@@ -1,0 +1,132 @@
+"""RGB primaries, white points, and RGB<->XYZ matrices (SMPTE RP 177).
+
+All M1 camera encodings use illuminant D65. Internal working gamut is
+DaVinci Wide Gamut (D65). ACEScg/AP1 (D60) is provided as an alternate.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+# CIE D65 (IEC 61966-2-1 / Rec.709 / Rec.2020).
+D65_XY = np.array([0.3127, 0.3290], dtype=np.float64)
+# ACES white (~D60), used by AP0/AP1.
+ACES_WHITE_XY = np.array([0.32168, 0.33767], dtype=np.float64)
+
+# Camera / working primaries: (R, G, B) as xy.
+PRIMARIES = {
+    "AWG4": np.array(
+        [[0.7347, 0.2653], [0.1424, 0.8576], [0.0991, -0.0308]], dtype=np.float64
+    ),
+    # Sony: S-Gamut3 primaries are the same as conventional S-Gamut
+    # (Technical Summary). Do not default S-Log3 to S-Gamut3.Cine.
+    "SGamut3": np.array(
+        [[0.730, 0.280], [0.140, 0.855], [0.100, -0.050]], dtype=np.float64
+    ),
+    "SGamut3Cine": np.array(
+        [[0.766, 0.275], [0.225, 0.800], [0.089, -0.087]], dtype=np.float64
+    ),
+    "VGamut": np.array(
+        [[0.730, 0.280], [0.165, 0.840], [0.100, -0.030]], dtype=np.float64
+    ),
+    "BT2020": np.array(
+        [[0.708, 0.292], [0.170, 0.797], [0.131, 0.046]], dtype=np.float64
+    ),
+    "REDWideGamutRGB": np.array(
+        [[0.780308, 0.304253], [0.121595, 1.493994], [0.095612, -0.084589]],
+        dtype=np.float64,
+    ),
+    "Rec709": np.array(
+        [[0.640, 0.330], [0.300, 0.600], [0.150, 0.060]], dtype=np.float64
+    ),
+    "DWG": np.array(
+        [[0.8000, 0.3130], [0.1682, 0.9877], [0.0790, -0.1155]], dtype=np.float64
+    ),
+    "AP1": np.array(
+        [[0.713, 0.293], [0.165, 0.830], [0.128, 0.044]], dtype=np.float64
+    ),
+    "AP0": np.array(
+        [[0.7347, 0.2653], [0.0000, 1.0000], [0.0001, -0.0770]], dtype=np.float64
+    ),
+}
+
+WHITE_POINTS = {
+    "AWG4": D65_XY,
+    "SGamut3": D65_XY,
+    "SGamut3Cine": D65_XY,
+    "VGamut": D65_XY,
+    "BT2020": D65_XY,
+    "REDWideGamutRGB": D65_XY,
+    "Rec709": D65_XY,
+    "DWG": D65_XY,
+    "AP1": ACES_WHITE_XY,
+    "AP0": ACES_WHITE_XY,
+}
+
+# Locked curve+gamut pairs for M1 IDTs. Sony is two pairs, user/metadata picks.
+IDT_PAIRS = {
+    "arri_logc4_awg4": ("logc4", "AWG4"),
+    "sony_slog3_sgamut3": ("slog3", "SGamut3"),
+    "sony_slog3_sgamut3cine": ("slog3", "SGamut3Cine"),
+    "panasonic_vlog_vgamut": ("vlog", "VGamut"),
+    "fujifilm_flog2_bt2020": ("flog2", "BT2020"),
+    "nikon_nlog_bt2020": ("nlog", "BT2020"),
+    "red_log3g10_rwg": ("log3g10", "REDWideGamutRGB"),
+}
+
+GAMUTS = tuple(PRIMARIES.keys())
+
+# ARRI-published AWG4 to CIE XYZ (D65). Used as a cross-check, not a substitute
+# for RP 177 construction from the published primaries.
+ARRI_AWG4_TO_XYZ = np.array(
+    [
+        [0.704858320407232064, 0.129760295170463003, 0.115837311473976537],
+        [0.254524176404027025, 0.781477732712002049, -0.036001909116029039],
+        [0.000000000000000000, 0.000000000000000000, 1.089057750759878429],
+    ],
+    dtype=np.float64,
+)
+
+# Panasonic-published V-Gamut to XYZ.
+PANASONIC_VGAMUT_TO_XYZ = np.array(
+    [
+        [0.679644, 0.152211, 0.118600],
+        [0.260686, 0.774894, -0.035580],
+        [-0.009310, -0.004612, 1.102980],
+    ],
+    dtype=np.float64,
+)
+
+
+def xy_to_xyz(xy) -> np.ndarray:
+    x, y = np.asarray(xy, dtype=np.float64)
+    return np.array([x / y, 1.0, (1.0 - x - y) / y], dtype=np.float64)
+
+
+def primaries_xy(name: str) -> np.ndarray:
+    return PRIMARIES[name].copy()
+
+
+def rgb_to_xyz_matrix(name: str) -> np.ndarray:
+    """Normalized primary matrix (SMPTE RP 177) for a named RGB space."""
+    P = PRIMARIES[name]
+    W = WHITE_POINTS[name]
+    xyz_rgb = np.column_stack([xy_to_xyz(P[0]), xy_to_xyz(P[1]), xy_to_xyz(P[2])])
+    S = np.linalg.inv(xyz_rgb) @ xy_to_xyz(W)
+    return xyz_rgb @ np.diag(S)
+
+
+def xyz_to_rgb_matrix(name: str) -> np.ndarray:
+    return np.linalg.inv(rgb_to_xyz_matrix(name))
+
+
+def rgb_to_rgb_matrix(src: str, dst: str, cat: np.ndarray | None = None) -> np.ndarray:
+    """Scene-linear RGB (src) -> scene-linear RGB (dst).
+
+    Optional 3x3 ``cat`` is applied in XYZ (e.g. Bradford D65->D60 for AP1).
+    Same-white D65->D65 conversions need no CAT.
+    """
+    m = rgb_to_xyz_matrix(src)
+    if cat is not None:
+        m = cat @ m
+    return xyz_to_rgb_matrix(dst) @ m
