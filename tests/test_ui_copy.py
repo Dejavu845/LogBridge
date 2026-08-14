@@ -79,3 +79,27 @@ def test_docs_name_the_review_locks():
     assert "paired IDT" in blob or "paired IDT" in blob
     assert "Rec.2100 HLG" in blob
     assert "Rec.2100 PQ" in blob
+
+
+def test_exposure_inspector_and_preview_not_finished_picture():
+    inspector = _read(INSPECTOR)
+    assert "ExposureInspector" in inspector
+    assert "Stops" in inspector
+    assert "2^stops" in inspector or "2 ** stops" in inspector or "rgb × (2^stops)" in inspector
+    assert "Do not add/subtract Log code values" in inspector
+    swift = _all_swift()
+    assert "case exposure" in swift or "case .exposure" in swift
+    assert "applyExposure" in swift
+    assert "02_Exposure" in swift
+    assert "not a finished" in (inspector + swift).lower() or "not a finished picture" in inspector
+    assert "预览·非成片" in inspector
+
+
+def test_no_bundled_manufacturer_demos():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    blob = readme + "\n" + acceptance
+    assert "No bundled camera manufacturer demo" in blob or "does **not** bundle camera manufacturer demo" in blob
+    assert "drop your own" in blob.lower() or "drops their own" in blob.lower()
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    assert "no bundled manufacturer demos" in sidebar.lower()

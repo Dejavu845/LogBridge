@@ -33,19 +33,21 @@ Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable colo
 
 ## Serial node graph (M1 + M2-start ODT)
 
-- UI shows three serial slots: IDT → WB → ODT (`color/graph.py` `SerialGraph`).
+- UI shows four serial slots: IDT → Exposure → WB → ODT (`color/graph.py` `SerialGraph`).
+- Locked order: IDT → Exposure (stops) → WB → ACEScct → preview ODT (709 / HLG / PQ).
+- Exposure is stops (default 0). Internally after IDT, in ACES2065-1 linear: `rgb * (2 ** stops)`. Not a log-code add. Bypassable / zeroable. Own export node (1D / gain) — not baked into IDT or WB when stops=0.
 - ODT selector: Off (ACEScct deliverable) | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ. Default Off.
-- Click a node to inspect parameters. WB / ODT are bypassable; IDT is not.
-- Node 2 off = IDT → ACEScct, no bake in preview and in Resolve export (`graph.xml` `enabled="false"`).
-- WB CAT runs in ACES2065-1 (AP0) scene-linear, never on ACEScct-encoded values. Preview cache stores IDT as ACES2065-1 linear.
-- Rec.709 node 3 is preview only, off by default. Off = ACEScct deliverable.
+- Click a node to inspect parameters. Exposure inspector when Exposure is selected. WB / Exposure / ODT are bypassable; IDT is not.
+- WB off = IDT → Exposure → ACEScct, no bake in preview and in Resolve export (`graph.xml` `enabled="false"`).
+- WB CAT runs in ACES2065-1 (AP0) scene-linear, never on ACEScct-encoded values. Preview cache stores post-IDT linear; exposure + WB apply in linear.
+- Rec.709 ODT is preview only, off by default. Off = ACEScct deliverable. UI must not imply grading on the 709 pane as a finished picture (预览·非成片).
 - Rec.2100 HLG / PQ: HDR OT via ACES/BT.2100 BuiltinTransform (unverified). No homemade HLG/PQ curve. Not supported.
-- Not a general node editor. No extra grade nodes.
+- Not a general node editor. No sat / unlisted grade nodes.
 
 ## Resolve export — WB toggle
 
-- Export is a Resolve-importable graph (`graph.xml` / `graph.dot`) plus `01_IDT_*.cube`, `02_WB.{cube,cdl,ccc,dctl}`, `03_ODT_Rec709.cube` — not a prose sidecar only.
-- **WB is its own corrector/node** (Color page serial node 2). Disable it, or tick DCTL **Bypass WB**, or skip `02_WB.cube` / the CDL.
+- Export is a Resolve-importable graph (`graph.xml` / `graph.dot`) plus `01_IDT_*.cube`, `02_Exposure.{cube,dctl}`, `03_WB.{cube,cdl,ccc,dctl}`, `04_ODT_Rec709.cube` — not a prose sidecar only.
+- **Exposure is its own 1D/gain node** (Color page serial node 2). **WB is its own corrector/node** (Color page serial node 3). Disable it, or tick DCTL **Bypass WB**, or skip `02_WB.cube` / the CDL.
 - WB is a linear AP0 Bradford/CAT02 3×3 (or DI-free DCTL on ACES2065-1 / ACEScct-decoded-to-linear), not baked into the IDT or Rec.709 cubes.
 - Standard deliverable is **ACEScct or ACES2065-1 EXR / ACES workflow** (**导出 ACEScct / EXR**). Rec.709 is preview only (node 3 off by default). Rec.2100 HLG/PQ are optional ACES/BT.2100 OT (unverified). Remaining graph when WB is off: IDT → ACEScct, no bake.
 
@@ -73,3 +75,8 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 - Primary button is **处理已锁定片段** — never 一键还原. Pending (disabled): **先选择 Log 与色域**.
 - IDT picker is one paired list (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine), not two dropdowns.
 - Venice pairs appear only if a Venice body is detected.
+
+## Media (no manufacturer demos)
+
+- LogBridge does **not** ship camera manufacturer demo clips (no ARRI / Sony / RED / Panasonic / Nikon / Fujifilm sample reels).
+- The user drops their own Log files or folders. Empty-state copy: drop a folder of mixed clips.

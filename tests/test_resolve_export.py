@@ -86,11 +86,13 @@ def test_export_bundle_writes_graph_not_sidecar_only(tmp_path: Path):
     assert "README_RESOLVE.md" in names
     assert "graph.xml" in names
     assert "graph.dot" in names
-    assert "02_WB.cdl" in names
-    assert "02_WB.ccc" in names
-    assert "02_WB.dctl" in names
-    assert "02_WB.cube" in names
-    assert "03_ODT_Rec709.cube" in names
+    assert "02_Exposure.cube" in names
+    assert "02_Exposure.dctl" in names
+    assert "03_WB.cdl" in names
+    assert "03_WB.ccc" in names
+    assert "03_WB.dctl" in names
+    assert "03_WB.cube" in names
+    assert "04_ODT_Rec709.cube" in names
     assert "01_IDT_arri_logc4_awg4.cube" in names
     assert "01_IDT_sony_slog3_sgamut3.cube" in names
     assert len(written) >= 8
@@ -106,8 +108,8 @@ def test_xml_wb_node_is_bypassable(tmp_path: Path):
     assert "Bradford" in xml
     assert "ACEScct" in xml
     assert "ACES2065-1" in xml
-    assert "02_WB.cube" in xml
-    assert "02_WB.cdl" in xml
+    assert "03_WB.cube" in xml
+    assert "03_WB.cdl" in xml
     off = format_graph_xml(["arri_logc4_awg4"], 5600.0, 0.0, include_wb=False)
     assert 'enabled="false"' in off
     assert 'bypassable="true"' in off
@@ -152,7 +154,7 @@ def test_cubes_have_lattice(tmp_path: Path):
     export_resolve_bundle(
         tmp_path, idt_ids=["arri_logc4_awg4"], lut_size=5, cct=3200.0
     )
-    for name in ("02_WB.cube", "03_ODT_Rec709.cube", "01_IDT_arri_logc4_awg4.cube"):
+    for name in ("03_WB.cube", "04_ODT_Rec709.cube", "01_IDT_arri_logc4_awg4.cube"):
         text = (tmp_path / name).read_text(encoding="utf-8")
         assert "LUT_3D_SIZE 5" in text
         rgb_lines = [
@@ -200,7 +202,7 @@ def test_export_default_odt_off_acescct_deliverable(tmp_path: Path):
     assert "preview only" in readme.lower()
     assert "most standard" not in readme.lower()
     names = {p.name for p in written}
-    assert "02_WB.dctl" in names
-    dctl = (tmp_path / "02_WB.dctl").read_text(encoding="utf-8")
+    assert "03_WB.dctl" in names
+    dctl = (tmp_path / "03_WB.dctl").read_text(encoding="utf-8")
     assert "AP0" in dctl or "ACES2065-1" in dctl
 

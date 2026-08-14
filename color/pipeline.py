@@ -1,4 +1,4 @@
-"""Fixed pipeline: IDT → ACES2065-1 → AP0 WB → optional ODT.
+"""Fixed pipeline: IDT → Exposure (stops) → AP0 WB → optional ODT.
 
 ODT selector: Off (ACEScct deliverable) | Rec.709 preview | Rec.2100 HLG |
 Rec.2100 PQ. Rec.709 is preview only. HLG/PQ are ACES Output Transform /
@@ -8,9 +8,11 @@ Not a node editor. The serial graph lives in ``color.graph`` and is shared
 with Resolve export. WB is a toggleable node in ACES2065-1 (AP0) scene-linear.
 Rec.709 is a preview-only ODT, not the standard Resolve deliverable.
 
-Every IDT goes to ACES2065-1. WB (Bradford/CAT02) runs in AP0 linear — never
-as a CAT on ACEScct-encoded values. Encode ACEScct only for grading / preview
-display. Do not use DaVinci Wide Gamut Intermediate as the internal reference.
+Every IDT goes to ACES2065-1. Exposure is rgb * (2 ** stops) in that linear
+domain (default 0 = identity; not a log-code add). WB (Bradford/CAT02) runs
+in AP0 linear — never as a CAT on ACEScct-encoded values. Encode ACEScct only
+for grading / preview display. Do not use DaVinci Wide Gamut Intermediate as
+the internal reference.
 """
 
 from __future__ import annotations
@@ -138,12 +140,14 @@ def process_to_rec709(
     tint: float = 0.0,
     working: str = "AP1",
     wb_method: str = "bradford",
+    exposure_stops: float = 0.0,
 ) -> np.ndarray:
     """Full fixed pipeline to Rec.709 encoded RGB via the serial graph."""
     from .graph import SerialGraph
 
     graph = SerialGraph(
         idt_id=idt_id,
+        exposure_stops=exposure_stops,
         wb_enabled=apply_wb,
         wb_cct=cct,
         wb_tint=tint,

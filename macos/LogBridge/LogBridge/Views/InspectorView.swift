@@ -17,6 +17,8 @@ struct InspectorView: View {
             switch session.selectedNode {
             case .idt:
                 IDTInspector(session: session)
+            case .exposure:
+                ExposureInspector(session: session)
             case .wb:
                 WBInspector(session: session)
             case .odt:
@@ -99,7 +101,7 @@ private struct WBInspector: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        Toggle("Enable WB (node 2). Off = bypass, no bake in preview or Resolve export.", isOn: Binding(
+        Toggle("Enable WB (node 3). Off = bypass, no bake in preview or Resolve export.", isOn: Binding(
             get: { session.graph.wbEnabled },
             set: { session.setWBEnabled($0) }
         ))
@@ -143,7 +145,7 @@ private struct WBInspector: View {
             }
             .frame(maxWidth: 220)
         }
-        Text("Scene-linear Bradford/CAT02 in ACES2065-1 (AP0). Disable this node in Resolve (or DCTL Bypass WB) = IDT → ACEScct, no bake.")
+        Text("Scene-linear Bradford/CAT02 in ACES2065-1 (AP0). Disable this node in Resolve (or DCTL Bypass WB) = IDT → Exposure → ACEScct, no bake.")
             .font(.caption)
             .foregroundStyle(.secondary)
     }
@@ -175,7 +177,44 @@ private struct ODTInspector: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        Text("Working space: \(session.graph.workingSpace.rawValue). 导出 ACEScct / EXR is the timeline deliverable.")
+        Text("Working space: \(session.graph.workingSpace.rawValue). 导出 ACEScct / EXR is the timeline deliverable. Rec.709 / HLG / PQ panes are 预览·非成片 — not a finished grade.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+    }
+}
+
+private struct ExposureInspector: View {
+    @ObservedObject var session: SessionModel
+
+    var body: some View {
+        Toggle("Enable Exposure (node 2). Off / 0 stops = identity, not baked into IDT or WB.", isOn: Binding(
+            get: { session.graph.exposureEnabled },
+            set: { session.setExposureEnabled($0) }
+        ))
+        if session.graph.exposureEnabled {
+            HStack {
+                Text("Stops")
+                    .frame(width: 48, alignment: .leading)
+                Slider(
+                    value: Binding(
+                        get: { session.graph.exposureStops },
+                        set: { session.setExposureStops($0) }
+                    ),
+                    in: -8...8,
+                    step: 0.05
+                )
+                Text(String(format: "%+.2f st", session.graph.exposureStops))
+                    .monospacedDigit()
+                    .frame(width: 72, alignment: .trailing)
+            }
+            Text(String(format: "Linear gain 2^stops = %.4f", pow(2.0, session.graph.exposureStops)))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        Text("User-facing unit is stops. After IDT, in ACES2065-1 linear: rgb × (2^stops). Do not add/subtract Log code values. Preview cache stores post-IDT linear; exposure applies in linear before WB.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        Text("预览·非成片 — Rec.709 / HLG / PQ are preview only, not a finished picture.")
             .font(.caption)
             .foregroundStyle(.secondary)
     }

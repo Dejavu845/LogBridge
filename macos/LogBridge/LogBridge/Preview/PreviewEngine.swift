@@ -11,8 +11,9 @@ import Combine
 ///
 /// Cache:
 ///   - decoded camera/log thumbnail per clip URL
-///   - IDT ACES2065-1 linear buffer per clip+IDT
-/// Invalidate the matching stage only (IDT change drops linear; WB toggles that AP0 buffer).
+///   - IDT ACES2065-1 linear buffer per clip+IDT (post-IDT linear; no exposure)
+/// Invalidate the matching stage only (IDT change drops linear; exposure+WB
+/// apply in linear on that cached AP0 buffer).
 /// Heavy work runs off the main thread.
 final class PreviewEngine: ObservableObject {
     static let maxLongEdge: CGFloat = 1920
@@ -93,6 +94,10 @@ final class PreviewEngine: ObservableObject {
         }
         let linear = cachedLinear(clipID: clip.id, idt: idt, source: source)
         var work = linear.rgb
+        // Cache is post-IDT linear. Apply exposure then WB in ACES2065-1.
+        if graph.exposureEnabled {
+            PreviewColor.applyExposure(rgb: &work, stops: graph.exposureStops)
+        }
         if graph.wbEnabled {
             PreviewColor.applyWB(
                 rgb: &work,
@@ -252,6 +257,15 @@ enum PreviewColor {
             rgb[i * 3 + 0] = Float(v.x)
             rgb[i * 3 + 1] = Float(v.y)
             rgb[i * 3 + 2] = Float(v.z)
+        }
+    }
+
+    static func applyExposure(rgb: inout [Float], stops: Double) {
+        // ACES2065-1 linear: rgb * (2 ** stops). Not a log-code add.
+        if stops == 0 { return }
+        let gain = Float(pow(2.0, stops))
+        for i in 0..<rgb.count {
+            rgb[i] *= gain
         }
     }
 
