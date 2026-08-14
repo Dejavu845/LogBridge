@@ -63,11 +63,11 @@ enum WhiteBalanceNode {
         return SIMD2(x, y)
     }
 
-    static func catMatrix(cct: Double, tint: Double = 0, method: String = "bradford") -> simd_double3x3 {
-        let src = xy(cct: cct, tint: tint)
+    /// XYZ CAT taking src white to dst white (Bradford / CAT02).
+    static func catMatrix(srcXY: SIMD2<Double>, dstXY: SIMD2<Double>, method: String = "bradford") -> simd_double3x3 {
         let m = method == "cat02" ? cat02 : bradford
-        let srcXYZ = xyToXYZ(src)
-        let dstXYZ = xyToXYZ(d65)
+        let srcXYZ = xyToXYZ(srcXY)
+        let dstXYZ = xyToXYZ(dstXY)
         let srcCone = m * srcXYZ
         let dstCone = m * dstXYZ
         let scale = simd_double3x3(diagonal: SIMD3(
@@ -76,6 +76,26 @@ enum WhiteBalanceNode {
             dstCone.z / srcCone.z
         ))
         return simd_mul(simd_mul(m.inverse, scale), m)
+    }
+
+    static func catMatrix(cct: Double, tint: Double = 0, method: String = "bradford") -> simd_double3x3 {
+        catMatrix(srcXY: xy(cct: cct, tint: tint), dstXY: d65, method: method)
+    }
+
+    /// Relative: Bradford(as-shot white → user white) = CAT(as→user).
+    /// Not CAT(user→D65)·inv(CAT(as→D65)) (that product is backwards).
+    static func relativeCatMatrix(
+        srcCCT: Double,
+        dstCCT: Double,
+        srcTint: Double = 0,
+        dstTint: Double = 0,
+        method: String = "bradford"
+    ) -> simd_double3x3 {
+        catMatrix(
+            srcXY: xy(cct: srcCCT, tint: srcTint),
+            dstXY: xy(cct: dstCCT, tint: dstTint),
+            method: method
+        )
     }
 
     /// Apply CAT in scene-linear RGB of a D65 space (XYZ CAT conjugated by RGB<->XYZ).

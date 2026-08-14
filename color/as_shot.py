@@ -5,7 +5,10 @@ neutral after IDT). Camera CCT/tint metadata is UI only — fill the
 knobs as “as-shot”. Default CAT is identity.
 
 Apply the existing linear AP0 CAT **only** when the user moves CCT/tint
-away from the as-shot values, or applies a grey-card override.
+away from the as-shot values (relative Bradford(as-shot → user) =
+CAT(as→user) = chromatic_adaptation_matrix(as_xy, user_xy) in AP0),
+or applies a grey-card override (absolute CAT). First typed CCT with
+no as-shot is a label (identity).
 
 Review locks:
   * As-shot writes ONLY the existing linear AP0 CAT node. Never CAT on
@@ -229,30 +232,67 @@ def effective_cat_cct(
     as_shot_cct: float | None = None,
     as_shot_tint: float = 0.0,
 ) -> float | None:
-    """CCT fed to the AP0 CAT, or None for identity.
+    """Destination CCT fed to the AP0 CAT, or None for identity.
 
     Log IDTs assume the image is already white-balanced. Camera CCT/tint
     is UI only (as-shot knobs). Default CAT is identity — do not treat
     as-shot 5600/6504 as an illuminant and CAT toward D65 (double WB).
 
-    Apply CAT only when the user moves CCT/tint away from as-shot, or
-    on a grey-card override (real CAT; identity only if the sample is D65).
+    Apply CAT only when the user moves CCT/tint away from as-shot
+    (relative: Bradford(as-shot white → user white) = CAT(as→user)
+    = chromatic_adaptation_matrix(as_xy, user_xy) in AP0 — not the
+    inverted CAT(user→D65)·inv(CAT(as→D65)) product), or on a
+    grey-card override (absolute CAT of the sampled white to D65).
+
+    First manually typed CCT with no as-shot is a label, not an
+    illuminant — identity until there is a reference (as-shot or grey).
+    Do not CAT(user→D65) on first fill.
 
     Missing CCT: identity, no 5600 guess.
 
-    An explicit CCT with source ``user`` / ``grey`` / unknown-but-set
-    (CLI / unit construction) is a real CAT. Source ``as_shot`` is never
-    a CAT, even at 3200 or 5600.
+    Source ``as_shot`` is never a CAT, even at 3200 or 5600.
+    Source ``grey`` is an absolute CAT. Source ``user`` with as-shot
+    is relative. Source ``unknown`` with an explicit CCT (CLI / unit
+    construction) stays an absolute CAT.
     """
     if wb_cct is None:
         return None
     if wb_source == WB_SOURCE_AS_SHOT:
         return None
-    if wb_source == WB_SOURCE_USER and knobs_match_as_shot(
-        wb_cct, wb_tint, as_shot_cct, as_shot_tint
-    ):
-        return None
+    if wb_source == WB_SOURCE_USER:
+        if as_shot_cct is None:
+            return None
+        if knobs_match_as_shot(wb_cct, wb_tint, as_shot_cct, as_shot_tint):
+            return None
+        return float(wb_cct)
     return float(wb_cct)
+
+
+def effective_cat_src_cct(
+    *,
+    wb_cct: float | None,
+    wb_tint: float = 0.0,
+    wb_source: str = WB_SOURCE_UNKNOWN,
+    as_shot_cct: float | None = None,
+    as_shot_tint: float = 0.0,
+) -> float | None:
+    """As-shot CCT for relative CAT, or None for absolute / identity.
+
+    Relative only when the user moved knobs away from a known as-shot.
+    Grey-card and CLI/unknown stay absolute (no src).
+    """
+    dst = effective_cat_cct(
+        wb_cct=wb_cct,
+        wb_tint=wb_tint,
+        wb_source=wb_source,
+        as_shot_cct=as_shot_cct,
+        as_shot_tint=as_shot_tint,
+    )
+    if dst is None:
+        return None
+    if wb_source == WB_SOURCE_USER and as_shot_cct is not None:
+        return float(as_shot_cct)
+    return None
 
 
 def wb_defaults_from_as_shot(shot: AsShotWB) -> dict:

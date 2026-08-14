@@ -74,3 +74,26 @@ def test_ap0_cat_differs_from_ap1_on_chroma():
     ap0 = apply_white_balance(rgb, 3200.0, rgb_space="AP0")
     ap1 = apply_white_balance(rgb, 3200.0, rgb_space="AP1")
     assert not np.allclose(ap0, ap1, atol=1e-4)
+
+
+
+
+def test_relative_cat_unmoved_as_shot_is_identity():
+    """as-shot 3200, knobs still 3200 -> identity."""
+    same = white_balance_matrix(src_cct=3200.0, dst_cct=3200.0)
+    np.testing.assert_allclose(same, np.eye(3), atol=1e-12)
+
+
+def test_relative_cat_as_shot_3200_user_5600():
+    """as-shot 3200, user 5600 == CAT(as→user), not the inverted product."""
+    from color.wb import _rgb_cat, cct_to_xy
+    rel = white_balance_matrix(src_cct=3200.0, dst_cct=5600.0)
+    expected = _rgb_cat(cct_to_xy(3200.0), cct_to_xy(5600.0), "AP0", "bradford")
+    np.testing.assert_allclose(rel, expected, atol=1e-12)
+    cat_user = white_balance_matrix(5600.0)
+    cat_shot = white_balance_matrix(3200.0)
+    inverted = cat_user @ np.linalg.inv(cat_shot)
+    assert not np.allclose(rel, cat_user, atol=1e-3)
+    assert not np.allclose(rel, inverted, atol=1e-3)
+    rel2 = white_balance_matrix(5600.0, src_cct=3200.0)
+    np.testing.assert_allclose(rel2, expected, atol=1e-12)

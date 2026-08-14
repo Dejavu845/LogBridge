@@ -1,11 +1,17 @@
 """White balance in ACES2065-1 scene-linear (AP0): Bradford (default) or CAT02.
 
-Given a source CCT (and optional green-magenta tint), build a CAT that
-adapts that illuminant to D65. Apply only to ACES2065-1 (AP0) scene-linear
-RGB — never as a CAT on ACEScct-encoded values.
+Absolute (grey-card): CAT(sampled white → D65).
+Relative (user moved CCT/tint away from as-shot):
+    Bradford(as-shot white → user white)
+    == CAT(as-shot → user) = chromatic_adaptation_matrix(as_xy, user_xy).
+NOT CAT(user→D65) alone — that treats the new knob as an illuminant on
+already-balanced Log.
 
-6504 K on the CIE daylight locus is D65, so the CAT is ~identity.
-3200 K (Planckian / tungsten) is not identity.
+Apply only to ACES2065-1 (AP0) scene-linear RGB — never as a CAT on
+ACEScct-encoded values.
+
+6504 K on the CIE daylight locus is D65, so the absolute CAT is ~identity.
+3200 K (Planckian / tungsten) is not identity. Unmoved as-shot is identity.
 """
 
 from __future__ import annotations
@@ -120,48 +126,91 @@ def bradford_cat_matrix(src_xy, dst_xy=D65_XY) -> np.ndarray:
     return chromatic_adaptation_matrix(src_xy, dst_xy, method="bradford")
 
 
-def white_balance_matrix(
-    cct: float | None,
-    tint: float = 0.0,
-    rgb_space: str = "AP0",
-    method: str = "bradford",
-    dst_xy=D65_XY,
-) -> np.ndarray:
-    """Scene-linear RGB CAT: adapt ``cct`` (+tint) to ``dst_xy`` (default D65).
-
-    Default ``rgb_space`` is ACES2065-1 (AP0). Never apply this CAT to
-    ACEScct-encoded values — decode to AP0 linear first (or stay in AP0
-    after IDT). Identity (within numerical tolerance) at 6504 K, tint 0.
-
-    ``cct is None`` is identity (pending / as-shot-unmoved at the graph
-    layer). Do not guess 5600 K. As-shot metadata must not be passed here
-    as an illuminant — that is double WB; see ``effective_cat_cct``.
-    """
-    if cct is None:
-        return np.eye(3, dtype=np.float64)
-    src_xy = cct_to_xy(cct, tint)
+def _rgb_cat(src_xy, dst_xy, rgb_space: str = "AP0", method: str = "bradford") -> np.ndarray:
+    """Scene-linear RGB CAT: adapt ``src_xy`` white to ``dst_xy`` white."""
     cat = chromatic_adaptation_matrix(src_xy, dst_xy, method=method)
     to_xyz = rgb_to_xyz_matrix(rgb_space)
     to_rgb = xyz_to_rgb_matrix(rgb_space)
     return to_rgb @ cat @ to_xyz
 
 
-def apply_white_balance(
-    rgb,
-    cct: float | None,
+def _rgb_cat_to_white(
+    cct: float,
     tint: float = 0.0,
     rgb_space: str = "AP0",
     method: str = "bradford",
+    dst_xy=D65_XY,
+) -> np.ndarray:
+    """Absolute scene-linear RGB CAT: adapt ``cct`` (+tint) to ``dst_xy``."""
+    return _rgb_cat(cct_to_xy(cct, tint), dst_xy, rgb_space, method)
+
+
+def white_balance_matrix(
+    cct: float | None = None,
+    tint: float = 0.0,
+    rgb_space: str = "AP0",
+    method: str = "bradford",
+    dst_xy=D65_XY,
+    src_cct: float | None = None,
+    dst_cct: float | None = None,
+    src_tint: float = 0.0,
+) -> np.ndarray:
+    """Scene-linear RGB CAT in ACES2065-1 (AP0) by default.
+
+    Absolute (grey-card / explicit illuminant):
+        ``cct`` (+tint) → ``dst_xy`` (default D65).
+        ``white_balance_matrix(3200)`` is CAT(3200→D65).
+
+    Relative (user moved CCT/tint away from as-shot):
+        ``src_cct`` = as-shot, ``dst_cct`` = user (``cct`` is dst if
+        ``dst_cct`` is omitted). Bradford(as-shot white → user white)
+        == CAT(as→user). Not CAT(user→D65) alone, and not
+        CAT(user→D65) @ inv(CAT(as→D65)) (that product is backwards).
+
+    Identity when both sides are missing, or when src equals dst.
+    ``cct is None`` without src/dst is identity (pending / unmoved).
+    Do not guess 5600 K. Never apply this CAT to ACEScct-encoded values.
+    """
+    dest = dst_cct if dst_cct is not None else cct
+    if src_cct is not None and dest is not None:
+        # CAT(as → user) in AP0. Do not use CAT(user→D65)@inv(CAT(as→D65)).
+        return _rgb_cat(
+            cct_to_xy(src_cct, src_tint),
+            cct_to_xy(dest, tint),
+            rgb_space,
+            method,
+        )
+    if dest is None:
+        return np.eye(3, dtype=np.float64)
+    return _rgb_cat_to_white(dest, tint, rgb_space, method, dst_xy)
+
+
+def apply_white_balance(
+    rgb,
+    cct: float | None = None,
+    tint: float = 0.0,
+    rgb_space: str = "AP0",
+    method: str = "bradford",
+    src_cct: float | None = None,
+    dst_cct: float | None = None,
+    src_tint: float = 0.0,
 ) -> np.ndarray:
     """Apply CCT+tint CAT to scene-linear RGB (..., 3).
 
     Default domain is ACES2065-1 (AP0). Do not pass ACEScct-encoded RGB.
-    ``cct is None`` (as-shot unknown) is identity — do not guess 5600 K.
+    Relative: pass ``src_cct`` (as-shot) and ``dst_cct`` (user).
+    ``cct is None`` without src/dst is identity — do not guess 5600 K.
     """
     rgb = np.asarray(rgb, dtype=np.float64)
-    if cct is None:
-        return rgb
-    m = white_balance_matrix(cct, tint, rgb_space=rgb_space, method=method)
+    m = white_balance_matrix(
+        cct,
+        tint,
+        rgb_space=rgb_space,
+        method=method,
+        src_cct=src_cct,
+        dst_cct=dst_cct,
+        src_tint=src_tint,
+    )
     return rgb @ m.T
 
 

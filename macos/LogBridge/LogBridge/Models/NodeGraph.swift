@@ -128,8 +128,9 @@ struct SerialGraph: Equatable {
         case .asShot:
             return nil
         case .user:
-            if let shot = asShotCCT,
-               abs(cct - shot) <= 0.5,
+            // First typed CCT with no as-shot is a label, not an illuminant.
+            guard let shot = asShotCCT else { return nil }
+            if abs(cct - shot) <= 0.5,
                abs(wbTint - asShotTint) <= 1e-3 {
                 return nil
             }
@@ -137,6 +138,14 @@ struct SerialGraph: Equatable {
         case .grey, .unknown:
             return cct
         }
+    }
+
+    /// As-shot CCT for relative CAT, or nil for absolute / identity.
+    var effectiveSrcCCT: Double? {
+        guard effectiveWBCCT != nil, wbSource == .user, let shot = asShotCCT else {
+            return nil
+        }
+        return shot
     }
 
     var asShotUnknown: Bool { wbCCT == nil }

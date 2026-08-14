@@ -10,10 +10,14 @@ Not a node editor. Used by ``pipeline`` and Resolve export.
                  on ACEScct-encoded values. As-shot CCT/tint from camera-private
                  metadata (not nclc) fills the knobs (UI only). Default CAT is
                  identity — Log IDTs assume already white-balanced. Do not CAT
-                 as-shot 5600/6504 toward D65 (double WB). Apply CAT only when
-                 the user moves CCT/tint away from as-shot, or on a grey-card
-                 override. Missing CCT: knobs empty / pending, identity, no
-                 5600 guess. Bypassable.
+                 as-shot 5600/6504 toward D65 (double WB). User move away from
+                 as-shot is relative Bradford(as-shot -> user) =
+                 CAT(as->user) = chromatic_adaptation_matrix(as_xy, user_xy)
+                 in AP0, not CAT(user->D65) alone and not the inverted
+                 CAT(user->D65)·inv(CAT(as->D65)) product. First typed CCT
+                 with no as-shot is a label (identity).
+                 Grey-card is absolute CAT. Missing CCT: knobs empty / pending,
+                 identity, no 5600 guess. Bypassable.
   4. ODT       — Off (ACEScct deliverable, default) | Rec.709 preview |
                  Rec.2100 HLG | Rec.2100 PQ. Rec.709 is preview only (DIY
                  BT.709 OETF, no RRT). HLG/PQ are ACES Output Transform /
@@ -45,7 +49,7 @@ from .odt import (
 )
 from .exposure import apply_exposure, stops_to_gain
 from .rec709 import rec709_oetf
-from .wb import apply_white_balance
+from .wb import white_balance_matrix
 from .as_shot import (
     WB_SOURCE_AS_SHOT,
     WB_SOURCE_GREY,
@@ -54,6 +58,7 @@ from .as_shot import (
     AsShotWB,
     UNKNOWN_AS_SHOT,
     effective_cat_cct,
+    effective_cat_src_cct,
     pick_neutral_from_linear_rgb,
     read_as_shot_wb,
     wb_defaults_from_as_shot,
@@ -115,9 +120,10 @@ class SerialGraph:
     WB is bypassable. As-shot camera-private CCT/tint (not nclc) fills the
     knobs (UI only). Default CAT is identity — do not treat as-shot
     5600/6504 as an illuminant (double WB). ``wb_cct is None`` /
-    ``wb_source==as_shot`` is identity — do not guess 5600 K. CAT applies
-    when the user moves knobs away from as-shot, or on a grey-card
-    override. ``odt`` selects Off | Rec.709 preview | Rec.2100 HLG |
+    ``wb_source==as_shot`` is identity — do not guess 5600 K. User move
+    away from as-shot is relative CAT (src=as-shot, dst=user). First
+    typed CCT with no as-shot is a label (identity). Grey-card is
+    absolute CAT. ``odt`` selects Off | Rec.709 preview | Rec.2100 HLG |
     Rec.2100 PQ.
     """
 
@@ -253,7 +259,7 @@ class SerialGraph:
         return self.pick_neutral(ap0_rgb, rgb_space="AP0")
 
     def set_user_wb(self, cct: float, tint: float | None = None) -> None:
-        """User CCT/tint override — a real CAT if knobs leave as-shot."""
+        """User CCT/tint. Relative CAT if knobs leave as-shot; else a label."""
         self.wb_cct = float(cct)
         if tint is not None:
             self.wb_tint = float(tint)
@@ -267,13 +273,13 @@ class SerialGraph:
 
     @property
     def effective_wb_cct(self) -> float | None:
-        """CCT applied by the CAT, or None when identity.
+        """Destination CCT applied by the CAT, or None when identity.
 
         As-shot knobs are UI only — identity even at 3200 or 5600 (no
         double WB). Missing CCT is identity — do not guess 5600.
-        User move away from as-shot, or grey-card override, applies CAT.
-        An explicit ``wb_cct`` with source user/grey (or a constructed
-        graph that is not as-shot) is honored.
+        First typed CCT with no as-shot is a label (identity).
+        User move away from as-shot is relative (see ``effective_src_cct``).
+        Grey-card override is an absolute CAT.
         """
         return effective_cat_cct(
             wb_cct=self.wb_cct,
@@ -281,6 +287,35 @@ class SerialGraph:
             wb_source=self.wb_source,
             as_shot_cct=self.as_shot_cct,
             as_shot_tint=self.as_shot_tint,
+        )
+
+    @property
+    def effective_src_cct(self) -> float | None:
+        """As-shot CCT for relative CAT, or None for absolute / identity."""
+        return effective_cat_src_cct(
+            wb_cct=self.wb_cct,
+            wb_tint=self.wb_tint,
+            wb_source=self.wb_source,
+            as_shot_cct=self.as_shot_cct,
+            as_shot_tint=self.as_shot_tint,
+        )
+
+    def wb_matrix(self) -> np.ndarray:
+        """3x3 AP0 CAT applied by ``wb_node`` (identity when no CAT).
+
+        Relative: ``src_cct`` = as-shot, ``dst_cct`` = user.
+        Grey-card / CLI-unknown: absolute CAT(cct->D65).
+        """
+        cct = self.effective_wb_cct
+        src = self.effective_src_cct
+        return white_balance_matrix(
+            cct if src is None else None,
+            tint=self.wb_tint,
+            rgb_space=WB_LINEAR_SPACE,
+            method=self.wb_method,
+            src_cct=src,
+            dst_cct=cct if src is not None else None,
+            src_tint=self.as_shot_tint,
         )
 
     @property
@@ -328,21 +363,17 @@ class SerialGraph:
 
         Input must be ACES2065-1 linear, not ACEScct-encoded.
         As-shot knobs (unmoved) and missing CCT are identity — not 5600 K.
+        User move: relative CAT via ``src_cct`` (as-shot) and ``dst_cct``
+        (user) — CAT(as->user), not CAT(user->D65) and not the inverted
+        product. First typed CCT with no as-shot is a label (identity).
+        Grey-card is absolute.
         Do not CAT as-shot 5600/6504 toward D65 (double WB).
         """
         rgb = np.asarray(aces_ap0, dtype=np.float64)
         if not self.wb_enabled:
             return rgb
-        cct = self.effective_wb_cct
-        if cct is None:
-            return rgb
-        return apply_white_balance(
-            rgb,
-            cct,
-            tint=self.wb_tint,
-            rgb_space=WB_LINEAR_SPACE,
-            method=self.wb_method,
-        )
+        m = self.wb_matrix()
+        return rgb @ m.T
 
     def wb_on_acescct(self, acescct_rgb) -> np.ndarray:
         """ACEScct in/out wrapper: decode → AP0 CAT → encode. Not a CAT on log."""
@@ -403,10 +434,9 @@ def graph_from_export_args(
     Exposure is its own node (default 0 stops = identity gain).
     """
     chosen = odt if odt is not None else (ODT_REC709 if odt_enabled else ODT_OFF)
-    if cct is None:
-        source = WB_SOURCE_UNKNOWN
-    else:
-        source = WB_SOURCE_USER
+    # CLI / export CCT without as-shot is an explicit absolute CAT
+    # (unknown-but-set), not a first-typed UI label.
+    source = WB_SOURCE_UNKNOWN
     return SerialGraph(
         idt_id=idt_id,
         exposure_stops=exposure_stops,

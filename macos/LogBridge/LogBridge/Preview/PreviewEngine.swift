@@ -101,12 +101,23 @@ final class PreviewEngine: ObservableObject {
         // As-shot-unmoved and missing CCT are identity — do not guess 5600 or 6504.
         // effectiveWBCCT is nil until the user moves knobs or picks a grey card.
         if graph.wbEnabled, let cct = graph.effectiveWBCCT {
-            PreviewColor.applyWB(
-                rgb: &work,
-                cct: cct,
-                tint: graph.wbTint,
-                method: graph.wbMethod
-            )
+            if let src = graph.effectiveSrcCCT {
+                PreviewColor.applyWB(
+                    rgb: &work,
+                    srcCCT: src,
+                    dstCCT: cct,
+                    srcTint: graph.asShotTint,
+                    dstTint: graph.wbTint,
+                    method: graph.wbMethod
+                )
+            } else {
+                PreviewColor.applyWB(
+                    rgb: &work,
+                    cct: cct,
+                    tint: graph.wbTint,
+                    method: graph.wbMethod
+                )
+            }
         }
         var odtCG: CGImage?
         var note = "Preview proxy (≤ \(Int(Self.maxLongEdge)) px). Not a full render."
@@ -289,8 +300,27 @@ enum PreviewColor {
     }
 
     static func applyWB(rgb: inout [Float], cct: Double, tint: Double, method: String) {
-        // CAT in ACES2065-1 (AP0) scene-linear. Preview cache is AP0 after IDT.
+        // Absolute CAT (grey-card / CLI) in ACES2065-1 (AP0) scene-linear.
         let cat = WhiteBalanceNode.catMatrix(cct: cct, tint: tint, method: method)
+        applyCAT(rgb: &rgb, cat: cat)
+    }
+
+    static func applyWB(
+        rgb: inout [Float],
+        srcCCT: Double,
+        dstCCT: Double,
+        srcTint: Double,
+        dstTint: Double,
+        method: String
+    ) {
+        // Relative: CAT(as-shot → user), not the inverted 调研 product.
+        let cat = WhiteBalanceNode.relativeCatMatrix(
+            srcCCT: srcCCT, dstCCT: dstCCT, srcTint: srcTint, dstTint: dstTint, method: method
+        )
+        applyCAT(rgb: &rgb, cat: cat)
+    }
+
+    private static func applyCAT(rgb: inout [Float], cat: simd_double3x3) {
         let m = ap0ToXYZ.inverse * cat * ap0ToXYZ
         let n = rgb.count / 3
         for i in 0..<n {

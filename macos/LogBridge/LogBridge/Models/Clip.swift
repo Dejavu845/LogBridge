@@ -401,6 +401,8 @@ final class SessionModel: ObservableObject {
                     tint: self.graph.wbTint,
                     catCCT: self.graph.effectiveWBCCT,
                     useEffectiveCAT: true,
+                    srcCCT: self.graph.effectiveSrcCCT,
+                    srcTint: self.graph.asShotTint,
                     odtEnabled: self.graph.odtEnabled,
                     exposureStops: self.graph.exposureStops,
                     exposureEnabled: self.graph.exposureEnabled
