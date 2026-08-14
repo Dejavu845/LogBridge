@@ -1,8 +1,12 @@
-"""Fixed M1 pipeline: IDT -> scene-linear WB -> Rec.709 ODT.
+"""Fixed M1 pipeline: IDT → ACES2065-1 → AP0 WB → optional Rec.709 preview.
 
-Not a node editor. WB is a toggleable node on Resolve export; the Rec.709
-preview path may apply WB for viewing without baking it as the only
-deliverable.
+Not a node editor. The serial graph lives in ``color.graph`` and is shared
+with Resolve export. WB is a toggleable node in ACES2065-1 (AP0) scene-linear.
+Rec.709 is a preview-only ODT, not the standard Resolve deliverable.
+
+Every IDT goes to ACES2065-1. WB (Bradford/CAT02) runs in AP0 linear — never
+as a CAT on ACEScct-encoded values. Encode ACEScct only for grading / preview
+display. Do not use DaVinci Wide Gamut Intermediate as the internal reference.
 """
 
 from __future__ import annotations
@@ -10,36 +14,100 @@ from __future__ import annotations
 import numpy as np
 
 from . import curves
-from .gamuts import IDT_PAIRS, rgb_to_rgb_matrix
+from .gamuts import (
+    IDT_PAIRS,
+    aces_to_rec709_matrix,
+    camera_to_aces2065_matrix,
+    rgb_to_rgb_matrix,
+)
+from .ocio_builtins import apply_builtin_idt, builtin_style_for, ocio_available
 from .rec709 import rec709_oetf
 from .wb import apply_white_balance
+from .working_space import (
+    DEFAULT_WORKING_LINEAR,
+    aces2065_to_acescct,
+    acescct_decode,
+)
 
 
 def apply_idt(log_rgb, idt_id: str) -> np.ndarray:
-    """Camera log RGB -> scene-linear camera RGB.
+    """Camera log RGB -> ACES2065-1 (AP0 scene-linear).
 
     Nikon N-Log IDT expects 10-bit code values (0-1023), not 0-1.
     All other IDTs expect normalized 0-1 log.
+
+    Uses the OCIO BuiltinTransform when importable and a Builtin exists.
+    Otherwise the white-paper reference (curve + RP 177 + Bradford D65->ACES).
+    After IDT, a documented 18% grey is scene-linear ≈ 0.18 in ACES.
     """
-    curve, _gamut = IDT_PAIRS[idt_id]
-    return curves.decode_log(curve, np.asarray(log_rgb, dtype=np.float64))
+    if idt_id not in IDT_PAIRS:
+        raise KeyError(f"Unknown IDT {idt_id!r}")
+    rgb = np.asarray(log_rgb, dtype=np.float64)
+    style = builtin_style_for(idt_id)
+    if style and ocio_available():
+        curve, _gamut = IDT_PAIRS[idt_id]
+        # Builtins expect 0-1 camera log. N-Log is not a Builtin.
+        buf = rgb
+        if curve == "nlog":
+            buf = rgb / 1023.0
+        return apply_builtin_idt(buf, style)
+    return apply_idt_reference(rgb, idt_id)
 
 
-def camera_linear_to_working(lin_rgb, idt_id: str, working: str = "DWG") -> np.ndarray:
-    """Scene-linear camera RGB -> scene-linear working RGB (default DWG)."""
+def apply_idt_reference(log_rgb, idt_id: str) -> np.ndarray:
+    """White-paper reference IDT: decode curve, then camera RGB -> ACES2065-1.
+
+    Used when OCIO Python is missing, and always for F-Log2 / N-Log.
+    Venice IDs fall back to the matching non-Venice S-Log3 pair (do not
+    invent a Venice matrix).
+    """
+    curve, gamut = IDT_PAIRS[idt_id]
+    cam = curves.decode_log(curve, np.asarray(log_rgb, dtype=np.float64))
+    m = camera_to_aces2065_matrix(gamut)
+    return np.asarray(cam, dtype=np.float64) @ m.T
+
+
+def camera_linear_to_working(lin_rgb, idt_id: str, working: str = "AP1") -> np.ndarray:
+    """Scene-linear camera RGB -> scene-linear working RGB (default ACEScg / AP1).
+
+    Prefer ``apply_idt`` (camera log -> ACES2065-1) then AP0->AP1. This helper
+    remains for callers that already hold camera-linear RGB.
+
+    ``working="DWG"`` is an optional named export space only — not the
+    internal reference.
+    """
     _curve, gamut = IDT_PAIRS[idt_id]
-    m = rgb_to_rgb_matrix(gamut, working)
     rgb = np.asarray(lin_rgb, dtype=np.float64)
-    return rgb @ m.T
+    if working == "DWG":
+        # Optional D65 named space: same-white camera RGB -> DWG, no ACES CAT.
+        return rgb @ rgb_to_rgb_matrix(gamut, "DWG").T
+    aces = rgb @ camera_to_aces2065_matrix(gamut).T
+    if working in ("AP0", "ACES2065-1"):
+        return aces
+    if working in ("AP1", "ACEScg"):
+        return aces @ rgb_to_rgb_matrix("AP0", "AP1").T
+    if working == "ACEScct":
+        return aces2065_to_acescct(aces)
+    raise KeyError(f"Unsupported working space {working!r} (use AP1 / ACEScct / ACES2065-1)")
 
 
-def apply_odt_rec709(working_lin, working: str = "DWG"):
+def apply_odt_rec709(working_lin, working: str = "AP1"):
     """Scene-linear working RGB -> Rec.709 encoded RGB.
 
     Tags conceptually as Rec.709. No tone-mapping RRT; 18% grey will encode
     near the Rec.709 OETF of 0.18 (~0.409). Implemented (unverified).
+    ``working`` is ACEScg/AP1 (or AP0 / ACEScct). Bradford CAT when whites differ.
+    ``working="DWG"`` is an optional named export space only.
     """
-    m = rgb_to_rgb_matrix(working, "Rec709")
+    if working in ("ACEScct",):
+        working_lin = acescct_decode(np.asarray(working_lin, dtype=np.float64))
+        working = "AP1"
+    if working == "DWG":
+        m = rgb_to_rgb_matrix("DWG", "Rec709")
+        rec_lin = np.asarray(working_lin, dtype=np.float64) @ m.T
+        return rec709_oetf(np.clip(rec_lin, 0.0, None))
+    space = "AP0" if working in ("AP0", "ACES2065-1") else "AP1"
+    m = aces_to_rec709_matrix(space)
     rgb = np.asarray(working_lin, dtype=np.float64)
     rec_lin = rgb @ m.T
     return rec709_oetf(np.clip(rec_lin, 0.0, None))
@@ -52,14 +120,18 @@ def process_to_rec709(
     apply_wb: bool = False,
     cct: float = 6504.0,
     tint: float = 0.0,
-    working: str = "DWG",
+    working: str = "AP1",
     wb_method: str = "bradford",
 ) -> np.ndarray:
-    """Full fixed pipeline to Rec.709 encoded RGB."""
-    cam_lin = apply_idt(log_rgb, idt_id)
-    work_lin = camera_linear_to_working(cam_lin, idt_id, working=working)
-    if apply_wb:
-        work_lin = apply_white_balance(
-            work_lin, cct, tint=tint, rgb_space=working, method=wb_method
-        )
-    return apply_odt_rec709(work_lin, working=working)
+    """Full fixed pipeline to Rec.709 encoded RGB via the serial graph."""
+    from .graph import SerialGraph
+
+    graph = SerialGraph(
+        idt_id=idt_id,
+        wb_enabled=apply_wb,
+        wb_cct=cct,
+        wb_tint=tint,
+        wb_method=wb_method,
+        odt_enabled=True,
+    )
+    return graph.apply(log_rgb)

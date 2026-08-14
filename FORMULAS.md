@@ -1,3 +1,9 @@
+# OCIO Builtins (M1 lock)
+
+config.ocio uses BuiltinTransform for LogC4, S-Log3 (SG3 / SG3.Cine / Venice), V-Log, and Log3G10. The curve constants below remain the Linux/no-OCIO reference and the 18% unit-test source. They match the Builtins on documented 18% grey to well under 0.5%. Do not invent replacement constants.
+
+F-Log2 and N-Log have no standard Builtin.
+
 # Formula verification (M1)
 
 Public white papers were fetched where possible. **No manufacturer constant from the research notes was replaced.** Gaps that the notes left as “official segment” were filled from the same papers.

@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// LogBridge M1 — fixed Log → scene-linear → WB → Rec.709 pipeline.
-/// Not a node editor. IDTs are implemented (unverified) until golden samples.
+/// LogBridge M1 — serial node graph: IDT → WB → optional Rec.709 preview.
+/// Not a general node editor. IDTs are implemented (unverified) until golden samples.
 @main
 struct LogBridgeApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
-        .defaultSize(width: 1280, height: 800)
+        .defaultSize(width: 1440, height: 900)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }

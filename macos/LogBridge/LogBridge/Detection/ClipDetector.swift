@@ -73,11 +73,12 @@ enum ClipDetector {
     static func detectFilename(url: URL) -> DetectionResult? {
         let name = url.lastPathComponent.lowercased()
         let cineTokens = ["sgamut3.cine", "s-gamut3.cine", "sgamut3cine", "sgamut3_cine"]
+        let venice = name.contains("venice")
         if cineTokens.contains(where: { name.contains($0) }) {
-            return locked(.sonySLog3SGamut3Cine, source: .filename, note: "filename S-Gamut3.Cine")
+            return locked(venice ? .sonySLog3SGamut3CineVenice : .sonySLog3SGamut3Cine, source: .filename, note: "filename S-Gamut3.Cine")
         }
         if name.contains("sgamut3") || name.contains("s-gamut3") {
-            return locked(.sonySLog3SGamut3, source: .filename, note: "filename S-Gamut3")
+            return locked(venice ? .sonySLog3SGamut3Venice : .sonySLog3SGamut3, source: .filename, note: "filename S-Gamut3")
         }
         if name.contains("logc4") || name.contains("awg4") {
             return locked(.arriLogC4AWG4, source: .filename, note: "filename LogC4/AWG4")
@@ -110,6 +111,16 @@ enum ClipDetector {
     static func detectModel(_ model: String?) -> DetectionResult? {
         guard let model else { return nil }
         let m = model.lowercased()
+        if m.contains("venice") {
+            return DetectionResult(
+                idt: nil,
+                curve: "S-Log3",
+                gamut: nil,
+                source: .model,
+                needsUserPicker: true,
+                note: "Venice camera detected; user must pick S-Gamut3 or S-Gamut3.Cine (Venice Builtin). Never default."
+            )
+        }
         if m.contains("alexa 35") || m.contains("alexa35") || m.contains("alexa 265") {
             return locked(.arriLogC4AWG4, source: .model, note: "model hint")
         }

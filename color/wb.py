@@ -1,7 +1,8 @@
-"""White balance in scene-linear: Bradford (default) or CAT02.
+"""White balance in ACES2065-1 scene-linear (AP0): Bradford (default) or CAT02.
 
 Given a source CCT (and optional green-magenta tint), build a CAT that
-adapts that illuminant to D65. Apply only to scene-linear RGB.
+adapts that illuminant to D65. Apply only to ACES2065-1 (AP0) scene-linear
+RGB — never as a CAT on ACEScct-encoded values.
 
 6504 K on the CIE daylight locus is D65, so the CAT is ~identity.
 3200 K (Planckian / tungsten) is not identity.
@@ -122,13 +123,15 @@ def bradford_cat_matrix(src_xy, dst_xy=D65_XY) -> np.ndarray:
 def white_balance_matrix(
     cct: float,
     tint: float = 0.0,
-    rgb_space: str = "DWG",
+    rgb_space: str = "AP0",
     method: str = "bradford",
     dst_xy=D65_XY,
 ) -> np.ndarray:
     """Scene-linear RGB CAT: adapt ``cct`` (+tint) to ``dst_xy`` (default D65).
 
-    Identity (within numerical tolerance) at 6504 K, tint 0, D65 spaces.
+    Default ``rgb_space`` is ACES2065-1 (AP0). Never apply this CAT to
+    ACEScct-encoded values — decode to AP0 linear first (or stay in AP0
+    after IDT). Identity (within numerical tolerance) at 6504 K, tint 0.
     """
     src_xy = cct_to_xy(cct, tint)
     cat = chromatic_adaptation_matrix(src_xy, dst_xy, method=method)
@@ -141,10 +144,13 @@ def apply_white_balance(
     rgb,
     cct: float,
     tint: float = 0.0,
-    rgb_space: str = "DWG",
+    rgb_space: str = "AP0",
     method: str = "bradford",
 ) -> np.ndarray:
-    """Apply CCT+tint CAT to scene-linear RGB (..., 3)."""
+    """Apply CCT+tint CAT to scene-linear RGB (..., 3).
+
+    Default domain is ACES2065-1 (AP0). Do not pass ACEScct-encoded RGB.
+    """
     rgb = np.asarray(rgb, dtype=np.float64)
     m = white_balance_matrix(cct, tint, rgb_space=rgb_space, method=method)
     return rgb @ m.T

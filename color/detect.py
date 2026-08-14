@@ -15,7 +15,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .gamuts import IDT_PAIRS
+from .gamuts import IDT_PAIRS, VENICE_IDTS
+
+
+def _venice_hit(*parts: str) -> bool:
+    """True only when a Venice camera token is present. Never a silent default."""
+    blob = " ".join(p or "" for p in parts).lower()
+    return "venice" in blob
+
+
+def _sony_pair(gamut_cine: bool, venice: bool) -> str:
+    if venice:
+        return "sony_slog3_sgamut3cine_venice" if gamut_cine else "sony_slog3_sgamut3_venice"
+    return "sony_slog3_sgamut3cine" if gamut_cine else "sony_slog3_sgamut3"
 
 # Filename tokens that hint a locked pair. Lowercase matching.
 _FILENAME_HINTS = (
@@ -85,21 +97,35 @@ def detect_from_metadata(meta: dict) -> Detection | None:
         cleaned.get("sony_acquisition_gamut", cleaned.get("sony_color_gamut", ""))
     ).lower()
     sony_curve = str(cleaned.get("sony_acquisition_gamma", "")).lower()
+    venice = _venice_hit(
+        sony,
+        sony_curve,
+        str(cleaned.get("sony_camera_model", "")),
+        str(cleaned.get("camera_model", "")),
+        str(cleaned.get("sony_model", "")),
+    )
     if "s-log3" in sony_curve or "slog3" in sony_curve or "s-log3" in sony:
         if "cine" in sony:
             return _pair(
-                "sony_slog3_sgamut3cine", "metadata", "Sony Acquisition metadata"
+                _sony_pair(True, venice),
+                "metadata",
+                "Sony Acquisition metadata" + (" (Venice)" if venice else ""),
             )
         if "s-gamut3" in sony or "sgamut3" in sony:
-            return _pair("sony_slog3_sgamut3", "metadata", "Sony Acquisition metadata")
-        # Curve known, gamut not: do not default to Cine.
+            return _pair(
+                _sony_pair(False, venice),
+                "metadata",
+                "Sony Acquisition metadata" + (" (Venice)" if venice else ""),
+            )
+        # Curve known, gamut not: do not default to Cine or Venice.
         return Detection(
             None,
             "slog3",
             None,
             "metadata",
             True,
-            "S-Log3 from Sony metadata without gamut; user must pick S-Gamut3 or S-Gamut3.Cine",
+            "S-Log3 from Sony metadata without gamut; user must pick S-Gamut3 or S-Gamut3.Cine"
+            + (" (Venice IDT if this is a Venice body)" if venice else ""),
         )
 
     canon = str(cleaned.get("canon_vendor_gamma", cleaned.get("canon_log", ""))).lower()
@@ -136,12 +162,17 @@ def detect_from_metadata(meta: dict) -> Detection | None:
 def detect_from_filename(path: str) -> Detection | None:
     name = Path(path).name.lower()
     # Check more specific tokens first (already ordered).
+    venice = _venice_hit(name)
     for token, idt_id in _FILENAME_HINTS:
         if token in name:
             if token in ("sgamut3", "s-gamut3") and "cine" in name:
                 continue  # let the cine tokens win; they are listed first
-            return _pair("sony_slog3_sgamut3cine" if "cine" in token else idt_id, "filename", f"filename token {token!r}")
-    # S-Log3 without gamut token: do not assume Cine.
+            if "cine" in token:
+                return _pair(_sony_pair(True, venice), "filename", f"filename token {token!r}")
+            if idt_id in ("sony_slog3_sgamut3", "sony_slog3_sgamut3cine"):
+                return _pair(_sony_pair(False, venice), "filename", f"filename token {token!r}")
+            return _pair(idt_id, "filename", f"filename token {token!r}")
+    # S-Log3 without gamut token: do not assume Cine or Venice.
     if "s-log3" in name or "slog3" in name:
         return Detection(
             None,
@@ -149,13 +180,25 @@ def detect_from_filename(path: str) -> Detection | None:
             None,
             "filename",
             True,
-            "S-Log3 in filename without gamut; user must pick S-Gamut3 or S-Gamut3.Cine (never default Cine)",
+            "S-Log3 in filename without gamut; user must pick S-Gamut3 or S-Gamut3.Cine (never default Cine"
+            + (" or Venice" if venice else "")
+            + ")",
         )
     return None
 
 
 def detect_from_model(model: str) -> Detection | None:
     m = (model or "").lower()
+    if _venice_hit(m):
+        # Venice body is not an IDT by itself — gamut still required. Never default.
+        return Detection(
+            None,
+            "slog3",
+            None,
+            "model",
+            True,
+            "Venice camera detected; user must pick S-Gamut3 or S-Gamut3.Cine (Venice Builtin). Never default.",
+        )
     for token, idt_id in _MODEL_HINTS:
         if token in m:
             return _pair(idt_id, "model", f"camera model {token!r}")

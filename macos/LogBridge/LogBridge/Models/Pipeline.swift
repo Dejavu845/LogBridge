@@ -2,23 +2,23 @@ import Foundation
 
 /// Fixed M1 pipeline. Not a node editor.
 ///
-///   IDT (log → camera scene-linear, manufacturer white paper)
-///     → gamut convert to Linear DWG (internal)
-///     → optional WB node (Bradford/CAT02, CCT + tint, scene-linear only)
-///     → Rec.709 ODT (matrix + BT.709 OETF)
+///   IDT (log → ACES2065-1 via OCIO Builtin or white-paper reference)
+///     → optional WB node (Bradford/CAT02, CCT + tint, ACES2065-1 / AP0)
+///     → ACEScct encode for timeline / grading display
+///     → optional Rec.709 preview ODT (matrix + BT.709 OETF)
 ///
-/// Resolve export keeps WB as a toggleable node rather than baking it into
-/// a Rec.709-only deliverable.
+/// Resolve export keeps WB as a toggleable AP0 matrix rather than baking it.
+/// Standard deliverable: ACEScct or ACES2065-1 EXR / ACES workflow.
+/// Rec.709 is preview only.
 struct FixedPipeline {
     var idt: IDT
-    var workingSpace: WorkingSpace = .davinciWideGamutLinear
+    var workingSpace: WorkingSpace = .acescct
     var whiteBalance: WhiteBalanceSettings = .identity
     var applyWhiteBalance: Bool = false
 
     enum WorkingSpace: String {
-        case davinciWideGamutLinear = "Linear DWG"
-        case davinciIntermediate = "DaVinci Intermediate"
         case acescct = "ACEScct"
+        case aces2065 = "ACES2065-1"
     }
 }
 

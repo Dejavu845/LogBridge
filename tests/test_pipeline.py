@@ -10,13 +10,13 @@ from color.gamuts import (
     PANASONIC_VGAMUT_TO_XYZ,
     rgb_to_xyz_matrix,
 )
+from color.graph import GRAPH_NODES, SCENE_LINEAR, WORKING_SPACE, SerialGraph
 from color.pipeline import apply_idt, process_to_rec709
 from color.working_space import (
-    DI_18_PERCENT,
+    ACESCCT_18_PERCENT,
+    aces2065_to_acescct,
     acescct_decode,
     acescct_encode,
-    davinci_intermediate_decode,
-    davinci_intermediate_encode,
 )
 
 
@@ -40,20 +40,20 @@ def test_idt_pairs_are_locked():
 def test_nlog_idt_uses_10bit_codes():
     cv = np.full(3, float(linear_to_nlog(0.18)))
     lin = apply_idt(cv, "nikon_nlog_bt2020")
-    np.testing.assert_allclose(lin, 0.18, rtol=1e-10)
+    np.testing.assert_allclose(lin, 0.18, rtol=1e-8)
 
 
 def test_logc4_idt_18_percent():
     log = np.full(3, float(linear_to_logc4(0.18)))
     lin = apply_idt(log, "arri_logc4_awg4")
-    np.testing.assert_allclose(lin, 0.18, rtol=1e-9)
+    np.testing.assert_allclose(lin, 0.18, rtol=1e-6)
 
 
 def test_process_to_rec709_neutral_grey_positive():
     log = np.full(3, float(linear_to_slog3(0.18)))
     out = process_to_rec709(log, "sony_slog3_sgamut3", apply_wb=False)
     assert np.all(out > 0.0)
-    # Neutral stays neutral through D65->D65.
+    # Neutral stays neutral through ACES D60 -> Rec.709 D65 CAT.
     assert out[0] == pytest.approx(out[1], rel=1e-5)
     assert out[1] == pytest.approx(out[2], rel=1e-5)
 
@@ -73,10 +73,10 @@ def test_wb_toggle_changes_tungsten_not_d65():
     assert not np.allclose(c, b, atol=1e-3)
 
 
-def test_davinci_intermediate_18_percent():
-    enc = davinci_intermediate_encode(0.18)
-    assert enc == pytest.approx(DI_18_PERCENT, abs=5e-6)
-    assert davinci_intermediate_decode(enc) == pytest.approx(0.18, rel=1e-6)
+def test_acescct_18_percent():
+    enc = acescct_encode(0.18)
+    assert enc == pytest.approx(ACESCCT_18_PERCENT, abs=5e-6)
+    assert acescct_decode(enc) == pytest.approx(0.18, rel=1e-6)
 
 
 def test_acescct_roundtrip():
@@ -84,3 +84,24 @@ def test_acescct_roundtrip():
     np.testing.assert_allclose(
         acescct_decode(acescct_encode(lin)), lin, rtol=1e-10, atol=1e-12
     )
+
+
+def test_idt_grey_is_aces_018():
+    log = np.full(3, float(linear_to_slog3(0.18)))
+    aces = apply_idt(log, "sony_slog3_sgamut3")
+    np.testing.assert_allclose(aces, 0.18, rtol=1e-6)
+    enc = aces2065_to_acescct(aces)
+    np.testing.assert_allclose(enc, ACESCCT_18_PERCENT, atol=5e-5)
+
+
+def test_serial_graph_nodes():
+    assert GRAPH_NODES == ("IDT", "WB", "ODT_Rec709")
+    assert WORKING_SPACE == "ACEScct"
+    assert SCENE_LINEAR == "ACES2065-1"
+    g = SerialGraph(idt_id="arri_logc4_awg4", wb_enabled=False, odt_enabled=True)
+    assert g.node(2).bypassable is True
+    assert g.node(2).enabled is False
+    log = np.full(3, float(linear_to_logc4(0.18)))
+    rec = g.apply(log)
+    direct = process_to_rec709(log, "arri_logc4_awg4", apply_wb=False)
+    np.testing.assert_allclose(rec, direct, atol=1e-10)

@@ -1,7 +1,9 @@
 """LogBridge color science (M1).
 
-Python implementations of manufacturer log curves are the source of truth.
-OCIO configs and LUTs are generated from these functions.
+Internal: every IDT lands in ACES2065-1; WB CAT is AP0 linear; ACEScct is the timeline encode.
+OCIO BuiltinTransform is used when PyOpenColorIO is importable and a
+Builtin exists. Otherwise white-paper reference implementations (18% codes).
+config.ocio always names the Builtins so Mac OCIO uses them.
 
 Status of every IDT: implemented (unverified) until golden grey-card samples
 are measured. Do not describe cameras as "supported".

@@ -3,12 +3,13 @@ import simd
 
 /// DaVinci Resolve export: a real bypassable WB node, not a prose sidecar.
 ///
-/// Serial graph on a DaVinci Wide Gamut / DaVinci Intermediate (D65) timeline:
-///   1. IDT  — camera log → DWG Intermediate (`.cube` and/or Resolve CST)
-///   2. WB   — scene-linear Bradford/CAT02 (CCT + tint). Own LUT / CDL / DCTL.
-///             Bypass this node → IDT → working space → optional Rec.709 ODT.
-///   3. ODT  — Rec.709 (later node, not the only deliverable)
+/// Serial graph on an ACEScct timeline (ACES2065-1 interchange):
+///   1. IDT  — camera log → ACES2065-1 → ACEScct (`.cube` and/or ACES IDT / CST)
+///   2. WB   — linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Own LUT / CDL / DCTL.
+///             Bypass this node → IDT → ACEScct, no bake.
+///   3. ODT  — Rec.709 preview only (off by default)
 ///
+/// Export ACEScct or ACES2065-1 EXR / ACES workflow. Do not bake DWG.
 /// WB is never baked into the IDT or ODT cubes. Status: implemented (unverified).
 enum ResolveExporter {
     static let lutSize = 17
@@ -16,14 +17,15 @@ enum ResolveExporter {
     static func exportNote(clips: [Clip], includeWBNode: Bool, cct: Double, tint: Double) -> String {
         var lines: [String] = []
         lines.append("LogBridge M1 Resolve export (implemented, unverified)")
-        lines.append("Working space: DaVinci Wide Gamut / DaVinci Intermediate (D65)")
-        lines.append("WB node: \(includeWBNode ? "ON (scene-linear Bradford CAT, \(Int(cct)) K, tint \(tint))" : "present, bypassed by default")")
-        lines.append("ODT: Rec.709 is a separate output, not the only deliverable.")
+        lines.append("Working space: ACEScct timeline / ACES2065-1 interchange.")
+        lines.append("WB node: \(includeWBNode ? "ON (AP0 Bradford CAT, \(Int(cct)) K, tint \(tint))" : "present, bypassed by default")")
+        lines.append("ODT: Rec.709 is preview only, off by default. Off = ACEScct deliverable.")
         lines.append("Files: graph.xml, graph.dot, 01_IDT_*.cube, 02_WB.{cube,cdl,ccc,dctl}, 03_ODT_Rec709.cube, README_RESOLVE.md")
-        lines.append("Bypass WB in Resolve: disable serial node 2 (or DCTL Bypass WB). Remaining graph is IDT → DWG Intermediate → optional Rec.709 ODT.")
+        lines.append("Bypass WB in Resolve: disable serial node 2 (or DCTL Bypass WB). Remaining graph is IDT → ACEScct, no bake.")
         lines.append("Clips:")
         for clip in clips {
-            lines.append("  - \(clip.url.lastPathComponent): \(clip.idt.ocioName) [\(clip.verificationBadge)]")
+            let name = clip.idt?.ocioName ?? clip.lockedPairLabel
+            lines.append("  - \(clip.url.lastPathComponent): \(name) [\(clip.verificationBadge)]")
         }
         return lines.joined(separator: "\n")
     }
@@ -36,7 +38,8 @@ enum ResolveExporter {
         includeWBNode: Bool,
         cct: Double,
         tint: Double,
-        lutSize: Int = lutSize
+        lutSize: Int = lutSize,
+        odtEnabled: Bool = false
     ) throws -> [URL] {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let idts = uniqueImplementedIDTs(clips)
@@ -49,7 +52,7 @@ enum ResolveExporter {
         }
 
         try write("README_RESOLVE.md", readme(idts: idts, cct: cct, tint: tint, includeWB: includeWBNode))
-        try write("graph.xml", graphXML(idts: idts, cct: cct, tint: tint, includeWB: includeWBNode))
+        try write("graph.xml", graphXML(idts: idts, cct: cct, tint: tint, includeWB: includeWBNode, odtEnabled: odtEnabled))
         try write("graph.dot", graphDOT(idts: idts, cct: cct, tint: tint, includeWB: includeWBNode))
         try write("02_WB.cdl", cdlXML(cct: cct, tint: tint, collection: false))
         try write("02_WB.ccc", cdlXML(cct: cct, tint: tint, collection: true))
@@ -85,9 +88,10 @@ enum ResolveExporter {
     private static func uniqueImplementedIDTs(_ clips: [Clip]) -> [IDT] {
         var seen = Set<IDT>()
         var out: [IDT] = []
-        for clip in clips where !clip.idt.isStub {
-            if seen.insert(clip.idt).inserted {
-                out.append(clip.idt)
+        for clip in clips {
+            guard let idt = clip.idt, !idt.isStub else { continue }
+            if seen.insert(idt).inserted {
+                out.append(idt)
             }
         }
         return out
@@ -95,90 +99,106 @@ enum ResolveExporter {
 
     // MARK: - Matrices (row-major, match ocio/matrices/*.spimtx)
 
-    private static let dwgToXYZ = simd_double3x3(rows: [
-        SIMD3(0.700622392094, 0.148774815123, 0.101058719835),
-        SIMD3(0.274118510907, 0.873631895940, -0.147750406847),
-        SIMD3(-0.098962912883, -0.137895325076, 1.325915988719)
+    private static let ap0ToXYZ = simd_double3x3(rows: [
+        SIMD3(0.952552395938186, 0.000000000000000, 0.000093678631660),
+        SIMD3(0.343966449765075, 0.728166096613486, -0.072132546378561),
+        SIMD3(0.000000000000000, 0.000000000000000, 1.008825184351586)
     ])
 
-    private static let dwgToRec709 = simd_double3x3(rows: [
-        SIMD3(1.898614899306, -0.792176183404, -0.106438715902),
-        SIMD3(-0.168948786476, 1.488975754118, -0.320026967642),
-        SIMD3(-0.121539160604, -0.315675853052, 1.437215013657)
+    private static let ap1ToXYZ = simd_double3x3(rows: [
+        SIMD3(0.662454181109, 0.134004206456, 0.156187687005),
+        SIMD3(0.272228716781, 0.674081765811, 0.053689517408),
+        SIMD3(-0.005574649490, 0.004060733529, 1.010339100313)
     ])
 
-    private static func cameraToDWG(_ idt: IDT) -> simd_double3x3? {
+    private static let ap1ToAP0 = simd_double3x3(rows: [
+        SIMD3(0.695452241357452, 0.140678696470294, 0.163869062172254),
+        SIMD3(0.044794563372038, 0.859671118456422, 0.095534318171540),
+        SIMD3(-0.005525882558114, 0.004025210305979, 1.001500672252135)
+    ])
+
+    private static let ap0ToAP1 = simd_double3x3(rows: [
+        SIMD3(1.451439316146, -0.236510746894, -0.214928569252),
+        SIMD3(-0.076553773396, 1.176229699834, -0.099675926438),
+        SIMD3(0.008316148426, -0.006032449791, 0.997716301365)
+    ])
+
+    private static let ap1ToRec709 = simd_double3x3(rows: [
+        SIMD3(1.705050992658, -0.621792120657, -0.083258872001),
+        SIMD3(-0.130256417507, 1.140804736575, -0.010548319068),
+        SIMD3(-0.024003356805, -0.128968976065, 1.152972332870)
+    ])
+
+    private static func cameraToAP0(_ idt: IDT) -> simd_double3x3? {
         switch idt {
         case .arriLogC4AWG4:
             return simd_double3x3(rows: [
-                SIMD3(0.997395939837, -0.023165014815, 0.025769074977),
-                SIMD3(-0.009183081266, 0.917632034596, 0.091551046670),
-                SIMD3(0.073487991967, 0.093704798362, 0.832807209671)
+                SIMD3(0.751244868485, 0.143007909499, 0.105747222016),
+                SIMD3(0.001403392600, 1.005384442231, -0.006787834830),
+                SIMD3(-0.000803152607, 0.003263851374, 0.997539301233)
             ])
-        case .sonySLog3SGamut3:
+        case .sonySLog3SGamut3, .sonySLog3SGamut3Venice:
             return simd_double3x3(rows: [
-                SIMD3(0.996650041836, -0.026739524102, 0.030089482265),
-                SIMD3(0.008962001489, 0.925300630159, 0.065737368353),
-                SIMD3(0.068020421169, 0.097704868626, 0.834274710205)
+                SIMD3(0.753230840311, 0.141947913791, 0.104821245898),
+                SIMD3(0.022234917350, 1.013293794080, -0.035528711431),
+                SIMD3(-0.009600262790, 0.007505931314, 1.002094331476)
             ])
-        case .sonySLog3SGamut3Cine:
+        case .sonySLog3SGamut3Cine, .sonySLog3SGamut3CineVenice:
             return simd_double3x3(rows: [
-                SIMD3(0.852787225200, 0.132475794312, 0.014736980487),
-                SIMD3(-0.014981188523, 0.987029009978, 0.027952178545),
-                SIMD3(0.037907848534, 0.091678874858, 0.870413276608)
+                SIMD3(0.639008308411, 0.270840678932, 0.090151012656),
+                SIMD3(-0.003450727728, 1.085955398170, -0.082504670442),
+                SIMD3(-0.030074188115, -0.021937342610, 1.052011530726)
             ])
         case .panasonicVLogVGamut:
             return simd_double3x3(rows: [
-                SIMD3(0.958788766787, 0.013416877789, 0.027794355424),
-                SIMD3(0.008621548181, 0.898149016914, 0.093229434905),
-                SIMD3(0.065436425015, 0.090930238374, 0.843633336611)
+                SIMD3(0.724616704132, 0.166915288194, 0.108468007675),
+                SIMD3(0.021390245413, 0.984908155703, -0.006298401116),
+                SIMD3(-0.009235562871, -0.001056905639, 1.010292468510)
             ])
         case .fujiFLog2BT2020, .nikonNLogBT2020:
             return simd_double3x3(rows: [
-                SIMD3(0.892112120946, 0.024369175871, 0.083518703182),
-                SIMD3(0.032616601764, 0.786137516904, 0.181245881332),
-                SIMD3(0.069977051186, 0.104749491904, 0.825273456911)
+                SIMD3(0.679085634707, 0.157700914643, 0.163213450650),
+                SIMD3(0.046002003080, 0.859054673003, 0.094943323917),
+                SIMD3(-0.000573943188, 0.028467768408, 0.972106174780)
             ])
         case .redLog3G10RWG:
             return simd_double3x3(rows: [
-                SIMD3(1.046183501418, -0.082175324998, 0.035991823580),
-                SIMD3(0.002998821038, 0.962281459766, 0.034719719196),
-                SIMD3(0.018301335409, -0.168020759769, 1.149719424360)
+                SIMD3(0.785058804068, 0.083858756544, 0.131082439388),
+                SIMD3(0.023173834845, 1.087897549192, -0.111071384038),
+                SIMD3(-0.073760435368, -0.314590072290, 1.388350507658)
             ])
         default:
             return nil
         }
     }
 
-    /// Scene-linear DWG RGB CAT: XYZ_to_DWG * Bradford_XYZ * DWG_to_XYZ.
+    /// Scene-linear ACES2065-1 (AP0) RGB CAT: XYZ_to_AP0 * Bradford_XYZ * AP0_to_XYZ.
     private static func wbRGBMatrix(cct: Double, tint: Double) -> simd_double3x3 {
         let cat = WhiteBalanceNode.catMatrix(cct: cct, tint: tint)
-        return dwgToXYZ.inverse * cat * dwgToXYZ
+        return ap0ToXYZ.inverse * cat * ap0ToXYZ
     }
 
     // MARK: - Working-space / OETF
 
-    private static let diA = 0.0075
-    private static let diB = 7.0
-    private static let diC = 0.07329248
-    private static let diM = 10.44426855
-    private static let diLinCut = 0.00262409
-    private static let diLogCut = 0.02740668
+    private static let acescctLoS = 10.5402377416545
+    private static let acescctLoO = 0.0729055341958355
+    private static let acescctBreakLin = 0.0078125
+    private static let acescctBreakLog = acescctLoS * acescctBreakLin + acescctLoO
     private static let rec709Beta = 0.018053968510807
     private static let rec709Alpha = 1.09929682680944
 
-    private static func diEncode(_ lin: Double) -> Double {
-        if lin > diLinCut {
-            return (log2(lin + diA) + diB) * diC
+    private static func acescctEncode(_ lin: Double) -> Double {
+        if lin <= acescctBreakLin {
+            return acescctLoS * lin + acescctLoO
         }
-        return lin * diM
+        return (log2(max(lin, 1e-10)) + 9.72) / 17.52
     }
 
-    private static func diDecode(_ enc: Double) -> Double {
-        if enc > diLogCut {
-            return pow(2.0, enc / diC - diB) - diA
+    private static func acescctDecode(_ enc: Double) -> Double {
+        if enc <= acescctBreakLog {
+            return (enc - acescctLoO) / acescctLoS
         }
-        return enc / diM
+        return pow(2.0, enc * 17.52 - 9.72)
     }
 
     private static func rec709OETF(_ lin: Double) -> Double {
@@ -196,7 +216,7 @@ enum ResolveExporter {
             let c = 95.0 / 1023.0
             let p = 14.0 * (x - c) / b + 6.0
             return (pow(2.0, p) - 64.0) / a
-        case .sonySLog3SGamut3, .sonySLog3SGamut3Cine:
+        case .sonySLog3SGamut3, .sonySLog3SGamut3Cine, .sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice:
             let cut = 171.2102946929 / 1023.0
             let cv = x * 1023.0
             if x >= cut {
@@ -235,23 +255,27 @@ enum ResolveExporter {
         m * v
     }
 
-    private static func idtToDI(_ logRGB: SIMD3<Double>, idt: IDT) -> SIMD3<Double> {
+    private static func idtToACEScct(_ logRGB: SIMD3<Double>, idt: IDT) -> SIMD3<Double> {
         let cam = SIMD3(decodeLog(logRGB.x, idt: idt),
                         decodeLog(logRGB.y, idt: idt),
                         decodeLog(logRGB.z, idt: idt))
-        let dwg = cameraToDWG(idt).map { apply3($0, cam) } ?? cam
-        return SIMD3(diEncode(dwg.x), diEncode(dwg.y), diEncode(dwg.z))
+        let ap0 = cameraToAP0(idt).map { apply3($0, cam) } ?? cam
+        let ap1 = apply3(ap0ToAP1, ap0)
+        return SIMD3(acescctEncode(ap1.x), acescctEncode(ap1.y), acescctEncode(ap1.z))
     }
 
-    private static func wbInDI(_ di: SIMD3<Double>, matrix: simd_double3x3) -> SIMD3<Double> {
-        let lin = SIMD3(diDecode(di.x), diDecode(di.y), diDecode(di.z))
-        let a = apply3(matrix, lin)
-        return SIMD3(diEncode(a.x), diEncode(a.y), diEncode(a.z))
+    private static func wbInACEScct(_ enc: SIMD3<Double>, matrix: simd_double3x3) -> SIMD3<Double> {
+        // Decode ACEScct → AP1 linear → AP0 → CAT (AP0 3x3) → AP1 → encode.
+        let ap1 = SIMD3(acescctDecode(enc.x), acescctDecode(enc.y), acescctDecode(enc.z))
+        let ap0 = apply3(ap1ToAP0, ap1)
+        let adapted = apply3(matrix, ap0)
+        let outAP1 = apply3(ap0ToAP1, adapted)
+        return SIMD3(acescctEncode(outAP1.x), acescctEncode(outAP1.y), acescctEncode(outAP1.z))
     }
 
-    private static func odtFromDI(_ di: SIMD3<Double>) -> SIMD3<Double> {
-        let lin = SIMD3(diDecode(di.x), diDecode(di.y), diDecode(di.z))
-        let rec = apply3(dwgToRec709, lin)
+    private static func odtFromACEScct(_ di: SIMD3<Double>) -> SIMD3<Double> {
+        let lin = SIMD3(acescctDecode(di.x), acescctDecode(di.y), acescctDecode(di.z))
+        let rec = apply3(ap1ToRec709, lin)
         return SIMD3(rec709OETF(rec.x), rec709OETF(rec.y), rec709OETF(rec.z))
     }
 
@@ -281,21 +305,21 @@ enum ResolveExporter {
     }
 
     private static func idtCube(idt: IDT, size: Int) -> String {
-        cubeFile(title: "LogBridge IDT \(idt.rawValue) → DWG Intermediate (no WB)", size: size) {
-            idtToDI($0, idt: idt)
+        cubeFile(title: "LogBridge IDT \(idt.rawValue) → ACEScct (no WB)", size: size) {
+            idtToACEScct($0, idt: idt)
         }
     }
 
     private static func wbCube(cct: Double, tint: Double, size: Int) -> String {
         let m = wbRGBMatrix(cct: cct, tint: tint)
-        return cubeFile(title: "LogBridge WB Bradford CAT \(Int(cct))K tint \(tint) (DI in/out)", size: size) {
-            wbInDI($0, matrix: m)
+        return cubeFile(title: "LogBridge WB AP0 CAT \(Int(cct))K tint \(tint) (ACEScct decode→ACES2065-1→encode)", size: size) {
+            wbInACEScct($0, matrix: m)
         }
     }
 
     private static func odtCube(size: Int) -> String {
-        cubeFile(title: "LogBridge ODT DWG Intermediate → Rec.709 (no WB)", size: size) {
-            odtFromDI($0)
+        cubeFile(title: "LogBridge ODT ACEScct → Rec.709 (no WB)", size: size) {
+            odtFromACEScct($0)
         }
     }
 
@@ -355,36 +379,34 @@ enum ResolveExporter {
             .map { String(format: "%.10ff", $0) }
             .joined(separator: ", ")
         return """
-        // LogBridge M1 WB node — scene-linear Bradford/CAT02 in DWG.
-        // Timeline: DaVinci Wide Gamut / DaVinci Intermediate (D65).
-        // Bypass this DCTL in Resolve to restore IDT → working space → optional Rec.709 ODT.
+        // LogBridge M1 WB node — linear AP0 Bradford/CAT02 (ACES2065-1).
+        // Timeline: ACEScct / ACES2065-1. CAT after ACEScct decode (AP1→AP0). Never on encoded ACEScct.
+        // Disable node 2 (or Bypass WB) = IDT → ACEScct, no bake. Rec.709 is preview only.
         // CCT \(Int(cct)) K  tint \(tint)  method bradford
         // Implemented (unverified). Not a camera-support claim.
 
         DEFINE_UI_PARAMS(bypass_wb, Bypass WB, DCTLUI_CHECK_BOX, 0, 0, 1)
 
-        __DEVICE__ float di_decode(float x)
+        __DEVICE__ float acescct_decode(float x)
         {
-            const float A = 0.0075f;
-            const float B = 7.0f;
-            const float C = 0.07329248f;
-            const float M = 10.44426855f;
-            const float LOG_CUT = 0.02740668f;
-            if (x > LOG_CUT)
-                return _exp2f(x / C - B) - A;
-            return x / M;
+            const float LO_S = 10.5402377416545f;
+            const float LO_O = 0.0729055341958355f;
+            const float BREAK_LIN = 0.0078125f;
+            const float BREAK_LOG = LO_S * BREAK_LIN + LO_O;
+            if (x <= BREAK_LOG)
+                return (x - LO_O) / LO_S;
+            return _exp2f(x * 17.52f - 9.72f);
         }
 
-        __DEVICE__ float di_encode(float lin)
+        __DEVICE__ float acescct_encode(float lin)
         {
-            const float A = 0.0075f;
-            const float B = 7.0f;
-            const float C = 0.07329248f;
-            const float M = 10.44426855f;
-            const float LIN_CUT = 0.00262409f;
-            if (lin > LIN_CUT)
-                return (_log2f(lin + A) + B) * C;
-            return lin * M;
+            const float LO_S = 10.5402377416545f;
+            const float LO_O = 0.0729055341958355f;
+            const float BREAK_LIN = 0.0078125f;
+            if (lin <= BREAK_LIN)
+                return LO_S * lin + LO_O;
+            if (lin < 1.0e-10f) lin = 1.0e-10f;
+            return (_log2f(lin) + 9.72f) / 17.52f;
         }
 
         __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
@@ -392,16 +414,26 @@ enum ResolveExporter {
             if (bypass_wb)
                 return make_float3(p_R, p_G, p_B);
 
-            float r = di_decode(p_R);
-            float g = di_decode(p_G);
-            float b = di_decode(p_B);
+            float r = acescct_decode(p_R);
+            float g = acescct_decode(p_G);
+            float b = acescct_decode(p_B);
+
+            const float ap1_to_ap0[9] = { 0.6954522414f, 0.1406786965f, 0.1638690622f, 0.0447945634f, 0.8596711185f, 0.0955343182f, -0.0055258826f, 0.0040252103f, 1.0015006723f };
+            float ar = ap1_to_ap0[0] * r + ap1_to_ap0[1] * g + ap1_to_ap0[2] * b;
+            float ag = ap1_to_ap0[3] * r + ap1_to_ap0[4] * g + ap1_to_ap0[5] * b;
+            float ab = ap1_to_ap0[6] * r + ap1_to_ap0[7] * g + ap1_to_ap0[8] * b;
 
             const float m[9] = { \(list) };
-            float or_ = m[0] * r + m[1] * g + m[2] * b;
-            float og  = m[3] * r + m[4] * g + m[5] * b;
-            float ob  = m[6] * r + m[7] * g + m[8] * b;
+            float or_ = m[0] * ar + m[1] * ag + m[2] * ab;
+            float og  = m[3] * ar + m[4] * ag + m[5] * ab;
+            float ob  = m[6] * ar + m[7] * ag + m[8] * ab;
 
-            return make_float3(di_encode(or_), di_encode(og), di_encode(ob));
+            const float ap0_to_ap1[9] = { 1.4514393161f, -0.2365107469f, -0.2149285693f, -0.0765537734f, 1.1762296998f, -0.0996759264f, 0.0083161484f, -0.0060324498f, 0.9977163014f };
+            float pr = ap0_to_ap1[0] * or_ + ap0_to_ap1[1] * og + ap0_to_ap1[2] * ob;
+            float pg = ap0_to_ap1[3] * or_ + ap0_to_ap1[4] * og + ap0_to_ap1[5] * ob;
+            float pb = ap0_to_ap1[6] * or_ + ap0_to_ap1[7] * og + ap0_to_ap1[8] * ob;
+
+            return make_float3(acescct_encode(pr), acescct_encode(pg), acescct_encode(pb));
         }
         """
     }
@@ -409,8 +441,8 @@ enum ResolveExporter {
     private static func resolveCST(_ idt: IDT) -> (space: String, gamma: String) {
         switch idt {
         case .arriLogC4AWG4: return ("ARRI Wide Gamut 4", "ARRI LogC4")
-        case .sonySLog3SGamut3: return ("Sony S-Gamut3", "Sony S-Log3")
-        case .sonySLog3SGamut3Cine: return ("Sony S-Gamut3.Cine", "Sony S-Log3")
+        case .sonySLog3SGamut3, .sonySLog3SGamut3Venice: return ("Sony S-Gamut3", "Sony S-Log3")
+        case .sonySLog3SGamut3Cine, .sonySLog3SGamut3CineVenice: return ("Sony S-Gamut3.Cine", "Sony S-Log3")
         case .panasonicVLogVGamut: return ("Panasonic V-Gamut", "Panasonic V-Log")
         case .fujiFLog2BT2020: return ("Rec.2020", "Fujifilm F-Log2")
         case .nikonNLogBT2020: return ("Rec.2020", "Nikon N-Log")
@@ -426,26 +458,27 @@ enum ResolveExporter {
             .replacingOccurrences(of: "\"", with: "&quot;")
     }
 
-    private static func graphXML(idts: [IDT], cct: Double, tint: Double, includeWB: Bool) -> String {
+    private static func graphXML(idts: [IDT], cct: Double, tint: Double, includeWB: Bool, odtEnabled: Bool = false) -> String {
         let enabled = includeWB ? "true" : "false"
+        let odtOn = odtEnabled ? "true" : "false"
         var idtNodes = ""
         if idts.isEmpty {
-            idtNodes = "    <IDT idt=\"(user picker)\" file=\"\" resolveOutputColorSpace=\"DaVinci Wide Gamut\" resolveOutputGamma=\"DaVinci Intermediate\"/>\n"
+            idtNodes = "    <IDT idt=\"(user picker)\" file=\"\" resolveOutputColorSpace=\"ACEScct\" resolveOutputGamma=\"ACEScct\"/>\n"
         } else {
             for idt in idts {
                 let cst = resolveCST(idt)
-                idtNodes += "    <IDT idt=\"\(xmlEscape(idt.rawValue))\" file=\"01_IDT_\(idt.rawValue).cube\" resolveInputColorSpace=\"\(xmlEscape(cst.space))\" resolveInputGamma=\"\(xmlEscape(cst.gamma))\" resolveOutputColorSpace=\"DaVinci Wide Gamut\" resolveOutputGamma=\"DaVinci Intermediate\"/>\n"
+                idtNodes += "    <IDT idt=\"\(xmlEscape(idt.rawValue))\" file=\"01_IDT_\(idt.rawValue).cube\" resolveInputColorSpace=\"\(xmlEscape(cst.space))\" resolveInputGamma=\"\(xmlEscape(cst.gamma))\" resolveOutputColorSpace=\"ACEScct\" resolveOutputGamma=\"ACEScct\"/>\n"
             }
         }
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <LogBridgeResolveGraph version="1" status="implemented (unverified)">
-          <WorkingSpace gamut="DaVinci Wide Gamut" encoding="DaVinci Intermediate" white="D65"/>
+          <WorkingSpace gamut="AP0" encoding="ACEScct" white="ACES" interchange="ACES2065-1"/>
           <Node index="1" name="IDT" type="LUT_or_CST" bypassable="false">
-            <Description>Camera log to DWG Intermediate. No white balance.</Description>
+            <Description>Camera log to ACEScct via ACES2065-1. No white balance. Disable node 2 = IDT → ACEScct, no bake.</Description>
         \(idtNodes)  </Node>
           <Node index="2" name="WB" type="Corrector" bypassable="true" enabled="\(enabled)" method="bradford">
-            <Description>Scene-linear Bradford/CAT02 (CCT + tint). Bypass this node in Resolve (Color page: disable node 2, or DCTL Bypass WB, or skip 02_WB.cube). Remaining graph is IDT → DWG Intermediate → optional Rec.709 ODT.</Description>
+            <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. Bypass this node = IDT → ACEScct, no bake.</Description>
             <CCT>\(String(format: "%.4f", cct))</CCT>
             <Tint>\(String(format: "%.6f", tint))</Tint>
             <File role="lut">02_WB.cube</File>
@@ -453,10 +486,10 @@ enum ResolveExporter {
             <File role="ccc">02_WB.ccc</File>
             <File role="dctl">02_WB.dctl</File>
           </Node>
-          <Node index="3" name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="true">
-            <Description>Optional Rec.709 ODT. Not the only deliverable; timeline stays DWG Intermediate when this node is off.</Description>
+          <Node index="3" name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="\(odtOn)">
+            <Description>Rec.709 preview ODT only. Not the standard deliverable. Off = ACEScct deliverable (or ACES2065-1 EXR).</Description>
             <File role="lut">03_ODT_Rec709.cube</File>
-            <ResolveCST inputColorSpace="DaVinci Wide Gamut" inputGamma="DaVinci Intermediate" outputColorSpace="Rec.709" outputGamma="Rec.709"/>
+            <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" outputColorSpace="Rec.709" outputGamma="Rec.709"/>
           </Node>
         </LogBridgeResolveGraph>
 
@@ -475,10 +508,10 @@ enum ResolveExporter {
           node [shape=box, fontname="Helvetica"];
 
           clip [label="Clip\\ncamera log"];
-          idt  [label="IDT\\n\(idtLabel)\\n01_IDT_<idt>.cube\\nor Resolve CST → DWG Intermediate"];
+          idt  [label="IDT\\n\(idtLabel)\\n01_IDT_<idt>.cube\\nor ACES IDT / CST → ACEScct"];
           wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n\(Int(cct)) K  tint \(tint)\\n02_WB.cube / .cdl / .ccc / .dctl", style="filled,\(wbStyle)", fillcolor="\(wbFill)"];
-          odt  [label="Rec.709 ODT (later node)\\n03_ODT_Rec709.cube\\nor CST DWG Intermediate → Rec.709"];
-          timeline [shape=oval, label="Timeline\\nDWG Intermediate"];
+          odt  [label="Rec.709 ODT (later node)\\n03_ODT_Rec709.cube\\nor CST ACEScct → Rec.709"];
+          timeline [shape=oval, label="Timeline\\nACEScct"];
 
           clip -> idt -> wb -> odt;
           idt -> timeline [style=dashed, label="working space"];
@@ -497,35 +530,32 @@ enum ResolveExporter {
 
         ## Graph (serial nodes)
 
-        Timeline color management: **DaVinci Wide Gamut / DaVinci Intermediate**, D65.
+        Standard Resolve deliverable: **ACEScct** timeline or **ACES2065-1** EXR / ACES workflow. Rec.709 is preview only.
 
         1. **IDT** — `01_IDT_<idt>.cube` or Color Space Transform
            - Input: camera log / camera gamut (`\(idtList)`)
-           - Output: DaVinci Wide Gamut, DaVinci Intermediate
+           - Output: ACEScct (via ACES2065-1)
            - Contains **no** white balance.
 
         2. **WB** — own corrector, **\(wbState)**
-           - `02_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in scene-linear DWG, wrapped in DaVinci Intermediate so it sits on the DI timeline.
-           - `02_WB.dctl` — same 3×3 as a DCTL (Decode DI → matrix → Encode DI). Checkbox **Bypass WB** inside the DCTL, or disable the node.
+           - `02_WB.cube` — ACEScct wrap of the linear AP0 Bradford/CAT02 3×3 (decode → ACES2065-1 CAT → encode).
+           - `02_WB.dctl` — DI-free DCTL: decode ACEScct → AP1→AP0 → AP0 3×3 → encode. **Bypass WB** or disable node 2 = IDT → ACEScct, no bake.
            - `02_WB.cdl` / `02_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
            - CCT \(Int(cct)) K, tint \(tint), method Bradford. Scene-linear only.
 
-        3. **Rec.709 ODT** — `03_ODT_Rec709.cube` or CST
-           - Input: DaVinci Wide Gamut / DaVinci Intermediate
-           - Output: Rec.709 encoded (BT.709 OETF, no RRT)
-           - Contains **no** white balance. Optional later node.
+        3. **Rec.709 preview** — `03_ODT_Rec709.cube` or CST
+           - Optional preview node, off by default. Off = ACEScct deliverable.
+           - BT.709 OETF, no RRT. Not the standard deliverable.
 
         ## How to bypass WB in Resolve
 
         Color page, serial node graph:
 
-        - Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or CST camera → DWG Intermediate).
+        - Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or ACES IDT / CST camera → ACEScct).
         - Apply **WB** (node 2: LUT `02_WB.cube`, **or** DCTL `02_WB.dctl`, **or** import `02_WB.cdl` onto a Color Corrector).
-        - Apply **ODT** (node 3: LUT `03_ODT_Rec709.cube`, or CST DWG Intermediate → Rec.709) if you need a 709 viewing/output node.
+        - Apply **ODT** (node 3: LUT `03_ODT_Rec709.cube`, or CST ACEScct → Rec.709) if you need a 709 viewing/output node.
 
-        To bypass WB: disable node 2 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). The remaining graph is **IDT → working space (DWG Intermediate) → optional Rec.709 ODT**. Camera linear after IDT is uncorrected.
-
-        Do not use a single Rec.709 file as the only deliverable. Rec.709 is a later node.
+        To bypass WB: disable node 2 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). Remaining graph: **IDT → ACEScct**, no bake.
 
         ## Files
 
@@ -534,13 +564,13 @@ enum ResolveExporter {
         | `graph.xml` | Machine-readable node graph (bypassable WB) |
         | `graph.dot` | Graphviz of the same graph |
         | `01_IDT_<idt>.cube` | IDT LUT (no WB) |
-        | `02_WB.cube` | WB LUT (Bradford CAT, DI-wrapped) |
+        | `02_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |
         | `02_WB.cdl` / `02_WB.ccc` | WB as ASC CDL Color Corrector |
         | `02_WB.dctl` | WB as DCTL (exact 3×3) |
         | `03_ODT_Rec709.cube` | Rec.709 ODT (no WB) |
         | `README_RESOLVE.md` | This file |
 
-        M1 is a fixed pipeline, not a node editor. Golden grey-card samples are required before any accuracy claim.
+        M1 is a serial node graph (IDT → WB → ODT), not a general node editor. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
         """
     }
 }

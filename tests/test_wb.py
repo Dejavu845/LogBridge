@@ -22,20 +22,20 @@ def test_6504k_bradford_is_identity():
     np.testing.assert_allclose(m, np.eye(3), atol=5e-3)
 
 
-def test_6504k_rgb_matrix_is_identity_on_d65_space():
-    m = white_balance_matrix(6504.0, tint=0.0, rgb_space="DWG")
+def test_6504k_rgb_matrix_is_identity_on_aces_working_space():
+    m = white_balance_matrix(6504.0, tint=0.0, rgb_space="AP1")
     np.testing.assert_allclose(m, np.eye(3), atol=5e-3)
     rgb = np.array([0.18, 0.18, 0.18])
-    out = apply_white_balance(rgb, 6504.0, rgb_space="DWG")
+    out = apply_white_balance(rgb, 6504.0, rgb_space="AP1")
     np.testing.assert_allclose(out, rgb, atol=1e-3)
 
 
 def test_3200k_is_not_identity():
-    m = white_balance_matrix(3200.0, rgb_space="DWG")
+    m = white_balance_matrix(3200.0, rgb_space="AP1")
     diff = np.linalg.norm(m - np.eye(3))
     assert diff > 0.05
     rgb = np.array([0.18, 0.18, 0.18])
-    out = apply_white_balance(rgb, 3200.0, rgb_space="DWG")
+    out = apply_white_balance(rgb, 3200.0, rgb_space="AP1")
     assert not np.allclose(out, rgb, atol=1e-3)
 
 
@@ -45,8 +45,8 @@ def test_cat02_also_identity_at_6504k():
 
 
 def test_tint_shifts_off_locus():
-    m0 = white_balance_matrix(5600.0, tint=0.0, rgb_space="DWG")
-    mg = white_balance_matrix(5600.0, tint=5.0, rgb_space="DWG")
+    m0 = white_balance_matrix(5600.0, tint=0.0, rgb_space="AP1")
+    mg = white_balance_matrix(5600.0, tint=5.0, rgb_space="AP1")
     assert not np.allclose(m0, mg, atol=1e-6)
 
 

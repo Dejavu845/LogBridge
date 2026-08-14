@@ -87,3 +87,21 @@ def test_canon_metadata_is_stub_not_a_real_idt():
     assert d.idt_id is None
     assert d.needs_user_picker
     assert "CANON_CLOG2" in d.note
+
+
+def test_venice_filename_with_sgamut3_is_venice_idt():
+    d = detect_from_filename("A001_Venice_SLog3_SGamut3.mov")
+    assert d.idt_id == "sony_slog3_sgamut3_venice"
+    assert d.needs_user_picker is False
+
+
+def test_venice_model_alone_does_not_default_gamut():
+    d = detect_clip("plain.mov", model="Sony VENICE 2")
+    assert d.idt_id is None
+    assert d.needs_user_picker
+    assert d.curve == "slog3"
+
+
+def test_slog3_without_venice_is_not_venice():
+    d = detect_from_filename("A001_SLog3_SGamut3.mov")
+    assert d.idt_id == "sony_slog3_sgamut3"

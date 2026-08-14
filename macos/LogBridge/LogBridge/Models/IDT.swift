@@ -9,6 +9,8 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
     case fujiFLog2BT2020 = "fujifilm_flog2_bt2020"
     case nikonNLogBT2020 = "nikon_nlog_bt2020"
     case redLog3G10RWG = "red_log3g10_rwg"
+    case sonySLog3SGamut3Venice = "sony_slog3_sgamut3_venice"
+    case sonySLog3SGamut3CineVenice = "sony_slog3_sgamut3cine_venice"
     // Stubs — shown in the picker as unimplemented.
     case canonCLog2Stub = "canon_clog2"
     case canonCLog3Stub = "canon_clog3"
@@ -29,7 +31,7 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
     var curve: String {
         switch self {
         case .arriLogC4AWG4: return "LogC4"
-        case .sonySLog3SGamut3, .sonySLog3SGamut3Cine: return "S-Log3"
+        case .sonySLog3SGamut3, .sonySLog3SGamut3Cine, .sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice: return "S-Log3"
         case .panasonicVLogVGamut: return "V-Log"
         case .fujiFLog2BT2020: return "F-Log2"
         case .nikonNLogBT2020: return "N-Log"
@@ -44,8 +46,8 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
     var gamut: String {
         switch self {
         case .arriLogC4AWG4: return "AWG4"
-        case .sonySLog3SGamut3: return "S-Gamut3"
-        case .sonySLog3SGamut3Cine: return "S-Gamut3.Cine"
+        case .sonySLog3SGamut3, .sonySLog3SGamut3Venice: return "S-Gamut3"
+        case .sonySLog3SGamut3Cine, .sonySLog3SGamut3CineVenice: return "S-Gamut3.Cine"
         case .panasonicVLogVGamut: return "V-Gamut"
         case .fujiFLog2BT2020, .nikonNLogBT2020: return "BT.2020"
         case .redLog3G10RWG: return "REDWideGamutRGB"
@@ -59,7 +61,12 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         if isStub {
             return "\(curve) / \(gamut) — stub, not implemented"
         }
-        return "\(curve) / \(gamut) — implemented (unverified)"
+        switch self {
+        case .sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice:
+            return "\(curve) / \(gamut) (Venice) — implemented (unverified)"
+        default:
+            return "\(curve) / \(gamut) — implemented (unverified)"
+        }
     }
 
     /// OCIO colorspace name in ocio/config.ocio.
@@ -68,6 +75,8 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         case .arriLogC4AWG4: return "ARRI LogC4 AWG4"
         case .sonySLog3SGamut3: return "Sony S-Log3 S-Gamut3"
         case .sonySLog3SGamut3Cine: return "Sony S-Log3 S-Gamut3.Cine"
+        case .sonySLog3SGamut3Venice: return "Sony S-Log3 S-Gamut3 Venice"
+        case .sonySLog3SGamut3CineVenice: return "Sony S-Log3 S-Gamut3.Cine Venice"
         case .panasonicVLogVGamut: return "Panasonic V-Log V-Gamut"
         case .fujiFLog2BT2020: return "Fujifilm F-Log2 BT.2020"
         case .nikonNLogBT2020: return "Nikon N-Log BT.2020"
@@ -77,5 +86,31 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         case .appleLogStub: return "Apple Log (stub)"
         case .djiDLogStub: return "DJI D-Log (stub)"
         }
+    }
+
+    /// Implemented (unverified) IDTs only — never stubs, never "supported".
+    static var implemented: [IDT] {
+        allCases.filter { !$0.isStub }
+    }
+
+    static var implementedCurves: [String] {
+        var seen: [String] = []
+        for idt in implemented where !seen.contains(idt.curve) {
+            seen.append(idt.curve)
+        }
+        return seen
+    }
+
+    static func pairs(forCurve curve: String) -> [IDT] {
+        implemented.filter { $0.curve == curve }
+    }
+
+    static func gamuts(forCurve curve: String) -> [String] {
+        pairs(forCurve: curve).map(\.gamut)
+    }
+
+    /// Locked pair only. Nil if the curve+gamut combination is not an M1 IDT.
+    static func match(curve: String, gamut: String) -> IDT? {
+        implemented.first { $0.curve == curve && $0.gamut == gamut }
     }
 }

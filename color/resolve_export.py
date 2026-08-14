@@ -1,15 +1,16 @@
 """DaVinci Resolve export: a real bypassable WB node, not a prose sidecar.
 
-Timeline / working space is DaVinci Wide Gamut + DaVinci Intermediate (D65).
-The graph is three serial nodes:
+Standard deliverable: ACEScct timeline or ACES2065-1 EXR / ACES workflow.
+Rec.709 is preview only (optional node 3, off by default).
 
-  1. IDT  — camera log → DWG Intermediate (LUT and/or Resolve CST)
-  2. WB   — scene-linear Bradford/CAT02 (CCT + tint). Own corrector/LUT/DCTL.
-            Bypass this node in Resolve to restore IDT → working space →
-            optional Rec.709 ODT.
-  3. ODT  — Rec.709 (LUT and/or Resolve CST). Optional / later node.
+  1. IDT  — camera log → ACES2065-1 → ACEScct (LUT and/or Resolve CST)
+  2. WB   — linear AP0 Bradford/CAT02 (CCT + tint). DCTL decodes ACEScct
+            to ACES2065-1, applies the AP0 3×3, encodes ACEScct. Same 3×3
+            works on ACES2065-1 linear. Disable node 2 = IDT → ACEScct, no bake.
+  3. ODT  — Rec.709 preview (LUT and/or Resolve CST). Off by default.
 
-WB is never baked into the IDT or ODT cubes. Status: implemented (unverified).
+WB is never a CAT on ACEScct-encoded values and is never baked into the
+IDT or ODT cubes. Status: implemented (unverified).
 """
 
 from __future__ import annotations
@@ -20,9 +21,19 @@ import numpy as np
 
 from .curves import decode_log, nlog_normalized_to_linear
 from .gamuts import IDT_PAIRS
-from .pipeline import apply_odt_rec709, camera_linear_to_working
+from .graph import SerialGraph, graph_from_export_args
+from .pipeline import apply_idt, apply_odt_rec709, camera_linear_to_working
 from .wb import white_balance_matrix, apply_white_balance
-from .working_space import davinci_intermediate_decode, davinci_intermediate_encode
+from .working_space import (
+    DEFAULT_WORKING_LINEAR,
+    aces2065_to_acescct,
+    aces2065_to_ap1,
+    acescct_decode,
+    acescct_encode,
+    acescct_to_aces2065,
+    davinci_intermediate_decode,
+    davinci_intermediate_encode,
+)
 
 # Resolve Color Space Transform labels (implemented, unverified).
 RESOLVE_CST = {
@@ -56,6 +67,10 @@ RESOLVE_CST = {
     },
 }
 
+RESOLVE_OUTPUT_CS = "ACEScct"
+RESOLVE_OUTPUT_GAMMA = "ACEScct"
+RESOLVE_SCENE_LINEAR = "ACES2065-1"
+
 
 def decode_camera_log_01(log_01, idt_id: str) -> np.ndarray:
     """Decode 0-1 camera log buffers to scene-linear camera RGB.
@@ -70,14 +85,71 @@ def decode_camera_log_01(log_01, idt_id: str) -> np.ndarray:
     return decode_log(curve, log_01)
 
 
+def _acescct_encode_lut(lin_ap1):
+    """ACEScct encode for export LUTs. Keep log2 defined for tiny/negative."""
+    lin = np.asarray(lin_ap1, dtype=np.float64)
+    return acescct_encode(np.maximum(lin, 1e-10))
+
+
+def idt_to_acescct(log_01, idt_id: str) -> np.ndarray:
+    """IDT node: camera log (0-1) → ACEScct. No WB.
+
+    N-Log LUT domain is 0-1 = code/1023; ``apply_idt`` takes 10-bit codes.
+    """
+    curve, _gamut = IDT_PAIRS[idt_id]
+    log = np.asarray(log_01, dtype=np.float64)
+    if curve == "nlog":
+        log = log * 1023.0
+    aces = apply_idt(log, idt_id)
+    return aces2065_to_acescct(aces)
+
+
+def wb_in_aces2065(
+    aces_ap0,
+    cct: float,
+    tint: float = 0.0,
+    method: str = "bradford",
+) -> np.ndarray:
+    """WB on ACES2065-1 scene-linear (AP0). Linear AP0 3×3 CAT."""
+    return apply_white_balance(
+        np.asarray(aces_ap0, dtype=np.float64),
+        cct,
+        tint=tint,
+        rgb_space="AP0",
+        method=method,
+    )
+
+
+def wb_in_acescct(
+    acescct_rgb,
+    cct: float,
+    tint: float = 0.0,
+    method: str = "bradford",
+) -> np.ndarray:
+    """WB node on an ACEScct timeline: decode → AP0 CAT → encode.
+
+    Never applies the CAT to ACEScct-encoded values.
+    """
+    ap0 = acescct_to_aces2065(np.asarray(acescct_rgb, dtype=np.float64))
+    ap0 = wb_in_aces2065(ap0, cct, tint=tint, method=method)
+    return _acescct_encode_lut(aces2065_to_ap1(ap0))
+
+
+def odt_from_acescct(acescct_rgb) -> np.ndarray:
+    """ODT node: ACEScct → Rec.709 encoded. No WB."""
+    return apply_odt_rec709(acescct_rgb, working="ACEScct")
+
+
+# --- Optional named-space helpers (DWG Intermediate). Not the default. ---
+
 def _di_encode_lut(lin):
-    """DI encode for export LUTs. Clamp below DI black so log2 is defined."""
+    """DI encode for optional DWG export LUTs."""
     lin = np.asarray(lin, dtype=np.float64)
     return davinci_intermediate_encode(np.maximum(lin, -0.0075 + 1e-12))
 
 
 def idt_to_di(log_01, idt_id: str) -> np.ndarray:
-    """IDT node: camera log (0-1) → DaVinci Intermediate (DWG, D65). No WB."""
+    """Optional named-space IDT: camera log → DWG Intermediate. Not default."""
     cam_lin = decode_camera_log_01(log_01, idt_id)
     work_lin = camera_linear_to_working(cam_lin, idt_id, working="DWG")
     return _di_encode_lut(work_lin)
@@ -89,16 +161,14 @@ def wb_in_di(
     tint: float = 0.0,
     method: str = "bradford",
 ) -> np.ndarray:
-    """WB node on a DI timeline: decode DI → linear CAT → encode DI."""
+    """Optional named-space WB on a DI timeline. Not the default export."""
     lin = davinci_intermediate_decode(np.asarray(di_rgb, dtype=np.float64))
-    lin = apply_white_balance(
-        lin, cct, tint=tint, rgb_space="DWG", method=method
-    )
+    lin = apply_white_balance(lin, cct, tint=tint, rgb_space="DWG", method=method)
     return _di_encode_lut(lin)
 
 
 def odt_from_di(di_rgb) -> np.ndarray:
-    """ODT node: DaVinci Intermediate → Rec.709 encoded. No WB."""
+    """Optional named-space ODT: DaVinci Intermediate → Rec.709. Not default."""
     lin = davinci_intermediate_decode(np.asarray(di_rgb, dtype=np.float64))
     return apply_odt_rec709(lin, working="DWG")
 
@@ -126,9 +196,9 @@ def format_cube(title: str, rgb: np.ndarray, size: int) -> str:
 
 def idt_cube_bytes(idt_id: str, size: int = 17) -> str:
     grid = _cube_sample_grid(size)
-    out = idt_to_di(grid, idt_id)
+    out = idt_to_acescct(grid, idt_id)
     return format_cube(
-        f"LogBridge IDT {idt_id} → DWG Intermediate (no WB)", out, size
+        f"LogBridge IDT {idt_id} → ACEScct (no WB)", out, size
     )
 
 
@@ -136,9 +206,9 @@ def wb_cube_bytes(
     cct: float, tint: float = 0.0, size: int = 17, method: str = "bradford"
 ) -> str:
     grid = _cube_sample_grid(size)
-    out = wb_in_di(grid, cct, tint=tint, method=method)
+    out = wb_in_acescct(grid, cct, tint=tint, method=method)
     return format_cube(
-        f"LogBridge WB Bradford CAT {cct:.0f}K tint {tint} (DI in/out)",
+        f"LogBridge WB AP0 CAT {cct:.0f}K tint {tint} (ACEScct decode→ACES2065-1→encode)",
         out,
         size,
     )
@@ -146,9 +216,9 @@ def wb_cube_bytes(
 
 def odt_cube_bytes(size: int = 17) -> str:
     grid = _cube_sample_grid(size)
-    out = odt_from_di(grid)
+    out = odt_from_acescct(grid)
     return format_cube(
-        "LogBridge ODT DWG Intermediate → Rec.709 (no WB)", out, size
+        "LogBridge ODT ACEScct → Rec.709 (no WB)", out, size
     )
 
 
@@ -163,7 +233,9 @@ def cdl_slope_offset_power(
     WB node; the CDL is the same serial slot in CDL form so Resolve can
     bypass a native corrector.
     """
-    m = white_balance_matrix(cct, tint=tint, rgb_space="DWG", method=method)
+    m = white_balance_matrix(
+        cct, tint=tint, rgb_space=DEFAULT_WORKING_LINEAR, method=method
+    )
     slope = m @ np.array([1.0, 1.0, 1.0], dtype=np.float64)
     offset = np.zeros(3, dtype=np.float64)
     power = np.ones(3, dtype=np.float64)
@@ -221,39 +293,40 @@ def format_ccc(
 def format_dctl(
     cct: float, tint: float = 0.0, method: str = "bradford"
 ) -> str:
-    m = white_balance_matrix(cct, tint=tint, rgb_space="DWG", method=method)
-    # Row-major 3x3 in DWG linear.
+    m = white_balance_matrix(
+        cct, tint=tint, rgb_space=DEFAULT_WORKING_LINEAR, method=method
+    )
     els = ", ".join(f"{m[i, j]:.10f}f" for i in range(3) for j in range(3))
-    return f"""// LogBridge M1 WB node — scene-linear Bradford/CAT02 in DWG.
-// Timeline: DaVinci Wide Gamut / DaVinci Intermediate (D65).
-// Bypass this DCTL in Resolve to restore IDT → working space → optional Rec.709 ODT.
+    return f"""// LogBridge M1 WB node — scene-linear Bradford/CAT02 in ACES2065-1 (AP0).
+// Timeline: ACEScct (ACES workflow). Scene-linear interchange: ACES2065-1.
+// Decode ACEScct → AP1 → AP0, apply cat_ap0, AP0 → AP1 → ACEScct.
+// Tick input_aces2065 if the clip is already ACES2065-1 linear (skip ACEScct wrap).
+// Bypass this DCTL in Resolve to restore IDT → ACEScct, no bake. Rec.709 is preview only.
 // CCT {cct:.0f} K  tint {tint}  method {method}
 // Implemented (unverified). Not a camera-support claim.
 
 DEFINE_UI_PARAMS(bypass_wb, Bypass WB, DCTLUI_CHECK_BOX, 0, 0, 1)
+DEFINE_UI_PARAMS(input_aces2065, Input is ACES2065-1 linear, DCTLUI_CHECK_BOX, 0, 0, 1)
 
-__DEVICE__ float di_decode(float x)
+__DEVICE__ float acescct_decode(float x)
 {{
-    const float A = 0.0075f;
-    const float B = 7.0f;
-    const float C = 0.07329248f;
-    const float M = 10.44426855f;
-    const float LOG_CUT = 0.02740668f;
-    if (x > LOG_CUT)
-        return _exp2f(x / C - B) - A;
-    return x / M;
+    const float lo_s = 10.5402377416545f;
+    const float lo_o = 0.0729055341958355f;
+    const float y_break = 0.1552511415525113f;
+    if (x <= y_break)
+        return (x - lo_o) / lo_s;
+    return _exp2f(x * 17.52f - 9.72f);
 }}
 
-__DEVICE__ float di_encode(float lin)
+__DEVICE__ float acescct_encode(float lin)
 {{
-    const float A = 0.0075f;
-    const float B = 7.0f;
-    const float C = 0.07329248f;
-    const float M = 10.44426855f;
-    const float LIN_CUT = 0.00262409f;
-    if (lin > LIN_CUT)
-        return (_log2f(lin + A) + B) * C;
-    return lin * M;
+    const float lo_s = 10.5402377416545f;
+    const float lo_o = 0.0729055341958355f;
+    const float lin_break = 0.0078125f;
+    if (lin <= lin_break)
+        return lo_s * lin + lo_o;
+    float v = lin > 1e-10f ? lin : 1e-10f;
+    return (_log2f(v) + 9.72f) / 17.52f;
 }}
 
 __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
@@ -261,16 +334,44 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
     if (bypass_wb)
         return make_float3(p_R, p_G, p_B);
 
-    float r = di_decode(p_R);
-    float g = di_decode(p_G);
-    float b = di_decode(p_B);
+    float r = p_R;
+    float g = p_G;
+    float b = p_B;
+    if (!input_aces2065)
+    {{
+        // ACEScct → AP1 linear
+        r = acescct_decode(p_R);
+        g = acescct_decode(p_G);
+        b = acescct_decode(p_B);
+        // AP1 → ACES2065-1 (AP0)
+        const float ap1_to_ap0[9] = {{
+            0.6954522414f, 0.1406786965f, 0.1638690622f,
+            0.0447945634f, 0.8596711185f, 0.0955343182f,
+            -0.0055258826f, 0.0040252103f, 1.0015006723f
+        }};
+        float ar = ap1_to_ap0[0] * r + ap1_to_ap0[1] * g + ap1_to_ap0[2] * b;
+        float ag = ap1_to_ap0[3] * r + ap1_to_ap0[4] * g + ap1_to_ap0[5] * b;
+        float ab = ap1_to_ap0[6] * r + ap1_to_ap0[7] * g + ap1_to_ap0[8] * b;
+        r = ar; g = ag; b = ab;
+    }}
 
-    const float m[9] = {{ {els} }};
-    float or_ = m[0] * r + m[1] * g + m[2] * b;
-    float og  = m[3] * r + m[4] * g + m[5] * b;
-    float ob  = m[6] * r + m[7] * g + m[8] * b;
+    const float cat_ap0[9] = {{ {els} }};
+    float or_ = cat_ap0[0] * r + cat_ap0[1] * g + cat_ap0[2] * b;
+    float og  = cat_ap0[3] * r + cat_ap0[4] * g + cat_ap0[5] * b;
+    float ob  = cat_ap0[6] * r + cat_ap0[7] * g + cat_ap0[8] * b;
 
-    return make_float3(di_encode(or_), di_encode(og), di_encode(ob));
+    if (input_aces2065)
+        return make_float3(or_, og, ob);
+
+    const float ap0_to_ap1[9] = {{
+        1.4514393161f, -0.2365107469f, -0.2149285693f,
+        -0.0765537734f, 1.1762296998f, -0.0996759264f,
+        0.0083161484f, -0.0060324498f, 0.9977163014f
+    }};
+    float pr = ap0_to_ap1[0] * or_ + ap0_to_ap1[1] * og + ap0_to_ap1[2] * ob;
+    float pg = ap0_to_ap1[3] * or_ + ap0_to_ap1[4] * og + ap0_to_ap1[5] * ob;
+    float pb = ap0_to_ap1[6] * or_ + ap0_to_ap1[7] * og + ap0_to_ap1[8] * ob;
+    return make_float3(acescct_encode(pr), acescct_encode(pg), acescct_encode(pb));
 }}
 """
 
@@ -291,10 +392,10 @@ def format_dot(
   node [shape=box, fontname="Helvetica"];
 
   clip [label="Clip\\ncamera log"];
-  idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\nor Resolve CST → DWG Intermediate"];
+  idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\nor Resolve CST → ACEScct (ACES workflow)"];
   wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n{cct:.0f} K  tint {tint}\\n02_WB.cube / .cdl / .ccc / .dctl", style="filled,{wb_style}", fillcolor="{wb_fill}"];
-  odt  [label="Rec.709 ODT (later node)\\n03_ODT_Rec709.cube\\nor CST DWG Intermediate → Rec.709"];
-  timeline [shape=oval, label="Timeline\\nDWG Intermediate"];
+  odt  [label="Rec.709 ODT (later node)\\n03_ODT_Rec709.cube\\nor CST ACEScct → Rec.709"];
+  timeline [shape=oval, label="Timeline\\nACEScct"];
 
   clip -> idt -> wb -> odt;
   idt -> timeline [style=dashed, label="working space"];
@@ -317,8 +418,23 @@ def format_graph_xml(
     tint: float,
     include_wb: bool,
     method: str = "bradford",
+    odt_enabled: bool = False,
+    graph: SerialGraph | None = None,
 ) -> str:
-    wb_enabled = "true" if include_wb else "false"
+    if graph is None:
+        graph = graph_from_export_args(
+            idt_id=idt_ids[0] if idt_ids else None,
+            cct=cct,
+            tint=tint,
+            include_wb=include_wb,
+            odt_enabled=odt_enabled,
+            method=method,
+        )
+    wb_enabled = "true" if graph.wb_enabled else "false"
+    odt_on = "true" if graph.odt_enabled else "false"
+    cct = graph.wb_cct
+    tint = graph.wb_tint
+    method = graph.wb_method
     idt_nodes = []
     for i, idt_id in enumerate(idt_ids):
         cst = RESOLVE_CST.get(idt_id, {})
@@ -328,25 +444,25 @@ def format_graph_xml(
             "    "
             f'<IDT idt="{_xml_escape(idt_id)}" file="01_IDT_{idt_id}.cube" '
             f'resolveInputColorSpace="{ics}" resolveInputGamma="{ig}" '
-            'resolveOutputColorSpace="DaVinci Wide Gamut" '
-            'resolveOutputGamma="DaVinci Intermediate"/>'
+            'resolveOutputColorSpace="ACEScct" '
+            'resolveOutputGamma="ACEScct"/>'
         )
     if not idt_nodes:
         idt_nodes.append(
             '    <IDT idt="(user picker)" file="" '
-            'resolveOutputColorSpace="DaVinci Wide Gamut" '
-            'resolveOutputGamma="DaVinci Intermediate"/>'
+            'resolveOutputColorSpace="ACEScct" '
+            'resolveOutputGamma="ACEScct"/>'
         )
     idt_block = "\n".join(idt_nodes)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <LogBridgeResolveGraph version="1" status="implemented (unverified)">
-  <WorkingSpace gamut="DaVinci Wide Gamut" encoding="DaVinci Intermediate" white="D65"/>
+  <WorkingSpace gamut="AP0" encoding="ACEScct" white="ACES" scene_linear="ACES2065-1"/>
   <Node index="1" name="IDT" type="LUT_or_CST" bypassable="false">
-    <Description>Camera log to DWG Intermediate. No white balance.</Description>
+    <Description>Camera log to ACEScct via ACES2065-1. No white balance. ACES workflow. Disable node 2 = IDT → ACEScct, no bake.</Description>
 {idt_block}
   </Node>
   <Node index="2" name="WB" type="Corrector" bypassable="true" enabled="{wb_enabled}" method="{_xml_escape(method)}">
-    <Description>Scene-linear Bradford/CAT02 (CCT + tint). Bypass this node in Resolve (Color page: disable node 2, or DCTL Bypass WB, or skip 02_WB.cube). Remaining graph is IDT → DWG Intermediate → optional Rec.709 ODT.</Description>
+    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. Bypass this node in Resolve (Color page: disable node 2, or DCTL Bypass WB, or skip 02_WB.cube). Remaining graph is IDT → ACEScct, no bake.</Description>
     <CCT>{cct:.4f}</CCT>
     <Tint>{tint:.6f}</Tint>
     <File role="lut">02_WB.cube</File>
@@ -354,10 +470,10 @@ def format_graph_xml(
     <File role="ccc">02_WB.ccc</File>
     <File role="dctl">02_WB.dctl</File>
   </Node>
-  <Node index="3" name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="true">
-    <Description>Optional Rec.709 ODT. Not the only deliverable; timeline stays DWG Intermediate when this node is off.</Description>
+  <Node index="3" name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="{odt_on}">
+    <Description>Rec.709 preview ODT only. Not the standard deliverable. Off = ACEScct deliverable (or ACES2065-1 EXR). No RRT.</Description>
     <File role="lut">03_ODT_Rec709.cube</File>
-    <ResolveCST inputColorSpace="DaVinci Wide Gamut" inputGamma="DaVinci Intermediate" outputColorSpace="Rec.709" outputGamma="Rec.709"/>
+    <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" outputColorSpace="Rec.709" outputGamma="Rec.709"/>
   </Node>
 </LogBridgeResolveGraph>
 """
@@ -377,35 +493,36 @@ Status: **implemented (unverified)**. This is not a camera-support claim.
 
 ## Graph (serial nodes)
 
-Timeline color management: **DaVinci Wide Gamut / DaVinci Intermediate**, D65.
+Timeline color management: **ACEScct**, ACES workflow. Scene-linear interchange: **ACES2065-1**.
+Do not set DaVinci Wide Gamut Intermediate as the default deliverable.
 
 1. **IDT** — `01_IDT_<idt>.cube` or Color Space Transform
    - Input: camera log / camera gamut (`{idt_list}`)
-   - Output: DaVinci Wide Gamut, DaVinci Intermediate
+   - Output: ACEScct (via ACES2065-1)
    - Contains **no** white balance.
 
 2. **WB** — own corrector, **{wb_state}**
-   - `02_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in scene-linear DWG, wrapped in DaVinci Intermediate so it sits on the DI timeline.
-   - `02_WB.dctl` — same 3×3 as a DCTL (Decode DI → matrix → Encode DI). Checkbox **Bypass WB** inside the DCTL, or disable the node.
+   - `02_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in ACES2065-1 (AP0), wrapped in ACEScct so it sits on the ACEScct timeline.
+   - `02_WB.dctl` — same 3×3 as a DCTL (Decode ACEScct → matrix → Encode ACEScct). Checkbox **Bypass WB** inside the DCTL, or disable the node.
    - `02_WB.cdl` / `02_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
    - CCT {cct:.0f} K, tint {tint}, method Bradford (CAT02 selectable in code). Scene-linear only.
 
-3. **Rec.709 ODT** — `03_ODT_Rec709.cube` or CST
-   - Input: DaVinci Wide Gamut / DaVinci Intermediate
-   - Output: Rec.709 encoded (BT.709 OETF, no RRT)
+3. **Rec.709 ODT** — `03_ODT_Rec709.cube` or CST (**preview only**, off by default)
+   - Input: ACEScct
+   - Output: Rec.709 encoded (BT.709 OETF, no RRT). Preview only — not the standard deliverable.
    - Contains **no** white balance. Optional later node.
 
 ## How to bypass WB in Resolve
 
 Color page, serial node graph:
 
-- Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or CST camera → DWG Intermediate).
+- Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or CST camera → ACEScct, ACES workflow).
 - Apply **WB** (node 2: LUT `02_WB.cube`, **or** DCTL `02_WB.dctl`, **or** import `02_WB.cdl` onto a Color Corrector).
-- Apply **ODT** (node 3: LUT `03_ODT_Rec709.cube`, or CST DWG Intermediate → Rec.709) if you need a 709 viewing/output node.
+- Apply **ODT** (node 3: LUT `03_ODT_Rec709.cube`, or CST ACEScct → Rec.709) if you need a 709 viewing/output node.
 
-To bypass WB: disable node 2 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). The remaining graph is **IDT → working space (DWG Intermediate) → optional Rec.709 ODT**. Camera linear after IDT is uncorrected.
+To bypass WB: disable node 2 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). The remaining graph is **IDT → working space (ACEScct) → optional Rec.709 ODT**. Camera linear after IDT is uncorrected.
 
-Do not use a single Rec.709 file as the only deliverable. Rec.709 is a later node.
+Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview only.
 
 ## Files
 
@@ -414,13 +531,13 @@ Do not use a single Rec.709 file as the only deliverable. Rec.709 is a later nod
 | `graph.xml` | Machine-readable node graph (bypassable WB) |
 | `graph.dot` | Graphviz of the same graph |
 | `01_IDT_<idt>.cube` | IDT LUT (no WB) |
-| `02_WB.cube` | WB LUT (Bradford CAT, DI-wrapped) |
+| `02_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |
 | `02_WB.cdl` / `02_WB.ccc` | WB as ASC CDL Color Corrector |
 | `02_WB.dctl` | WB as DCTL (exact 3×3) |
 | `03_ODT_Rec709.cube` | Rec.709 ODT (no WB) |
 | `README_RESOLVE.md` | This file |
 
-M1 is a fixed pipeline, not a node editor. Golden grey-card samples are required before any accuracy claim.
+M1 is a serial node graph (IDT → WB → ODT), not a general node editor. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
 """
 
 
@@ -433,12 +550,32 @@ def export_resolve_bundle(
     include_wb: bool = True,
     lut_size: int = 17,
     method: str = "bradford",
+    odt_enabled: bool = False,
+    graph: SerialGraph | None = None,
 ) -> list[Path]:
-    """Write a Resolve-importable graph (XML, DOT, CDL, DCTL, cubes, README)."""
+    """Write a Resolve-importable graph (XML, DOT, CDL, DCTL, cubes, README).
+
+    Bypass flags come from ``graph`` when given (node 2 off = IDT → ACEScct, no bake).
+    Default timeline is ACEScct / ACES2065-1. Rec.709 ODT is preview, off by default.
+    """
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     idt_ids = list(idt_ids or [])
-    # Stable unique order, skip stubs / unknown.
+    if graph is not None:
+        include_wb = graph.wb_enabled
+        cct = graph.wb_cct
+        tint = graph.wb_tint
+        method = graph.wb_method
+        odt_enabled = graph.odt_enabled
+    else:
+        graph = graph_from_export_args(
+            idt_id=idt_ids[0] if idt_ids else None,
+            cct=cct,
+            tint=tint,
+            include_wb=include_wb,
+            odt_enabled=odt_enabled,
+            method=method,
+        )
     seen: list[str] = []
     for i in idt_ids:
         if i in IDT_PAIRS and i not in seen:
@@ -454,7 +591,7 @@ def export_resolve_bundle(
         return p
 
     _w("README_RESOLVE.md", format_readme(idt_ids, cct, tint, include_wb))
-    _w("graph.xml", format_graph_xml(idt_ids, cct, tint, include_wb, method))
+    _w("graph.xml", format_graph_xml(idt_ids, cct, tint, include_wb, method, odt_enabled=odt_enabled, graph=graph))
     _w("graph.dot", format_dot(idt_ids, cct, tint, include_wb))
     _w("02_WB.cdl", format_cdl(cct, tint, method))
     _w("02_WB.ccc", format_ccc(cct, tint, method))

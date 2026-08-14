@@ -1,4 +1,12 @@
-"""Manufacturer log curve encode/decode.
+"""Manufacturer log curve encode/decode (reference implementations).
+
+When OpenColorIO Python is importable, IDTs with a BuiltinTransform
+(LogC4, S-Log3, V-Log, Log3G10, Venice) call that Builtin to ACES2065-1.
+These functions stay as the Linux/no-OCIO reference and as the 18% grey
+unit-test source. They match the Builtins on documented 18% codes to well
+under 0.5%. Do not replace them with invented “more accurate” constants.
+
+F-Log2 and N-Log have no standard Builtin — these papers are the IDT.
 
 Inputs are normalized 0-1 except Nikon N-Log, whose white-paper ``x`` is a
 10-bit code value in 0-1023. Do not divide N-Log by 1023 before the curve.
@@ -235,6 +243,8 @@ IDT_NAMES = (
     "Fujifilm F-Log2 / BT.2020",
     "Nikon N-Log / BT.2020",
     "RED Log3G10 / REDWideGamutRGB",
+    "Sony S-Log3 / S-Gamut3 (Venice)",
+    "Sony S-Log3 / S-Gamut3.Cine (Venice)",
 )
 
 _DECODE = {

@@ -2,23 +2,40 @@ import Foundation
 import Combine
 import AppKit
 
-/// One imported clip with a locked curve+gamut pair.
+/// One imported clip with a locked curve+gamut pair (or a pending picker).
+///
+/// `idt` is nil until metadata/filename/model locks a pair or the user picks
+/// both curve and gamut. Never default S-Log3 to S-Gamut3.Cine.
 struct Clip: Identifiable, Hashable {
     let id: UUID
     let url: URL
-    var idt: IDT
+    var idt: IDT?
+    var detectedCurve: String?
+    var detectedGamut: String?
     var detectionSource: DetectionSource
     var needsUserPicker: Bool
     var detectionNote: String
 
+    var filename: String { url.lastPathComponent }
+
     var lockedPairLabel: String {
-        "\(idt.curve) + \(idt.gamut)"
+        if let idt {
+            return "\(idt.curve) + \(idt.gamut)"
+        }
+        if let curve = detectedCurve, detectedGamut == nil {
+            return "\(curve) + (pick gamut)"
+        }
+        return "pick curve + gamut"
     }
 
     var verificationBadge: String {
-        if idt.isStub { return "stub" }
+        if let idt, idt.isStub { return "stub" }
+        if idt == nil { return "needs picker" }
         return "implemented (unverified)"
     }
+
+    var displayCurve: String? { idt?.curve ?? detectedCurve }
+    var displayGamut: String? { idt?.gamut ?? detectedGamut }
 }
 
 enum DetectionSource: String, Hashable {
@@ -32,23 +49,77 @@ enum DetectionSource: String, Hashable {
 final class SessionModel: ObservableObject {
     @Published var clips: [Clip] = []
     @Published var selectedID: UUID?
+    @Published var selectedNode: NodeSlot = .idt
+    @Published var graph = SerialGraph()
     @Published var showImporter = false
     @Published var dropTargeted = false
-    @Published var whiteBalanceEnabled = false
-    @Published var cct: Double = 6504
-    @Published var tint: Double = 0
     @Published var lastExportNote: String = ""
+
+    let preview = PreviewEngine()
 
     var selectedClip: Clip? {
         clips.first { $0.id == selectedID }
     }
 
+    func refreshPreview() {
+        preview.refresh(clip: selectedClip, graph: graph)
+    }
+
     func setIDT(_ id: UUID, _ idt: IDT) {
         guard let idx = clips.firstIndex(where: { $0.id == id }) else { return }
         clips[idx].idt = idt
+        clips[idx].detectedCurve = idt.curve
+        clips[idx].detectedGamut = idt.gamut
         clips[idx].detectionSource = .user
         clips[idx].needsUserPicker = false
         clips[idx].detectionNote = "user picker"
+        preview.invalidateIDT(clipID: id)
+        refreshPreview()
+    }
+
+    /// Curve picker. A single-gamut curve locks the pair; S-Log3 waits for gamut.
+    func setCurve(_ id: UUID, curve: String) {
+        let pairs = IDT.pairs(forCurve: curve)
+        if pairs.count == 1 {
+            setIDT(id, pairs[0])
+            return
+        }
+        guard let idx = clips.firstIndex(where: { $0.id == id }) else { return }
+        clips[idx].idt = nil
+        clips[idx].detectedCurve = curve
+        clips[idx].detectedGamut = nil
+        clips[idx].needsUserPicker = true
+        clips[idx].detectionSource = .user
+        clips[idx].detectionNote = "\(curve) selected; pick gamut (never default S-Gamut3.Cine)"
+        preview.invalidateIDT(clipID: id)
+        refreshPreview()
+    }
+
+    func setGamut(_ id: UUID, gamut: String) {
+        guard let idx = clips.firstIndex(where: { $0.id == id }) else { return }
+        let curve = clips[idx].idt?.curve ?? clips[idx].detectedCurve
+        guard let curve, let idt = IDT.match(curve: curve, gamut: gamut) else { return }
+        setIDT(id, idt)
+    }
+
+    func setWBEnabled(_ enabled: Bool) {
+        graph.setEnabled(.wb, enabled)
+        preview.invalidateWBODT()
+        refreshPreview()
+    }
+
+    func setODTEnabled(_ enabled: Bool) {
+        graph.setEnabled(.odt, enabled)
+        preview.invalidateWBODT()
+        refreshPreview()
+    }
+
+    func setWBParams(cct: Double? = nil, tint: Double? = nil, method: String? = nil) {
+        if let cct { graph.wbCCT = cct }
+        if let tint { graph.wbTint = tint }
+        if let method { graph.wbMethod = method }
+        preview.invalidateWBODT()
+        refreshPreview()
     }
 
     func importProviders(_ providers: [NSItemProvider]) {
@@ -92,18 +163,21 @@ final class SessionModel: ObservableObject {
 
     private func appendClip(_ url: URL) {
         let detection = ClipDetector.detect(url: url)
+        // Never silently assign an IDT. S-Log3 without gamut stays nil
+        // (user must pick S-Gamut3 or S-Gamut3.Cine — never default Cine).
         let clip = Clip(
             id: UUID(),
             url: url,
-            idt: detection.idt ?? .sonySLog3SGamut3,
+            idt: detection.idt,
+            detectedCurve: detection.curve,
+            detectedGamut: detection.gamut,
             detectionSource: detection.source,
             needsUserPicker: detection.needsUserPicker,
             detectionNote: detection.note
         )
-        // If unresolved, still add the clip but force the picker — and NEVER
-        // silently pick S-Gamut3.Cine for S-Log3.
         clips.append(clip)
         if selectedID == nil { selectedID = clip.id }
+        refreshPreview()
     }
 
     func exportResolve() {
@@ -112,22 +186,23 @@ final class SessionModel: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "Export"
-        panel.message = "Folder for the Resolve node graph (LUT / CDL / DCTL). WB is a bypassable node."
+        panel.message = "Folder for the Resolve node graph (LUT / CDL / DCTL). WB node 2 off = no bake."
         panel.begin { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
             do {
                 let written = try ResolveExporter.export(
                     to: url,
                     clips: self.clips,
-                    includeWBNode: self.whiteBalanceEnabled,
-                    cct: self.cct,
-                    tint: self.tint
+                    includeWBNode: self.graph.wbEnabled,
+                    cct: self.graph.wbCCT,
+                    tint: self.graph.wbTint,
+                    odtEnabled: self.graph.odtEnabled
                 )
                 self.lastExportNote = ResolveExporter.exportNote(
                     clips: self.clips,
-                    includeWBNode: self.whiteBalanceEnabled,
-                    cct: self.cct,
-                    tint: self.tint
+                    includeWBNode: self.graph.wbEnabled,
+                    cct: self.graph.wbCCT,
+                    tint: self.graph.wbTint
                 ) + "\nWrote \(written.count) files to \(url.path)"
             } catch {
                 self.lastExportNote = "Export failed: \(error.localizedDescription)"
