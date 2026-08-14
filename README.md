@@ -66,7 +66,7 @@ CI: `.github/workflows/test.yml` runs pytest on Ubuntu.
 | Nikon N-Log / BT.2020 | N-Log | BT.2020 / D65 | ~372 / 10-bit | implemented (unverified) |
 | RED Log3G10 / REDWideGamutRGB | Log3G10 | RWG / D65 | 1/3 | implemented (unverified) |
 
-Sony S-Log3 is **two locked pairs**. Metadata or the user picks a **paired IDT** (not a curve dropdown plus a gamut dropdown). LogBridge never defaults S-Log3 to S-Gamut3.Cine. Missing metadata **blocks one-click process** until the user picks a pair (e.g. “S-Log3 + S-Gamut3” or “S-Log3 + S-Gamut3.Cine”). Venice pairs appear only if a Venice body is detected.
+Sony S-Log3 is **two locked pairs**. Metadata or the user picks a **paired IDT** (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine) — not two dropdowns. LogBridge never defaults S-Log3 to S-Gamut3.Cine. Clips without a locked pair stay **pending**. **Process selected** / **Apply graph** and Resolve export are blocked for those clips. The primary button is never 一键还原. Venice pairs appear only if a Venice body is detected.
 
 Nikon N-Log white-paper `x` is a **10-bit code value 0–1023**. Do not divide by 1023 before the curve. 452 is the breakpoint, not 18% grey (~372). The OCIO LUT is sampled on 0–1 = code/1023 so image buffers stay normalized; the Python API takes 10-bit codes.
 
@@ -76,7 +76,7 @@ Fujifilm F-Log2 uses Data Sheet 1.0 + BT.2020 (`a=5.555556`). Not an F-Log1 LUT.
 
 1. Camera-private metadata (ARRI MXF, Sony Acquisition, Canon vendor, RED RMD)
 2. Filename / model hint
-3. User picker (paired IDTs; process blocked until chosen)
+3. User picker (paired IDTs; clip stays pending until chosen)
 
 QuickTime `nclc` / `nclx` / `colr` is **never** used to identify S-Log3 or LogC4.
 
@@ -96,7 +96,7 @@ Python: `from color.graph import SerialGraph`. Swift: `SerialGraph` + `NodeSlot`
 
 Export writes a serial **node graph**, not a prose sidecar: `graph.xml`, `graph.dot`, `01_IDT_<idt>.cube`, `02_WB.cube` / `.cdl` / `.ccc` / `.dctl`, `03_ODT_Rec709.cube`, `README_RESOLVE.md`.
 
-Export default: **ACEScct** timeline / **ACES2065-1**. Rec.709 ODT is an optional preview node (off by default). Implemented (unverified).
+Export default: **ACEScct** timeline / **ACES2065-1**. Rec.709 ODT is an optional preview node (off by default). Export is blocked while any clip is pending (no locked IDT pair). Implemented (unverified).
 
 Python: `from color.resolve_export import export_resolve_bundle` (pass `graph=` or `include_wb=`). Swift: `ResolveExporter.export(to:clips:...)`. Status: implemented (unverified).
 
@@ -125,6 +125,7 @@ No golden samples have been measured. Do not claim accuracy. See `ACCEPTANCE.md`
 - Camera-protocol reverse engineering, marketplace integrations
 - Treating QuickTime nclc as log identity
 - Using the preview as a substitute for a full render
+- 一键还原 / claiming a one-click restore (primary actions are Process selected / Apply graph)
 
 ## Layout
 
