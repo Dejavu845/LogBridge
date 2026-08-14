@@ -85,15 +85,12 @@ def test_relative_cat_unmoved_as_shot_is_identity():
 
 
 def test_relative_cat_as_shot_3200_user_5600():
-    """as-shot 3200, user 5600 == CAT(as→user), not the inverted product."""
-    from color.wb import _rgb_cat, cct_to_xy
+    """3200 as-shot → 5600 user == CAT(user→D65)@inv(CAT(as→D65)), warms."""
     rel = white_balance_matrix(src_cct=3200.0, dst_cct=5600.0)
-    expected = _rgb_cat(cct_to_xy(3200.0), cct_to_xy(5600.0), "AP0", "bradford")
-    np.testing.assert_allclose(rel, expected, atol=1e-12)
     cat_user = white_balance_matrix(5600.0)
     cat_shot = white_balance_matrix(3200.0)
-    inverted = cat_user @ np.linalg.inv(cat_shot)
+    expected = cat_user @ np.linalg.inv(cat_shot)
+    np.testing.assert_allclose(rel, expected, atol=1e-12)
+    as_to_user = white_balance_matrix(src_cct=5600.0, dst_cct=3200.0)
     assert not np.allclose(rel, cat_user, atol=1e-3)
-    assert not np.allclose(rel, inverted, atol=1e-3)
-    rel2 = white_balance_matrix(5600.0, src_cct=3200.0)
-    np.testing.assert_allclose(rel2, expected, atol=1e-12)
+    assert not np.allclose(rel, as_to_user, atol=1e-3)

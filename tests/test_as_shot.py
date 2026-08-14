@@ -302,8 +302,7 @@ def test_as_shot_3200_user_5600_is_relative_not_absolute():
     got = g.wb_matrix()
     cat_user = white_balance_matrix(5600.0, rgb_space="AP0")
     cat_shot = white_balance_matrix(3200.0, rgb_space="AP0")
-    from color.wb import _rgb_cat, cct_to_xy
-    expected = _rgb_cat(cct_to_xy(3200.0), cct_to_xy(5600.0), "AP0", "bradford")
+    expected = cat_user @ np.linalg.inv(cat_shot)
     np.testing.assert_allclose(got, expected, atol=1e-12)
     assert not np.allclose(got, cat_user, atol=1e-3)
     log = _logc4_chroma()

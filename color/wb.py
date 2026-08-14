@@ -163,9 +163,8 @@ def white_balance_matrix(
 
     Relative (user moved CCT/tint away from as-shot):
         ``src_cct`` = as-shot, ``dst_cct`` = user (``cct`` is dst if
-        ``dst_cct`` is omitted). Bradford(as-shot white → user white)
-        == CAT(as→user). Not CAT(user→D65) alone, and not
-        CAT(user→D65) @ inv(CAT(as→D65)) (that product is backwards).
+        ``dst_cct`` is omitted). Locked: CAT(user→D65)·inv(CAT(as→D65))
+        == CAT(user→as). 3200→5600 warms. Not CAT(as→user), not CAT(user→D65) alone.
 
     Identity when both sides are missing, or when src equals dst.
     ``cct is None`` without src/dst is identity (pending / unmoved).
@@ -173,13 +172,11 @@ def white_balance_matrix(
     """
     dest = dst_cct if dst_cct is not None else cct
     if src_cct is not None and dest is not None:
-        # CAT(as → user) in AP0. Do not use CAT(user→D65)@inv(CAT(as→D65)).
-        return _rgb_cat(
-            cct_to_xy(src_cct, src_tint),
-            cct_to_xy(dest, tint),
-            rgb_space,
-            method,
-        )
+        # CAT(user→D65) @ inv(CAT(as→D65)) == CAT(user→as).
+        # 3200 as-shot → 5600 user warms the picture (in-camera Kelvin).
+        m_user = _rgb_cat_to_white(dest, tint, rgb_space, method, dst_xy)
+        m_shot = _rgb_cat_to_white(src_cct, src_tint, rgb_space, method, dst_xy)
+        return m_user @ np.linalg.inv(m_shot)
     if dest is None:
         return np.eye(3, dtype=np.float64)
     return _rgb_cat_to_white(dest, tint, rgb_space, method, dst_xy)
