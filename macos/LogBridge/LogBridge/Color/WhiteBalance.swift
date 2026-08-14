@@ -157,4 +157,79 @@ enum WhiteBalanceNode {
         guard s > 1e-12 else { return nil }
         return cctTint(fromXY: SIMD2(xyz.x / s, xyz.y / s))
     }
+
+    static let ap0ToAP1 = simd_double3x3(rows: [
+        SIMD3(1.451439316146, -0.236510746894, -0.214928569252),
+        SIMD3(-0.076553773396, 1.176229699834, -0.099675926438),
+        SIMD3(0.008316148426, -0.006032449791, 0.997716301365)
+    ])
+    static let ap1ToAP0 = simd_double3x3(rows: [
+        SIMD3(0.695452241357452, 0.140678696470294, 0.163869062172254),
+        SIMD3(0.044794563372038, 0.859671118456422, 0.095534318171540),
+        SIMD3(-0.005525882558114, 0.004025210305979, 1.001500672252135)
+    ])
+    static let ap1Y = SIMD3(0.272228716781, 0.674081765811, 0.053689517408)
+
+    /// 白平衡（估计）: SoG p=6 in linear ACEScg. Empty on low confidence. Not calibration.
+    static func estimateAutoWB(ap0: [Float], width: Int, height: Int) -> (cct: Double, tint: Double)? {
+        guard width > 0, height > 0, ap0.count >= width * height * 3 else { return nil }
+        func pixel(_ x: Int, _ y: Int) -> SIMD3<Double> {
+            let i = (y * width + x) * 3
+            let ap0p = SIMD3(Double(ap0[i]), Double(ap0[i + 1]), Double(ap0[i + 2]))
+            return ap0ToAP1 * ap0p
+        }
+        func sog(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int) -> (SIMD3<Double>, Double)? {
+            var sum = SIMD3<Double>(repeating: 0)
+            var n = 0
+            var total = 0
+            let p = 6.0
+            for y in y0..<y1 {
+                for x in x0..<x1 {
+                    total += 1
+                    let c = pixel(x, y)
+                    let yv = simd_dot(c, ap1Y)
+                    if yv >= 0.02, c.x <= 8, c.y <= 8, c.z <= 8, c.x >= 0, c.y >= 0, c.z >= 0,
+                       c.x.isFinite, c.y.isFinite, c.z.isFinite {
+                        sum += SIMD3(pow(c.x, p), pow(c.y, p), pow(c.z, p))
+                        n += 1
+                    }
+                }
+            }
+            let frac = total == 0 ? 0.0 : Double(n) / Double(total)
+            guard frac >= 0.15, n > 0 else { return nil }
+            let mean = sum / Double(n)
+            let illum = SIMD3(pow(max(mean.x, 0), 1 / p), pow(max(mean.y, 0), 1 / p), pow(max(mean.z, 0), 1 / p))
+            return (illum, frac)
+        }
+        func angle(_ a: SIMD3<Double>, _ b: SIMD3<Double>) -> Double {
+            let na = simd_length(a), nb = simd_length(b)
+            guard na > 1e-12, nb > 1e-12 else { return 0 }
+            let c = min(1, max(-1, simd_dot(a, b) / (na * nb)))
+            return acos(c) * 180 / .pi
+        }
+        guard let (illum, _) = sog(0, 0, width, height) else { return nil }
+        if angle(illum, SIMD3(1, 1, 1)) < 2 { return nil }
+        if width >= 3, height >= 3 {
+            var tiles: [SIMD3<Double>] = []
+            let ys = [0, height / 3, 2 * height / 3, height]
+            let xs = [0, width / 3, 2 * width / 3, width]
+            for ty in 0..<3 {
+                for tx in 0..<3 {
+                    if let (t, _) = sog(xs[tx], ys[ty], xs[tx + 1], ys[ty + 1]) {
+                        tiles.append(t)
+                    }
+                }
+            }
+            var mx = 0.0
+            for i in 0..<tiles.count {
+                for j in (i + 1)..<tiles.count {
+                    mx = max(mx, angle(tiles[i], tiles[j]))
+                }
+            }
+            if mx > 5 { return nil }
+        }
+        let ap0Illum = ap1ToAP0 * illum
+        return pickNeutral(linearRGB: ap0Illum, rgbToXYZ: ap0ToXYZ)
+    }
 }
+

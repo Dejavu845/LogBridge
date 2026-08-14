@@ -95,6 +95,7 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 - User move is relative: `CAT(user→D65)·inv(CAT(as→D65))` == `CAT(user→as)` in AP0. 3200→5600 warms. Not `CAT(as→user)`, not `CAT(user→D65)` alone. First typed CCT with no as-shot is a label (identity).
 - Missing CCT does **not** apply 5600 K. Knobs empty / pending / identity.
 - Grey-card / pick-neutral overrides as-shot and **is** an absolute CAT of the sampled white to D65 (identity only if sampled D65). Golden grey-card samples are still required. Labels stay **implemented (unverified)**.
+- Auto WB is **白平衡（估计）**, not 精准 / 一键校准. SoG p=6 in linear ACEScg after IDT; confirm writes an absolute AP0 CAT. Residual <2°, mixed-light tile angle >5°, or valid pixels <15% stay empty. Never guess 5600. Never read Rec.709 pixels. Grey-card overrides the estimate. As-shot default stays identity.
 
 ## Media (no manufacturer demos)
 

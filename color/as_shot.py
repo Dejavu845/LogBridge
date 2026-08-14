@@ -40,6 +40,7 @@ WB_SOURCE_GREY = "grey"
 WB_SOURCE_GREY_CARD = WB_SOURCE_GREY
 WB_SOURCE_USER = "user"
 WB_SOURCE_MANUAL = WB_SOURCE_USER
+WB_SOURCE_ESTIMATE = "estimate"
 
 PENDING_NOTE = (
     "Missing as-shot CCT/tint; knobs empty / pending, identity CAT "
@@ -251,7 +252,8 @@ def effective_cat_cct(
     Missing CCT: identity, no 5600 guess.
 
     Source ``as_shot`` is never a CAT, even at 3200 or 5600.
-    Source ``grey`` is an absolute CAT. Source ``user`` with as-shot
+    Source ``grey`` is an absolute CAT. Source ``estimate`` (confirmed
+    auto WB) is an absolute CAT. Source ``user`` with as-shot
     is relative. Source ``unknown`` with an explicit CCT (CLI / unit
     construction) stays an absolute CAT.
     """

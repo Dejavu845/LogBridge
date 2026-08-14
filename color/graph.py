@@ -15,7 +15,8 @@ Not a node editor. Used by ``pipeline`` and Resolve export.
                  == CAT(user->as) in AP0; 3200->5600 warms. Not
                  CAT(as->user), not CAT(user->D65) alone. First typed CCT
                  with no as-shot is a label (identity).
-                 Grey-card is absolute CAT. Missing CCT: knobs empty / pending,
+                 Grey-card is absolute CAT. Confirmed auto WB (白平衡（估计）)
+                 is also absolute; propose does not write CAT. Missing CCT: knobs empty / pending,
                  identity, no 5600 guess. Bypassable.
   4. ODT       — Off (ACEScct deliverable, default) | Rec.709 preview |
                  Rec.2100 HLG | Rec.2100 PQ. Rec.709 is preview only (DIY
@@ -51,6 +52,7 @@ from .rec709 import rec709_oetf
 from .wb import white_balance_matrix
 from .as_shot import (
     WB_SOURCE_AS_SHOT,
+    WB_SOURCE_ESTIMATE,
     WB_SOURCE_GREY,
     WB_SOURCE_UNKNOWN,
     WB_SOURCE_USER,
@@ -136,6 +138,9 @@ class SerialGraph:
     wb_source: str = WB_SOURCE_UNKNOWN
     as_shot_cct: float | None = None
     as_shot_tint: float = 0.0
+    auto_wb_cct: float | None = None
+    auto_wb_tint: float = 0.0
+    auto_wb_note: str = ""
     odt_enabled: bool = False
     odt: str = ODT_OFF
 
@@ -256,6 +261,33 @@ class SerialGraph:
     def apply_grey_card(self, ap0_rgb) -> AsShotWB:
         """Grey-card pick after IDT in ACES2065-1 (AP0) linear. Overrides metadata."""
         return self.pick_neutral(ap0_rgb, rgb_space="AP0")
+
+    def propose_auto_wb(self, ap0_rgb):
+        """Estimate residual WB. Does not write CAT. Empty on low confidence."""
+        from .auto_wb import estimate_auto_wb
+
+        est = estimate_auto_wb(ap0_rgb)
+        if est.ok:
+            self.auto_wb_cct = float(est.cct)
+            self.auto_wb_tint = float(est.tint)
+            self.auto_wb_note = est.note
+        else:
+            self.auto_wb_cct = None
+            self.auto_wb_tint = 0.0
+            self.auto_wb_note = est.note
+        return est
+
+    def confirm_auto_wb(self) -> bool:
+        """User confirm: write absolute AP0 CAT. Grey-card wins. Empty stays empty."""
+        if self.wb_source == WB_SOURCE_GREY:
+            return False
+        if self.auto_wb_cct is None:
+            return False
+        self.wb_cct = float(self.auto_wb_cct)
+        self.wb_tint = float(self.auto_wb_tint)
+        self.wb_source = WB_SOURCE_ESTIMATE
+        self.wb_enabled = True
+        return True
 
     def set_user_wb(self, cct: float, tint: float | None = None) -> None:
         """User CCT/tint. Relative CAT if knobs leave as-shot; else a label."""
