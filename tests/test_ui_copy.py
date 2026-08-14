@@ -18,12 +18,19 @@ def _all_swift() -> str:
     return "\n".join(p.read_text(encoding="utf-8") for p in SWIFT_ROOT.rglob("*.swift"))
 
 
-def test_primary_button_is_process_selected_or_apply_graph():
+def test_primary_button_is_locked_chinese():
     content = _read(CONTENT)
-    assert 'Button("Process selected")' in content
-    assert 'Button("Apply graph")' in content
+    assert "处理已锁定片段" in content
+    assert "先选择 Log 与色域" in content
+    assert "导出 ACEScct / EXR" in content
+    assert "预览·非成片" in content
     assert 'Button("一键还原")' not in content
     assert 'Button("一键还原")' not in _all_swift()
+    assert "一键精准" not in _all_swift() or "Not 一键精准" in _all_swift()
+    swift = _all_swift()
+    assert "处理已锁定片段" in swift
+    assert "先选择 Log 与色域" in swift
+    assert "导出 ACEScct / EXR" in swift
 
 
 def test_preview_overlay_badge_feichengpian():
@@ -63,8 +70,12 @@ def test_docs_name_the_review_locks():
     blob = readme + "\n" + acceptance
     assert "预览·非成片" in blob
     assert "8-bit thumbnail is not a deliverable" in blob
-    assert "Process selected" in blob
+    assert "处理已锁定片段" in blob
+    assert "先选择 Log 与色域" in blob
+    assert "导出 ACEScct / EXR" in blob
     assert "Apply graph" in blob
     assert "一键还原" in blob  # forbidden label is named so reviewers can grep
     assert "pending" in blob.lower()
     assert "paired IDT" in blob or "paired IDT" in blob
+    assert "Rec.2100 HLG" in blob
+    assert "Rec.2100 PQ" in blob

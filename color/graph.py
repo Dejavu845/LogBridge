@@ -1,4 +1,4 @@
-"""Serial node graph: IDT → WB (bypassable) → ODT (preview).
+"""Serial node graph: IDT → WB (bypassable) → selectable ODT.
 
 Not a node editor. Used by ``pipeline`` and Resolve export.
 
@@ -6,11 +6,14 @@ Not a node editor. Used by ``pipeline`` and Resolve export.
   2. WB   — Bradford/CAT02 in ACES2065-1 scene-linear (AP0). Never a CAT
             on ACEScct-encoded values. Bypassable. Disable node 2 =
             IDT → ACEScct (timeline), no bake.
-  3. ODT  — Rec.709 encoded (BT.709 OETF, no RRT). Preview only — not
-            the standard Resolve deliverable. Off by default.
+  3. ODT  — Off (ACEScct deliverable, default) | Rec.709 preview |
+            Rec.2100 HLG | Rec.2100 PQ. Rec.709 is preview only (DIY
+            BT.709 OETF, no RRT). HLG/PQ are ACES Output Transform /
+            BT.2100 OCIO Builtins — no homemade HLG/PQ curve.
 
 Working / deliverable: ACEScct timeline or ACES2065-1 EXR / ACES workflow.
-Rec.709 is preview only. Do not bake DaVinci Wide Gamut Intermediate.
+Rec.709 is preview only. HLG/PQ are implemented (unverified). Not supported.
+Do not bake DaVinci Wide Gamut Intermediate.
 """
 
 from __future__ import annotations
@@ -20,6 +23,16 @@ from dataclasses import dataclass
 import numpy as np
 
 from .gamuts import IDT_PAIRS, aces_to_rec709_matrix
+from .odt import (
+    HDR_ODTS,
+    ODT_CHOICES,
+    ODT_DEFAULT,
+    ODT_HLG,
+    ODT_OFF,
+    ODT_PQ,
+    ODT_REC709,
+    apply_hdr_odt,
+)
 from .rec709 import rec709_oetf
 from .wb import apply_white_balance
 from .working_space import (
@@ -30,7 +43,16 @@ from .working_space import (
 NODE_IDT = "IDT"
 NODE_WB = "WB"
 NODE_ODT = "ODT_Rec709"
+NODE_ODT_HLG = "ODT_Rec2100_HLG"
+NODE_ODT_PQ = "ODT_Rec2100_PQ"
 GRAPH_NODES = (NODE_IDT, NODE_WB, NODE_ODT)
+# ODT slot selector. Default Off = ACEScct deliverable.
+ODT_OFF = ODT_OFF
+ODT_REC709 = ODT_REC709
+ODT_HLG = ODT_HLG
+ODT_PQ = ODT_PQ
+ODT_CHOICES = ODT_CHOICES
+ODT_DEFAULT = ODT_DEFAULT
 EXPORT_SLOTS = (
     (1, NODE_IDT, "01_IDT"),
     (2, NODE_WB, "02_WB"),
@@ -51,9 +73,22 @@ class GraphNode:
     bypassable: bool = False
 
 
+def odt_node_name(odt: str) -> str:
+    """Export / graph name for the ODT slot. Default slot stays ODT_Rec709."""
+    if odt == ODT_HLG:
+        return NODE_ODT_HLG
+    if odt == ODT_PQ:
+        return NODE_ODT_PQ
+    return NODE_ODT
+
+
 @dataclass
 class SerialGraph:
-    """Fixed three-node graph. WB is the only required bypassable grade node."""
+    """Fixed three-node graph. WB is the only required bypassable grade node.
+
+    ``odt`` selects Off | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ.
+    ``odt_enabled=True`` (legacy) means Rec.709 preview when ``odt`` is Off.
+    """
 
     idt_id: str | None = None
     wb_enabled: bool = False
@@ -61,6 +96,15 @@ class SerialGraph:
     wb_tint: float = 0.0
     wb_method: str = "bradford"
     odt_enabled: bool = False
+    odt: str = ODT_OFF
+
+    def __post_init__(self) -> None:
+        if self.odt not in ODT_CHOICES:
+            raise ValueError(f"Unknown ODT {self.odt!r} (use {ODT_CHOICES})")
+        if self.odt != ODT_OFF:
+            self.odt_enabled = True
+        elif self.odt_enabled:
+            self.odt = ODT_REC709
 
     @property
     def apply_wb(self) -> bool:
@@ -68,7 +112,7 @@ class SerialGraph:
 
     @property
     def apply_odt(self) -> bool:
-        return self.odt_enabled
+        return self.odt != ODT_OFF
 
     @property
     def cct(self) -> float:
@@ -78,11 +122,20 @@ class SerialGraph:
     def tint(self) -> float:
         return self.wb_tint
 
+    def odt_slot_name(self) -> str:
+        return odt_node_name(self.odt)
+
     def nodes(self) -> list[GraphNode]:
         return [
             GraphNode(1, NODE_IDT, "01_IDT", enabled=True, bypassable=False),
             GraphNode(2, NODE_WB, "02_WB", enabled=self.wb_enabled, bypassable=True),
-            GraphNode(3, NODE_ODT, "03_ODT", enabled=self.odt_enabled, bypassable=True),
+            GraphNode(
+                3,
+                self.odt_slot_name(),
+                "03_ODT",
+                enabled=self.odt_enabled,
+                bypassable=True,
+            ),
         ]
 
     def node(self, index: int) -> GraphNode:
@@ -97,9 +150,21 @@ class SerialGraph:
         if index == 2:
             self.wb_enabled = bool(enabled)
         elif index == 3:
-            self.odt_enabled = bool(enabled)
+            if enabled:
+                if self.odt == ODT_OFF:
+                    self.odt = ODT_REC709
+                self.odt_enabled = True
+            else:
+                self.odt = ODT_OFF
+                self.odt_enabled = False
         else:
             raise KeyError(index)
+
+    def set_odt(self, odt: str) -> None:
+        if odt not in ODT_CHOICES:
+            raise ValueError(f"Unknown ODT {odt!r} (use {ODT_CHOICES})")
+        self.odt = odt
+        self.odt_enabled = odt != ODT_OFF
 
     def idt_node(self, log_rgb, idt_id: str | None = None) -> np.ndarray:
         """IDT: camera log → ACES2065-1 linear (AP0). No white balance.
@@ -150,10 +215,11 @@ class SerialGraph:
         return rec709_oetf(np.clip(rec_lin, 0.0, None))
 
     def apply(self, log_rgb, idt_id: str | None = None) -> np.ndarray:
-        """Run IDT → optional WB (AP0) → optional Rec.709 preview ODT.
+        """Run IDT → optional WB (AP0) → optional ODT.
 
         ODT off: ACES2065-1 scene-linear (ACEScct deliverable when encoded
-        for the Resolve timeline). Rec.709 is preview only.
+        for the Resolve timeline). Rec.709 is preview only. HLG/PQ use
+        ACES Output Transform / BT.2100 (OCIO Builtin; no homemade curve).
         """
         chosen = idt_id or self.idt_id
         if not chosen:
@@ -162,8 +228,10 @@ class SerialGraph:
             raise KeyError(f"Unknown IDT {chosen!r}")
         work = self.idt_node(log_rgb, chosen)
         work = self.wb_node(work)
-        if self.odt_enabled:
+        if self.odt == ODT_REC709:
             return self.odt_node(work)
+        if self.odt in HDR_ODTS:
+            return apply_hdr_odt(work, self.odt)
         return work
 
     def process(self, log_rgb, idt_id: str) -> np.ndarray:
@@ -178,11 +246,14 @@ def graph_from_export_args(
     include_wb: bool = True,
     odt_enabled: bool = False,
     method: str = "bradford",
+    odt: str | None = None,
 ) -> SerialGraph:
     """Build a SerialGraph from Resolve-export CLI / Swift flags.
 
-    Rec.709 ODT defaults off (preview node, not the standard deliverable).
+    ODT defaults Off (ACEScct deliverable). Rec.709 is preview only.
+    HLG/PQ are ACES Output Transform / BT.2100 (unverified).
     """
+    chosen = odt if odt is not None else (ODT_REC709 if odt_enabled else ODT_OFF)
     return SerialGraph(
         idt_id=idt_id,
         wb_enabled=include_wb,
@@ -190,4 +261,5 @@ def graph_from_export_args(
         wb_tint=tint,
         wb_method=method,
         odt_enabled=odt_enabled,
+        odt=chosen,
     )

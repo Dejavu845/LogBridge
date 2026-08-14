@@ -1,4 +1,4 @@
-"""LogBridge color science (M1).
+"""LogBridge color science (M1 + M2-start HDR ODT).
 
 Internal: every IDT lands in ACES2065-1; WB CAT is AP0 linear; ACEScct is the timeline encode.
 OCIO BuiltinTransform is used when PyOpenColorIO is importable and a
@@ -27,7 +27,25 @@ from .curves import (
     linear_to_log3g10,
 )
 from .gamuts import GAMUTS, primaries_xy, rgb_to_xyz_matrix
-from .pipeline import apply_idt, apply_odt_rec709, process_to_rec709
+from .odt import (
+    ACES_OT_HLG_1_3,
+    ACES_OT_PQ_1_3,
+    CONFIG_ACES_HLG,
+    CONFIG_ACES_PQ,
+    DISPLAY_REC2100_HLG,
+    DISPLAY_REC2100_PQ,
+    HDR_ODTS,
+    ODT_CHOICES,
+    ODT_DEFAULT,
+    ODT_HLG,
+    ODT_OFF,
+    ODT_PQ,
+    ODT_REC709,
+    apply_hdr_odt,
+    apply_odt,
+    odt_descriptor,
+)
+from .pipeline import apply_idt, apply_odt_rec709, apply_selected_odt, process_to_rec709
 from .wb import bradford_cat_matrix, white_balance_matrix
 
 __all__ = [
@@ -51,6 +69,23 @@ __all__ = [
     "rgb_to_xyz_matrix",
     "apply_idt",
     "apply_odt_rec709",
+    "apply_selected_odt",
+    "apply_odt",
+    "apply_hdr_odt",
+    "odt_descriptor",
+    "ODT_CHOICES",
+    "ODT_DEFAULT",
+    "ODT_OFF",
+    "ODT_REC709",
+    "ODT_HLG",
+    "ODT_PQ",
+    "HDR_ODTS",
+    "ACES_OT_HLG_1_3",
+    "ACES_OT_PQ_1_3",
+    "DISPLAY_REC2100_HLG",
+    "DISPLAY_REC2100_PQ",
+    "CONFIG_ACES_HLG",
+    "CONFIG_ACES_PQ",
     "process_to_rec709",
     "bradford_cat_matrix",
     "white_balance_matrix",

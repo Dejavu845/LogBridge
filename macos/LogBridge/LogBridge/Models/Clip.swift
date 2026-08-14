@@ -102,8 +102,7 @@ final class SessionModel: ObservableObject {
     var processBlockedReason: String? {
         if clips.isEmpty { return "Drop a folder of mixed clips" }
         if pendingPickerCount > 0 {
-            let n = pendingPickerCount
-            return "Pick a paired IDT for \(n) pending clip\(n == 1 ? "" : "s") — process/export blocked"
+            return "先选择 Log 与色域"
         }
         if clips.contains(where: { $0.idt?.isStub == true }) {
             return "Stub IDT — process/export blocked"
@@ -114,34 +113,60 @@ final class SessionModel: ObservableObject {
     var processSelectedBlockedReason: String? {
         guard let clip = selectedClip else { return "No clip selected" }
         if clip.isPending {
-            return "Selected clip is pending — pick a paired IDT. Process selected / Apply graph blocked."
+            return "先选择 Log 与色域"
         }
         if clip.idt?.isStub == true {
-            return "Stub IDT — Process selected / Apply graph blocked."
+            return "Stub IDT — 处理已锁定片段 blocked."
         }
         return nil
     }
 
-    /// Primary action. Label is "Process selected" — never 一键还原.
+    /// Primary action. Label is "处理已锁定片段" — never 一键还原.
+    /// Pending label is "先选择 Log 与色域" (disabled).
     func processSelected() {
         guard canProcessSelected else {
             lastExportNote = processSelectedBlockedReason
-                ?? "Selected clip is pending — process blocked."
+                ?? "先选择 Log 与色域"
             return
         }
         refreshPreview()
-        lastExportNote = "Process selected — applied serial graph (预览·非成片; 8-bit thumbnail is not a deliverable)."
+        lastExportNote = "处理已锁定片段 — applied serial graph (预览·非成片; 8-bit thumbnail is not a deliverable)."
     }
 
-    /// Same lock as processSelected. Label is "Apply graph" — never 一键还原.
+    /// Same lock as processSelected. Never 一键还原.
     func applyGraph() {
         guard canProcessSelected else {
             lastExportNote = processSelectedBlockedReason
-                ?? "Selected clip is pending — Apply graph blocked."
+                ?? "先选择 Log 与色域"
             return
         }
         refreshPreview()
         lastExportNote = "Apply graph — serial graph applied to the selected clip (preview proxy, not a deliverable)."
+    }
+
+    var odtPreviewTitle: String {
+        switch graph.odt {
+        case .off:
+            return "ODT off — ACEScct deliverable (not Rec.709)"
+        case .rec709:
+            return "Rec.709 ODT (preview only, unverified)"
+        case .hlg:
+            return "Rec.2100 HLG (ACES OT / BT.2100, unverified)"
+        case .pq:
+            return "Rec.2100 PQ (ACES OT / BT.2100, unverified)"
+        }
+    }
+
+    var odtPreviewCaption: String {
+        let badge = "预览·非成片 — 8-bit thumbnail is not a deliverable."
+        switch graph.odt {
+        case .off:
+            return "Node 3 off: ACEScct deliverable. This pane is not tagged Rec.709. \(badge)"
+        case .rec709:
+            return "Tagged CGColorSpace.itur_709. Preview only. \(badge) Golden grey-card samples required before any accuracy claim."
+        case .hlg, .pq:
+            return "\(graph.odt.acesOTNote) Preview does not invent a homemade HLG/PQ curve. \(badge)"
+        }
     }
 
     func setIDT(_ id: UUID, _ idt: IDT) {
@@ -164,6 +189,12 @@ final class SessionModel: ObservableObject {
 
     func setODTEnabled(_ enabled: Bool) {
         graph.setEnabled(.odt, enabled)
+        preview.invalidateWBODT()
+        refreshPreview()
+    }
+
+    func setODT(_ mode: ODTMode) {
+        graph.odt = mode
         preview.invalidateWBODT()
         refreshPreview()
     }
@@ -267,7 +298,7 @@ final class SessionModel: ObservableObject {
     func exportResolve() {
         guard canProcess else {
             lastExportNote = processBlockedReason
-                ?? "Pick a paired IDT before export. Process selected / Apply graph is blocked for pending clips."
+                ?? "先选择 Log 与色域"
             return
         }
         let panel = NSOpenPanel()

@@ -1,4 +1,8 @@
-"""Fixed M1 pipeline: IDT → ACES2065-1 → AP0 WB → optional Rec.709 preview.
+"""Fixed pipeline: IDT → ACES2065-1 → AP0 WB → optional ODT.
+
+ODT selector: Off (ACEScct deliverable) | Rec.709 preview | Rec.2100 HLG |
+Rec.2100 PQ. Rec.709 is preview only. HLG/PQ are ACES Output Transform /
+BT.2100 OCIO Builtins (no homemade curve). Implemented (unverified).
 
 Not a node editor. The serial graph lives in ``color.graph`` and is shared
 with Resolve export. WB is a toggleable node in ACES2065-1 (AP0) scene-linear.
@@ -21,6 +25,7 @@ from .gamuts import (
     rgb_to_rgb_matrix,
 )
 from .ocio_builtins import apply_builtin_idt, builtin_style_for, ocio_available
+from .odt import HDR_ODTS, ODT_OFF, ODT_REC709, apply_hdr_odt
 from .rec709 import rec709_oetf
 from .wb import apply_white_balance
 from .working_space import (
@@ -111,6 +116,17 @@ def apply_odt_rec709(working_lin, working: str = "AP1"):
     rgb = np.asarray(working_lin, dtype=np.float64)
     rec_lin = rgb @ m.T
     return rec709_oetf(np.clip(rec_lin, 0.0, None))
+
+
+def apply_selected_odt(aces_ap0, odt: str):
+    """Apply the selected ODT to ACES2065-1. Off returns the AP0 buffer."""
+    if odt in (ODT_OFF, None, ""):
+        return np.asarray(aces_ap0, dtype=np.float64)
+    if odt == ODT_REC709:
+        return apply_odt_rec709(aces_ap0, working="AP0")
+    if odt in HDR_ODTS:
+        return apply_hdr_odt(aces_ap0, odt)
+    raise KeyError(f"Unknown ODT {odt!r}")
 
 
 def process_to_rec709(

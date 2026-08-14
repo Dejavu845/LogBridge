@@ -2,6 +2,8 @@
 
 Standard deliverable: ACEScct timeline or ACES2065-1 EXR / ACES workflow.
 Rec.709 is preview only (optional node 3, off by default).
+Rec.2100 HLG / PQ are optional ACES Output Transform / BT.2100 nodes
+(unverified). No homemade HLG/PQ LUT.
 
   1. IDT  — camera log → ACES2065-1 → ACEScct (LUT and/or Resolve CST)
   2. WB   — linear AP0 Bradford/CAT02 (CCT + tint). DCTL decodes ACEScct
@@ -21,7 +23,18 @@ import numpy as np
 
 from .curves import decode_log, nlog_normalized_to_linear
 from .gamuts import IDT_PAIRS
-from .graph import SerialGraph, graph_from_export_args
+from .graph import SerialGraph, graph_from_export_args, odt_node_name
+from .odt import (
+    CONFIG_ACES_HLG,
+    CONFIG_ACES_PQ,
+    HDR_ODTS,
+    ODT_HLG,
+    ODT_OFF,
+    ODT_PQ,
+    ODT_REC709,
+    declared_hdr_styles,
+    odt_descriptor,
+)
 from .pipeline import apply_idt, apply_odt_rec709, camera_linear_to_working
 from .wb import white_balance_matrix, apply_white_balance
 from .working_space import (
@@ -419,6 +432,7 @@ def format_graph_xml(
     include_wb: bool,
     method: str = "bradford",
     odt_enabled: bool = False,
+    odt: str | None = None,
     graph: SerialGraph | None = None,
 ) -> str:
     if graph is None:
@@ -429,9 +443,12 @@ def format_graph_xml(
             include_wb=include_wb,
             odt_enabled=odt_enabled,
             method=method,
+            odt=odt,
         )
     wb_enabled = "true" if graph.wb_enabled else "false"
     odt_on = "true" if graph.odt_enabled else "false"
+    odt_mode = graph.odt
+    odt_name = odt_node_name(odt_mode)
     cct = graph.wb_cct
     tint = graph.wb_tint
     method = graph.wb_method
@@ -454,6 +471,49 @@ def format_graph_xml(
             'resolveOutputGamma="ACEScct"/>'
         )
     idt_block = "\n".join(idt_nodes)
+    if odt_mode == ODT_HLG:
+        styles = declared_hdr_styles(ODT_HLG)
+        odt_type = "ACES_OT"
+        odt_desc = (
+            "Rec.2100 HLG via ACES Output Transform / BT.2100. "
+            "Implemented (unverified). Not supported. No homemade HLG curve."
+        )
+        style_xml = "\n".join(
+            f'    <OCIOBuiltin style="{s}"/>' for s in styles
+        )
+        odt_payload = (
+            f"{style_xml}\n"
+            f'    <ConfigACES name="{CONFIG_ACES_HLG}"/>\n'
+            '    <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" '
+            'outputColorSpace="Rec.2100-HLG" outputGamma="Rec.2100 HLG"/>\n'
+        )
+    elif odt_mode == ODT_PQ:
+        styles = declared_hdr_styles(ODT_PQ)
+        odt_type = "ACES_OT"
+        odt_desc = (
+            "Rec.2100 PQ via ACES Output Transform / BT.2100. "
+            "Implemented (unverified). Not supported. No homemade PQ curve."
+        )
+        style_xml = "\n".join(
+            f'    <OCIOBuiltin style="{s}"/>' for s in styles
+        )
+        odt_payload = (
+            f"{style_xml}\n"
+            f'    <ConfigACES name="{CONFIG_ACES_PQ}"/>\n'
+            '    <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" '
+            'outputColorSpace="Rec.2100-PQ" outputGamma="Rec.2100 PQ"/>\n'
+        )
+    else:
+        odt_type = "LUT_or_CST"
+        odt_desc = (
+            "Rec.709 preview ODT only. Not the standard deliverable. "
+            "Off = ACEScct deliverable (or ACES2065-1 EXR). No RRT."
+        )
+        odt_payload = (
+            '    <File role="lut">03_ODT_Rec709.cube</File>\n'
+            '    <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" '
+            'outputColorSpace="Rec.709" outputGamma="Rec.709"/>\n'
+        )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <LogBridgeResolveGraph version="1" status="implemented (unverified)">
   <WorkingSpace gamut="AP0" encoding="ACEScct" white="ACES" scene_linear="ACES2065-1"/>
@@ -470,11 +530,9 @@ def format_graph_xml(
     <File role="ccc">02_WB.ccc</File>
     <File role="dctl">02_WB.dctl</File>
   </Node>
-  <Node index="3" name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="{odt_on}">
-    <Description>Rec.709 preview ODT only. Not the standard deliverable. Off = ACEScct deliverable (or ACES2065-1 EXR). No RRT.</Description>
-    <File role="lut">03_ODT_Rec709.cube</File>
-    <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" outputColorSpace="Rec.709" outputGamma="Rec.709"/>
-  </Node>
+  <Node index="3" name="{odt_name}" type="{odt_type}" bypassable="true" enabled="{odt_on}" odt="{odt_mode}">
+    <Description>{odt_desc}</Description>
+{odt_payload}  </Node>
 </LogBridgeResolveGraph>
 """
 
@@ -507,9 +565,9 @@ Do not set DaVinci Wide Gamut Intermediate as the default deliverable.
    - `02_WB.cdl` / `02_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
    - CCT {cct:.0f} K, tint {tint}, method Bradford (CAT02 selectable in code). Scene-linear only.
 
-3. **Rec.709 ODT** — `03_ODT_Rec709.cube` or CST (**preview only**, off by default)
-   - Input: ACEScct
-   - Output: Rec.709 encoded (BT.709 OETF, no RRT). Preview only — not the standard deliverable.
+3. **ODT** — Off (ACEScct deliverable, default) | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ
+   - Rec.709: `03_ODT_Rec709.cube` or CST. **preview only**, off by default. BT.709 OETF, no RRT.
+   - Rec.2100 HLG / PQ: ACES Output Transform / BT.2100 OCIO Builtin (no homemade curve). Implemented (unverified). Not a support claim.
    - Contains **no** white balance. Optional later node.
 
 ## How to bypass WB in Resolve
@@ -551,6 +609,7 @@ def export_resolve_bundle(
     lut_size: int = 17,
     method: str = "bradford",
     odt_enabled: bool = False,
+    odt: str | None = None,
     graph: SerialGraph | None = None,
 ) -> list[Path]:
     """Write a Resolve-importable graph (XML, DOT, CDL, DCTL, cubes, README).
@@ -567,6 +626,7 @@ def export_resolve_bundle(
         tint = graph.wb_tint
         method = graph.wb_method
         odt_enabled = graph.odt_enabled
+        odt = graph.odt
     else:
         graph = graph_from_export_args(
             idt_id=idt_ids[0] if idt_ids else None,
@@ -575,6 +635,7 @@ def export_resolve_bundle(
             include_wb=include_wb,
             odt_enabled=odt_enabled,
             method=method,
+            odt=odt,
         )
     seen: list[str] = []
     for i in idt_ids:

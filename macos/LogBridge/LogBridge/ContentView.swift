@@ -3,7 +3,8 @@ import UniformTypeIdentifiers
 
 /// Drop zone, clip list, split preview, node strip, inspector.
 /// UI copy uses "implemented (unverified)" — never "supported".
-/// Primary actions are "Process selected" / "Apply graph" — never 一键还原.
+/// Primary action is "处理已锁定片段" — never 一键还原.
+/// Pending IDT button: "先选择 Log 与色域" (disabled). Export: "导出 ACEScct / EXR".
 struct ContentView: View {
     @StateObject private var session = SessionModel()
 
@@ -52,12 +53,8 @@ struct SplitPreview: View {
             }
             ZStack(alignment: .topLeading) {
                 Rec709PreviewView(
-                    title: session.graph.odtEnabled
-                        ? "Rec.709 ODT (implemented, unverified)"
-                        : "ODT off — working space (not Rec.709)",
-                    caption: session.graph.odtEnabled
-                        ? "Tagged CGColorSpace.itur_709. 预览·非成片 — 8-bit thumbnail is not a deliverable. Golden grey-card samples required before any accuracy claim."
-                        : "Node 3 off: ACEScct deliverable. This pane is not tagged Rec.709. 预览·非成片 — 8-bit thumbnail is not a deliverable.",
+                    title: session.odtPreviewTitle,
+                    caption: session.odtPreviewCaption,
                     image: session.preview.odtImage
                 )
                 PreviewBadge()
@@ -72,7 +69,7 @@ struct StatusBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text("LogBridge M1 · serial graph · implemented (unverified)")
+            Text("LogBridge · serial graph · implemented (unverified)")
             if session.preview.isWorking {
                 ProgressView()
                     .controlSize(.small)
@@ -91,22 +88,22 @@ struct StatusBar: View {
                     .lineLimit(1)
             }
             Spacer()
-            Button("Process selected") {
+            Button(session.canProcessSelected ? "处理已锁定片段" : "先选择 Log 与色域") {
                 session.processSelected()
             }
             .buttonStyle(.borderedProminent)
             .disabled(!session.canProcessSelected)
-            .help("Apply the serial graph to the selected clip. Blocked while the clip is pending (no locked IDT pair). Never 一键还原.")
+            .help("Apply the serial graph to locked clips. Blocked until a paired IDT is chosen. Never 一键还原.")
             Button("Apply graph") {
                 session.applyGraph()
             }
             .disabled(!session.canProcessSelected)
-            .help("Apply the serial graph to the selected clip. Same lock as Process selected.")
-            Button("Export for Resolve…") {
+            .help("Apply the serial graph to the selected clip. Same lock as 处理已锁定片段.")
+            Button("导出 ACEScct / EXR") {
                 session.exportResolve()
             }
             .disabled(!session.canProcess)
-            .help("Blocked while any clip is pending without a locked IDT pair.")
+            .help("Export ACEScct timeline / ACES2065-1 EXR. Blocked while any clip is pending.")
         }
         .font(.caption)
         .padding(8)
