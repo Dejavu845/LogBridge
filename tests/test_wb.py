@@ -74,3 +74,28 @@ def test_ap0_cat_differs_from_ap1_on_chroma():
     ap0 = apply_white_balance(rgb, 3200.0, rgb_space="AP0")
     ap1 = apply_white_balance(rgb, 3200.0, rgb_space="AP1")
     assert not np.allclose(ap0, ap1, atol=1e-4)
+
+
+
+
+def test_relative_cat_unmoved_as_shot_is_identity():
+    """as-shot 3200, knobs still 3200 -> identity."""
+    same = white_balance_matrix(src_cct=3200.0, dst_cct=3200.0)
+    np.testing.assert_allclose(same, np.eye(3), atol=1e-12)
+
+
+def test_relative_cat_as_shot_3200_user_5600():
+    """3200 as-shot → 5600 user == CAT(user→D65)@inv(CAT(as→D65)), warms."""
+    rel = white_balance_matrix(src_cct=3200.0, dst_cct=5600.0)
+    cat_user = white_balance_matrix(5600.0)
+    cat_shot = white_balance_matrix(3200.0)
+    expected = cat_user @ np.linalg.inv(cat_shot)
+    np.testing.assert_allclose(rel, expected, atol=1e-12)
+    as_to_user = white_balance_matrix(src_cct=5600.0, dst_cct=3200.0)
+    assert not np.allclose(rel, cat_user, atol=1e-3)
+    assert not np.allclose(rel, as_to_user, atol=1e-3)
+    grey = np.array([0.18, 0.18, 0.18])
+    warmed = apply_white_balance(grey, src_cct=3200.0, dst_cct=5600.0)
+    cooled = apply_white_balance(grey, src_cct=5600.0, dst_cct=3200.0)
+    assert warmed[0] / warmed[2] > grey[0] / grey[2]
+    assert cooled[0] / cooled[2] < grey[0] / grey[2]

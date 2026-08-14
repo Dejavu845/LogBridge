@@ -102,8 +102,9 @@ enum WBSource: String, Hashable {
 }
 
 /// Session-level WB / ODT. IDT lives on the selected clip.
-/// WB default is as-shot camera-private CCT/tint (not nclc). Missing CCT
-/// is pending / identity — do not guess 5600 or 6504.
+/// As-shot camera-private CCT/tint (not nclc) fills knobs (UI only).
+/// Default CAT is identity — do not CAT as-shot 5600/6504 toward D65.
+/// Missing CCT is pending / identity — do not guess 5600 or 6504.
 struct SerialGraph: Equatable {
     var exposureEnabled: Bool = true
     var exposureStops: Double = 0
@@ -117,11 +118,39 @@ struct SerialGraph: Equatable {
     var odt: ODTMode = .off
     var workingSpace: FixedPipeline.WorkingSpace = .acescct
 
-    /// CCT applied by the CAT, or nil when as-shot unknown (identity).
-    var effectiveWBCCT: Double? { wbCCT }
+    /// CCT applied by the CAT, or nil for identity.
+    /// As-shot knobs are UI only — do not CAT as-shot 5600/6504 toward D65
+    /// (double WB). Apply CAT when the user moves knobs away from as-shot,
+    /// or on a grey-card override. Missing CCT: identity, no 5600 guess.
+    var effectiveWBCCT: Double? {
+        guard let cct = wbCCT else { return nil }
+        switch wbSource {
+        case .asShot:
+            return nil
+        case .user:
+            // First typed CCT with no as-shot is a label, not an illuminant.
+            guard let shot = asShotCCT else { return nil }
+            if abs(cct - shot) <= 0.5,
+               abs(wbTint - asShotTint) <= 1e-3 {
+                return nil
+            }
+            return cct
+        case .grey, .unknown:
+            return cct
+        }
+    }
+
+    /// As-shot CCT for relative CAT, or nil for absolute / identity.
+    var effectiveSrcCCT: Double? {
+        guard effectiveWBCCT != nil, wbSource == .user, let shot = asShotCCT else {
+            return nil
+        }
+        return shot
+    }
 
     var asShotUnknown: Bool { wbCCT == nil }
 
+    /// Slider park only when knobs are empty. Not a 5600/6504 metadata guess.
     var wbCCTDisplay: Double { wbCCT ?? 6504 }
 
     var odtEnabled: Bool {

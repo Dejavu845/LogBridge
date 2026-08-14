@@ -44,6 +44,10 @@ enum ResolveExporter {
         cct: Double?,
         tint: Double,
         lutSize: Int = lutSize,
+        catCCT: Double? = nil,
+        useEffectiveCAT: Bool = false,
+        srcCCT: Double? = nil,
+        srcTint: Double = 0,
         odtEnabled: Bool = false,
         exposureStops: Double = 0,
         exposureEnabled: Bool = true
@@ -51,6 +55,9 @@ enum ResolveExporter {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let idts = uniqueImplementedIDTs(clips)
         var written: [URL] = []
+        // Knobs (`cct`) stay in XML/README. CAT files use effective CCT so
+        // as-shot-unmoved exports identity (no double WB).
+        let matrixCCT = useEffectiveCAT ? catCCT : cct
 
         func write(_ name: String, _ body: String) throws {
             let url = directory.appendingPathComponent(name)
@@ -63,10 +70,10 @@ enum ResolveExporter {
         try write("graph.dot", graphDOT(idts: idts, cct: cct, tint: tint, includeWB: includeWBNode, exposureStops: exposureStops))
         try write("02_Exposure.cube", exposureCube(stops: exposureEnabled ? exposureStops : 0))
         try write("02_Exposure.dctl", exposureDCTL(stops: exposureEnabled ? exposureStops : 0))
-        try write("03_WB.cdl", cdlXML(cct: cct, tint: tint, collection: false))
-        try write("03_WB.ccc", cdlXML(cct: cct, tint: tint, collection: true))
-        try write("03_WB.dctl", dctl(cct: cct, tint: tint))
-        try write("03_WB.cube", wbCube(cct: cct, tint: tint, size: lutSize))
+        try write("03_WB.cdl", cdlXML(cct: matrixCCT, tint: tint, collection: false, srcCCT: srcCCT, srcTint: srcTint))
+        try write("03_WB.ccc", cdlXML(cct: matrixCCT, tint: tint, collection: true, srcCCT: srcCCT, srcTint: srcTint))
+        try write("03_WB.dctl", dctl(cct: matrixCCT, tint: tint, srcCCT: srcCCT, srcTint: srcTint))
+        try write("03_WB.cube", wbCube(cct: matrixCCT, tint: tint, size: lutSize, srcCCT: srcCCT, srcTint: srcTint))
         try write("04_ODT_Rec709.cube", odtCube(size: lutSize))
         for idt in idts {
             try write("01_IDT_\(idt.rawValue).cube", idtCube(idt: idt, size: lutSize))
@@ -200,9 +207,21 @@ enum ResolveExporter {
     }
 
     /// Scene-linear ACES2065-1 (AP0) RGB CAT: XYZ_to_AP0 * Bradford_XYZ * AP0_to_XYZ.
-    private static func wbRGBMatrix(cct: Double?, tint: Double) -> simd_double3x3 {
+    private static func wbRGBMatrix(
+        cct: Double?,
+        tint: Double,
+        srcCCT: Double? = nil,
+        srcTint: Double = 0
+    ) -> simd_double3x3 {
         guard let cct else { return matrix_identity_double3x3 }
-        let cat = WhiteBalanceNode.catMatrix(cct: cct, tint: tint)
+        let cat: simd_double3x3
+        if let srcCCT {
+            cat = WhiteBalanceNode.relativeCatMatrix(
+                srcCCT: srcCCT, dstCCT: cct, srcTint: srcTint, dstTint: tint
+            )
+        } else {
+            cat = WhiteBalanceNode.catMatrix(cct: cct, tint: tint)
+        }
         return ap0ToXYZ.inverse * cat * ap0ToXYZ
     }
 
@@ -377,8 +396,8 @@ enum ResolveExporter {
         }
     }
 
-    private static func wbCube(cct: Double?, tint: Double, size: Int) -> String {
-        let m = wbRGBMatrix(cct: cct, tint: tint)
+    private static func wbCube(cct: Double?, tint: Double, size: Int, srcCCT: Double? = nil, srcTint: Double = 0) -> String {
+        let m = wbRGBMatrix(cct: cct, tint: tint, srcCCT: srcCCT, srcTint: srcTint)
         return cubeFile(title: "LogBridge WB AP0 CAT \(cctLabel(cct)) tint \(tint) (ACEScct decode→ACES2065-1→encode)", size: size) {
             wbInACEScct($0, matrix: m)
         }
@@ -447,16 +466,16 @@ enum ResolveExporter {
 
     // MARK: - CDL / CCC / DCTL / graph
 
-    private static func cdlSlope(cct: Double, tint: Double) -> SIMD3<Double> {
-        wbRGBMatrix(cct: cct, tint: tint) * SIMD3(1.0, 1.0, 1.0)
+    private static func cdlSlope(cct: Double?, tint: Double, srcCCT: Double? = nil, srcTint: Double = 0) -> SIMD3<Double> {
+        wbRGBMatrix(cct: cct, tint: tint, srcCCT: srcCCT, srcTint: srcTint) * SIMD3(1.0, 1.0, 1.0)
     }
 
     private static func fmt3(_ v: SIMD3<Double>) -> String {
         String(format: "%.10f %.10f %.10f", v.x, v.y, v.z)
     }
 
-    private static func cdlXML(cct: Double?, tint: Double, collection: Bool) -> String {
-        let slope = fmt3(cdlSlope(cct: cct, tint: tint))
+    private static func cdlXML(cct: Double?, tint: Double, collection: Bool, srcCCT: Double? = nil, srcTint: Double = 0) -> String {
+        let slope = fmt3(cdlSlope(cct: cct, tint: tint, srcCCT: srcCCT, srcTint: srcTint))
         let sop = """
               <SOPNode>
                 <Slope>\(slope)</Slope>
@@ -491,8 +510,8 @@ enum ResolveExporter {
         """
     }
 
-    private static func dctl(cct: Double?, tint: Double) -> String {
-        let m = wbRGBMatrix(cct: cct, tint: tint)
+    private static func dctl(cct: Double?, tint: Double, srcCCT: Double? = nil, srcTint: Double = 0) -> String {
+        let m = wbRGBMatrix(cct: cct, tint: tint, srcCCT: srcCCT, srcTint: srcTint)
         // simd_double3x3 is column-major. Flatten row-major for the DCTL 3x3.
         let r0c0 = m.columns.0.x, r0c1 = m.columns.1.x, r0c2 = m.columns.2.x
         let r1c0 = m.columns.0.y, r1c1 = m.columns.1.y, r1c2 = m.columns.2.y
@@ -615,7 +634,7 @@ enum ResolveExporter {
             <File role="dctl">02_Exposure.dctl</File>
           </Node>
           <Node index="3" name="WB" type="Corrector" bypassable="true" enabled="\(enabled)" method="bradford">
-            <Description>As-shot writes this linear AP0 CAT node only. Missing CCT/tint is pending / identity (do not guess 5600 or 6504). Bypass WB = IDT → Exposure → ACEScct, no bake.</Description>
+            <Description>As-shot CCT/tint fills knobs (UI only); default CAT is identity — do not treat as-shot 5600/6504 as an illuminant (double WB). Missing CCT/tint is pending / identity (do not guess 5600 or 6504). Bypass WB = IDT → Exposure → ACEScct, no bake.</Description>
             \(cct == nil ? "<CCT pending=\"true\" source=\"unknown\"/>" : "<CCT>\(String(format: "%.4f", cct!))</CCT>")
             <Tint>\(String(format: "%.6f", tint))</Tint>
             <File role="lut">03_WB.cube</File>
@@ -679,7 +698,7 @@ enum ResolveExporter {
            - `03_WB.cube` — ACEScct wrap of the linear AP0 Bradford/CAT02 3×3 (decode → ACES2065-1 CAT → encode).
            - `03_WB.dctl` — DI-free DCTL: decode ACEScct → AP1→AP0 → AP0 3×3 → encode. **Bypass WB** or disable node 2 = IDT → ACEScct, no bake.
            - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
-           - CCT \(cctLabel(cct)), tint \(tint), method Bradford. As-shot writes this node only. Missing CCT is pending / identity (do not guess 5600 or 6504). Scene-linear only.
+           - CCT \(cctLabel(cct)), tint \(tint), method Bradford. As-shot fills knobs (UI only); default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT is pending / identity (do not guess 5600 or 6504). Scene-linear only.
 
         3. **Rec.709 preview** — `04_ODT_Rec709.cube` or CST
            - Optional preview node, off by default. Off = ACEScct deliverable.

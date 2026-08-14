@@ -8,7 +8,9 @@ from color.as_shot import (
     WB_SOURCE_AS_SHOT,
     WB_SOURCE_GREY,
     WB_SOURCE_UNKNOWN,
+    WB_SOURCE_USER,
     AsShotWB,
+    effective_cat_cct,
     grey_card_from_ap0,
     pick_neutral_from_linear_rgb,
     read_as_shot_wb,
@@ -26,7 +28,7 @@ from color.resolve_export import (
     wb_in_aces2065,
     wb_in_acescct,
 )
-from color.wb import apply_white_balance, cct_to_xy, linear_rgb_to_cct_tint
+from color.wb import apply_white_balance, cct_to_xy, linear_rgb_to_cct_tint, white_balance_matrix
 from color.working_space import aces2065_to_acescct
 
 
@@ -98,18 +100,21 @@ def test_as_shot_writes_existing_ap0_node_only():
     assert [n.name for n in g.nodes()] == ["IDT", "Exposure", "WB", "ODT_Rec709"]
     assert g.wb_cct == pytest.approx(3200.0)
     assert g.wb_source == WB_SOURCE_AS_SHOT
+    assert g.effective_wb_cct is None
     assert g.node(3).name == "WB"
     assert g.node(3).bypassable is True
     log = _logc4_chroma()
     out = g.apply(log)
     aces = apply_idt(log, "arri_logc4_awg4")
-    expected = apply_white_balance(aces, 3200.0, rgb_space="AP0")
-    np.testing.assert_allclose(out, expected, atol=1e-12)
+    # As-shot knobs are UI only — CAT is identity (no double WB).
+    np.testing.assert_allclose(out, aces, atol=1e-12)
     enc = aces2065_to_acescct(aces)
     wrong_log = apply_white_balance(log, 3200.0, rgb_space="AP0")
     wrong_cct = apply_white_balance(enc, 3200.0, rgb_space="AP0")
+    doubled = apply_white_balance(aces, 3200.0, rgb_space="AP0")
     assert not np.allclose(out, wrong_log, atol=1e-3)
     assert not np.allclose(out, wrong_cct, atol=1e-3)
+    assert not np.allclose(out, doubled, atol=1e-3)
 
 
 def test_pending_as_shot_is_identity():
@@ -192,6 +197,71 @@ def test_pending_export_does_not_write_guessed_cct(tmp_path):
     assert "<CCT>6504" not in disk
 
 
+def test_as_shot_present_unmoved_knobs_are_identity_cat():
+    """As-shot present, user has not moved knobs → CAT is identity (3200 or 5600)."""
+    log = _logc4_chroma()
+    aces = apply_idt(log, "arri_logc4_awg4")
+    for kelvin in (3200.0, 5600.0, 6504.0):
+        g = SerialGraph.from_metadata({"cct": kelvin}, idt_id="arri_logc4_awg4")
+        assert g.wb_cct == pytest.approx(kelvin)
+        assert g.as_shot_cct == pytest.approx(kelvin)
+        assert g.wb_source == WB_SOURCE_AS_SHOT
+        assert g.effective_wb_cct is None
+        np.testing.assert_allclose(g.apply(log), aces, atol=1e-12)
+        if kelvin != 6504.0:
+            doubled = apply_white_balance(aces, kelvin, rgb_space="AP0")
+            assert not np.allclose(g.apply(log), doubled, atol=1e-3)
+
+
+def test_user_changes_cct_from_as_shot_applies_cat():
+    """User changes CCT from as-shot -> relative CAT, not CAT(user->D65)."""
+    g = SerialGraph.from_metadata({"cct": 5600.0}, idt_id="arri_logc4_awg4")
+    log = _logc4_chroma()
+    aces = apply_idt(log, "arri_logc4_awg4")
+    np.testing.assert_allclose(g.apply(log), aces, atol=1e-12)
+    g.set_user_wb(3200.0, 0.0)
+    assert g.wb_source == WB_SOURCE_USER
+    assert g.effective_wb_cct == pytest.approx(3200.0)
+    assert g.effective_src_cct == pytest.approx(5600.0)
+    out = g.apply(log)
+    expected = apply_white_balance(
+        aces, src_cct=5600.0, dst_cct=3200.0, rgb_space="AP0"
+    )
+    np.testing.assert_allclose(out, expected, atol=1e-12)
+    assert not np.allclose(out, aces, atol=1e-3)
+
+
+def test_grey_card_override_is_real_cat_unless_d65():
+    """Grey-card override → CAT not identity (unless sampled D65)."""
+    g = SerialGraph.from_metadata({"cct": 5600.0}, idt_id="arri_logc4_awg4")
+    assert g.effective_wb_cct is None
+    ap0_3200 = _ap0_of_cct(3200.0)
+    shot = g.apply_grey_card(ap0_3200)
+    assert shot.source == WB_SOURCE_GREY
+    assert g.wb_source == WB_SOURCE_GREY
+    assert g.effective_wb_cct is not None
+    m = white_balance_matrix(g.effective_wb_cct, tint=g.wb_tint, rgb_space="AP0")
+    assert np.linalg.norm(m - np.eye(3)) > 0.05
+
+    g65 = SerialGraph.from_metadata({"cct": 3200.0}, idt_id="arri_logc4_awg4")
+    g65.apply_grey_card(_ap0_of_cct(6504.0))
+    assert g65.wb_source == WB_SOURCE_GREY
+    m65 = white_balance_matrix(g65.effective_wb_cct, tint=g65.wb_tint, rgb_space="AP0")
+    np.testing.assert_allclose(m65, np.eye(3), atol=5e-3)
+
+
+def test_missing_cct_identity_no_5600_guess():
+    """Missing CCT → identity, no 5600."""
+    assert effective_cat_cct(wb_cct=None) is None
+    g = SerialGraph.from_as_shot(UNKNOWN_AS_SHOT, idt_id="arri_logc4_awg4")
+    assert g.wb_cct is None
+    assert g.effective_wb_cct is None
+    assert g.wb_cct not in (5600, 5600.0)
+    log = _logc4_chroma()
+    aces = apply_idt(log, "arri_logc4_awg4")
+    np.testing.assert_allclose(g.apply(log), aces, atol=1e-12)
+
+
 def test_no_supported_in_as_shot_copy():
     shot = read_as_shot_wb(None)
     grey = grey_card_from_ap0(_ap0_of_cct(3200.0))
@@ -206,3 +276,77 @@ def test_wb_acescct_wrap_still_decodes_before_as_shot_cat():
     wrapped = wb_in_acescct(enc, 3200.0)
     direct = aces2065_to_acescct(wb_in_aces2065(ap0, 3200.0))
     np.testing.assert_allclose(wrapped, direct, atol=1e-10)
+
+
+
+def test_as_shot_3200_unmoved_knobs_identity_matrix():
+    """as-shot 3200, knobs still 3200 -> identity."""
+    g = SerialGraph.from_metadata({"cct": 3200.0}, idt_id="arri_logc4_awg4")
+    assert g.wb_cct == pytest.approx(3200.0)
+    assert g.effective_wb_cct is None
+    np.testing.assert_allclose(g.wb_matrix(), np.eye(3), atol=1e-12)
+    log = _logc4_chroma()
+    aces = apply_idt(log, "arri_logc4_awg4")
+    np.testing.assert_allclose(g.apply(log), aces, atol=1e-12)
+
+
+def test_as_shot_3200_user_5600_is_relative_not_absolute():
+    """as-shot 3200, user 5600 == CAT(5600->D65) @ inv(CAT(3200->D65)).
+
+    Not equal to CAT(5600->D65) alone.
+    """
+    g = SerialGraph.from_metadata({"cct": 3200.0}, idt_id="arri_logc4_awg4")
+    g.set_user_wb(5600.0, 0.0)
+    assert g.effective_wb_cct == pytest.approx(5600.0)
+    assert g.effective_src_cct == pytest.approx(3200.0)
+    got = g.wb_matrix()
+    cat_user = white_balance_matrix(5600.0, rgb_space="AP0")
+    cat_shot = white_balance_matrix(3200.0, rgb_space="AP0")
+    expected = cat_user @ np.linalg.inv(cat_shot)
+    np.testing.assert_allclose(got, expected, atol=1e-12)
+    assert not np.allclose(got, cat_user, atol=1e-3)
+    log = _logc4_chroma()
+    aces = apply_idt(log, "arri_logc4_awg4")
+    out = g.wb_node(aces)
+    np.testing.assert_allclose(out, aces @ expected.T, atol=1e-12)
+    absolute = apply_white_balance(aces, 5600.0, rgb_space="AP0")
+    assert not np.allclose(out, absolute, atol=1e-3)
+
+
+def test_first_typed_cct_no_as_shot_is_identity():
+    """No as-shot, user types 5600 first time -> identity (label, not illuminant)."""
+    g = SerialGraph(idt_id="arri_logc4_awg4", wb_enabled=True)
+    g.set_user_wb(5600.0, 0.0)
+    assert g.as_shot_cct is None
+    assert g.wb_source == WB_SOURCE_USER
+    assert g.effective_wb_cct is None
+    assert g.effective_src_cct is None
+    np.testing.assert_allclose(g.wb_matrix(), np.eye(3), atol=1e-12)
+    log = _logc4_chroma()
+    aces = apply_idt(log, "arri_logc4_awg4")
+    np.testing.assert_allclose(g.apply(log), aces, atol=1e-12)
+    g.set_user_wb(3200.0, 0.0)
+    assert g.effective_wb_cct is None
+    np.testing.assert_allclose(g.apply(log), aces, atol=1e-12)
+    absolute_3200 = apply_white_balance(aces, 3200.0, rgb_space="AP0")
+    assert not np.allclose(g.apply(log), absolute_3200, atol=1e-3)
+
+
+def test_grey_card_is_absolute_cat_not_relative():
+    """Grey-card -> absolute CAT of sampled white to D65, not relative to as-shot."""
+    g = SerialGraph.from_metadata({"cct": 5600.0}, idt_id="arri_logc4_awg4")
+    ap0_3200 = _ap0_of_cct(3200.0)
+    shot = g.apply_grey_card(ap0_3200)
+    assert shot.source == WB_SOURCE_GREY
+    assert g.wb_source == WB_SOURCE_GREY
+    assert g.effective_wb_cct is not None
+    assert g.effective_src_cct is None
+    got = g.wb_matrix()
+    absolute = white_balance_matrix(g.wb_cct, tint=g.wb_tint, rgb_space="AP0")
+    np.testing.assert_allclose(got, absolute, atol=1e-12)
+    rel = white_balance_matrix(
+        src_cct=5600.0, dst_cct=g.wb_cct, tint=g.wb_tint, rgb_space="AP0"
+    )
+    assert not np.allclose(got, rel, atol=1e-3)
+    cat_3200 = white_balance_matrix(3200.0, rgb_space="AP0")
+    np.testing.assert_allclose(got, cat_3200, atol=5e-2)

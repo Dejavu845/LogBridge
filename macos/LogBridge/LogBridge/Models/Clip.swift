@@ -225,7 +225,12 @@ final class SessionModel: ObservableObject {
             graph.wbCCT = cct
             graph.wbSource = .user
         }
-        if let tint { graph.wbTint = tint }
+        if let tint {
+            graph.wbTint = tint
+            if graph.wbCCT != nil {
+                graph.wbSource = .user
+            }
+        }
         if let method { graph.wbMethod = method }
         persistGraphWBToSelectedClip()
         preview.invalidateWBODT()
@@ -394,6 +399,10 @@ final class SessionModel: ObservableObject {
                     includeWBNode: self.graph.wbEnabled,
                     cct: self.graph.wbCCT,
                     tint: self.graph.wbTint,
+                    catCCT: self.graph.effectiveWBCCT,
+                    useEffectiveCAT: true,
+                    srcCCT: self.graph.effectiveSrcCCT,
+                    srcTint: self.graph.asShotTint,
                     odtEnabled: self.graph.odtEnabled,
                     exposureStops: self.graph.exposureStops,
                     exposureEnabled: self.graph.exposureEnabled

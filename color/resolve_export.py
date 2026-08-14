@@ -163,32 +163,36 @@ def idt_to_acescct(log_01, idt_id: str) -> np.ndarray:
 
 def wb_in_aces2065(
     aces_ap0,
-    cct: float,
+    cct: float | None,
     tint: float = 0.0,
     method: str = "bradford",
+    src_cct: float | None = None,
 ) -> np.ndarray:
-    """WB on ACES2065-1 scene-linear (AP0). Linear AP0 3×3 CAT."""
+    """WB on ACES2065-1 scene-linear (AP0). Linear AP0 3x3 CAT."""
     return apply_white_balance(
         np.asarray(aces_ap0, dtype=np.float64),
         cct,
         tint=tint,
         rgb_space="AP0",
         method=method,
+        src_cct=src_cct,
+        dst_cct=cct if src_cct is not None else None,
     )
 
 
 def wb_in_acescct(
     acescct_rgb,
-    cct: float,
+    cct: float | None,
     tint: float = 0.0,
     method: str = "bradford",
+    src_cct: float | None = None,
 ) -> np.ndarray:
-    """WB node on an ACEScct timeline: decode → AP0 CAT → encode.
+    """WB node on an ACEScct timeline: decode -> AP0 CAT -> encode.
 
     Never applies the CAT to ACEScct-encoded values.
     """
     ap0 = acescct_to_aces2065(np.asarray(acescct_rgb, dtype=np.float64))
-    ap0 = wb_in_aces2065(ap0, cct, tint=tint, method=method)
+    ap0 = wb_in_aces2065(ap0, cct, tint=tint, method=method, src_cct=src_cct)
     return _acescct_encode_lut(aces2065_to_ap1(ap0))
 
 
@@ -275,10 +279,14 @@ def idt_cube_bytes(idt_id: str, size: int = 17) -> str:
 
 
 def wb_cube_bytes(
-    cct: float, tint: float = 0.0, size: int = 17, method: str = "bradford"
+    cct: float | None,
+    tint: float = 0.0,
+    size: int = 17,
+    method: str = "bradford",
+    src_cct: float | None = None,
 ) -> str:
     grid = _cube_sample_grid(size)
-    out = wb_in_acescct(grid, cct, tint=tint, method=method)
+    out = wb_in_acescct(grid, cct, tint=tint, method=method, src_cct=src_cct)
     return format_cube(
         f"LogBridge WB AP0 CAT {_cct_label(cct)} tint {tint} (ACEScct decode→ACES2065-1→encode)",
         out,
@@ -382,7 +390,10 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
 
 
 def cdl_slope_offset_power(
-    cct: float, tint: float = 0.0, method: str = "bradford"
+    cct: float | None,
+    tint: float = 0.0,
+    method: str = "bradford",
+    src_cct: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """ASC CDL SOP for a bypassable Color Corrector.
 
@@ -393,7 +404,12 @@ def cdl_slope_offset_power(
     bypass a native corrector.
     """
     m = white_balance_matrix(
-        cct, tint=tint, rgb_space=DEFAULT_WORKING_LINEAR, method=method
+        cct,
+        tint=tint,
+        rgb_space=DEFAULT_WORKING_LINEAR,
+        method=method,
+        src_cct=src_cct,
+        dst_cct=cct if src_cct is not None else None,
     )
     slope = m @ np.array([1.0, 1.0, 1.0], dtype=np.float64)
     offset = np.zeros(3, dtype=np.float64)
@@ -402,9 +418,13 @@ def cdl_slope_offset_power(
 
 
 def format_cdl(
-    cct: float, tint: float = 0.0, method: str = "bradford", ident: str = "LogBridge_WB"
+    cct: float | None,
+    tint: float = 0.0,
+    method: str = "bradford",
+    ident: str = "LogBridge_WB",
+    src_cct: float | None = None,
 ) -> str:
-    slope, offset, power = cdl_slope_offset_power(cct, tint, method)
+    slope, offset, power = cdl_slope_offset_power(cct, tint, method, src_cct=src_cct)
     def _v(a):
         return f"{a[0]:.10f} {a[1]:.10f} {a[2]:.10f}"
     return (
@@ -427,9 +447,13 @@ def format_cdl(
 
 
 def format_ccc(
-    cct: float, tint: float = 0.0, method: str = "bradford", ident: str = "LogBridge_WB"
+    cct: float | None,
+    tint: float = 0.0,
+    method: str = "bradford",
+    ident: str = "LogBridge_WB",
+    src_cct: float | None = None,
 ) -> str:
-    slope, offset, power = cdl_slope_offset_power(cct, tint, method)
+    slope, offset, power = cdl_slope_offset_power(cct, tint, method, src_cct=src_cct)
     def _v(a):
         return f"{a[0]:.10f} {a[1]:.10f} {a[2]:.10f}"
     return (
@@ -450,10 +474,18 @@ def format_ccc(
 
 
 def format_dctl(
-    cct: float, tint: float = 0.0, method: str = "bradford"
+    cct: float | None,
+    tint: float = 0.0,
+    method: str = "bradford",
+    src_cct: float | None = None,
 ) -> str:
     m = white_balance_matrix(
-        cct, tint=tint, rgb_space=DEFAULT_WORKING_LINEAR, method=method
+        cct,
+        tint=tint,
+        rgb_space=DEFAULT_WORKING_LINEAR,
+        method=method,
+        src_cct=src_cct,
+        dst_cct=cct if src_cct is not None else None,
     )
     els = ", ".join(f"{m[i, j]:.10f}f" for i in range(3) for j in range(3))
     return f"""// LogBridge M1 WB node — scene-linear Bradford/CAT02 in ACES2065-1 (AP0).
@@ -691,7 +723,7 @@ def format_graph_xml(
     <File role="dctl">02_Exposure.dctl</File>
   </Node>
   <Node index="3" name="WB" type="Corrector" bypassable="true" enabled="{wb_enabled}" method="{_xml_escape(method)}">
-    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. As-shot writes this node only. Missing CCT/tint is pending / identity (do not guess 5600 or 6504). Bypass this node in Resolve (Color page: disable WB, or DCTL Bypass WB, or skip 03_WB.cube). Remaining graph is IDT → Exposure → ACEScct, no bake.</Description>
+    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. As-shot CCT/tint fills knobs (UI only); default CAT is identity — do not treat as-shot 5600/6504 as an illuminant (double WB). CAT applies when the user moves knobs or on a grey-card override. Missing CCT/tint is pending / identity (do not guess 5600 or 6504). Bypass this node in Resolve (Color page: disable WB, or DCTL Bypass WB, or skip 03_WB.cube). Remaining graph is IDT → Exposure → ACEScct, no bake.</Description>
     {cct_xml}
     <Tint>{tint:.6f}</Tint>
     <WBSource>{_xml_escape(wb_source)}</WBSource>
@@ -745,7 +777,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
    - `03_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in ACES2065-1 (AP0), wrapped in ACEScct so it sits on the ACEScct timeline.
    - `03_WB.dctl` — same 3×3 as a DCTL (Decode ACEScct → matrix → Encode ACEScct). Checkbox **Bypass WB** inside the DCTL, or disable the node.
    - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
-   - CCT {_cct_label(cct)}, tint {tint}, method Bradford (CAT02 selectable in code). As-shot default; missing CCT is identity (not 5600 K). Scene-linear only.
+   - CCT {_cct_label(cct)}, tint {tint}, method Bradford (CAT02 selectable in code). As-shot fills knobs (UI only); default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT is identity (not 5600 K). Scene-linear only.
 
 4. **ODT** — Off (ACEScct deliverable, default) | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ
    - Rec.709: `04_ODT_Rec709.cube` or CST. **preview only**, off by default. BT.709 OETF, no RRT.
@@ -817,6 +849,8 @@ def export_resolve_bundle(
         odt = graph.odt
         exposure_stops = graph.exposure_stops
         exposure_enabled = graph.exposure_enabled
+        cat_cct = graph.effective_wb_cct
+        cat_src = graph.effective_src_cct
     else:
         graph = graph_from_export_args(
             idt_id=idt_ids[0] if idt_ids else None,
@@ -829,6 +863,8 @@ def export_resolve_bundle(
             exposure_stops=exposure_stops,
             exposure_enabled=exposure_enabled,
         )
+        cat_cct = graph.effective_wb_cct
+        cat_src = graph.effective_src_cct
     seen: list[str] = []
     for i in idt_ids:
         if i in IDT_PAIRS and i not in seen:
@@ -854,10 +890,12 @@ def export_resolve_bundle(
     ))
     _w("02_Exposure.cube", exposure_cube_bytes(exposure_stops if exposure_enabled else 0.0))
     _w("02_Exposure.dctl", format_exposure_dctl(exposure_stops if exposure_enabled else 0.0))
-    _w("03_WB.cdl", format_cdl(cct, tint, method))
-    _w("03_WB.ccc", format_ccc(cct, tint, method))
-    _w("03_WB.dctl", format_dctl(cct, tint, method))
-    _w("03_WB.cube", wb_cube_bytes(cct, tint, size=lut_size, method=method))
+    # Knobs (cct) stay in XML/README; CAT files use effective_wb_cct
+    # so as-shot-unmoved exports identity (no double WB).
+    _w("03_WB.cdl", format_cdl(cat_cct, tint, method, src_cct=cat_src))
+    _w("03_WB.ccc", format_ccc(cat_cct, tint, method, src_cct=cat_src))
+    _w("03_WB.dctl", format_dctl(cat_cct, tint, method, src_cct=cat_src))
+    _w("03_WB.cube", wb_cube_bytes(cat_cct, tint, size=lut_size, method=method, src_cct=cat_src))
     _w("04_ODT_Rec709.cube", odt_cube_bytes(size=lut_size))
     for idt_id in idt_ids:
         _w(f"01_IDT_{idt_id}.cube", idt_cube_bytes(idt_id, size=lut_size))

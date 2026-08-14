@@ -31,7 +31,8 @@ struct WhiteBalanceSettings {
     var method: String
     var source: WBSource
 
-    /// D65 identity CAT (6504 K). Not a 5600 K guess.
+    /// Explicit D65 identity CAT (6504 K). Not a 5600 K guess. As-shot knobs
+    /// must not use this as a filled-in default (UI only; CAT stays identity).
     static let identity = WhiteBalanceSettings(cct: 6504, tint: 0, method: "bradford", source: .user)
     /// As-shot unknown: apply identity, do not guess 5600 K.
     static let unknown = WhiteBalanceSettings(cct: nil, tint: 0, method: "bradford", source: .unknown)

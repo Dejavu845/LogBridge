@@ -99,19 +99,30 @@ No standard Builtin.
 
 # As-shot white balance (linear AP0 CAT)
 
-Default of the existing Bradford/CAT02 node in ACES2065-1 (AP0):
+Log IDTs assume the image is **already white-balanced** (neutrals are
+neutral after IDT). Camera CCT/tint is **UI only**. Default CAT is identity.
 
 1. Read CCT + tint from camera-private metadata (ARRI MXF, Sony Acquisition,
    Canon vendor, RED RMD, Apple/DJI). Never QuickTime nclc / nclx / colr.
-2. Write those values into the WB node. User can still change CCT/tint or bypass.
-3. Grey-card / pick-neutral: sample preview linear RGB (post-IDT, post-exposure
+2. Fill the WB knobs as “as-shot”. Do **not** treat as-shot 5600/6504 as an
+   illuminant and CAT toward D65 again (double WB).
+3. Apply AP0 CAT **only** when the user moves CCT/tint away from the as-shot
+   values, or applies a grey-card override.
+   User move is **relative**: `CAT(user→D65)·inv(CAT(as→D65))` ==
+   `CAT(user→as)`. 3200→5600 warms (in-camera Kelvin). Not `CAT(as→user)`,
+   not `CAT(user→D65)` alone.
+   First manually typed CCT with no as-shot is a **label**, not an
+   illuminant — identity until there is a reference (as-shot or grey).
+4. Grey-card / pick-neutral: sample preview linear RGB (post-IDT, post-exposure
    AP0) → invert the same daylight/Planckian locus used by `cct_to_xy` →
-   CCT + tint (1e-3 uv). This overrides metadata.
-4. If CCT cannot be read and the user has not picked grey: identity /
-   as-shot unknown. Do **not** guess 5600 K.
+   CCT + tint (1e-3 uv). This overrides metadata and **is** a real
+   **absolute** CAT of that sampled white to D65 / working white
+   (identity only if the sample is D65).
+5. If CCT cannot be read and the user has not picked grey: knobs empty /
+   pending, identity CAT. Do **not** guess 5600 K.
 
-6504 K (D65) CAT is identity. 5600 K uses the same CAT builder (daylight locus).
-Missing CCT is not filled in as 5600.
+6504 K (D65) CAT math is identity when a caller *explicitly* sets that CCT
+(user move or grey-card). Missing CCT is not filled in as 5600 or 6504.
 
 
 
@@ -119,7 +130,13 @@ Missing CCT is not filled in as 5600.
 
 As-shot writes **only** the existing linear AP0 CAT node (`color/wb.py` Bradford/CAT02). Never CAT on camera-log or ACEScct-encoded values.
 
-- Camera-private CCT/tint → `SerialGraph.wb_cct` / `wb_tint`. QuickTime nclc is ignored.
-- Missing CCT/tint → **pending / identity**. Do not guess 5600 or 6504. `cct is None` returns `I` from `white_balance_matrix`.
-- Grey-card pick: mean of the post-IDT ACES2065-1 (AP0) linear patch → XYZ → xy → invert `cct_to_xy` (locus search + 1e-3 uv tint). Overrides metadata. Implemented (unverified).
-- Resolve WB node stays bypassable (`graph.xml` `bypassable="true"`; DCTL **Bypass WB**).
+- Camera-private CCT/tint → `SerialGraph.wb_cct` / `wb_tint` knobs (UI only). QuickTime nclc is ignored. Default CAT is identity.
+- Do not treat as-shot 5600/6504 as an illuminant and CAT toward D65 (double WB).
+- Apply CAT only when the user moves CCT/tint away from as-shot, or on a grey-card override.
+- User move: `white_balance_matrix(src_cct=as-shot, dst_cct=user)` =
+  `CAT(user→D65)·inv(CAT(as→D65))` == `CAT(user→as)`. 3200→5600 warms.
+  As-shot / unmoved = identity.
+- First typed CCT with no as-shot = label, identity. Do not CAT(user→D65) on first fill.
+- Missing CCT/tint → **pending / identity** (knobs empty). Do not guess 5600 or 6504. `cct is None` returns `I` from `white_balance_matrix`.
+- Grey-card pick: mean of the post-IDT ACES2065-1 (AP0) linear patch → XYZ → xy → invert `cct_to_xy` (locus search + 1e-3 uv tint). Overrides metadata; that is an **absolute** CAT of the sampled white to D65 (identity only if sampled D65). Implemented (unverified).
+- Resolve WB node stays bypassable (`graph.xml` `bypassable="true"`; DCTL **Bypass WB**). Implemented (unverified).
