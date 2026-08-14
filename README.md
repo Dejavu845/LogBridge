@@ -1,8 +1,10 @@
 # LogBridge
 
-macOS batch tool: mixed-camera Log → ACES2065-1 (IDT) → WB in ACES2065-1 linear (AP0) → ACEScct timeline / Rec.709 preview ODT.
+macOS batch tool: mixed-camera Log → ACES2065-1 (IDT) → WB in ACES2065-1 linear (AP0) → ACEScct timeline / optional ODT (Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ).
 
-M1 is a **serial node graph** (IDT → WB → optional Rec.709 preview), not a general node editor and not a Resolve-like grade. Every IDT is **implemented (unverified)** until golden grey-card samples are measured. This project does not describe cameras as “supported”. There is no 一键精准.
+M1 is a **serial node graph** (IDT → WB → selectable ODT), not a general node editor and not a Resolve-like grade. Every IDT and ODT is **implemented (unverified)** until golden grey-card samples are measured. This project does not describe cameras or HDR outputs as “supported”. There is no 一键精准.
+
+M2-start adds optional **Rec.2100 HLG** and **Rec.2100 PQ** ODT nodes via **ACES Output Transform / BT.2100** (OCIO BuiltinTransform, or config-aces names if present). Prefer those Builtins over any handwritten transfer. There is no homemade HLG/PQ curve. HDR OT is unverified — not a one-click accurate path.
 
 Internal working encoding: **ACEScct** (AP1 log). Scene-linear interchange / `roles.scene_linear`: **ACES2065-1** (Linear AP0). `roles.color_timing`: ACEScct. White balance is Bradford (or CAT02) chromatic adaptation in ACES2065-1 (AP0) scene-linear only — never a CAT on ACEScct. DaVinci Wide Gamut Intermediate is **not** the default internal or deliverable.
 
@@ -10,17 +12,22 @@ Internal working encoding: **ACEScct** (AP1 log). Scene-linear interchange / `ro
 
 - **Empty state:** drag-and-drop a folder of mixed clips is the primary action (big drop zone, short copy: “Drop a folder of mixed clips”). Choosing files is secondary.
 - **Paired IDT picker:** when metadata cannot lock a curve+gamut pair, the UI shows locked pairs — e.g. `S-Log3 + S-Gamut3` and `S-Log3 + S-Gamut3.Cine` — **not** two independent dropdowns (curve vs gamut).
-- **Block process:** one-click process / Resolve export stays disabled until every clip has a locked pair. No silent IDT.
+- **Block process:** **处理已锁定片段** stays disabled until every clip has a locked pair. Pending label: **先选择 Log 与色域**. No silent IDT.
 - **S-Log3:** never silently default to S-Gamut3.Cine. Both pairs are offered; the user must pick one.
 - **Venice:** `S-Log3 + S-Gamut3 (Venice)` and `S-Log3 + S-Gamut3.Cine (Venice)` appear **only if** a Venice body is detected.
 - **Copy / badges:** “implemented (unverified)” — never “supported”, never 一键精准.
-- **Graph:** inspector + node strip stay: IDT → bypassable WB → Rec.709 preview ODT (off by default).
+- **Graph:** inspector + node strip: IDT → bypassable WB → ODT selector: **Off (ACEScct deliverable)** | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ. Default Off.
+- **Primary button:** **处理已锁定片段** (never 一键还原). Pending: **先选择 Log 与色域** (disabled).
+- **Preview badge:** **预览·非成片**
+- **Export:** **导出 ACEScct / EXR**
 
 ## OpenColorIO
 
 Mac OpenColorIO uses **BuiltinTransform** styles named in `ocio/config.ocio` (`ARRI_LOGC4_to_ACES2065-1`, `SONY_SLOG3-SGAMUT3_to_ACES2065-1`, `SONY_SLOG3-SGAMUT3.CINE_to_ACES2065-1`, `PANASONIC_VLOG-VGAMUT_to_ACES2065-1`, `RED_LOG3G10-RWG_to_ACES2065-1`). Venice Builtins are detect-only, never a silent S-Log3 default.
 
 Linux tests use `color/` white-paper **reference encode/decode for 18% codes only**. They do not require PyOpenColorIO. F-Log2 and N-Log have no standard Builtin — those papers stay handwritten.
+
+Rec.2100 HLG / PQ colorspaces in `ocio/config.ocio` name ACES Output Transform BuiltinTransform styles (`ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nits-15nits-HLG_1.1` + `DISPLAY - CIE-XYZ-D65_to_REC.2100-HLG`, and the ST2084 / Rec.2100-PQ pair) plus config-aces aliases (`Output - Rec.2100-HLG - 1000 nit`, `Output - Rec.2100-Rec.2020-ST2084 - 1000 nit`). Applying HDR requires OCIO. No homemade HLG/PQ LUT. HDR OT via ACES/BT.2100 is **implemented (unverified)**.
 
 Python curves in `color/` are the source of truth for 18% tests. Regenerating OCIO assets:
 
@@ -66,7 +73,7 @@ CI: `.github/workflows/test.yml` runs pytest on Ubuntu.
 | Nikon N-Log / BT.2020 | N-Log | BT.2020 / D65 | ~372 / 10-bit | implemented (unverified) |
 | RED Log3G10 / REDWideGamutRGB | Log3G10 | RWG / D65 | 1/3 | implemented (unverified) |
 
-Sony S-Log3 is **two locked pairs**. Metadata or the user picks a **paired IDT** (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine) — not two dropdowns. LogBridge never defaults S-Log3 to S-Gamut3.Cine. Clips without a locked pair stay **pending**. **Process selected** / **Apply graph** and Resolve export are blocked for those clips. The primary button is never 一键还原. Venice pairs appear only if a Venice body is detected.
+Sony S-Log3 is **two locked pairs**. Metadata or the user picks a **paired IDT** (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine) — not two dropdowns. LogBridge never defaults S-Log3 to S-Gamut3.Cine. Clips without a locked pair stay **pending**. **处理已锁定片段** / **Apply graph** and **导出 ACEScct / EXR** are blocked for those clips (pending button: **先选择 Log 与色域**). The primary button is never 一键还原. Venice pairs appear only if a Venice body is detected.
 
 Nikon N-Log white-paper `x` is a **10-bit code value 0–1023**. Do not divide by 1023 before the curve. 452 is the breakpoint, not 18% grey (~372). The OCIO LUT is sampled on 0–1 = code/1023 so image buffers stay normalized; the Python API takes 10-bit codes.
 
@@ -80,13 +87,18 @@ Fujifilm F-Log2 uses Data Sheet 1.0 + BT.2020 (`a=5.555556`). Not an F-Log1 LUT.
 
 QuickTime `nclc` / `nclx` / `colr` is **never** used to identify S-Log3 or LogC4.
 
-## Node workflow (M1, serial only)
+## Node workflow (serial only)
 
 Visible graph, three slots — `color/graph.py` `SerialGraph`, used by `color/pipeline.py` and Resolve export:
 
 1. **IDT** (`01_IDT`) — locked curve+gamut pair → ACES2065-1. Preview cache stores this AP0 linear buffer. Not bypassable.
 2. **WB** (`02_WB`) — Bradford/CAT02 in **ACES2065-1 (AP0)** scene-linear, CCT + green-magenta tint. Never a CAT on ACEScct-encoded values. **Bypassable.** Node 2 off = IDT → ACEScct, no bake (XML `enabled="false"`; DCTL **Bypass WB**). Export WB is a linear AP0 3×3 (or DI-free DCTL on ACES2065-1 / ACEScct-decoded-to-linear).
-3. **ODT Rec.709** (`03_ODT`) — **preview only**, off by default. Off = ACEScct deliverable (or ACES2065-1 EXR). Not the standard reconstruction or default export. Preview tags `CGColorSpace.itur_709` only when this node is on.
+3. **ODT** (`03_ODT`) — selector, default **Off** (ACEScct deliverable / ACES2065-1 EXR):
+   - **Off** — ACEScct timeline deliverable.
+   - **Rec.709 preview** — DIY BT.709 OETF, no RRT. Preview only, unverified. Tags `CGColorSpace.itur_709` only in this mode.
+   - **Rec.2100 HLG** — ACES Output Transform / BT.2100 (`ACES-OUTPUT … HLG_1.1` + `DISPLAY … REC.2100-HLG`, or ACES 2.0 Rec.2100-HLG style if present). Implemented (unverified).
+   - **Rec.2100 PQ** — ACES Output Transform / BT.2100 (`ACES-OUTPUT … ST2084_1.1` + `DISPLAY … REC.2100-REC2020-ST2084`). Implemented (unverified).
+   - HLG/PQ are **not** “supported” and not 一键精准. No homemade HLG/PQ curve.
 
 Click a node in the strip to inspect its parameters. No extra grade nodes (exposure/sat).
 
@@ -96,7 +108,7 @@ Python: `from color.graph import SerialGraph`. Swift: `SerialGraph` + `NodeSlot`
 
 Export writes a serial **node graph**, not a prose sidecar: `graph.xml`, `graph.dot`, `01_IDT_<idt>.cube`, `02_WB.cube` / `.cdl` / `.ccc` / `.dctl`, `03_ODT_Rec709.cube`, `README_RESOLVE.md`.
 
-Export default: **ACEScct** timeline / **ACES2065-1**. Rec.709 ODT is an optional preview node (off by default). Export is blocked while any clip is pending (no locked IDT pair). Implemented (unverified).
+Export default: **ACEScct** timeline / **ACES2065-1** (**导出 ACEScct / EXR**). Rec.709 ODT is an optional preview node (off by default). Rec.2100 HLG/PQ are optional ACES/BT.2100 OT nodes (unverified). Export is blocked while any clip is pending (no locked IDT pair). Implemented (unverified).
 
 Python: `from color.resolve_export import export_resolve_bundle` (pass `graph=` or `include_wb=`). Swift: `ResolveExporter.export(to:clips:...)`. Status: implemented (unverified).
 
@@ -119,13 +131,14 @@ No golden samples have been measured. Do not claim accuracy. See `ACCEPTANCE.md`
 ## Out of scope (M1)
 
 - Full node editor / grading (serial three-slot graph only)
-- ACES RRT / treating the DIY Rec.709 OETF as a standard deliverable (it is preview only)
+- Treating the DIY Rec.709 OETF as a standard deliverable (it is preview only)
+- Homemade HLG/PQ curves (HDR OT is ACES/BT.2100 Builtin only)
 - Canon C-Log2 / C-Log3, Apple Log, DJI D-Log (stubs only)
 - C-Log2 negative toe: use OCIO `CURVE - CANON_CLOG2_to_LINEAR` or ACES CLF; do not invent a mirrored toe
 - Camera-protocol reverse engineering, marketplace integrations
 - Treating QuickTime nclc as log identity
 - Using the preview as a substitute for a full render
-- 一键还原 / claiming a one-click restore (primary actions are Process selected / Apply graph)
+- 一键还原 / claiming a one-click restore (primary action is 处理已锁定片段; pending is 先选择 Log 与色域)
 
 ## Layout
 

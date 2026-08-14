@@ -46,6 +46,33 @@ ACES_AP1_TO_REC709 = "UTILITY - ACES-AP1_to_LINEAR-REC709_BFD"
 CANON_CLOG2_CURVE = "CURVE - CANON_CLOG2_to_LINEAR"
 CANON_CLOG2_IDT = "CANON_CLOG2-CGAMUT_to_ACES2065-1"
 
+# ACES Output Transform / BT.2100 (Rec.2100 HLG + PQ). Prefer these
+# BuiltinTransform styles over any handwritten HLG/PQ curve.
+# ACES 1.3 OT → CIE-XYZ-D65; DISPLAY encodes Rec.2100.
+ACES_OT_HLG_1_3 = (
+    "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nits-15nits-HLG_1.1"
+)
+ACES_OT_PQ_1_3 = (
+    "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nits-15nits-ST2084_1.1"
+)
+DISPLAY_REC2100_HLG = "DISPLAY - CIE-XYZ-D65_to_REC.2100-HLG"
+DISPLAY_REC2100_PQ = "DISPLAY - CIE-XYZ-D65_to_REC.2100-REC2020-ST2084"
+# ACES 2.0 Rec.2100-named OT (OCIO 2.4+), used when the registry has them.
+ACES_OT_HLG_2_0 = (
+    "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - Rec.2100-HLG-1000nit_2.0"
+)
+ACES_OT_PQ_2_0 = (
+    "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - Rec.2100-Rec.2020-ST2084-1000nit_2.0"
+)
+# Academy config-aces colorspace names.
+CONFIG_ACES_HLG = "Output - Rec.2100-HLG - 1000 nit"
+CONFIG_ACES_PQ = "Output - Rec.2100-Rec.2020-ST2084 - 1000 nit"
+
+ODT_BUILTINS: dict[str, tuple[str, ...]] = {
+    "hlg": (ACES_OT_HLG_1_3, DISPLAY_REC2100_HLG),
+    "pq": (ACES_OT_PQ_1_3, DISPLAY_REC2100_PQ),
+}
+
 _OCIO = None
 _OCIO_TRIED = False
 

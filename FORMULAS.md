@@ -28,3 +28,8 @@ Public white papers were fetched where possible. **No manufacturer constant from
 7. **S-Gamut3 primaries** — Sony states they match conventional S-Gamut: (0.73, 0.28), (0.14, 0.855), (0.10, −0.05). **S-Gamut3.Cine** from the widely used colour-science / ACES set: (0.766, 0.275), (0.225, 0.800), (0.089, −0.087). Sony has not published Cine xy in the Technical Summary; these are community-standard, **implemented (unverified)**. Never the S-Log3 default.
 
 Third-party pages sometimes list F-Log2 `a=0.555556` (that is F-Log). LogBridge keeps `a=5.555556`.
+
+
+# HDR ODT (M2-start)
+
+Rec.2100 HLG and Rec.2100 PQ are **ACES Output Transform / BT.2100** OCIO BuiltinTransform paths. Do not invent homemade HLG/PQ constants or a DIY Rec.2100 OETF like the Rec.709 preview curve. Apply only via OCIO (`ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nits-15nits-HLG_1.1` + `DISPLAY - CIE-XYZ-D65_to_REC.2100-HLG`, and the ST2084 / Rec.2100-PQ pair). Implemented (unverified).

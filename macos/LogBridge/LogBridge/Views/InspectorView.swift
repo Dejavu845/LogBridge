@@ -153,14 +153,29 @@ private struct ODTInspector: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        Toggle("Enable Rec.709 ODT (node 3). Off = ACEScct deliverable.", isOn: Binding(
-            get: { session.graph.odtEnabled },
-            set: { session.setODTEnabled($0) }
-        ))
-        Text("Rec.709 is preview only, not the standard deliverable. Tagged CGColorSpace.itur_709 only when this node is on. Off = ACEScct deliverable. No RRT. Implemented (unverified).")
+        Picker("ODT", selection: Binding(
+            get: { session.graph.odt },
+            set: { session.setODT($0) }
+        )) {
+            ForEach(ODTMode.allCases) { mode in
+                Text(mode.title).tag(mode)
+            }
+        }
+        .frame(maxWidth: 280)
+        Text(session.graph.odt.acesOTNote)
             .font(.caption)
             .foregroundStyle(.secondary)
-        Text("Working space: \(session.graph.workingSpace.rawValue). Timeline export is ACEScct (ACES2065-1 interchange).")
+        if session.graph.odt == .rec709 {
+            Text("Rec.709 is preview only, not the standard deliverable. Tagged CGColorSpace.itur_709 only when this node is Rec.709. No RRT. Implemented (unverified).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        if session.graph.odt.isHDR {
+            Text("HDR OT via ACES/BT.2100 BuiltinTransform. No homemade HLG/PQ curve. Implemented (unverified). Not supported. Not 一键精准.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        Text("Working space: \(session.graph.workingSpace.rawValue). 导出 ACEScct / EXR is the timeline deliverable.")
             .font(.caption)
             .foregroundStyle(.secondary)
     }

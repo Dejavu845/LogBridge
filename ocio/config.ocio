@@ -1,15 +1,17 @@
 ocio_profile_version: 2.2
 
-# LogBridge M1 OCIO config.
+# LogBridge M1 + M2-start OCIO config.
 # scene_linear / reference: ACES2065-1 (AP0).
 # color_timing: ACEScct (Academy grading). WB / preview sit here.
 # Do NOT use DaVinci Wide Gamut Intermediate as the internal reference.
 #
 # IDTs with a standard Builtin use BuiltinTransform (Mac OCIO).
 # F-Log2 and N-Log have no Builtin — Fuji / Nikon white paper + BT.2020.
+# Rec.2100 HLG / PQ use ACES Output Transform / BT.2100 BuiltinTransform
+# (no homemade HLG/PQ curve). Rec.709 stays preview-only DIY OETF.
 # Python color/ calls Builtins when PyOpenColorIO is importable; otherwise
-# it uses matching white-paper reference implementations for tests.
-# All IDTs: implemented (unverified). Do not mark cameras as supported.
+# it uses matching white-paper reference implementations for IDT 18% tests.
+# HDR apply requires OCIO. All paths: implemented (unverified). Not supported.
 
 environment: {}
 
@@ -36,6 +38,10 @@ file_rules:
 displays:
   Rec.709:
     - !<View> {name: Rec.709, colorspace: Rec.709}
+  Rec.2100-HLG:
+    - !<View> {name: Rec.2100-HLG, colorspace: Rec.2100-HLG}
+  Rec.2100-PQ:
+    - !<View> {name: Rec.2100-PQ, colorspace: Rec.2100-PQ}
   ACEScct:
     - !<View> {name: ACEScct, colorspace: ACEScct}
 
@@ -108,6 +114,46 @@ colorspaces:
         - !<FileTransform> {src: lin_to_Rec709_oetf.spi1d, interpolation: linear, inverse: true}
         - !<BuiltinTransform> {style: UTILITY - ACES-AP1_to_LINEAR-REC709_BFD, direction: inverse}
         - !<BuiltinTransform> {style: ACEScg_to_ACES2065-1}
+
+  - !<ColorSpace>
+    name: Rec.2100-HLG
+    family: Output
+    bitdepth: 32f
+    isdata: false
+    aliases: ["Output - Rec.2100-HLG - 1000 nit", "BT.2100 HLG"]
+    description: |
+      Rec.2100 HLG via ACES Output Transform / BT.2100 (BuiltinTransform).
+      ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nits-15nits-HLG_1.1
+      then DISPLAY - CIE-XYZ-D65_to_REC.2100-HLG
+      config-aces: Output - Rec.2100-HLG - 1000 nit
+      ACES 2.0 alias (if registry has it):
+      ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - Rec.2100-HLG-1000nit_2.0
+      Implemented (unverified). Not supported. Not 一键精准.
+      No homemade HLG curve.
+    from_scene_reference: !<GroupTransform>
+      children:
+        - !<BuiltinTransform> {style: ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nits-15nits-HLG_1.1}
+        - !<BuiltinTransform> {style: DISPLAY - CIE-XYZ-D65_to_REC.2100-HLG}
+
+  - !<ColorSpace>
+    name: Rec.2100-PQ
+    family: Output
+    bitdepth: 32f
+    isdata: false
+    aliases: ["Output - Rec.2100-Rec.2020-ST2084 - 1000 nit", "BT.2100 PQ"]
+    description: |
+      Rec.2100 PQ via ACES Output Transform / BT.2100 (BuiltinTransform).
+      ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nits-15nits-ST2084_1.1
+      then DISPLAY - CIE-XYZ-D65_to_REC.2100-REC2020-ST2084
+      config-aces: Output - Rec.2100-Rec.2020-ST2084 - 1000 nit
+      ACES 2.0 alias (if registry has it):
+      ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - Rec.2100-Rec.2020-ST2084-1000nit_2.0
+      Implemented (unverified). Not supported. Not 一键精准.
+      No homemade PQ / ST.2084 curve.
+    from_scene_reference: !<GroupTransform>
+      children:
+        - !<BuiltinTransform> {style: ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nits-15nits-ST2084_1.1}
+        - !<BuiltinTransform> {style: DISPLAY - CIE-XYZ-D65_to_REC.2100-REC2020-ST2084}
 
   - !<ColorSpace>
     name: ARRI LogC4 AWG4

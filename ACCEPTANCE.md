@@ -1,8 +1,8 @@
-# LogBridge M1 acceptance gates
+# LogBridge M1 + M2-start acceptance gates
 
-Nothing below is claimed as passing. IDTs are **implemented (unverified)**.
+Nothing below is claimed as passing. IDTs and HDR OTs are **implemented (unverified)**.
 
-Default language is **ACEScct** / **ACES2065-1**. Rec.709 is preview only. WB is ACES2065-1 (AP0) scene-linear. Implemented (unverified).
+Default language is **ACEScct** / **ACES2065-1**. Rec.709 is preview only. Rec.2100 HLG / PQ are ACES Output Transform / BT.2100 (unverified). WB is ACES2065-1 (AP0) scene-linear. Implemented (unverified). Not supported. Not 一键精准.
 
 ## Golden grey-card samples (per log)
 
@@ -31,13 +31,15 @@ Both preview panes overlay **预览·非成片**. 8-bit thumbnail is not a deliv
 
 Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable color space is BT.709 and the source drawable is not. Overlay badge text includes 预览·非成片.
 
-## Serial node graph (M1)
+## Serial node graph (M1 + M2-start ODT)
 
-- UI shows three serial slots: IDT → WB → ODT Rec.709 preview (`color/graph.py` `SerialGraph`).
+- UI shows three serial slots: IDT → WB → ODT (`color/graph.py` `SerialGraph`).
+- ODT selector: Off (ACEScct deliverable) | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ. Default Off.
 - Click a node to inspect parameters. WB / ODT are bypassable; IDT is not.
 - Node 2 off = IDT → ACEScct, no bake in preview and in Resolve export (`graph.xml` `enabled="false"`).
 - WB CAT runs in ACES2065-1 (AP0) scene-linear, never on ACEScct-encoded values. Preview cache stores IDT as ACES2065-1 linear.
 - Rec.709 node 3 is preview only, off by default. Off = ACEScct deliverable.
+- Rec.2100 HLG / PQ: HDR OT via ACES/BT.2100 BuiltinTransform (unverified). No homemade HLG/PQ curve. Not supported.
 - Not a general node editor. No extra grade nodes.
 
 ## Resolve export — WB toggle
@@ -45,9 +47,16 @@ Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable colo
 - Export is a Resolve-importable graph (`graph.xml` / `graph.dot`) plus `01_IDT_*.cube`, `02_WB.{cube,cdl,ccc,dctl}`, `03_ODT_Rec709.cube` — not a prose sidecar only.
 - **WB is its own corrector/node** (Color page serial node 2). Disable it, or tick DCTL **Bypass WB**, or skip `02_WB.cube` / the CDL.
 - WB is a linear AP0 Bradford/CAT02 3×3 (or DI-free DCTL on ACES2065-1 / ACEScct-decoded-to-linear), not baked into the IDT or Rec.709 cubes.
-- Standard deliverable is **ACEScct or ACES2065-1 EXR / ACES workflow**. Rec.709 is preview only (node 3 off by default). Remaining graph when WB is off: IDT → ACEScct, no bake.
+- Standard deliverable is **ACEScct or ACES2065-1 EXR / ACES workflow** (**导出 ACEScct / EXR**). Rec.709 is preview only (node 3 off by default). Rec.2100 HLG/PQ are optional ACES/BT.2100 OT (unverified). Remaining graph when WB is off: IDT → ACEScct, no bake.
 
 Gate: open the export in Resolve; bypassing the WB node must restore uncorrected camera linear (after IDT). Implemented (unverified).
+
+## HDR OT via ACES/BT.2100 (M2-start)
+
+- Rec.2100 HLG and Rec.2100 PQ are declared ODT paths using OCIO **ACES Output Transform / BT.2100** naming (`ACES-OUTPUT … HLG_1.1` / `… ST2084_1.1` + `DISPLAY … REC.2100-*`, or ACES 2.0 Rec.2100 styles if the registry has them; config-aces aliases `Output - Rec.2100-HLG - 1000 nit` / `Output - Rec.2100-Rec.2020-ST2084 - 1000 nit`).
+- Prefer OCIO Builtin / ACES OT. Do not invent a homemade HLG/PQ curve.
+- Status: **implemented (unverified)** until golden samples. Not “supported”. Not 一键精准.
+- Applying HDR without OCIO must not fall back to a DIY transfer.
 
 ## Other gates
 
@@ -60,7 +69,7 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 ## Pending IDT / process lock
 
 - Clips without a locked curve+gamut pair stay **pending**.
-- **Process selected** / **Apply graph** and Resolve export are blocked for pending clips.
-- Primary button is "Process selected" or "Apply graph" — never 一键还原.
+- **处理已锁定片段** / **Apply graph** and **导出 ACEScct / EXR** are blocked for pending clips.
+- Primary button is **处理已锁定片段** — never 一键还原. Pending (disabled): **先选择 Log 与色域**.
 - IDT picker is one paired list (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine), not two dropdowns.
 - Venice pairs appear only if a Venice body is detected.

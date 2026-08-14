@@ -48,7 +48,7 @@ struct NodeStripView: View {
             }
             return "bypassed"
         case .odt:
-            return session.graph.odtEnabled ? "Rec.709" : "off (ACEScct)"
+            return session.graph.odt.title
         }
     }
 }

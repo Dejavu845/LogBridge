@@ -1,10 +1,10 @@
 import Foundation
 
-/// Serial M1 graph: IDT → WB → optional Rec.709 preview. Not a general node editor.
+/// Serial graph: IDT → WB → selectable ODT. Not a general node editor.
 ///
 /// Slots match `color/graph.py` and Resolve export (01_IDT / 02_WB / 03_ODT).
-/// Node 2 (WB) off = IDT → ACEScct, no bake. Node 3 (ODT) off = ACEScct deliverable
-/// (preview only when on; not tagged Rec.709 when off).
+/// Node 2 (WB) off = IDT → ACEScct, no bake. Node 3 ODT: Off (ACEScct) |
+/// Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ. Default Off.
 enum NodeSlot: Int, CaseIterable, Identifiable, Hashable {
     case idt = 1
     case wb = 2
@@ -16,7 +16,7 @@ enum NodeSlot: Int, CaseIterable, Identifiable, Hashable {
         switch self {
         case .idt: return "IDT"
         case .wb: return "WB"
-        case .odt: return "ODT Rec.709"
+        case .odt: return "ODT"
         }
     }
 
@@ -32,12 +32,49 @@ enum NodeSlot: Int, CaseIterable, Identifiable, Hashable {
         switch self {
         case .idt: return "curve + gamut"
         case .wb: return "scene-linear CAT"
-        case .odt: return "preview only"
+        case .odt: return "Off / 709 / HLG / PQ"
         }
     }
 
     var isBypassable: Bool {
         self != .idt
+    }
+}
+
+/// ODT slot selector. Default Off = ACEScct deliverable.
+enum ODTMode: String, CaseIterable, Identifiable, Hashable {
+    case off = "off"
+    case rec709 = "rec709"
+    case hlg = "hlg"
+    case pq = "pq"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .off: return "Off (ACEScct)"
+        case .rec709: return "Rec.709 preview"
+        case .hlg: return "Rec.2100 HLG"
+        case .pq: return "Rec.2100 PQ"
+        }
+    }
+
+    var isPreviewOnly: Bool { self == .rec709 }
+    var isHDR: Bool { self == .hlg || self == .pq }
+    var isEnabled: Bool { self != .off }
+
+    /// ACES Output Transform / BT.2100 BuiltinTransform (no homemade curve).
+    var acesOTNote: String {
+        switch self {
+        case .off:
+            return "ACEScct timeline / ACES2065-1 EXR deliverable."
+        case .rec709:
+            return "Rec.709 preview only (DIY BT.709 OETF, no RRT). Implemented (unverified)."
+        case .hlg:
+            return "Rec.2100 HLG via ACES Output Transform / BT.2100. Implemented (unverified). Not supported."
+        case .pq:
+            return "Rec.2100 PQ via ACES Output Transform / BT.2100. Implemented (unverified). Not supported."
+        }
     }
 }
 
@@ -47,8 +84,13 @@ struct SerialGraph: Equatable {
     var wbCCT: Double = 6504
     var wbTint: Double = 0
     var wbMethod: String = "bradford"
-    var odtEnabled: Bool = false
+    var odt: ODTMode = .off
     var workingSpace: FixedPipeline.WorkingSpace = .acescct
+
+    var odtEnabled: Bool {
+        get { odt != .off }
+        set { odt = newValue ? (odt == .off ? .rec709 : odt) : .off }
+    }
 
     func isEnabled(_ slot: NodeSlot) -> Bool {
         switch slot {

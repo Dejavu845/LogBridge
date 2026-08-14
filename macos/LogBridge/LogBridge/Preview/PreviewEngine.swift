@@ -103,7 +103,7 @@ final class PreviewEngine: ObservableObject {
         }
         var odtCG: CGImage?
         var note = "Preview proxy (≤ \(Int(Self.maxLongEdge)) px). Not a full render."
-        if graph.odtEnabled {
+        if graph.odt == .rec709 {
             PreviewColor.applyODT(rgb: &work)
             odtCG = PreviewColor.makeCGImage(
                 rgb: work,
@@ -111,6 +111,9 @@ final class PreviewEngine: ObservableObject {
                 height: linear.height,
                 colorSpace: CGColorSpace(name: CGColorSpace.itur_709)
             )
+        } else if graph.odt.isHDR {
+            // No homemade HLG/PQ. Preview does not invent a Rec.2100 transfer.
+            note = "\(graph.odt.acesOTNote) 预览·非成片 — preview does not apply a homemade HDR curve."
         } else {
             note = "ODT off — ACEScct deliverable. Rec.709 pane is not tagged."
         }

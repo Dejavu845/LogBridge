@@ -5,7 +5,7 @@ import Foundation
 ///   IDT (log → ACES2065-1 via OCIO Builtin or white-paper reference)
 ///     → optional WB node (Bradford/CAT02, CCT + tint, ACES2065-1 / AP0)
 ///     → ACEScct encode for timeline / grading display
-///     → optional Rec.709 preview ODT (matrix + BT.709 OETF)
+///     → optional ODT: Off | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ
 ///
 /// Resolve export keeps WB as a toggleable AP0 matrix rather than baking it.
 /// Standard deliverable: ACEScct or ACES2065-1 EXR / ACES workflow.
@@ -33,5 +33,5 @@ struct WhiteBalanceSettings {
 enum PipelineStage: String, CaseIterable {
     case idt = "IDT"
     case whiteBalance = "WB (scene-linear)"
-    case odt = "Rec.709 ODT"
+    case odt = "ODT"
 }
