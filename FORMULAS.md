@@ -140,3 +140,14 @@ As-shot writes **only** the existing linear AP0 CAT node (`color/wb.py` Bradford
 - Missing CCT/tint → **pending / identity** (knobs empty). Do not guess 5600 or 6504. `cct is None` returns `I` from `white_balance_matrix`.
 - Grey-card pick: mean of the post-IDT ACES2065-1 (AP0) linear patch → XYZ → xy → invert `cct_to_xy` (locus search + 1e-3 uv tint). Overrides metadata; that is an **absolute** CAT of the sampled white to D65 (identity only if sampled D65). Implemented (unverified).
 - Resolve WB node stays bypassable (`graph.xml` `bypassable="true"`; DCTL **Bypass WB**). Implemented (unverified).
+
+
+# Auto WB estimate (not calibration)
+
+Engineering lock, not a white paper. Label: **白平衡（估计）**. Implemented (unverified).
+
+1. Input is post-IDT ACES2065-1 (AP0) linear. Convert to linear ACEScg for the statistic. Never Rec.709 pixels, never ACEScct, never camera-log.
+2. Shades-of-Gray Minkowski mean, `p=6`, on pixels with AP1 Y ≥ 0.02 and no channel > 8.
+3. Empty (no 5600 guess) when: residual angle vs ACEScg (1,1,1) < 2°; 3×3 tile max angle > 5° (mixed light); valid pixels < 15%.
+4. Confirm writes an **absolute** AP0 CAT of the estimated white to D65 (same class as grey-card). Not relative to as-shot.
+5. Propose does not write CAT. Grey-card overrides the estimate. As-shot default stays identity.

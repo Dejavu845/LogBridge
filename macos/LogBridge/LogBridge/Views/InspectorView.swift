@@ -128,6 +128,17 @@ private struct WBInspector: View {
             session.pickingNeutral.toggle()
         }
         .help("Grey-card click: sample after IDT in ACES2065-1 (AP0) linear; overrides metadata. Writes the existing CAT node.")
+        Button("估计白平衡") {
+            session.proposeAutoWB()
+        }
+        .help("白平衡（估计）: SoG p=6 in ACEScg after IDT. Does not write CAT. Low confidence stays empty. Not 精准.")
+        if session.graph.autoWBCCT != nil {
+            Text("白平衡（估计） \(Int(session.graph.autoWBCCT ?? 0)) K — confirm to write absolute CAT")
+                .font(.caption)
+            Button("确认估计") {
+                session.confirmAutoWB()
+            }
+        }
         if session.graph.wbEnabled {
             HStack {
                 Text("CCT")

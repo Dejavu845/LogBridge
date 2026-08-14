@@ -179,6 +179,12 @@ final class PreviewEngine: ObservableObject {
         }
     }
 
+    /// Full cached post-IDT AP0 linear buffer. Never Rec.709 / ACEScct / log.
+    func linearAP0Frame(clipID: UUID) -> (rgb: [Float], width: Int, height: Int)? {
+        guard let linear = linearCache[clipID] else { return nil }
+        return (linear.rgb, linear.width, linear.height)
+    }
+
     /// Sample cached post-IDT (post-exposure if enabled) linear AP0 RGB at a normalized point.
     func sampleLinearRGB(clipID: UUID, nx: Double, ny: Double, exposureStops: Double, exposureEnabled: Bool) -> SIMD3<Double>? {
         guard let linear = linearCache[clipID] else { return nil }

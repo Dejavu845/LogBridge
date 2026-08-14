@@ -243,7 +243,7 @@ final class SessionModel: ObservableObject {
         graph.wbSource = clip.wbSource
         graph.wbCCT = clip.wbCCT
         graph.wbTint = clip.wbTint
-        if clip.wbSource == .asShot || clip.wbSource == .grey {
+        if clip.wbSource == .asShot || clip.wbSource == .grey || clip.wbSource == .estimate {
             graph.wbEnabled = true
         }
     }
@@ -261,6 +261,31 @@ final class SessionModel: ObservableObject {
         graph.wbCCT = est.cct
         graph.wbTint = est.tint
         graph.wbSource = .grey
+        graph.wbEnabled = true
+        persistGraphWBToSelectedClip()
+        preview.invalidateWBODT()
+        refreshPreview()
+    }
+
+    /// 白平衡（估计）: SoG on cached post-IDT AP0. Does not write CAT.
+    func proposeAutoWB() {
+        guard let clip = selectedClip, clip.hasLockedPair else { return }
+        guard let frame = preview.linearAP0Frame(clipID: clip.id) else { return }
+        if let est = WhiteBalanceNode.estimateAutoWB(ap0: frame.rgb, width: frame.width, height: frame.height) {
+            graph.autoWBCCT = est.cct
+            graph.autoWBTint = est.tint
+        } else {
+            graph.autoWBCCT = nil
+            graph.autoWBTint = 0
+        }
+    }
+
+    /// Confirm estimate → absolute AP0 CAT. Grey-card wins. Empty stays empty.
+    func confirmAutoWB() {
+        guard graph.wbSource != .grey, let cct = graph.autoWBCCT else { return }
+        graph.wbCCT = cct
+        graph.wbTint = graph.autoWBTint
+        graph.wbSource = .estimate
         graph.wbEnabled = true
         persistGraphWBToSelectedClip()
         preview.invalidateWBODT()

@@ -88,6 +88,7 @@ enum ODTMode: String, CaseIterable, Identifiable, Hashable {
 enum WBSource: String, Hashable {
     case asShot = "as_shot"
     case grey = "grey"
+    case estimate = "estimate"
     case user = "user"
     case unknown = "unknown"
 
@@ -95,6 +96,7 @@ enum WBSource: String, Hashable {
         switch self {
         case .asShot: return "as-shot"
         case .grey: return "grey-card"
+        case .estimate: return "白平衡（估计）"
         case .user: return "user"
         case .unknown: return "as-shot unknown"
         }
@@ -115,6 +117,8 @@ struct SerialGraph: Equatable {
     var wbSource: WBSource = .unknown
     var asShotCCT: Double? = nil
     var asShotTint: Double = 0
+    var autoWBCCT: Double? = nil
+    var autoWBTint: Double = 0
     var odt: ODTMode = .off
     var workingSpace: FixedPipeline.WorkingSpace = .acescct
 
@@ -135,7 +139,7 @@ struct SerialGraph: Equatable {
                 return nil
             }
             return cct
-        case .grey, .unknown:
+        case .grey, .estimate, .unknown:
             return cct
         }
     }
