@@ -16,30 +16,110 @@ struct DetectionResult {
     var needsUserPicker: Bool
     var note: String
     var veniceDetected: Bool = false
+    var asShotCCT: Double? = nil
+    var asShotTint: Double = 0
 }
 
 enum ClipDetector {
     static func detect(url: URL, modelHint: String? = nil) -> DetectionResult {
+        var result: DetectionResult
         if let meta = detectMetadata(url: url), !meta.needsUserPicker {
-            return meta
+            result = meta
+        } else if let fn = detectFilename(url: url), !fn.needsUserPicker {
+            result = fn
+        } else if let model = detectModel(modelHint) {
+            result = model
+        } else if let partial = detectMetadata(url: url) ?? detectFilename(url: url) {
+            result = partial
+        } else {
+            result = DetectionResult(
+                idt: nil,
+                curve: nil,
+                gamut: nil,
+                source: .unresolved,
+                needsUserPicker: true,
+                note: "No camera-private metadata or filename/model hint; user picker required. QuickTime nclc is never used."
+            )
         }
-        if let fn = detectFilename(url: url), !fn.needsUserPicker {
-            return fn
+        let shot = readAsShotWB(url: url)
+        result.asShotCCT = shot.cct
+        result.asShotTint = shot.tint
+        return result
+    }
+
+    /// Camera-private CCT/tint only. QuickTime nclc is never an illuminant.
+    /// Missing CCT/tint → pending / identity. Do not guess 5600 or 6504.
+    static func readAsShotWB(from meta: [String: Any]) -> (cct: Double?, tint: Double) {
+        let forbidden: Set<String> = [
+            "nclc", "nclx", "colr", "quicktime_nclc", "qt_nclc",
+            "quicktime_nclx", "qt_nclx", "quicktime_colr", "qt_colr"
+        ]
+        var cleaned: [String: Any] = [:]
+        for (k, v) in meta {
+            if !forbidden.contains(k.lowercased()) {
+                cleaned[k.lowercased()] = v
+            }
         }
-        if let model = detectModel(modelHint) {
-            return model
+        let cctKeys = [
+            "arri_wb_kelvin", "arri_white_balance_kelvin", "arri_color_temperature", "arri_cct",
+            "sony_wb_kelvin", "sony_white_balance", "sony_acquisition_white_balance",
+            "sony_acquisition_cct", "sony_colortemp", "sony_color_temperature",
+            "canon_wb_kelvin", "canon_white_balance", "canon_color_temperature", "canon_cct",
+            "red_kelvin", "red_wb_kelvin", "red_color_temp", "red_rmd_kelvin", "red_rmd_wb_kelvin",
+            "apple_wb_kelvin", "apple_white_balance", "apple_color_temperature",
+            "dji_wb_kelvin", "dji_white_balance", "dji_color_temperature",
+            "as_shot_cct", "as_shot_kelvin", "white_balance_kelvin", "wb_kelvin", "cct", "kelvin", "color_temperature"
+        ]
+        let tintKeys = [
+            "arri_wb_tint", "arri_tint", "arri_cc_shift", "sony_wb_tint", "sony_tint",
+            "canon_wb_tint", "canon_tint", "red_tint", "red_wb_tint", "red_rmd_tint",
+            "apple_tint", "dji_tint", "as_shot_tint", "wb_tint"
+        ]
+        var cct: Double?
+        for key in cctKeys {
+            if let v = cleaned[key], let parsed = parseCCT(v) {
+                cct = parsed
+                break
+            }
         }
-        if let partial = detectMetadata(url: url) ?? detectFilename(url: url) {
-            return partial
+        var tint: Double = 0
+        for key in tintKeys {
+            if let v = cleaned[key], let parsed = parseTint(v) {
+                tint = parsed
+                break
+            }
         }
-        return DetectionResult(
-            idt: nil,
-            curve: nil,
-            gamut: nil,
-            source: .unresolved,
-            needsUserPicker: true,
-            note: "No camera-private metadata or filename/model hint; user picker required. QuickTime nclc is never used."
-        )
+        return (cct, tint)
+    }
+
+    private static func parseCCT(_ value: Any) -> Double? {
+        let n: Double?
+        if let d = value as? Double { n = d }
+        else if let i = value as? Int { n = Double(i) }
+        else if let s = value as? String {
+            let digits = s.split(whereSeparator: { !$0.isNumber && $0 != "." })
+            n = digits.first.flatMap { Double($0) }
+        } else { n = nil }
+        guard let cct = n, cct >= 1000, cct <= 25000 else { return nil }
+        return cct
+    }
+
+    private static func parseTint(_ value: Any) -> Double? {
+        if let d = value as? Double { return d }
+        if let i = value as? Int { return Double(i) }
+        if let s = value as? String { return Double(s) }
+        return nil
+    }
+
+    /// Sidecar JSON next to the clip (camera-private keys). Not nclc. Not a demo reel.
+    static func readAsShotWB(url: URL) -> (cct: Double?, tint: Double) {
+        let jsonURL = url.deletingPathExtension().appendingPathExtension("json")
+        guard let data = try? Data(contentsOf: jsonURL),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let dict = obj as? [String: Any] else {
+            return (nil, 0)
+        }
+        return readAsShotWB(from: dict)
     }
 
     /// Camera-private boxes only. QuickTime nclc is read then discarded.

@@ -17,6 +17,7 @@ Internal working encoding: **ACEScct** (AP1 log). Scene-linear interchange / `ro
 - **C-Log2 / C-Log3:** never silently default to Cinema Gamut. Both Cinema Gamut and BT.2020 pairs are offered; the user must pick one.
 - **Venice:** `S-Log3 + S-Gamut3 (Venice)` and `S-Log3 + S-Gamut3.Cine (Venice)` appear **only if** a Venice body is detected.
 - **Copy / badges:** “implemented (unverified)” — never “supported”, never 一键精准.
+- **WB default:** as-shot CCT + tint from camera-private metadata (ARRI MXF, Sony Acquisition, Canon vendor, RED RMD, Apple/DJI if present). **Not** QuickTime nclc. Grey-card click / pick-neutral overrides metadata. If CCT cannot be read and the user has not picked grey: WB stays identity / **as-shot unknown** — do **not** guess 5600 K. User can still change CCT/tint or bypass WB.
 - **Graph:** inspector + node strip: IDT → Exposure (stops, default 0) → bypassable WB → ODT selector: **Off (ACEScct deliverable)** | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ. Default Off. Rec.709 / HLG / PQ panes are 预览·非成片 — not a finished picture.
 - **Primary button:** **处理已锁定片段** (never 一键还原). Pending: **先选择 Log 与色域** (disabled).
 - **Preview badge:** **预览·非成片**
@@ -96,7 +97,9 @@ Fujifilm F-Log2 uses Data Sheet 1.0 + BT.2020 (`a=5.555556`). Not an F-Log1 LUT.
 2. Filename / model hint
 3. User picker (paired IDTs; clip stays pending until chosen)
 
-QuickTime `nclc` / `nclx` / `colr` is **never** used to identify S-Log3 or LogC4.
+QuickTime `nclc` / `nclx` / `colr` is **never** used to identify S-Log3 or LogC4, and is **never** used as as-shot CCT/tint.
+
+As-shot white balance (CCT + tint) is read from the same camera-private boxes when present and written **only** into the existing linear AP0 CAT WB node. Missing CCT/tint is **pending / identity** — do not guess 5600 or 6504. Grey-card pick samples **after IDT in ACES2065-1 (AP0) linear** and overrides metadata. Implemented (unverified).
 
 ## Node workflow (serial only)
 
@@ -106,7 +109,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT (709 / HLG /
 
 1. **IDT** (`01_IDT`) — locked curve+gamut pair → ACES2065-1. Preview cache stores this AP0 linear buffer. Not bypassable.
 2. **Exposure** (`02_Exposure`) — user-facing **stops** (default 0). After IDT, in ACES2065-1 linear: `rgb * (2 ** stops)`. Not a log-code add. **Bypassable / zeroable.** Own 1D / gain export node — not baked into IDT or WB when stops=0. Preview applies exposure in linear on the cached post-IDT buffer.
-3. **WB** (`03_WB`) — Bradford/CAT02 in **ACES2065-1 (AP0)** scene-linear, CCT + green-magenta tint. Never a CAT on ACEScct-encoded values. **Bypassable.** WB off = IDT → Exposure → ACEScct, no bake (XML `enabled="false"`; DCTL **Bypass WB**). Export WB is a linear AP0 3×3 (or DI-free DCTL on ACES2065-1 / ACEScct-decoded-to-linear). Uniform gain and CAT commute; the order is still locked.
+3. **WB** (`03_WB`) — Bradford/CAT02 in **ACES2065-1 (AP0)** scene-linear, CCT + green-magenta tint. As-shot writes **only** this existing linear AP0 CAT node (never a CAT on camera-log or ACEScct-encoded values). Default is **as-shot** from camera-private metadata (not nclc). Grey-card pick samples **after IDT in ACES2065-1 (AP0) linear** and overrides metadata. Missing CCT/tint = **pending / identity** — **do not guess 5600 or 6504**. **Bypassable.** User can still change CCT/tint. WB off = IDT → Exposure → ACEScct, no bake (XML `enabled="false"`; DCTL **Bypass WB**). Export WB is a linear AP0 3×3 (or DI-free DCTL on ACES2065-1 / ACEScct-decoded-to-linear). Implemented (unverified). Uniform gain and CAT commute; the order is still locked.
 4. **ODT** (`04_ODT`) — selector, default **Off** (ACEScct deliverable / ACES2065-1 EXR):
    - **Off** — ACEScct timeline deliverable.
    - **Rec.709 preview** — DIY BT.709 OETF, no RRT. Preview only, unverified. Tags `CGColorSpace.itur_709` only in this mode.
@@ -150,7 +153,8 @@ No golden samples have been measured. Do not claim accuracy. See `ACCEPTANCE.md`
 - Apple Log 2, DJI D-Log M, ARRI LogC3 (explicitly unsupported)
 - Inventing a C-Log2 mirrored toe (use OCIO `CURVE - CANON_CLOG2_to_LINEAR` / `CANON_CLOG2-CGAMUT_to_ACES2065-1` / ACES CTL)
 - Camera-protocol reverse engineering, marketplace integrations
-- Treating QuickTime nclc as log identity
+- Treating QuickTime nclc as log identity or as-shot CCT
+- Guessing 5600 K when as-shot CCT is missing
 - Using the preview as a substitute for a full render
 - 一键还原 / claiming a one-click restore (primary action is 处理已锁定片段; pending is 先选择 Log 与色域)
 

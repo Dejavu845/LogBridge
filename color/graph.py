@@ -7,8 +7,10 @@ Not a node editor. Used by ``pipeline`` and Resolve export.
                  Not a log-code add. Bypassable / zeroable. Own export node
                  (1D / gain); not baked into IDT or WB when stops=0.
   3. WB        — Bradford/CAT02 in ACES2065-1 scene-linear (AP0). Never a CAT
-                 on ACEScct-encoded values. Bypassable. Disable WB =
-                 IDT → Exposure → ACEScct (timeline), no bake.
+                 on ACEScct-encoded values. Default CCT/tint is as-shot from
+                 camera-private metadata (not nclc). Grey-card / pick-neutral
+                 overrides metadata. Missing CCT is identity / as-shot unknown
+                 — do not guess 5600 K. Bypassable.
   4. ODT       — Off (ACEScct deliverable, default) | Rec.709 preview |
                  Rec.2100 HLG | Rec.2100 PQ. Rec.709 is preview only (DIY
                  BT.709 OETF, no RRT). HLG/PQ are ACES Output Transform /
@@ -41,6 +43,17 @@ from .odt import (
 from .exposure import apply_exposure, stops_to_gain
 from .rec709 import rec709_oetf
 from .wb import apply_white_balance
+from .as_shot import (
+    WB_SOURCE_AS_SHOT,
+    WB_SOURCE_GREY,
+    WB_SOURCE_UNKNOWN,
+    WB_SOURCE_USER,
+    AsShotWB,
+    UNKNOWN_AS_SHOT,
+    pick_neutral_from_linear_rgb,
+    read_as_shot_wb,
+    wb_defaults_from_as_shot,
+)
 from .working_space import (
     aces2065_to_acescct,
     acescct_to_aces2065,
@@ -95,18 +108,22 @@ class SerialGraph:
     """Fixed four-node graph: IDT → Exposure → WB → ODT.
 
     Exposure is stop-based linear gain in ACES2065-1 (default 0 = identity).
-    WB is bypassable. ``odt`` selects Off | Rec.709 preview | Rec.2100 HLG |
-    Rec.2100 PQ. ``odt_enabled=True`` (legacy) means Rec.709 preview when
-    ``odt`` is Off.
+    WB is bypassable. Default CCT/tint is as-shot camera-private metadata
+    (not nclc). ``wb_cct is None`` / ``wb_source==unknown`` is identity —
+    do not guess 5600 K. Grey-card overrides as-shot. ``odt`` selects Off |
+    Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ.
     """
 
     idt_id: str | None = None
     exposure_stops: float = 0.0
     exposure_enabled: bool = True
     wb_enabled: bool = False
-    wb_cct: float = 6504.0
+    wb_cct: float | None = None
     wb_tint: float = 0.0
     wb_method: str = "bradford"
+    wb_source: str = WB_SOURCE_UNKNOWN
+    as_shot_cct: float | None = None
+    as_shot_tint: float = 0.0
     odt_enabled: bool = False
     odt: str = ODT_OFF
 
@@ -127,7 +144,7 @@ class SerialGraph:
         return self.odt != ODT_OFF
 
     @property
-    def cct(self) -> float:
+    def cct(self) -> float | None:
         return self.wb_cct
 
     @property
@@ -184,6 +201,74 @@ class SerialGraph:
     def set_exposure_stops(self, stops: float) -> None:
         self.exposure_stops = float(stops)
 
+    @classmethod
+    def from_as_shot(cls, as_shot: AsShotWB | None = None, **kwargs) -> "SerialGraph":
+        """Build a graph whose WB node default is as-shot (or identity if unknown)."""
+        shot = as_shot if as_shot is not None else UNKNOWN_AS_SHOT
+        defaults = wb_defaults_from_as_shot(shot)
+        defaults.update(kwargs)
+        return cls(**defaults)
+
+    @classmethod
+    def from_metadata(cls, meta: dict | None, **kwargs) -> "SerialGraph":
+        """Read camera-private CCT/tint (never nclc) into the WB node default."""
+        return cls.from_as_shot(read_as_shot_wb(meta), **kwargs)
+
+    def apply_as_shot(self, as_shot: AsShotWB) -> None:
+        """Write as-shot CCT/tint into the WB node as the default."""
+        self.as_shot_cct = as_shot.cct
+        self.as_shot_tint = float(as_shot.tint)
+        if as_shot.known:
+            self.wb_cct = float(as_shot.cct)
+            self.wb_tint = float(as_shot.tint)
+            self.wb_source = WB_SOURCE_AS_SHOT
+            self.wb_enabled = True
+        else:
+            self.wb_cct = None
+            self.wb_tint = 0.0
+            self.wb_source = WB_SOURCE_UNKNOWN
+
+    def pick_neutral(self, linear_rgb, rgb_space: str = "AP0") -> AsShotWB:
+        """Grey-card / pick-neutral override: sample preview linear RGB.
+
+        Review lock: sample after IDT in ACES2065-1 (AP0) linear. Default
+        space is AP0. Overrides as-shot metadata. Writes this WB node only.
+        """
+        shot = pick_neutral_from_linear_rgb(linear_rgb, rgb_space=rgb_space)
+        self.wb_cct = float(shot.cct)
+        self.wb_tint = float(shot.tint)
+        self.wb_source = WB_SOURCE_GREY
+        self.wb_enabled = True
+        return shot
+
+    def apply_grey_card(self, ap0_rgb) -> AsShotWB:
+        """Grey-card pick after IDT in ACES2065-1 (AP0) linear. Overrides metadata."""
+        return self.pick_neutral(ap0_rgb, rgb_space="AP0")
+
+    def set_user_wb(self, cct: float, tint: float | None = None) -> None:
+        """User CCT/tint override (still bypassable)."""
+        self.wb_cct = float(cct)
+        if tint is not None:
+            self.wb_tint = float(tint)
+        self.wb_source = WB_SOURCE_USER
+        self.wb_enabled = True
+
+    @property
+    def as_shot_unknown(self) -> bool:
+        """Pending when no CCT is written. An explicit CCT is never dropped."""
+        return self.wb_cct is None
+
+    @property
+    def effective_wb_cct(self) -> float | None:
+        """CCT applied by the CAT, or None when pending (identity).
+
+        None means do not apply a guessed illuminant (including 5600 or 6504).
+        An explicit ``wb_cct`` (as-shot, grey-card, or user) is honored.
+        """
+        if self.wb_cct is None:
+            return None
+        return float(self.wb_cct)
+
     @property
     def exposure_gain(self) -> float:
         if not self.exposure_enabled:
@@ -228,13 +313,17 @@ class SerialGraph:
         """WB CAT in ACES2065-1 (AP0) scene-linear. Identity when disabled.
 
         Input must be ACES2065-1 linear, not ACEScct-encoded.
+        As-shot unknown (no CCT, no grey pick) is identity — not 5600 K.
         """
         rgb = np.asarray(aces_ap0, dtype=np.float64)
         if not self.wb_enabled:
             return rgb
+        cct = self.effective_wb_cct
+        if cct is None:
+            return rgb
         return apply_white_balance(
             rgb,
-            self.wb_cct,
+            cct,
             tint=self.wb_tint,
             rgb_space=WB_LINEAR_SPACE,
             method=self.wb_method,
@@ -283,7 +372,7 @@ class SerialGraph:
 
 def graph_from_export_args(
     idt_id: str | None = None,
-    cct: float = 6504.0,
+    cct: float | None = 6504.0,
     tint: float = 0.0,
     include_wb: bool = True,
     odt_enabled: bool = False,
@@ -299,6 +388,10 @@ def graph_from_export_args(
     Exposure is its own node (default 0 stops = identity gain).
     """
     chosen = odt if odt is not None else (ODT_REC709 if odt_enabled else ODT_OFF)
+    if cct is None:
+        source = WB_SOURCE_UNKNOWN
+    else:
+        source = WB_SOURCE_USER
     return SerialGraph(
         idt_id=idt_id,
         exposure_stops=exposure_stops,
@@ -307,6 +400,7 @@ def graph_from_export_args(
         wb_cct=cct,
         wb_tint=tint,
         wb_method=method,
+        wb_source=source,
         odt_enabled=odt_enabled,
         odt=chosen,
     )

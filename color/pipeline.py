@@ -10,7 +10,9 @@ Rec.709 is a preview-only ODT, not the standard Resolve deliverable.
 
 Every IDT goes to ACES2065-1. Exposure is rgb * (2 ** stops) in that linear
 domain (default 0 = identity; not a log-code add). WB (Bradford/CAT02) runs
-in AP0 linear — never as a CAT on ACEScct-encoded values. Encode ACEScct only
+in AP0 linear — never as a CAT on ACEScct-encoded values.
+As-shot CCT/tint from camera-private metadata is the WB default; missing CCT
+is identity (do not guess 5600 K). Grey-card overrides as-shot. Encode ACEScct only
 for grading / preview display. Do not use DaVinci Wide Gamut Intermediate as
 the internal reference.
 """
@@ -139,7 +141,7 @@ def process_to_rec709(
     idt_id: str,
     *,
     apply_wb: bool = False,
-    cct: float = 6504.0,
+    cct: float | None = 6504.0,
     tint: float = 0.0,
     working: str = "AP1",
     wb_method: str = "bradford",

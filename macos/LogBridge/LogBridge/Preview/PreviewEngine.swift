@@ -98,10 +98,11 @@ final class PreviewEngine: ObservableObject {
         if graph.exposureEnabled {
             PreviewColor.applyExposure(rgb: &work, stops: graph.exposureStops)
         }
-        if graph.wbEnabled {
+        // Pending as-shot (no CCT) is identity — do not guess 5600 or 6504.
+        if graph.wbEnabled, let cct = graph.effectiveWBCCT {
             PreviewColor.applyWB(
                 rgb: &work,
-                cct: graph.wbCCT,
+                cct: cct,
                 tint: graph.wbTint,
                 method: graph.wbMethod
             )
@@ -164,6 +165,23 @@ final class PreviewEngine: ObservableObject {
             self.status = status
             self.isWorking = false
         }
+    }
+
+    /// Sample cached post-IDT (post-exposure if enabled) linear AP0 RGB at a normalized point.
+    func sampleLinearRGB(clipID: UUID, nx: Double, ny: Double, exposureStops: Double, exposureEnabled: Bool) -> SIMD3<Double>? {
+        guard let linear = linearCache[clipID] else { return nil }
+        let x = min(max(Int((nx * Double(linear.width)).rounded(.down)), 0), max(linear.width - 1, 0))
+        let y = min(max(Int((ny * Double(linear.height)).rounded(.down)), 0), max(linear.height - 1, 0))
+        let i = (y * linear.width + x) * 3
+        guard i + 2 < linear.rgb.count else { return nil }
+        var r = Double(linear.rgb[i])
+        var g = Double(linear.rgb[i + 1])
+        var b = Double(linear.rgb[i + 2])
+        if exposureEnabled && exposureStops != 0 {
+            let gain = pow(2.0, exposureStops)
+            r *= gain; g *= gain; b *= gain
+        }
+        return SIMD3(r, g, b)
     }
 
     /// AVAssetImageGenerator (VideoToolbox) for movies; ImageIO thumbnail for stills.

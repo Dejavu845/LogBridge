@@ -95,3 +95,31 @@ No standard Builtin.
 - 18% grey → ~0.39876
 - D-Log M is unsupported.
 
+
+
+# As-shot white balance (linear AP0 CAT)
+
+Default of the existing Bradford/CAT02 node in ACES2065-1 (AP0):
+
+1. Read CCT + tint from camera-private metadata (ARRI MXF, Sony Acquisition,
+   Canon vendor, RED RMD, Apple/DJI). Never QuickTime nclc / nclx / colr.
+2. Write those values into the WB node. User can still change CCT/tint or bypass.
+3. Grey-card / pick-neutral: sample preview linear RGB (post-IDT, post-exposure
+   AP0) → invert the same daylight/Planckian locus used by `cct_to_xy` →
+   CCT + tint (1e-3 uv). This overrides metadata.
+4. If CCT cannot be read and the user has not picked grey: identity /
+   as-shot unknown. Do **not** guess 5600 K.
+
+6504 K (D65) CAT is identity. 5600 K uses the same CAT builder (daylight locus).
+Missing CCT is not filled in as 5600.
+
+
+
+# As-shot / grey-card WB (ACES2065-1 AP0)
+
+As-shot writes **only** the existing linear AP0 CAT node (`color/wb.py` Bradford/CAT02). Never CAT on camera-log or ACEScct-encoded values.
+
+- Camera-private CCT/tint → `SerialGraph.wb_cct` / `wb_tint`. QuickTime nclc is ignored.
+- Missing CCT/tint → **pending / identity**. Do not guess 5600 or 6504. `cct is None` returns `I` from `white_balance_matrix`.
+- Grey-card pick: mean of the post-IDT ACES2065-1 (AP0) linear patch → XYZ → xy → invert `cct_to_xy` (locus search + 1e-3 uv tint). Overrides metadata. Implemented (unverified).
+- Resolve WB node stays bypassable (`graph.xml` `bypassable="true"`; DCTL **Bypass WB**).

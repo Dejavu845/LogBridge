@@ -44,6 +44,9 @@ Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable colo
 - Click a node to inspect parameters. Exposure inspector when Exposure is selected. WB / Exposure / ODT are bypassable; IDT is not.
 - WB off = IDT → Exposure → ACEScct, no bake in preview and in Resolve export (`graph.xml` `enabled="false"`).
 - WB CAT runs in ACES2065-1 (AP0) scene-linear, never on ACEScct-encoded values. Preview cache stores post-IDT linear; exposure + WB apply in linear.
+- **As-shot writes only the existing linear AP0 CAT node.** Camera-private CCT + tint (ARRI MXF, Sony Acquisition, Canon vendor, RED RMD, Apple/DJI if present). Not QuickTime nclc. Never a CAT on camera-log or ACEScct-encoded values. User can still change CCT/tint or bypass WB.
+- **Missing CCT/tint → pending / identity.** Do not guess 5600 or 6504.
+- **Grey-card pick** samples **after IDT in ACES2065-1 (AP0) linear** and overrides metadata. Implemented (unverified).
 - Rec.709 ODT is preview only, off by default. Off = ACEScct deliverable. UI must not imply grading on the 709 pane as a finished picture (预览·非成片).
 - Rec.2100 HLG / PQ: HDR OT via ACES/BT.2100 BuiltinTransform (unverified). No homemade HLG/PQ curve. Not supported.
 - Not a general node editor. No sat / unlisted grade nodes.
@@ -66,7 +69,7 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 
 ## Other gates
 
-- Detection ignores QuickTime `nclc` for S-Log3 / LogC4.
+- Detection ignores QuickTime `nclc` for S-Log3 / LogC4 and for as-shot CCT/tint.
 - S-Log3 without gamut metadata requires the paired IDT picker (never silent Cine, never two dropdowns). Venice pairs appear only if Venice is detected.
 - Nikon path does not divide 10-bit codes by 1023 before the white-paper curve.
 - C-Log2 negative toe is OCIO / ACES CTL (not an invented mirrored toe).
@@ -82,6 +85,13 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 - Primary button is **处理已锁定片段** — never 一键还原. Pending (disabled): **先选择 Log 与色域**.
 - IDT picker is one paired list (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine), not two dropdowns.
 - Venice pairs appear only if a Venice body is detected.
+
+## As-shot white balance
+
+- Default of the existing linear AP0 CAT WB node is as-shot CCT + tint from camera-private metadata.
+- Metadata CCT 5600 uses that CAT (D65 / 6504 K CAT remains identity).
+- Missing CCT does **not** apply 5600 K. Identity / as-shot unknown pending.
+- Grey-card / pick-neutral overrides as-shot. Golden grey-card samples are still required. Labels stay **implemented (unverified)**.
 
 ## Media (no manufacturer demos)
 

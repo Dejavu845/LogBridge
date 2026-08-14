@@ -22,6 +22,13 @@ enum WhiteBalanceNode {
 
     static let d65 = SIMD2<Double>(0.3127, 0.3290)
 
+    /// ACES2065-1 (AP0) → XYZ. Matches color/gamuts.py / PreviewColor.
+    static let ap0ToXYZ = simd_double3x3(rows: [
+        SIMD3(0.952552395938186, 0.000000000000000, 0.000093678631660),
+        SIMD3(0.343966449765075, 0.728166096613486, -0.072132546378561),
+        SIMD3(0.000000000000000, 0.000000000000000, 1.008825184351586)
+    ])
+
     static func xy(cct: Double, tint: Double = 0) -> SIMD2<Double> {
         // Daylight locus at T >= 4000 K so 6504 K ≈ D65 identity.
         // Planckian below 4000 K (tungsten). Full implementation matches color/wb.py.
@@ -72,7 +79,9 @@ enum WhiteBalanceNode {
     }
 
     /// Apply CAT in scene-linear RGB of a D65 space (XYZ CAT conjugated by RGB<->XYZ).
-    static func apply(rgb: SIMD3<Double>, rgbToXYZ: simd_double3x3, cct: Double, tint: Double) -> SIMD3<Double> {
+    /// `cct == nil` is pending / identity — do not guess 5600 or 6504.
+    static func apply(rgb: SIMD3<Double>, rgbToXYZ: simd_double3x3, cct: Double?, tint: Double) -> SIMD3<Double> {
+        guard let cct else { return rgb }
         let cat = catMatrix(cct: cct, tint: tint)
         let xyz = rgbToXYZ * rgb
         let adapted = cat * xyz
@@ -81,5 +90,52 @@ enum WhiteBalanceNode {
 
     private static func xyToXYZ(_ xy: SIMD2<Double>) -> SIMD3<Double> {
         SIMD3(xy.x / xy.y, 1.0, (1.0 - xy.x - xy.y) / xy.y)
+    }
+
+    private static func xyToUV(_ xy: SIMD2<Double>) -> SIMD2<Double> {
+        let denom = -2.0 * xy.x + 12.0 * xy.y + 3.0
+        return SIMD2(4.0 * xy.x / denom, 6.0 * xy.y / denom)
+    }
+
+    /// Invert the same locus as `xy(cct:tint:)`. Grey-card / pick-neutral.
+    static func cctTint(fromXY xy: SIMD2<Double>) -> (cct: Double, tint: Double) {
+        let uv = xyToUV(xy)
+        func err(_ cct: Double) -> Double {
+            let lu = xyToUV(Self.xy(cct: cct, tint: 0))
+            let du = uv.x - lu.x
+            let dv = uv.y - lu.y
+            return du * du + dv * dv
+        }
+        var best = 6504.0
+        var bestE = err(best)
+        var c = 1000.0
+        while c <= 20000.0 {
+            let e = err(c)
+            if e < bestE {
+                bestE = e
+                best = c
+            }
+            c += 50.0
+        }
+        var lo = max(1000.0, best - 50.0)
+        var hi = min(20000.0, best + 50.0)
+        let phi = (1.0 + 5.0.squareRoot()) / 2.0
+        for _ in 0..<40 {
+            let a = hi - (hi - lo) / phi
+            let b = lo + (hi - lo) / phi
+            if err(a) < err(b) { hi = b } else { lo = a }
+        }
+        let cct = 0.5 * (lo + hi)
+        let locusUV = xyToUV(Self.xy(cct: cct, tint: 0))
+        let tint = (uv.y - locusUV.y) / 1.0e-3
+        return (cct, tint)
+    }
+
+    /// Grey-card: sample after IDT in ACES2065-1 (AP0) linear. Overrides metadata.
+    static func pickNeutral(linearRGB: SIMD3<Double>, rgbToXYZ: simd_double3x3) -> (cct: Double, tint: Double)? {
+        let xyz = rgbToXYZ * linearRGB
+        let s = xyz.x + xyz.y + xyz.z
+        guard s > 1e-12 else { return nil }
+        return cctTint(fromXY: SIMD2(xyz.x / s, xyz.y / s))
     }
 }

@@ -121,7 +121,7 @@ def bradford_cat_matrix(src_xy, dst_xy=D65_XY) -> np.ndarray:
 
 
 def white_balance_matrix(
-    cct: float,
+    cct: float | None,
     tint: float = 0.0,
     rgb_space: str = "AP0",
     method: str = "bradford",
@@ -132,7 +132,11 @@ def white_balance_matrix(
     Default ``rgb_space`` is ACES2065-1 (AP0). Never apply this CAT to
     ACEScct-encoded values — decode to AP0 linear first (or stay in AP0
     after IDT). Identity (within numerical tolerance) at 6504 K, tint 0.
+
+    ``cct is None`` is as-shot unknown: return identity. Do not guess 5600 K.
     """
+    if cct is None:
+        return np.eye(3, dtype=np.float64)
     src_xy = cct_to_xy(cct, tint)
     cat = chromatic_adaptation_matrix(src_xy, dst_xy, method=method)
     to_xyz = rgb_to_xyz_matrix(rgb_space)
@@ -142,7 +146,7 @@ def white_balance_matrix(
 
 def apply_white_balance(
     rgb,
-    cct: float,
+    cct: float | None,
     tint: float = 0.0,
     rgb_space: str = "AP0",
     method: str = "bradford",
@@ -150,7 +154,74 @@ def apply_white_balance(
     """Apply CCT+tint CAT to scene-linear RGB (..., 3).
 
     Default domain is ACES2065-1 (AP0). Do not pass ACEScct-encoded RGB.
+    ``cct is None`` (as-shot unknown) is identity — do not guess 5600 K.
     """
     rgb = np.asarray(rgb, dtype=np.float64)
+    if cct is None:
+        return rgb
     m = white_balance_matrix(cct, tint, rgb_space=rgb_space, method=method)
     return rgb @ m.T
+
+
+def _xy_to_uv(x: float, y: float) -> tuple[float, float]:
+    denom = -2.0 * x + 12.0 * y + 3.0
+    return 4.0 * x / denom, 6.0 * y / denom
+
+
+def xyz_to_xy(xyz) -> np.ndarray:
+    xyz = np.asarray(xyz, dtype=np.float64)
+    s = float(np.sum(xyz))
+    if s <= 0.0:
+        raise ValueError("XYZ sum must be positive")
+    return np.array([xyz[0] / s, xyz[1] / s], dtype=np.float64)
+
+
+def xy_to_cct_tint(xy) -> tuple[float, float]:
+    """Invert ``cct_to_xy``: chromaticity → CCT (K) + tint (1e-3 uv).
+
+    Searches this module's daylight/Planckian locus (not McCamy-only) so a
+    grey-card sample in AP0 linear round-trips the same CAT the WB node uses.
+    """
+    x, y = float(xy[0]), float(xy[1])
+    u, v = _xy_to_uv(x, y)
+
+    def locus_err(cct: float) -> float:
+        lx, ly = cct_to_xy(float(cct), 0.0)
+        lu, lv = _xy_to_uv(float(lx), float(ly))
+        return (u - lu) ** 2 + (v - lv) ** 2
+
+    grid = np.linspace(1000.0, 20000.0, 381)
+    errs = np.array([locus_err(c) for c in grid])
+    i = int(np.argmin(errs))
+    lo = float(grid[max(0, i - 1)])
+    hi = float(grid[min(len(grid) - 1, i + 1)])
+    phi = (1.0 + 5.0 ** 0.5) / 2.0
+    for _ in range(48):
+        a = hi - (hi - lo) / phi
+        b = lo + (hi - lo) / phi
+        if locus_err(a) < locus_err(b):
+            hi = b
+        else:
+            lo = a
+    cct = 0.5 * (lo + hi)
+    lu, lv = _xy_to_uv(*cct_to_xy(cct, 0.0))
+    tint = (v - lv) / 1.0e-3
+    return float(cct), float(tint)
+
+
+def linear_rgb_to_cct_tint(rgb, rgb_space: str = "AP0") -> tuple[float, float]:
+    """Estimate CCT+tint from preview scene-linear RGB (default ACES2065-1 / AP0).
+
+    Average if ``rgb`` is an image patch. Used by grey-card / pick-neutral.
+    """
+    rgb = np.asarray(rgb, dtype=np.float64)
+    if rgb.ndim == 1:
+        pix = rgb[..., :3]
+    else:
+        pix = rgb.reshape(-1, rgb.shape[-1])[:, :3].mean(axis=0)
+    if not np.all(np.isfinite(pix)) or float(np.max(pix)) <= 1e-12:
+        raise ValueError("cannot estimate CCT from empty or black linear RGB")
+    xyz = rgb_to_xyz_matrix(rgb_space) @ pix
+    if float(np.sum(xyz)) <= 1e-12:
+        raise ValueError("cannot estimate CCT from non-positive XYZ")
+    return xy_to_cct_tint(xyz_to_xy(xyz))

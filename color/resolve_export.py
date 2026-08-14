@@ -115,6 +115,20 @@ RESOLVE_OUTPUT_GAMMA = "ACEScct"
 RESOLVE_SCENE_LINEAR = "ACES2065-1"
 
 
+def _cct_label(cct) -> str:
+    """Export label. None = as-shot unknown (identity), not a 5600 K guess."""
+    if cct is None:
+        return "as-shot unknown"
+    return f"{float(cct):.0f} K"
+
+
+def _cct_xml_value(cct) -> str:
+    if cct is None:
+        return 'pending="true" source="unknown"'
+    return f">{float(cct):.4f}<"
+
+
+
 def decode_camera_log_01(log_01, idt_id: str) -> np.ndarray:
     """Decode 0-1 camera log buffers to scene-linear camera RGB.
 
@@ -266,7 +280,7 @@ def wb_cube_bytes(
     grid = _cube_sample_grid(size)
     out = wb_in_acescct(grid, cct, tint=tint, method=method)
     return format_cube(
-        f"LogBridge WB AP0 CAT {cct:.0f}K tint {tint} (ACEScct decode→ACES2065-1→encode)",
+        f"LogBridge WB AP0 CAT {_cct_label(cct)} tint {tint} (ACEScct decode→ACES2065-1→encode)",
         out,
         size,
     )
@@ -447,7 +461,7 @@ def format_dctl(
 // Decode ACEScct → AP1 → AP0, apply cat_ap0, AP0 → AP1 → ACEScct.
 // Tick input_aces2065 if the clip is already ACES2065-1 linear (skip ACEScct wrap).
 // Bypass this DCTL in Resolve to restore IDT → Exposure → ACEScct, no bake. Rec.709 is preview only.
-// CCT {cct:.0f} K  tint {tint}  method {method}
+// CCT {_cct_label(cct)}  tint {tint}  method {method}
 // Implemented (unverified). Not a camera-support claim.
 
 DEFINE_UI_PARAMS(bypass_wb, Bypass WB, DCTLUI_CHECK_BOX, 0, 0, 1)
@@ -544,7 +558,7 @@ def format_dot(
   clip [label="Clip\\ncamera log"];
   idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\nor Resolve CST → ACEScct (ACES workflow)"];
   exp  [label="Exposure (bypassable/zeroable)\\nACES2065-1 linear gain\\n{exposure_stops:+.2f} stops  gain {gain:.4f}\\n02_Exposure.cube / .dctl", style="filled,{exp_style}", fillcolor="{exp_fill}"];
-  wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n{cct:.0f} K  tint {tint}\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,{wb_style}", fillcolor="{wb_fill}"];
+  wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n{_cct_label(cct)}  tint {tint}\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,{wb_style}", fillcolor="{wb_fill}"];
   odt  [label="Rec.709 ODT (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709"];
   timeline [shape=oval, label="Timeline\\nACEScct"];
 
@@ -593,6 +607,13 @@ def format_graph_xml(
     cct = graph.wb_cct
     tint = graph.wb_tint
     method = graph.wb_method
+    wb_source = getattr(graph, "wb_source", "user")
+    if cct is None:
+        cct_xml = '<CCT pending="true" source="unknown"/>'
+        cct_for_files = None
+    else:
+        cct_xml = f"<CCT>{float(cct):.4f}</CCT>"
+        cct_for_files = float(cct)
     idt_nodes = []
     for i, idt_id in enumerate(idt_ids):
         cst = RESOLVE_CST.get(idt_id, {})
@@ -670,9 +691,10 @@ def format_graph_xml(
     <File role="dctl">02_Exposure.dctl</File>
   </Node>
   <Node index="3" name="WB" type="Corrector" bypassable="true" enabled="{wb_enabled}" method="{_xml_escape(method)}">
-    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. Bypass this node in Resolve (Color page: disable WB, or DCTL Bypass WB, or skip 03_WB.cube). Remaining graph is IDT → Exposure → ACEScct, no bake.</Description>
-    <CCT>{cct:.4f}</CCT>
+    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. As-shot writes this node only. Missing CCT/tint is pending / identity (do not guess 5600 or 6504). Bypass this node in Resolve (Color page: disable WB, or DCTL Bypass WB, or skip 03_WB.cube). Remaining graph is IDT → Exposure → ACEScct, no bake.</Description>
+    {cct_xml}
     <Tint>{tint:.6f}</Tint>
+    <WBSource>{_xml_escape(wb_source)}</WBSource>
     <File role="lut">03_WB.cube</File>
     <File role="cdl">03_WB.cdl</File>
     <File role="ccc">03_WB.ccc</File>
@@ -723,7 +745,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
    - `03_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in ACES2065-1 (AP0), wrapped in ACEScct so it sits on the ACEScct timeline.
    - `03_WB.dctl` — same 3×3 as a DCTL (Decode ACEScct → matrix → Encode ACEScct). Checkbox **Bypass WB** inside the DCTL, or disable the node.
    - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
-   - CCT {cct:.0f} K, tint {tint}, method Bradford (CAT02 selectable in code). Scene-linear only.
+   - CCT {_cct_label(cct)}, tint {tint}, method Bradford (CAT02 selectable in code). As-shot default; missing CCT is identity (not 5600 K). Scene-linear only.
 
 4. **ODT** — Off (ACEScct deliverable, default) | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ
    - Rec.709: `04_ODT_Rec709.cube` or CST. **preview only**, off by default. BT.709 OETF, no RRT.
