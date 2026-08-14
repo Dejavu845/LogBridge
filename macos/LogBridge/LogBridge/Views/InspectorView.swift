@@ -61,7 +61,7 @@ private struct IDTInspector: View {
                     }
                     .labelsHidden()
                     .frame(maxWidth: 320)
-                    Text("S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine. Venice pair only if detected.")
+                    Text("S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine. C-Log2 / C-Log3 + Cinema Gamut vs BT.2020. Venice pair only if detected.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

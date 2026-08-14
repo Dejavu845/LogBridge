@@ -41,6 +41,14 @@ PRIMARIES = {
         [[0.780308, 0.304253], [0.121595, 1.493994], [0.095612, -0.084589]],
         dtype=np.float64,
     ),
+    # Canon Cinema Gamut (published xy). White is D65 per the IDT pair.
+    "CinemaGamut": np.array(
+        [[0.74, 0.27], [0.17, 1.14], [0.08, -0.10]], dtype=np.float64
+    ),
+    # DJI D-Gamut (2017-10-10 white paper).
+    "DGamut": np.array(
+        [[0.71, 0.31], [0.21, 0.88], [0.09, -0.08]], dtype=np.float64
+    ),
     "Rec709": np.array(
         [[0.640, 0.330], [0.300, 0.600], [0.150, 0.060]], dtype=np.float64
     ),
@@ -62,6 +70,8 @@ WHITE_POINTS = {
     "VGamut": D65_XY,
     "BT2020": D65_XY,
     "REDWideGamutRGB": D65_XY,
+    "CinemaGamut": D65_XY,
+    "DGamut": D65_XY,
     "Rec709": D65_XY,
     "DWG": D65_XY,
     "AP1": ACES_WHITE_XY,
@@ -69,6 +79,7 @@ WHITE_POINTS = {
 }
 
 # Locked curve+gamut pairs for M1 IDTs. Sony is two pairs, user/metadata picks.
+# Canon C-Log2 and C-Log3 are each two pairs — never default either gamut.
 # Venice pairs are only selected when a Venice camera is detected — never default.
 IDT_PAIRS = {
     "arri_logc4_awg4": ("logc4", "AWG4"),
@@ -80,6 +91,12 @@ IDT_PAIRS = {
     "fujifilm_flog2_bt2020": ("flog2", "BT2020"),
     "nikon_nlog_bt2020": ("nlog", "BT2020"),
     "red_log3g10_rwg": ("log3g10", "REDWideGamutRGB"),
+    "canon_clog2_cgamut": ("clog2", "CinemaGamut"),
+    "canon_clog2_bt2020": ("clog2", "BT2020"),
+    "canon_clog3_cgamut": ("clog3", "CinemaGamut"),
+    "canon_clog3_bt2020": ("clog3", "BT2020"),
+    "apple_log_bt2020": ("apple_log", "BT2020"),
+    "dji_dlog_dgamut": ("dlog", "DGamut"),
 }
 
 VENICE_IDTS = frozenset(

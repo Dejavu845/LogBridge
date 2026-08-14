@@ -96,6 +96,62 @@ enum ClipDetector {
         if name.contains("log3g10") || name.contains("redwidegamut") {
             return locked(.redLog3G10RWG, source: .filename, note: "filename Log3G10")
         }
+        if name.contains("d-log m") || name.contains("dlog m") || name.contains("dlogm") || name.contains("d-logm") {
+            return DetectionResult(
+                idt: nil, curve: nil, gamut: nil, source: .filename, needsUserPicker: true,
+                note: "D-Log M is unsupported. D-Log + D-Gamut (2017) is implemented (unverified)."
+            )
+        }
+        if name.contains("apple log 2") || name.contains("applelog2") || name.contains("apple-log-2") {
+            return DetectionResult(
+                idt: nil, curve: nil, gamut: nil, source: .filename, needsUserPicker: true,
+                note: "Apple Log 2 is unsupported (out of scope). Apple Log 1 + BT.2020 is implemented (unverified)."
+            )
+        }
+        if name.contains("logc3") && !name.contains("logc4") {
+            return DetectionResult(
+                idt: nil, curve: nil, gamut: nil, source: .filename, needsUserPicker: true,
+                note: "ARRI LogC3 is unsupported. Use LogC4 + AWG4."
+            )
+        }
+        if name.contains("c-log2") || name.contains("clog2") {
+            if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {
+                return locked(.canonCLog2CGamut, source: .filename, note: "filename C-Log2 + Cinema Gamut")
+            }
+            if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
+                return locked(.canonCLog2BT2020, source: .filename, note: "filename C-Log2 + BT.2020")
+            }
+            return DetectionResult(
+                idt: nil,
+                curve: "C-Log2",
+                gamut: nil,
+                source: .filename,
+                needsUserPicker: true,
+                note: "C-Log2 in filename without gamut; pick C-Log2 + Cinema Gamut or C-Log2 + BT.2020. Never default Cinema Gamut."
+            )
+        }
+        if name.contains("c-log3") || name.contains("clog3") {
+            if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {
+                return locked(.canonCLog3CGamut, source: .filename, note: "filename C-Log3 + Cinema Gamut")
+            }
+            if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
+                return locked(.canonCLog3BT2020, source: .filename, note: "filename C-Log3 + BT.2020")
+            }
+            return DetectionResult(
+                idt: nil,
+                curve: "C-Log3",
+                gamut: nil,
+                source: .filename,
+                needsUserPicker: true,
+                note: "C-Log3 in filename without gamut; pick C-Log3 + Cinema Gamut or C-Log3 + BT.2020. Never default Cinema Gamut."
+            )
+        }
+        if name.contains("apple log") || name.contains("applelog") {
+            return locked(.appleLogBT2020, source: .filename, note: "filename Apple Log")
+        }
+        if name.contains("d-log") || name.contains("dlog") || name.contains("d-gamut") || name.contains("dgamut") {
+            return locked(.djiDLogDGamut, source: .filename, note: "filename D-Log")
+        }
         if name.contains("s-log3") || name.contains("slog3") {
             return DetectionResult(
                 idt: nil,
@@ -165,7 +221,7 @@ enum ClipDetector {
         return nil
     }
 
-    /// Canon vendor metadata. C-Log2/3 are stubs: do not invent a C-Log2 toe.
+    /// Canon vendor metadata. C-Log2 / C-Log3 without gamut stay pending (no Cinema Gamut default).
     private static func readCanonVendor(url: URL) -> DetectionResult? {
         _ = url
         return nil

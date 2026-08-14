@@ -5,7 +5,7 @@ import AppKit
 /// One imported clip with a locked curve+gamut pair (or a pending picker).
 ///
 /// `idt` is nil until metadata/filename/model locks a pair or the user picks
-/// a paired IDT. Never default S-Log3 to S-Gamut3.Cine.
+/// a paired IDT. Never default S-Log3 to S-Gamut3.Cine, or C-Log2/C-Log3 to Cinema Gamut.
 struct Clip: Identifiable, Hashable {
     let id: UUID
     let url: URL

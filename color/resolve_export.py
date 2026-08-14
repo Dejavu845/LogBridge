@@ -84,6 +84,30 @@ RESOLVE_CST = {
         "input_color_space": "REDWideGamutRGB",
         "input_gamma": "RED Log3G10",
     },
+    "canon_clog2_cgamut": {
+        "input_color_space": "Canon Cinema Gamut",
+        "input_gamma": "Canon C-Log2",
+    },
+    "canon_clog2_bt2020": {
+        "input_color_space": "Rec.2020",
+        "input_gamma": "Canon C-Log2",
+    },
+    "canon_clog3_cgamut": {
+        "input_color_space": "Canon Cinema Gamut",
+        "input_gamma": "Canon C-Log3",
+    },
+    "canon_clog3_bt2020": {
+        "input_color_space": "Rec.2020",
+        "input_gamma": "Canon C-Log3",
+    },
+    "apple_log_bt2020": {
+        "input_color_space": "Rec.2020",
+        "input_gamma": "Apple Log",
+    },
+    "dji_dlog_dgamut": {
+        "input_color_space": "DJI D-Gamut",
+        "input_gamma": "DJI D-Log",
+    },
 }
 
 RESOLVE_OUTPUT_CS = "ACEScct"

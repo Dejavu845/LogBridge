@@ -171,6 +171,24 @@ enum ResolveExporter {
                 SIMD3(0.023173834845, 1.087897549192, -0.111071384038),
                 SIMD3(-0.073760435368, -0.314590072290, 1.388350507658)
             ])
+        case .canonCLog2CGamut, .canonCLog3CGamut:
+            return simd_double3x3(rows: [
+                SIMD3(0.763342923317, 0.147229267219, 0.089427809463),
+                SIMD3(0.004230590136, 1.104451311582, -0.108681901718),
+                SIMD3(-0.009670967662, -0.213042645554, 1.222713613216)
+            ])
+        case .canonCLog2BT2020, .canonCLog3BT2020, .appleLogBT2020:
+            return simd_double3x3(rows: [
+                SIMD3(0.679085634707, 0.157700914643, 0.163213450650),
+                SIMD3(0.046002003080, 0.859054673003, 0.094943323917),
+                SIMD3(-0.000573943188, 0.028467768408, 0.972106174780)
+            ])
+        case .djiDLogDGamut:
+            return simd_double3x3(rows: [
+                SIMD3(0.691430323906, 0.212906283248, 0.095663392846),
+                SIMD3(0.066597281331, 1.009546581651, -0.076143862983),
+                SIMD3(-0.017243534539, -0.072986432766, 1.090229967305)
+            ])
         default:
             return nil
         }
@@ -250,6 +268,45 @@ enum ResolveExporter {
                 return (pow(10.0, x / 0.224282) - 1.0) / 155.975327 - 0.01
             }
             return x / 15.1927 - 0.01
+        case .canonCLog2CGamut, .canonCLog2BT2020:
+            let cut = 0.092864125
+            let c1 = 0.24136077
+            let c2 = 87.099375
+            if x >= cut {
+                return 0.9 * (pow(10.0, (x - cut) / c1) - 1.0) / c2
+            }
+            return -0.9 * (pow(10.0, (cut - x) / c1) - 1.0) / c2
+        case .canonCLog3CGamut, .canonCLog3BT2020:
+            let a = 0.36726845
+            let b = 14.98325
+            let ire: Double
+            if x < 0.097465473 {
+                ire = -(pow(10.0, (0.12783901 - x) / a) - 1.0) / b
+            } else if x <= 0.15277891 {
+                ire = (x - 0.12512219) / 1.9754798
+            } else {
+                ire = (pow(10.0, (x - 0.12240537) / a) - 1.0) / b
+            }
+            return ire * 0.9
+        case .appleLogBT2020:
+            let r0 = -0.05641088
+            let c = 47.28711236
+            let beta = 0.00964052
+            let gamma = 0.08550479
+            let delta = 0.69336945
+            let pt = c * pow(0.01 - r0, 2.0)
+            if x >= pt {
+                return pow(2.0, (x - delta) / gamma) - beta
+            }
+            if x >= 0.0 {
+                return sqrt(x / c) + r0
+            }
+            return r0
+        case .djiDLogDGamut:
+            if x > 0.14 {
+                return (pow(10.0, 3.89616 * x - 2.27752) - 0.0108) / 0.9892
+            }
+            return (x - 0.0929) / 6.025
         default:
             return x
         }
@@ -506,6 +563,12 @@ enum ResolveExporter {
         case .fujiFLog2BT2020: return ("Rec.2020", "Fujifilm F-Log2")
         case .nikonNLogBT2020: return ("Rec.2020", "Nikon N-Log")
         case .redLog3G10RWG: return ("REDWideGamutRGB", "RED Log3G10")
+        case .canonCLog2CGamut: return ("Canon Cinema Gamut", "Canon C-Log2")
+        case .canonCLog2BT2020: return ("Rec.2020", "Canon C-Log2")
+        case .canonCLog3CGamut: return ("Canon Cinema Gamut", "Canon C-Log3")
+        case .canonCLog3BT2020: return ("Rec.2020", "Canon C-Log3")
+        case .appleLogBT2020: return ("Rec.2020", "Apple Log")
+        case .djiDLogDGamut: return ("DJI D-Gamut", "DJI D-Log")
         default: return (idt.ocioName, idt.curve)
         }
     }
