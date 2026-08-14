@@ -17,12 +17,13 @@ import QuartzCore
 struct Rec709PreviewView: View {
     let title: String
     let caption: String
+    var image: CGImage? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.headline)
-            Rec709MetalPreview()
+            Rec709TaggedHost(image: image)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
             Text(caption)
@@ -30,6 +31,48 @@ struct Rec709PreviewView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(8)
+    }
+}
+
+/// AppKit host: layer.colorspace is itur_709. Never used for the source pane.
+struct Rec709TaggedHost: NSViewRepresentable {
+    var image: CGImage?
+
+    func makeNSView(context: Context) -> Rec709ImageHost {
+        Rec709ImageHost()
+    }
+
+    func updateNSView(_ nsView: Rec709ImageHost, context: Context) {
+        nsView.setImage(image)
+    }
+}
+
+final class Rec709ImageHost: NSView {
+    private let imageLayer = CALayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        let rec709 = CGColorSpace(name: CGColorSpace.itur_709)
+        layer = CALayer()
+        layer?.colorspace = rec709
+        layer?.backgroundColor = CGColor(gray: 0.09, alpha: 1)
+        imageLayer.contentsGravity = .resizeAspect
+        imageLayer.colorspace = rec709
+        layer?.addSublayer(imageLayer)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setImage(_ img: CGImage?) {
+        imageLayer.contents = img
+    }
+
+    override func layout() {
+        super.layout()
+        imageLayer.frame = bounds
     }
 }
 
@@ -109,16 +152,17 @@ struct Rec709MetalPreview: NSViewRepresentable {
 // so the split is a real comparison against the 709 ODT pane.
 
 /// Source / camera-log preview. Color space is untagged (or working-space
-/// when linear DWG is shown later). Never `CGColorSpace.itur_709`.
+/// when ACEScct / ACES2065-1 is shown later). Never `CGColorSpace.itur_709`.
 struct SourcePreviewView: View {
     let title: String
     let caption: String
+    var image: CGImage? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.headline)
-            SourceMetalPreview()
+            SourceUntaggedHost(image: image)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
             Text(caption)
@@ -126,6 +170,47 @@ struct SourcePreviewView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(8)
+    }
+}
+
+/// Untagged source host. Never CGColorSpace.itur_709.
+struct SourceUntaggedHost: NSViewRepresentable {
+    var image: CGImage?
+
+    func makeNSView(context: Context) -> SourceImageHost {
+        SourceImageHost()
+    }
+
+    func updateNSView(_ nsView: SourceImageHost, context: Context) {
+        nsView.setImage(image)
+    }
+}
+
+final class SourceImageHost: NSView {
+    private let imageLayer = CALayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer = CALayer()
+        layer?.colorspace = nil
+        layer?.backgroundColor = CGColor(gray: 0.06, alpha: 1)
+        imageLayer.contentsGravity = .resizeAspect
+        imageLayer.colorspace = nil
+        layer?.addSublayer(imageLayer)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setImage(_ img: CGImage?) {
+        imageLayer.contents = img
+    }
+
+    override func layout() {
+        super.layout()
+        imageLayer.frame = bounds
     }
 }
 
@@ -143,7 +228,7 @@ final class SourceMTKView: MTKView {
 
     private func configureSource() {
         colorPixelFormat = .bgra8Unorm
-        // Camera/log code values (or later: scene-linear working space).
+        // Camera/log code values (or later: ACEScct / ACES2065-1 working space).
         // Do NOT tag itur_709 — that tag is reserved for the ODT pane.
         // Untagged: we are not claiming Rec.709 primaries/transfer.
         // Do not blit Rec.709-encoded pixels into this surface.

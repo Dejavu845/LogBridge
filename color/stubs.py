@@ -12,6 +12,7 @@ Status: not implemented. Do not mark these cameras as supported.
 from __future__ import annotations
 
 CANON_CLOG2_OCIO_BUILTIN = "CURVE - CANON_CLOG2_to_LINEAR"
+CANON_CLOG2_IDT_BUILTIN = "CANON_CLOG2-CGAMUT_to_ACES2065-1"
 CANON_CLOG3_OCIO_BUILTIN = "CURVE - CANON_CLOG3_to_LINEAR"
 
 STUB_IDTS = (
@@ -22,8 +23,8 @@ STUB_IDTS = (
         "status": "stub",
         "note": (
             "C-Log2 negative toe: use OCIO builtin "
-            f"{CANON_CLOG2_OCIO_BUILTIN} or the ACES CLF. "
-            "Do not invent a mirrored toe."
+            f"{CANON_CLOG2_OCIO_BUILTIN} / {CANON_CLOG2_IDT_BUILTIN} "
+            "or the ACES CLF. Do not invent a mirrored toe."
         ),
     },
     {
@@ -54,7 +55,8 @@ def clog2_to_linear(_x):
     """Not implemented. C-Log2 negative toe must come from OCIO/ACES CLF."""
     raise NotImplementedError(
         "Canon C-Log2 is a stub. Use OCIO "
-        f"{CANON_CLOG2_OCIO_BUILTIN} / ACES CLF; do not invent a mirrored toe."
+        f"{CANON_CLOG2_OCIO_BUILTIN} / {CANON_CLOG2_IDT_BUILTIN} "
+        "/ ACES CLF; do not invent a mirrored toe."
     )
 
 

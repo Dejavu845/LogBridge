@@ -16,42 +16,42 @@ from color.resolve_export import (
     format_dot,
     format_graph_xml,
     format_readme,
-    idt_to_di,
-    odt_from_di,
-    wb_in_di,
+    idt_to_acescct,
+    odt_from_acescct,
+    wb_in_acescct,
 )
-from color.working_space import DI_18_PERCENT
+from color.working_space import ACESCCT_18_PERCENT
 
 
-def test_idt_di_18_percent_logc4():
+def test_idt_acescct_18_percent_logc4():
     log = np.full(3, float(linear_to_logc4(0.18)))
-    di = idt_to_di(log, "arri_logc4_awg4")
-    np.testing.assert_allclose(di, DI_18_PERCENT, atol=5e-5)
-    assert di[0] == pytest.approx(di[1], rel=1e-5)
+    enc = idt_to_acescct(log, "arri_logc4_awg4")
+    np.testing.assert_allclose(enc, ACESCCT_18_PERCENT, atol=5e-5)
+    assert enc[0] == pytest.approx(enc[1], rel=1e-5)
 
 
 def test_bypass_wb_idt_then_odt_matches_pipeline():
     log = np.full(3, float(linear_to_slog3(0.18)))
-    di = idt_to_di(log, "sony_slog3_sgamut3")
-    rec = odt_from_di(di)
+    enc = idt_to_acescct(log, "sony_slog3_sgamut3")
+    rec = odt_from_acescct(enc)
     direct = process_to_rec709(log, "sony_slog3_sgamut3", apply_wb=False)
     np.testing.assert_allclose(rec, direct, atol=1e-6)
     assert rec[0] == pytest.approx(rec[1], rel=1e-5)
 
 
 def test_wb_node_identity_at_d65_not_at_tungsten():
-    grey = np.full(3, DI_18_PERCENT)
-    a = wb_in_di(grey, 6504.0)
+    grey = np.full(3, ACESCCT_18_PERCENT)
+    a = wb_in_acescct(grey, 6504.0)
     np.testing.assert_allclose(a, grey, atol=2e-3)
-    b = wb_in_di(grey, 3200.0)
+    b = wb_in_acescct(grey, 3200.0)
     assert not np.allclose(b, grey, atol=1e-3)
 
 
 def test_odt_has_no_wb_baked():
-    """ODT of tungsten-shifted DI grey is not the ODT of D65 grey — WB is separate."""
-    grey = np.full(3, DI_18_PERCENT)
-    shifted = wb_in_di(grey, 3200.0)
-    assert not np.allclose(odt_from_di(shifted), odt_from_di(grey), atol=1e-3)
+    """ODT of tungsten-shifted ACEScct grey is not the ODT of D65 grey — WB is separate."""
+    grey = np.full(3, ACESCCT_18_PERCENT)
+    shifted = wb_in_acescct(grey, 3200.0)
+    assert not np.allclose(odt_from_acescct(shifted), odt_from_acescct(grey), atol=1e-3)
 
 
 def test_cdl_slope_near_identity_at_6504k():
@@ -98,7 +98,8 @@ def test_xml_wb_node_is_bypassable(tmp_path: Path):
     assert 'name="WB"' in xml
     assert 'bypassable="true"' in xml
     assert "Bradford" in xml
-    assert "DaVinci Intermediate" in xml
+    assert "ACEScct" in xml
+    assert "ACES2065-1" in xml
     assert "02_WB.cube" in xml
     assert "02_WB.cdl" in xml
     off = format_graph_xml(["arri_logc4_awg4"], 5600.0, 0.0, include_wb=False)
@@ -112,7 +113,8 @@ def test_dot_and_readme_explain_bypass():
     assert "bypassable" in dot
     readme = format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True)
     assert "bypass" in readme.lower()
-    assert "DaVinci Intermediate" in readme
+    assert "ACEScct" in readme
+    assert "ACES2065-1" in readme
     assert "implemented (unverified)" in readme
     assert "supported" not in readme.lower()
     assert "一键精准" not in readme
@@ -125,7 +127,7 @@ def test_cdl_ccc_dctl_are_real_payloads():
     ccc = format_ccc(3200.0, 0.0)
     assert "ColorCorrectionCollection" in ccc
     dctl = format_dctl(3200.0, 1.0)
-    assert "di_decode" in dctl
+    assert "acescct_decode" in dctl
     assert "bypass_wb" in dctl
     assert "const float m[9]" in dctl
 

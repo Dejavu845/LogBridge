@@ -20,6 +20,12 @@
 		A1000000000000000000000B /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* Metal.framework */; };
 		A1000000000000000000000C /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* MetalKit.framework */; };
 		A1000000000000000000000D /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* AVFoundation.framework */; };
+		A1000000000000000000000E /* NodeGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* NodeGraph.swift */; };
+		A1000000000000000000000F /* NodeStripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* NodeStripView.swift */; };
+		A10000000000000000000010 /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* InspectorView.swift */; };
+		A10000000000000000000011 /* ClipSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* ClipSidebarView.swift */; };
+		A10000000000000000000012 /* PreviewEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* PreviewEngine.swift */; };
+		A10000000000000000000013 /* VideoToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* VideoToolbox.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +43,12 @@
 		A2000000000000000000000C /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		A2000000000000000000000D /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		A2000000000000000000000E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000010 /* NodeGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeGraph.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* NodeStripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeStripView.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* ClipSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipSidebarView.swift; sourceTree = "<group>"; };
+		A20000000000000000000014 /* PreviewEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* VideoToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = System/Library/Frameworks/VideoToolbox.framework; sourceTree = SDKROOT; };
 		A2000000000000000000000F /* LogBridge.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LogBridge.entitlements; sourceTree = "<group>"; };
 		A30000000000000000000001 /* LogBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LogBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -49,6 +61,7 @@
 				A1000000000000000000000B /* Metal.framework in Frameworks */,
 				A1000000000000000000000C /* MetalKit.framework in Frameworks */,
 				A1000000000000000000000D /* AVFoundation.framework in Frameworks */,
+				A10000000000000000000013 /* VideoToolbox.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +87,8 @@
 				A50000000000000000000005 /* Color */,
 				A50000000000000000000006 /* Export */,
 				A50000000000000000000007 /* Stubs */,
+				A5000000000000000000000A /* Views */,
+				A5000000000000000000000B /* Preview */,
 				A2000000000000000000000E /* Info.plist */,
 				A2000000000000000000000F /* LogBridge.entitlements */,
 			);
@@ -86,8 +101,27 @@
 				A20000000000000000000003 /* IDT.swift */,
 				A20000000000000000000004 /* Clip.swift */,
 				A20000000000000000000005 /* Pipeline.swift */,
+				A20000000000000000000010 /* NodeGraph.swift */,
 			);
 			path = Models;
+			sourceTree = "<group>";
+		};
+		A5000000000000000000000A /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000011 /* NodeStripView.swift */,
+				A20000000000000000000012 /* InspectorView.swift */,
+				A20000000000000000000013 /* ClipSidebarView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A5000000000000000000000B /* Preview */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000014 /* PreviewEngine.swift */,
+			);
+			path = Preview;
 			sourceTree = "<group>";
 		};
 		A50000000000000000000004 /* Detection */ = {
@@ -129,6 +163,7 @@
 				A2000000000000000000000B /* Metal.framework */,
 				A2000000000000000000000C /* MetalKit.framework */,
 				A2000000000000000000000D /* AVFoundation.framework */,
+				A20000000000000000000015 /* VideoToolbox.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -219,6 +254,11 @@
 				A10000000000000000000008 /* WhiteBalance.swift in Sources */,
 				A10000000000000000000009 /* ResolveExporter.swift in Sources */,
 				A1000000000000000000000A /* FutureIDTs.swift in Sources */,
+				A1000000000000000000000E /* NodeGraph.swift in Sources */,
+				A1000000000000000000000F /* NodeStripView.swift in Sources */,
+				A10000000000000000000010 /* InspectorView.swift in Sources */,
+				A10000000000000000000011 /* ClipSidebarView.swift in Sources */,
+				A10000000000000000000012 /* PreviewEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

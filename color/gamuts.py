@@ -1,7 +1,11 @@
 """RGB primaries, white points, and RGB<->XYZ matrices (SMPTE RP 177).
 
-All M1 camera encodings use illuminant D65. Internal working gamut is
-DaVinci Wide Gamut (D65). ACEScg/AP1 (D60) is provided as an alternate.
+Internal scene-linear interchange is ACES2065-1 (AP0, ACES white ~D60).
+Grading / WB / preview encoding is ACEScct (AP1 log). Camera encodings use
+illuminant D65; camera RGB -> AP0 uses Bradford D65->ACES CAT.
+
+DaVinci Wide Gamut is not the internal reference. DWG primaries are not
+used by the M1 pipeline.
 """
 
 from __future__ import annotations
@@ -64,20 +68,30 @@ WHITE_POINTS = {
 }
 
 # Locked curve+gamut pairs for M1 IDTs. Sony is two pairs, user/metadata picks.
+# Venice pairs are only selected when a Venice camera is detected — never default.
 IDT_PAIRS = {
     "arri_logc4_awg4": ("logc4", "AWG4"),
     "sony_slog3_sgamut3": ("slog3", "SGamut3"),
     "sony_slog3_sgamut3cine": ("slog3", "SGamut3Cine"),
+    "sony_slog3_sgamut3_venice": ("slog3", "SGamut3"),
+    "sony_slog3_sgamut3cine_venice": ("slog3", "SGamut3Cine"),
     "panasonic_vlog_vgamut": ("vlog", "VGamut"),
     "fujifilm_flog2_bt2020": ("flog2", "BT2020"),
     "nikon_nlog_bt2020": ("nlog", "BT2020"),
     "red_log3g10_rwg": ("log3g10", "REDWideGamutRGB"),
 }
 
+VENICE_IDTS = frozenset(
+    {
+        "sony_slog3_sgamut3_venice",
+        "sony_slog3_sgamut3cine_venice",
+    }
+)
+
 GAMUTS = tuple(PRIMARIES.keys())
 
-# ARRI-published AWG4 to CIE XYZ (D65). Used as a cross-check, not a substitute
-# for RP 177 construction from the published primaries.
+# ARRI-published AWG4 to CIE XYZ (D65). Cross-check of RP 177 from primaries,
+# not a substitute IDT matrix (IDT uses OCIO Builtin ARRI_LOGC4_to_ACES2065-1).
 ARRI_AWG4_TO_XYZ = np.array(
     [
         [0.704858320407232064, 0.129760295170463003, 0.115837311473976537],
@@ -123,10 +137,31 @@ def xyz_to_rgb_matrix(name: str) -> np.ndarray:
 def rgb_to_rgb_matrix(src: str, dst: str, cat: np.ndarray | None = None) -> np.ndarray:
     """Scene-linear RGB (src) -> scene-linear RGB (dst).
 
-    Optional 3x3 ``cat`` is applied in XYZ (e.g. Bradford D65->D60 for AP1).
-    Same-white D65->D65 conversions need no CAT.
+    Optional 3x3 ``cat`` is applied in XYZ (e.g. Bradford D65->ACES for AP0).
+    Same-white conversions need no CAT.
     """
     m = rgb_to_xyz_matrix(src)
     if cat is not None:
         m = cat @ m
     return xyz_to_rgb_matrix(dst) @ m
+
+
+def camera_to_aces2065_matrix(gamut: str) -> np.ndarray:
+    """Scene-linear camera RGB (D65) -> ACES2065-1 (AP0).
+
+    Bradford CAT D65 -> ACES white, then RP 177 from published primaries.
+    Used only as the Linux/no-OCIO reference path. Prefer the OCIO Builtin
+    when it exists; do not invent a second homemade camera matrix.
+    """
+    from .wb import bradford_cat_matrix
+
+    cat = bradford_cat_matrix(D65_XY, ACES_WHITE_XY)
+    return rgb_to_rgb_matrix(gamut, "AP0", cat=cat)
+
+
+def aces_to_rec709_matrix(working: str = "AP1") -> np.ndarray:
+    """Scene-linear ACES RGB (AP0 or AP1) -> scene-linear Rec.709 (D65)."""
+    from .wb import bradford_cat_matrix
+
+    cat = bradford_cat_matrix(ACES_WHITE_XY, D65_XY)
+    return rgb_to_rgb_matrix(working, "Rec709", cat=cat)

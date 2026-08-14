@@ -3,6 +3,7 @@ import simd
 
 /// Scene-linear white-balance node (Bradford CAT, CCT + green-magenta tint).
 ///
+/// Scene-linear ACEScg (AP1) after IDT → ACES2065-1 → ACEScct decode.
 /// This math is applied in scene-linear RGB, never in log. The node can be
 /// toggled off for Resolve export so WB is not baked into a Rec.709-only
 /// deliverable.
