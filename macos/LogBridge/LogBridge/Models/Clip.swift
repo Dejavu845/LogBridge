@@ -161,9 +161,9 @@ final class SessionModel: ObservableObject {
         let badge = "预览·非成片 — 8-bit thumbnail is not a deliverable."
         switch graph.odt {
         case .off:
-            return "Node 3 off: ACEScct deliverable. This pane is not tagged Rec.709. \(badge)"
+            return "Node 4 off: ACEScct deliverable. This pane is not tagged Rec.709. Not a finished picture. \(badge)"
         case .rec709:
-            return "Tagged CGColorSpace.itur_709. Preview only. \(badge) Golden grey-card samples required before any accuracy claim."
+            return "Tagged CGColorSpace.itur_709. Preview only — not a finished grade on the 709 pane. \(badge) Golden grey-card samples required before any accuracy claim."
         case .hlg, .pq:
             return "\(graph.odt.acesOTNote) Preview does not invent a homemade HLG/PQ curve. \(badge)"
         }
@@ -178,6 +178,18 @@ final class SessionModel: ObservableObject {
         clips[idx].needsUserPicker = false
         clips[idx].detectionNote = "user picker (paired IDT)"
         preview.invalidateIDT(clipID: id)
+        refreshPreview()
+    }
+
+    func setExposureEnabled(_ enabled: Bool) {
+        graph.setEnabled(.exposure, enabled)
+        preview.invalidateWBODT()
+        refreshPreview()
+    }
+
+    func setExposureStops(_ stops: Double) {
+        graph.exposureStops = stops
+        preview.invalidateWBODT()
         refreshPreview()
     }
 
@@ -306,7 +318,7 @@ final class SessionModel: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "Export"
-        panel.message = "Folder for the Resolve node graph (LUT / CDL / DCTL). WB node 2 off = no bake."
+        panel.message = "Folder for the Resolve node graph (LUT / CDL / DCTL). Exposure is its own node. WB off = no bake."
         panel.begin { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
             do {
@@ -316,7 +328,9 @@ final class SessionModel: ObservableObject {
                     includeWBNode: self.graph.wbEnabled,
                     cct: self.graph.wbCCT,
                     tint: self.graph.wbTint,
-                    odtEnabled: self.graph.odtEnabled
+                    odtEnabled: self.graph.odtEnabled,
+                    exposureStops: self.graph.exposureStops,
+                    exposureEnabled: self.graph.exposureEnabled
                 )
                 self.lastExportNote = ResolveExporter.exportNote(
                     clips: self.clips,

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact serial node strip: IDT → WB → ODT. Click a node to inspect it.
+/// Compact serial node strip: IDT → Exposure → WB → ODT. Click a node to inspect it.
 struct NodeStripView: View {
     @ObservedObject var session: SessionModel
 
@@ -42,6 +42,11 @@ struct NodeStripView: View {
         switch slot {
         case .idt:
             return session.selectedClip?.lockedPairLabel ?? "no clip"
+        case .exposure:
+            if session.graph.exposureEnabled {
+                return String(format: "%+.2f st", session.graph.exposureStops)
+            }
+            return "bypassed"
         case .wb:
             if session.graph.wbEnabled {
                 return "\(Int(session.graph.wbCCT)) K"

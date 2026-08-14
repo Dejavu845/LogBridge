@@ -1,6 +1,6 @@
 """LogBridge color science (M1 + M2-start HDR ODT).
 
-Internal: every IDT lands in ACES2065-1; WB CAT is AP0 linear; ACEScct is the timeline encode.
+Internal: every IDT lands in ACES2065-1; Exposure is linear gain (stops); WB CAT is AP0 linear; ACEScct is the timeline encode.
 OCIO BuiltinTransform is used when PyOpenColorIO is importable and a
 Builtin exists. Otherwise white-paper reference implementations (18% codes).
 config.ocio always names the Builtins so Mac OCIO uses them.
@@ -45,6 +45,7 @@ from .odt import (
     apply_odt,
     odt_descriptor,
 )
+from .exposure import apply_exposure, stops_to_gain
 from .pipeline import apply_idt, apply_odt_rec709, apply_selected_odt, process_to_rec709
 from .wb import bradford_cat_matrix, white_balance_matrix
 
@@ -87,6 +88,8 @@ __all__ = [
     "CONFIG_ACES_HLG",
     "CONFIG_ACES_PQ",
     "process_to_rec709",
+    "apply_exposure",
+    "stops_to_gain",
     "bradford_cat_matrix",
     "white_balance_matrix",
 ]

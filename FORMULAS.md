@@ -33,3 +33,16 @@ Third-party pages sometimes list F-Log2 `a=0.555556` (that is F-Log). LogBridge 
 # HDR ODT (M2-start)
 
 Rec.2100 HLG and Rec.2100 PQ are **ACES Output Transform / BT.2100** OCIO BuiltinTransform paths. Do not invent homemade HLG/PQ constants or a DIY Rec.2100 OETF like the Rec.709 preview curve. Apply only via OCIO (`ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nits-15nits-HLG_1.1` + `DISPLAY - CIE-XYZ-D65_to_REC.2100-HLG`, and the ST2084 / Rec.2100-PQ pair). Implemented (unverified).
+
+
+# Exposure (ACES2065-1 linear)
+
+User-facing control is **stops**. After IDT, in ACES2065-1 (AP0) scene-linear:
+
+    rgb_out = rgb_in * (2 ** stops)
+
+- 0 stops is identity (`gain = 1`).
+- +1 stop doubles scene-linear RGB.
+- Do **not** add or subtract from camera-log or ACEScct code values.
+- Then WB / CAT in the same linear AP0 domain. Uniform gain and CAT commute; the locked order is still IDT → Exposure → WB.
+- Rec.709 / HLG / PQ remain preview only. ACEScct / EXR is the deliverable.

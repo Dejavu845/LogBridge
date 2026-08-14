@@ -1,4 +1,4 @@
-"""Serial node graph: IDT → WB → ODT, bypass flags match pipeline + export."""
+"""Serial node graph: IDT → Exposure → WB → ODT, bypass flags match pipeline + export."""
 
 from pathlib import Path
 
@@ -27,14 +27,14 @@ def _logc4_chroma():
     )
 
 
-def test_serial_slots_are_idt_wb_odt():
+def test_serial_slots_are_idt_exposure_wb_odt():
     g = SerialGraph(idt_id="arri_logc4_awg4")
     nodes = g.nodes()
-    assert [n.index for n in nodes] == [1, 2, 3]
-    assert [n.name for n in nodes] == ["IDT", "WB", "ODT_Rec709"]
-    assert [n.export_basename for n in nodes] == ["01_IDT", "02_WB", "03_ODT"]
-    assert [s[2] for s in EXPORT_SLOTS] == ["01_IDT", "02_WB", "03_ODT"]
-    assert len(nodes) == 3
+    assert [n.index for n in nodes] == [1, 2, 3, 4]
+    assert [n.name for n in nodes] == ["IDT", "Exposure", "WB", "ODT_Rec709"]
+    assert [n.export_basename for n in nodes] == ["01_IDT", "02_Exposure", "03_WB", "04_ODT"]
+    assert [s[2] for s in EXPORT_SLOTS] == ["01_IDT", "02_Exposure", "03_WB", "04_ODT"]
+    assert len(nodes) == 4
 
 
 def test_idt_is_not_bypassable():
@@ -45,16 +45,22 @@ def test_idt_is_not_bypassable():
         g.set_enabled(1, False)
 
 
-def test_wb_and_odt_are_bypassable():
+def test_exposure_wb_and_odt_are_bypassable():
     g = SerialGraph(idt_id="arri_logc4_awg4", wb_enabled=True, odt_enabled=True)
+    assert g.node(2).name == "Exposure"
     assert g.node(2).bypassable is True
+    assert g.node(3).name == "WB"
     assert g.node(3).bypassable is True
+    assert g.node(4).bypassable is True
     g.set_enabled(2, False)
     g.set_enabled(3, False)
+    g.set_enabled(4, False)
+    assert g.exposure_enabled is False
     assert g.wb_enabled is False
     assert g.odt_enabled is False
     assert g.node(2).enabled is False
     assert g.node(3).enabled is False
+    assert g.node(4).enabled is False
 
 
 def test_wb_bypass_matches_pipeline_no_bake():
@@ -95,7 +101,7 @@ def test_odt_off_leaves_aces2065_linear():
 def test_odt_defaults_off():
     g = SerialGraph(idt_id="arri_logc4_awg4")
     assert g.odt_enabled is False
-    assert g.node(3).enabled is False
+    assert g.node(4).enabled is False
 
 
 def test_wb_runs_in_ap0_not_on_acescct():
@@ -129,27 +135,31 @@ def test_export_xml_reads_graph_bypass(tmp_path: Path):
     xml = format_graph_xml(
         ["arri_logc4_awg4"], 3200.0, 0.25, include_wb=True, graph=g
     )
+    assert 'name="Exposure"' in xml
     assert 'name="WB"' in xml
     assert 'name="ODT_Rec709"' in xml
     assert 'index="2"' in xml
     assert 'index="3"' in xml
-    # Graph wins over include_wb=True: node 2 off = no bake.
+    assert 'index="4"' in xml
+    # Graph wins over include_wb=True: WB off = no bake.
     assert 'name="WB" type="Corrector" bypassable="true" enabled="false"' in xml
     assert 'name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="false"' in xml
+    assert 'name="Exposure" type="Gain_1D" bypassable="true"' in xml
     written = export_resolve_bundle(
         tmp_path, idt_ids=["arri_logc4_awg4"], graph=g, lut_size=5
     )
     names = {p.name for p in written}
-    assert "02_WB.cube" in names
-    assert "03_ODT_Rec709.cube" in names
+    assert "02_Exposure.cube" in names
+    assert "02_Exposure.dctl" in names
+    assert "03_WB.cube" in names
+    assert "04_ODT_Rec709.cube" in names
     disk = (tmp_path / "graph.xml").read_text(encoding="utf-8")
     assert 'enabled="false"' in disk
-    assert "01_IDT" in disk and "02_WB" in disk and "03_ODT" in disk
+    assert "01_IDT" in disk and "02_Exposure" in disk and "03_WB" in disk and "04_ODT" in disk
 
 
-def test_no_extra_grade_nodes():
+def test_no_sat_or_unlisted_grade_nodes():
     g = SerialGraph(idt_id="arri_logc4_awg4")
     names = {n.name for n in g.nodes()}
-    assert names == {"IDT", "WB", "ODT_Rec709"}
-    assert "exposure" not in {n.name.lower() for n in g.nodes()}
+    assert names == {"IDT", "Exposure", "WB", "ODT_Rec709"}
     assert "sat" not in {n.name.lower() for n in g.nodes()}

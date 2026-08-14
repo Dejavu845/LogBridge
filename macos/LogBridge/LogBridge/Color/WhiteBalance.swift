@@ -5,7 +5,7 @@ import simd
 ///
 /// Scene-linear ACES2065-1 (AP0) after IDT. Never a CAT on ACEScct-encoded values.
 /// This math is applied in AP0 scene-linear RGB, never in log. The node can be
-/// toggled off for Resolve export so WB is not baked (disable node 2 = IDT → ACEScct).
+/// toggled off for Resolve export so WB is not baked (disable WB = IDT → Exposure → ACEScct).
 enum WhiteBalanceNode {
     /// Bradford cone-response matrix (CIE).
     static let bradford = simd_double3x3(rows: [

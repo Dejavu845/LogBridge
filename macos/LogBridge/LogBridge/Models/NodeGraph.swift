@@ -1,20 +1,24 @@
 import Foundation
 
-/// Serial graph: IDT → WB → selectable ODT. Not a general node editor.
+/// Serial graph: IDT → Exposure → WB → selectable ODT. Not a general node editor.
 ///
-/// Slots match `color/graph.py` and Resolve export (01_IDT / 02_WB / 03_ODT).
-/// Node 2 (WB) off = IDT → ACEScct, no bake. Node 3 ODT: Off (ACEScct) |
+/// Slots match `color/graph.py` and Resolve export
+/// (01_IDT / 02_Exposure / 03_WB / 04_ODT).
+/// Exposure is stops in ACES2065-1 linear (rgb * 2**stops). Default 0.
+/// WB off = IDT → Exposure → ACEScct, no bake. ODT: Off (ACEScct) |
 /// Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ. Default Off.
 enum NodeSlot: Int, CaseIterable, Identifiable, Hashable {
     case idt = 1
-    case wb = 2
-    case odt = 3
+    case exposure = 2
+    case wb = 3
+    case odt = 4
 
     var id: Int { rawValue }
 
     var title: String {
         switch self {
         case .idt: return "IDT"
+        case .exposure: return "Exposure"
         case .wb: return "WB"
         case .odt: return "ODT"
         }
@@ -23,14 +27,16 @@ enum NodeSlot: Int, CaseIterable, Identifiable, Hashable {
     var exportBasename: String {
         switch self {
         case .idt: return "01_IDT"
-        case .wb: return "02_WB"
-        case .odt: return "03_ODT"
+        case .exposure: return "02_Exposure"
+        case .wb: return "03_WB"
+        case .odt: return "04_ODT"
         }
     }
 
     var subtitle: String {
         switch self {
         case .idt: return "curve + gamut"
+        case .exposure: return "stops (linear gain)"
         case .wb: return "scene-linear CAT"
         case .odt: return "Off / 709 / HLG / PQ"
         }
@@ -80,6 +86,8 @@ enum ODTMode: String, CaseIterable, Identifiable, Hashable {
 
 /// Session-level WB / ODT. IDT lives on the selected clip.
 struct SerialGraph: Equatable {
+    var exposureEnabled: Bool = true
+    var exposureStops: Double = 0
     var wbEnabled: Bool = false
     var wbCCT: Double = 6504
     var wbTint: Double = 0
@@ -95,6 +103,7 @@ struct SerialGraph: Equatable {
     func isEnabled(_ slot: NodeSlot) -> Bool {
         switch slot {
         case .idt: return true
+        case .exposure: return exposureEnabled
         case .wb: return wbEnabled
         case .odt: return odtEnabled
         }
@@ -104,6 +113,8 @@ struct SerialGraph: Equatable {
         switch slot {
         case .idt:
             break
+        case .exposure:
+            exposureEnabled = enabled
         case .wb:
             wbEnabled = enabled
         case .odt:

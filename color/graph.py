@@ -1,16 +1,21 @@
-"""Serial node graph: IDT → WB (bypassable) → selectable ODT.
+"""Serial node graph: IDT → Exposure → WB (bypassable) → selectable ODT.
 
 Not a node editor. Used by ``pipeline`` and Resolve export.
 
-  1. IDT  — camera log → ACES2065-1 (AP0 scene-linear). No WB.
-  2. WB   — Bradford/CAT02 in ACES2065-1 scene-linear (AP0). Never a CAT
-            on ACEScct-encoded values. Bypassable. Disable node 2 =
-            IDT → ACEScct (timeline), no bake.
-  3. ODT  — Off (ACEScct deliverable, default) | Rec.709 preview |
-            Rec.2100 HLG | Rec.2100 PQ. Rec.709 is preview only (DIY
-            BT.709 OETF, no RRT). HLG/PQ are ACES Output Transform /
-            BT.2100 OCIO Builtins — no homemade HLG/PQ curve.
+  1. IDT       — camera log → ACES2065-1 (AP0 scene-linear). No WB, no exposure.
+  2. Exposure  — stops (default 0). In ACES2065-1 linear: rgb * (2 ** stops).
+                 Not a log-code add. Bypassable / zeroable. Own export node
+                 (1D / gain); not baked into IDT or WB when stops=0.
+  3. WB        — Bradford/CAT02 in ACES2065-1 scene-linear (AP0). Never a CAT
+                 on ACEScct-encoded values. Bypassable. Disable WB =
+                 IDT → Exposure → ACEScct (timeline), no bake.
+  4. ODT       — Off (ACEScct deliverable, default) | Rec.709 preview |
+                 Rec.2100 HLG | Rec.2100 PQ. Rec.709 is preview only (DIY
+                 BT.709 OETF, no RRT). HLG/PQ are ACES Output Transform /
+                 BT.2100 OCIO Builtins — no homemade HLG/PQ curve.
 
+Locked order: IDT → Exposure → WB → ACEScct → preview ODT.
+Uniform gain and CAT commute; the order is still locked.
 Working / deliverable: ACEScct timeline or ACES2065-1 EXR / ACES workflow.
 Rec.709 is preview only. HLG/PQ are implemented (unverified). Not supported.
 Do not bake DaVinci Wide Gamut Intermediate.
@@ -33,6 +38,7 @@ from .odt import (
     ODT_REC709,
     apply_hdr_odt,
 )
+from .exposure import apply_exposure, stops_to_gain
 from .rec709 import rec709_oetf
 from .wb import apply_white_balance
 from .working_space import (
@@ -41,11 +47,12 @@ from .working_space import (
 )
 
 NODE_IDT = "IDT"
+NODE_EXPOSURE = "Exposure"
 NODE_WB = "WB"
 NODE_ODT = "ODT_Rec709"
 NODE_ODT_HLG = "ODT_Rec2100_HLG"
 NODE_ODT_PQ = "ODT_Rec2100_PQ"
-GRAPH_NODES = (NODE_IDT, NODE_WB, NODE_ODT)
+GRAPH_NODES = (NODE_IDT, NODE_EXPOSURE, NODE_WB, NODE_ODT)
 # ODT slot selector. Default Off = ACEScct deliverable.
 ODT_OFF = ODT_OFF
 ODT_REC709 = ODT_REC709
@@ -55,8 +62,9 @@ ODT_CHOICES = ODT_CHOICES
 ODT_DEFAULT = ODT_DEFAULT
 EXPORT_SLOTS = (
     (1, NODE_IDT, "01_IDT"),
-    (2, NODE_WB, "02_WB"),
-    (3, NODE_ODT, "03_ODT"),
+    (2, NODE_EXPOSURE, "02_Exposure"),
+    (3, NODE_WB, "03_WB"),
+    (4, NODE_ODT, "04_ODT"),
 )
 
 WORKING_SPACE = "ACEScct"
@@ -84,13 +92,17 @@ def odt_node_name(odt: str) -> str:
 
 @dataclass
 class SerialGraph:
-    """Fixed three-node graph. WB is the only required bypassable grade node.
+    """Fixed four-node graph: IDT → Exposure → WB → ODT.
 
-    ``odt`` selects Off | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ.
-    ``odt_enabled=True`` (legacy) means Rec.709 preview when ``odt`` is Off.
+    Exposure is stop-based linear gain in ACES2065-1 (default 0 = identity).
+    WB is bypassable. ``odt`` selects Off | Rec.709 preview | Rec.2100 HLG |
+    Rec.2100 PQ. ``odt_enabled=True`` (legacy) means Rec.709 preview when
+    ``odt`` is Off.
     """
 
     idt_id: str | None = None
+    exposure_stops: float = 0.0
+    exposure_enabled: bool = True
     wb_enabled: bool = False
     wb_cct: float = 6504.0
     wb_tint: float = 0.0
@@ -128,11 +140,18 @@ class SerialGraph:
     def nodes(self) -> list[GraphNode]:
         return [
             GraphNode(1, NODE_IDT, "01_IDT", enabled=True, bypassable=False),
-            GraphNode(2, NODE_WB, "02_WB", enabled=self.wb_enabled, bypassable=True),
             GraphNode(
-                3,
+                2,
+                NODE_EXPOSURE,
+                "02_Exposure",
+                enabled=self.exposure_enabled,
+                bypassable=True,
+            ),
+            GraphNode(3, NODE_WB, "03_WB", enabled=self.wb_enabled, bypassable=True),
+            GraphNode(
+                4,
                 self.odt_slot_name(),
-                "03_ODT",
+                "04_ODT",
                 enabled=self.odt_enabled,
                 bypassable=True,
             ),
@@ -148,8 +167,10 @@ class SerialGraph:
         if index == 1:
             raise ValueError("IDT is not bypassable")
         if index == 2:
-            self.wb_enabled = bool(enabled)
+            self.exposure_enabled = bool(enabled)
         elif index == 3:
+            self.wb_enabled = bool(enabled)
+        elif index == 4:
             if enabled:
                 if self.odt == ODT_OFF:
                     self.odt = ODT_REC709
@@ -160,6 +181,15 @@ class SerialGraph:
         else:
             raise KeyError(index)
 
+    def set_exposure_stops(self, stops: float) -> None:
+        self.exposure_stops = float(stops)
+
+    @property
+    def exposure_gain(self) -> float:
+        if not self.exposure_enabled:
+            return 1.0
+        return stops_to_gain(self.exposure_stops)
+
     def set_odt(self, odt: str) -> None:
         if odt not in ODT_CHOICES:
             raise ValueError(f"Unknown ODT {odt!r} (use {ODT_CHOICES})")
@@ -167,10 +197,11 @@ class SerialGraph:
         self.odt_enabled = odt != ODT_OFF
 
     def idt_node(self, log_rgb, idt_id: str | None = None) -> np.ndarray:
-        """IDT: camera log → ACES2065-1 linear (AP0). No white balance.
+        """IDT: camera log → ACES2065-1 linear (AP0). No WB, no exposure.
 
-        Preview cache stores this buffer. WB toggles it; ACEScct encode
-        is only for grading / preview display / the Resolve timeline.
+        Preview cache stores this buffer. Exposure + WB apply in linear
+        on top of it. ACEScct encode is only for grading / preview
+        display / the Resolve timeline.
         """
         from .pipeline import apply_idt
 
@@ -182,6 +213,16 @@ class SerialGraph:
     def idt_to_acescct(self, log_rgb, idt_id: str | None = None) -> np.ndarray:
         """IDT then ACEScct encode (timeline / grading). No WB."""
         return aces2065_to_acescct(self.idt_node(log_rgb, idt_id))
+
+    def exposure_node(self, aces_ap0) -> np.ndarray:
+        """Exposure: uniform gain in ACES2065-1 linear. Identity at 0 / bypass.
+
+        ``rgb * (2 ** stops)``. Not an add/subtract on log code values.
+        """
+        rgb = np.asarray(aces_ap0, dtype=np.float64)
+        if not self.exposure_enabled or self.exposure_stops == 0.0:
+            return rgb
+        return apply_exposure(rgb, self.exposure_stops)
 
     def wb_node(self, aces_ap0) -> np.ndarray:
         """WB CAT in ACES2065-1 (AP0) scene-linear. Identity when disabled.
@@ -215,7 +256,7 @@ class SerialGraph:
         return rec709_oetf(np.clip(rec_lin, 0.0, None))
 
     def apply(self, log_rgb, idt_id: str | None = None) -> np.ndarray:
-        """Run IDT → optional WB (AP0) → optional ODT.
+        """Run IDT → Exposure (AP0 linear) → optional WB (AP0) → optional ODT.
 
         ODT off: ACES2065-1 scene-linear (ACEScct deliverable when encoded
         for the Resolve timeline). Rec.709 is preview only. HLG/PQ use
@@ -227,6 +268,7 @@ class SerialGraph:
         if chosen not in IDT_PAIRS:
             raise KeyError(f"Unknown IDT {chosen!r}")
         work = self.idt_node(log_rgb, chosen)
+        work = self.exposure_node(work)
         work = self.wb_node(work)
         if self.odt == ODT_REC709:
             return self.odt_node(work)
@@ -247,15 +289,20 @@ def graph_from_export_args(
     odt_enabled: bool = False,
     method: str = "bradford",
     odt: str | None = None,
+    exposure_stops: float = 0.0,
+    exposure_enabled: bool = True,
 ) -> SerialGraph:
     """Build a SerialGraph from Resolve-export CLI / Swift flags.
 
     ODT defaults Off (ACEScct deliverable). Rec.709 is preview only.
     HLG/PQ are ACES Output Transform / BT.2100 (unverified).
+    Exposure is its own node (default 0 stops = identity gain).
     """
     chosen = odt if odt is not None else (ODT_REC709 if odt_enabled else ODT_OFF)
     return SerialGraph(
         idt_id=idt_id,
+        exposure_stops=exposure_stops,
+        exposure_enabled=exposure_enabled,
         wb_enabled=include_wb,
         wb_cct=cct,
         wb_tint=tint,

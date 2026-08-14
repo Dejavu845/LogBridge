@@ -56,8 +56,8 @@ def test_odt_choices_declare_off_709_hlg_pq():
     g = SerialGraph(idt_id="sony_slog3_sgamut3")
     assert g.odt == ODT_OFF
     assert g.odt_enabled is False
-    assert g.node(3).enabled is False
-    assert g.node(3).name == "ODT_Rec709"
+    assert g.node(4).enabled is False
+    assert g.node(4).name == "ODT_Rec709"
 
 
 def test_rec709_remains_preview_only():
@@ -67,8 +67,8 @@ def test_rec709_remains_preview_only():
     assert desc["supported"] is False
     assert desc["status"] == "implemented (unverified)"
     assert "preview" in desc["via"].lower() or desc["preview_only"]
-    # Slot identity is still the three-node M1 graph.
-    assert GRAPH_NODES == ("IDT", "WB", "ODT_Rec709")
+    # Slot identity is the four-node graph (IDT → Exposure → WB → ODT).
+    assert GRAPH_NODES == ("IDT", "Exposure", "WB", "ODT_Rec709")
     g = SerialGraph(idt_id="sony_slog3_sgamut3", odt_enabled=True)
     assert g.odt == ODT_REC709
     log = _slog3_grey()
@@ -153,16 +153,16 @@ def test_hdr_apply_requires_ocio_no_diy_fallback():
 def test_graph_selects_hlg_pq_without_extra_grade_nodes():
     g = SerialGraph(idt_id="arri_logc4_awg4", odt=ODT_HLG)
     assert g.odt_enabled is True
-    assert g.node(3).name == "ODT_Rec2100_HLG"
-    assert g.node(3).bypassable is True
+    assert g.node(4).name == "ODT_Rec2100_HLG"
+    assert g.node(4).bypassable is True
     names = {n.name for n in g.nodes()}
-    assert names == {"IDT", "WB", "ODT_Rec2100_HLG"}
+    assert names == {"IDT", "Exposure", "WB", "ODT_Rec2100_HLG"}
     g.set_odt(ODT_PQ)
-    assert g.node(3).name == "ODT_Rec2100_PQ"
+    assert g.node(4).name == "ODT_Rec2100_PQ"
     g.set_odt(ODT_OFF)
     assert g.odt_enabled is False
-    assert g.node(3).name == "ODT_Rec709"
-    assert len(g.nodes()) == 3
+    assert g.node(4).name == "ODT_Rec709"
+    assert len(g.nodes()) == 4
 
 
 def test_ocio_config_names_aces_ot_bt2100():

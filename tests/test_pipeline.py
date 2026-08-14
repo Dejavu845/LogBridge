@@ -95,12 +95,15 @@ def test_idt_grey_is_aces_018():
 
 
 def test_serial_graph_nodes():
-    assert GRAPH_NODES == ("IDT", "WB", "ODT_Rec709")
+    assert GRAPH_NODES == ("IDT", "Exposure", "WB", "ODT_Rec709")
     assert WORKING_SPACE == "ACEScct"
     assert SCENE_LINEAR == "ACES2065-1"
     g = SerialGraph(idt_id="arri_logc4_awg4", wb_enabled=False, odt_enabled=True)
+    assert g.node(2).name == "Exposure"
     assert g.node(2).bypassable is True
-    assert g.node(2).enabled is False
+    assert g.node(3).name == "WB"
+    assert g.node(3).bypassable is True
+    assert g.node(3).enabled is False
     log = np.full(3, float(linear_to_logc4(0.18)))
     rec = g.apply(log)
     direct = process_to_rec709(log, "arri_logc4_awg4", apply_wb=False)

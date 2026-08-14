@@ -1,18 +1,23 @@
-"""DaVinci Resolve export: a real bypassable WB node, not a prose sidecar.
+"""DaVinci Resolve export: serial IDT → Exposure → WB → ODT, not a prose sidecar.
 
 Standard deliverable: ACEScct timeline or ACES2065-1 EXR / ACES workflow.
-Rec.709 is preview only (optional node 3, off by default).
+Rec.709 is preview only (optional ODT, off by default).
 Rec.2100 HLG / PQ are optional ACES Output Transform / BT.2100 nodes
 (unverified). No homemade HLG/PQ LUT.
 
-  1. IDT  — camera log → ACES2065-1 → ACEScct (LUT and/or Resolve CST)
-  2. WB   — linear AP0 Bradford/CAT02 (CCT + tint). DCTL decodes ACEScct
-            to ACES2065-1, applies the AP0 3×3, encodes ACEScct. Same 3×3
-            works on ACES2065-1 linear. Disable node 2 = IDT → ACEScct, no bake.
-  3. ODT  — Rec.709 preview (LUT and/or Resolve CST). Off by default.
+  1. IDT       — camera log → ACES2065-1 → ACEScct (LUT and/or Resolve CST)
+  2. Exposure  — own 1D / gain stage. ACES2065-1 linear: rgb * (2 ** stops).
+                 On an ACEScct timeline: decode → gain → encode. Not a
+                 log-code add. Not baked into IDT or WB when stops=0.
+  3. WB        — linear AP0 Bradford/CAT02 (CCT + tint). DCTL decodes ACEScct
+                 to ACES2065-1, applies the AP0 3×3, encodes ACEScct. Same 3×3
+                 works on ACES2065-1 linear. Disable WB = IDT → Exposure →
+                 ACEScct, no bake.
+  4. ODT       — Rec.709 preview (LUT and/or Resolve CST). Off by default.
 
 WB is never a CAT on ACEScct-encoded values and is never baked into the
-IDT or ODT cubes. Status: implemented (unverified).
+IDT or ODT cubes. Exposure is never baked into IDT or WB. Status:
+implemented (unverified).
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ import numpy as np
 
 from .curves import decode_log, nlog_normalized_to_linear
 from .gamuts import IDT_PAIRS
+from .exposure import apply_exposure, stops_to_gain
 from .graph import SerialGraph, graph_from_export_args, odt_node_name
 from .odt import (
     CONFIG_ACES_HLG,
@@ -153,6 +159,21 @@ def odt_from_acescct(acescct_rgb) -> np.ndarray:
     return apply_odt_rec709(acescct_rgb, working="ACEScct")
 
 
+def exposure_in_aces2065(aces_ap0, stops: float) -> np.ndarray:
+    """Exposure on ACES2065-1 scene-linear: rgb * (2 ** stops)."""
+    return apply_exposure(np.asarray(aces_ap0, dtype=np.float64), stops)
+
+
+def exposure_in_acescct(acescct_rgb, stops: float) -> np.ndarray:
+    """Exposure on an ACEScct timeline: decode → linear gain → encode.
+
+    Not an add/subtract on ACEScct or camera-log codes.
+    """
+    ap0 = acescct_to_aces2065(np.asarray(acescct_rgb, dtype=np.float64))
+    ap0 = apply_exposure(ap0, stops)
+    return _acescct_encode_lut(aces2065_to_ap1(ap0))
+
+
 # --- Optional named-space helpers (DWG Intermediate). Not the default. ---
 
 def _di_encode_lut(lin):
@@ -235,6 +256,93 @@ def odt_cube_bytes(size: int = 17) -> str:
     )
 
 
+def format_1d_cube(title: str, rgb: np.ndarray) -> str:
+    """IRIDAS 1D cube (uniform gain / ACEScct-wrapped exposure)."""
+    rgb = np.asarray(rgb, dtype=np.float64).reshape(-1, 3)
+    lines = [
+        f'TITLE "{title}"',
+        "# LogBridge Exposure — ACES2065-1 linear gain rgb*(2**stops).",
+        "# ACEScct wrap: decode → gain → encode. Not a log-code add.",
+        "# Implemented (unverified). Own node; not baked into IDT or WB.",
+        f"LUT_1D_SIZE {len(rgb)}",
+        "DOMAIN_MIN 0.0 0.0 0.0",
+        "DOMAIN_MAX 1.0 1.0 1.0",
+    ]
+    for row in rgb:
+        lines.append(f"{row[0]:.8f} {row[1]:.8f} {row[2]:.8f}")
+    return "\n".join(lines) + "\n"
+
+
+def exposure_cube_bytes(stops: float = 0.0, size: int = 65) -> str:
+    """1D LUT: ACEScct-wrapped linear exposure. Identity at 0 stops."""
+    xs = np.linspace(0.0, 1.0, int(size))
+    grid = np.stack([xs, xs, xs], axis=-1)
+    out = exposure_in_acescct(grid, stops)
+    gain = stops_to_gain(stops)
+    return format_1d_cube(
+        f"LogBridge Exposure {stops:+.3f} stops (gain {gain:.8f}, ACEScct wrap)",
+        out,
+    )
+
+
+def format_exposure_dctl(stops: float = 0.0) -> str:
+    gain = stops_to_gain(stops)
+    return f"""// LogBridge Exposure node — ACES2065-1 linear gain.
+// User-facing: stops. Internally: rgb * (2 ** stops) = rgb * {gain:.10f}f
+// Timeline: ACEScct (decode → gain → encode). Tick input_aces2065 for linear EXR.
+// Not a log-code add. Own node — not baked into IDT or WB when stops=0.
+// Stops {stops:.6f}  gain {gain:.10f}
+// Implemented (unverified). Not a camera-support claim.
+
+DEFINE_UI_PARAMS(bypass_exposure, Bypass Exposure, DCTLUI_CHECK_BOX, 0, 0, 1)
+DEFINE_UI_PARAMS(input_aces2065, Input is ACES2065-1 linear, DCTLUI_CHECK_BOX, 0, 0, 1)
+
+__DEVICE__ float acescct_decode(float x)
+{{
+    const float lo_s = 10.5402377416545f;
+    const float lo_o = 0.0729055341958355f;
+    const float y_break = 0.1552511415525113f;
+    if (x <= y_break)
+        return (x - lo_o) / lo_s;
+    return _exp2f(x * 17.52f - 9.72f);
+}}
+
+__DEVICE__ float acescct_encode(float lin)
+{{
+    const float lo_s = 10.5402377416545f;
+    const float lo_o = 0.0729055341958355f;
+    const float lin_break = 0.0078125f;
+    if (lin <= lin_break)
+        return lo_s * lin + lo_o;
+    float v = lin > 1e-10f ? lin : 1e-10f;
+    return (_log2f(v) + 9.72f) / 17.52f;
+}}
+
+__DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p_R, float p_G, float p_B)
+{{
+    if (bypass_exposure)
+        return make_float3(p_R, p_G, p_B);
+
+    const float gain = {gain:.10f}f;
+    float r = p_R;
+    float g = p_G;
+    float b = p_B;
+    if (!input_aces2065)
+    {{
+        r = acescct_decode(p_R);
+        g = acescct_decode(p_G);
+        b = acescct_decode(p_B);
+    }}
+    r *= gain;
+    g *= gain;
+    b *= gain;
+    if (input_aces2065)
+        return make_float3(r, g, b);
+    return make_float3(acescct_encode(r), acescct_encode(g), acescct_encode(b));
+}}
+"""
+
+
 def cdl_slope_offset_power(
     cct: float, tint: float = 0.0, method: str = "bradford"
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -314,7 +422,7 @@ def format_dctl(
 // Timeline: ACEScct (ACES workflow). Scene-linear interchange: ACES2065-1.
 // Decode ACEScct → AP1 → AP0, apply cat_ap0, AP0 → AP1 → ACEScct.
 // Tick input_aces2065 if the clip is already ACES2065-1 linear (skip ACEScct wrap).
-// Bypass this DCTL in Resolve to restore IDT → ACEScct, no bake. Rec.709 is preview only.
+// Bypass this DCTL in Resolve to restore IDT → Exposure → ACEScct, no bake. Rec.709 is preview only.
 // CCT {cct:.0f} K  tint {tint}  method {method}
 // Implemented (unverified). Not a camera-support claim.
 
@@ -394,10 +502,15 @@ def format_dot(
     cct: float,
     tint: float,
     include_wb: bool,
+    exposure_stops: float = 0.0,
+    exposure_enabled: bool = True,
 ) -> str:
     idt_label = ", ".join(idt_ids) if idt_ids else "(per clip CST/LUT)"
     wb_style = "solid" if include_wb else "dashed"
     wb_fill = "lightgrey" if include_wb else "white"
+    exp_style = "solid" if exposure_enabled else "dashed"
+    exp_fill = "lightgrey" if exposure_enabled else "white"
+    gain = stops_to_gain(exposure_stops)
     return f"""digraph LogBridgeResolve {{
   rankdir=LR;
   labelloc="t";
@@ -406,11 +519,12 @@ def format_dot(
 
   clip [label="Clip\\ncamera log"];
   idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\nor Resolve CST → ACEScct (ACES workflow)"];
-  wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n{cct:.0f} K  tint {tint}\\n02_WB.cube / .cdl / .ccc / .dctl", style="filled,{wb_style}", fillcolor="{wb_fill}"];
-  odt  [label="Rec.709 ODT (later node)\\n03_ODT_Rec709.cube\\nor CST ACEScct → Rec.709"];
+  exp  [label="Exposure (bypassable/zeroable)\\nACES2065-1 linear gain\\n{exposure_stops:+.2f} stops  gain {gain:.4f}\\n02_Exposure.cube / .dctl", style="filled,{exp_style}", fillcolor="{exp_fill}"];
+  wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n{cct:.0f} K  tint {tint}\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,{wb_style}", fillcolor="{wb_fill}"];
+  odt  [label="Rec.709 ODT (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709"];
   timeline [shape=oval, label="Timeline\\nACEScct"];
 
-  clip -> idt -> wb -> odt;
+  clip -> idt -> exp -> wb -> odt;
   idt -> timeline [style=dashed, label="working space"];
 }}
 """
@@ -447,6 +561,9 @@ def format_graph_xml(
         )
     wb_enabled = "true" if graph.wb_enabled else "false"
     odt_on = "true" if graph.odt_enabled else "false"
+    exp_on = "true" if graph.exposure_enabled else "false"
+    exp_stops = graph.exposure_stops
+    exp_gain = stops_to_gain(exp_stops) if graph.exposure_enabled else 1.0
     odt_mode = graph.odt
     odt_name = odt_node_name(odt_mode)
     cct = graph.wb_cct
@@ -510,7 +627,7 @@ def format_graph_xml(
             "Off = ACEScct deliverable (or ACES2065-1 EXR). No RRT."
         )
         odt_payload = (
-            '    <File role="lut">03_ODT_Rec709.cube</File>\n'
+            '    <File role="lut">04_ODT_Rec709.cube</File>\n'
             '    <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" '
             'outputColorSpace="Rec.709" outputGamma="Rec.709"/>\n'
         )
@@ -518,19 +635,26 @@ def format_graph_xml(
 <LogBridgeResolveGraph version="1" status="implemented (unverified)">
   <WorkingSpace gamut="AP0" encoding="ACEScct" white="ACES" scene_linear="ACES2065-1"/>
   <Node index="1" name="IDT" type="LUT_or_CST" bypassable="false">
-    <Description>Camera log to ACEScct via ACES2065-1. No white balance. ACES workflow. Disable node 2 = IDT → ACEScct, no bake.</Description>
+    <Description>Camera log to ACEScct via ACES2065-1. No white balance, no exposure. ACES workflow. Exposure is its own node (not baked into IDT).</Description>
 {idt_block}
   </Node>
-  <Node index="2" name="WB" type="Corrector" bypassable="true" enabled="{wb_enabled}" method="{_xml_escape(method)}">
-    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. Bypass this node in Resolve (Color page: disable node 2, or DCTL Bypass WB, or skip 02_WB.cube). Remaining graph is IDT → ACEScct, no bake.</Description>
+  <Node index="2" name="Exposure" type="Gain_1D" bypassable="true" enabled="{exp_on}" stops="{exp_stops:.6f}">
+    <Description>ACES2065-1 linear gain: rgb * (2 ** stops). Not a log-code add. Own bypassable/zeroable node — not baked into IDT or WB when stops=0. On ACEScct timeline: decode → gain → encode.</Description>
+    <Stops>{exp_stops:.6f}</Stops>
+    <Gain>{exp_gain:.10f}</Gain>
+    <File role="lut1d">02_Exposure.cube</File>
+    <File role="dctl">02_Exposure.dctl</File>
+  </Node>
+  <Node index="3" name="WB" type="Corrector" bypassable="true" enabled="{wb_enabled}" method="{_xml_escape(method)}">
+    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. Bypass this node in Resolve (Color page: disable WB, or DCTL Bypass WB, or skip 03_WB.cube). Remaining graph is IDT → Exposure → ACEScct, no bake.</Description>
     <CCT>{cct:.4f}</CCT>
     <Tint>{tint:.6f}</Tint>
-    <File role="lut">02_WB.cube</File>
-    <File role="cdl">02_WB.cdl</File>
-    <File role="ccc">02_WB.ccc</File>
-    <File role="dctl">02_WB.dctl</File>
+    <File role="lut">03_WB.cube</File>
+    <File role="cdl">03_WB.cdl</File>
+    <File role="ccc">03_WB.ccc</File>
+    <File role="dctl">03_WB.dctl</File>
   </Node>
-  <Node index="3" name="{odt_name}" type="{odt_type}" bypassable="true" enabled="{odt_on}" odt="{odt_mode}">
+  <Node index="4" name="{odt_name}" type="{odt_type}" bypassable="true" enabled="{odt_on}" odt="{odt_mode}">
     <Description>{odt_desc}</Description>
 {odt_payload}  </Node>
 </LogBridgeResolveGraph>
@@ -542,9 +666,13 @@ def format_readme(
     cct: float,
     tint: float,
     include_wb: bool,
+    exposure_stops: float = 0.0,
+    exposure_enabled: bool = True,
 ) -> str:
     idt_list = ", ".join(idt_ids) if idt_ids else "(none — assign IDT in Resolve CST)"
     wb_state = "enabled by default" if include_wb else "present but bypassed by default"
+    exp_state = "enabled" if exposure_enabled else "bypassed"
+    gain = stops_to_gain(exposure_stops) if exposure_enabled else 1.0
     return f"""# LogBridge Resolve export
 
 Status: **implemented (unverified)**. This is not a camera-support claim.
@@ -554,31 +682,40 @@ Status: **implemented (unverified)**. This is not a camera-support claim.
 Timeline color management: **ACEScct**, ACES workflow. Scene-linear interchange: **ACES2065-1**.
 Do not set DaVinci Wide Gamut Intermediate as the default deliverable.
 
+Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 / HLG / PQ are preview only.
+
 1. **IDT** — `01_IDT_<idt>.cube` or Color Space Transform
    - Input: camera log / camera gamut (`{idt_list}`)
    - Output: ACEScct (via ACES2065-1)
-   - Contains **no** white balance.
+   - Contains **no** white balance and **no** exposure.
 
-2. **WB** — own corrector, **{wb_state}**
-   - `02_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in ACES2065-1 (AP0), wrapped in ACEScct so it sits on the ACEScct timeline.
-   - `02_WB.dctl` — same 3×3 as a DCTL (Decode ACEScct → matrix → Encode ACEScct). Checkbox **Bypass WB** inside the DCTL, or disable the node.
-   - `02_WB.cdl` / `02_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
+2. **Exposure** — own 1D / gain stage, **{exp_state}**, {exposure_stops:+.3f} stops (gain {gain:.6f})
+   - `02_Exposure.cube` — 1D LUT: ACEScct decode → rgb * (2 ** stops) → encode.
+   - `02_Exposure.dctl` — same gain as a DCTL (checkbox **Bypass Exposure**, or tick input_aces2065 for linear EXR).
+   - User-facing unit is **stops**. Internally after IDT, in ACES2065-1 linear: `rgb * (2 ** stops)`.
+   - Not a log-code add. Not baked into IDT or WB when stops=0 (zeroable identity node).
+
+3. **WB** — own corrector, **{wb_state}**
+   - `03_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in ACES2065-1 (AP0), wrapped in ACEScct so it sits on the ACEScct timeline.
+   - `03_WB.dctl` — same 3×3 as a DCTL (Decode ACEScct → matrix → Encode ACEScct). Checkbox **Bypass WB** inside the DCTL, or disable the node.
+   - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
    - CCT {cct:.0f} K, tint {tint}, method Bradford (CAT02 selectable in code). Scene-linear only.
 
-3. **ODT** — Off (ACEScct deliverable, default) | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ
-   - Rec.709: `03_ODT_Rec709.cube` or CST. **preview only**, off by default. BT.709 OETF, no RRT.
+4. **ODT** — Off (ACEScct deliverable, default) | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ
+   - Rec.709: `04_ODT_Rec709.cube` or CST. **preview only**, off by default. BT.709 OETF, no RRT.
    - Rec.2100 HLG / PQ: ACES Output Transform / BT.2100 OCIO Builtin (no homemade curve). Implemented (unverified). Not a support claim.
-   - Contains **no** white balance. Optional later node.
+   - Contains **no** white balance and **no** exposure. Optional later node.
 
-## How to bypass WB in Resolve
+## How to bypass Exposure / WB in Resolve
 
 Color page, serial node graph:
 
 - Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or CST camera → ACEScct, ACES workflow).
-- Apply **WB** (node 2: LUT `02_WB.cube`, **or** DCTL `02_WB.dctl`, **or** import `02_WB.cdl` onto a Color Corrector).
-- Apply **ODT** (node 3: LUT `03_ODT_Rec709.cube`, or CST ACEScct → Rec.709) if you need a 709 viewing/output node.
+- Apply **Exposure** (node 2: LUT `02_Exposure.cube` or DCTL `02_Exposure.dctl`). Zero stops or bypass = identity.
+- Apply **WB** (node 3: LUT `03_WB.cube`, **or** DCTL `03_WB.dctl`, **or** import `03_WB.cdl` onto a Color Corrector).
+- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) if you need a 709 viewing/output node.
 
-To bypass WB: disable node 2 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). The remaining graph is **IDT → working space (ACEScct) → optional Rec.709 ODT**. Camera linear after IDT is uncorrected.
+To bypass Exposure: disable node 2 (or tick DCTL **Bypass Exposure**, or leave stops at 0). To bypass WB: disable node 3 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). The remaining graph is **IDT → (optional Exposure) → ACEScct → optional Rec.709 ODT**.
 
 Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview only.
 
@@ -586,16 +723,18 @@ Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview onl
 
 | File | Role |
 | --- | --- |
-| `graph.xml` | Machine-readable node graph (bypassable WB) |
+| `graph.xml` | Machine-readable node graph (bypassable Exposure + WB) |
 | `graph.dot` | Graphviz of the same graph |
-| `01_IDT_<idt>.cube` | IDT LUT (no WB) |
-| `02_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |
-| `02_WB.cdl` / `02_WB.ccc` | WB as ASC CDL Color Corrector |
-| `02_WB.dctl` | WB as DCTL (exact 3×3) |
-| `03_ODT_Rec709.cube` | Rec.709 ODT (no WB) |
+| `01_IDT_<idt>.cube` | IDT LUT (no WB, no exposure) |
+| `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |
+| `02_Exposure.dctl` | Exposure as DCTL (linear gain) |
+| `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |
+| `03_WB.cdl` / `03_WB.ccc` | WB as ASC CDL Color Corrector |
+| `03_WB.dctl` | WB as DCTL (exact 3×3) |
+| `04_ODT_Rec709.cube` | Rec.709 ODT (no WB) |
 | `README_RESOLVE.md` | This file |
 
-M1 is a serial node graph (IDT → WB → ODT), not a general node editor. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
+M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
 """
 
 
@@ -611,10 +750,13 @@ def export_resolve_bundle(
     odt_enabled: bool = False,
     odt: str | None = None,
     graph: SerialGraph | None = None,
+    exposure_stops: float = 0.0,
+    exposure_enabled: bool = True,
 ) -> list[Path]:
     """Write a Resolve-importable graph (XML, DOT, CDL, DCTL, cubes, README).
 
-    Bypass flags come from ``graph`` when given (node 2 off = IDT → ACEScct, no bake).
+    Bypass flags come from ``graph`` when given. Exposure is its own
+    1D/gain node (not baked into IDT or WB when stops=0).
     Default timeline is ACEScct / ACES2065-1. Rec.709 ODT is preview, off by default.
     """
     dest = Path(dest)
@@ -627,6 +769,8 @@ def export_resolve_bundle(
         method = graph.wb_method
         odt_enabled = graph.odt_enabled
         odt = graph.odt
+        exposure_stops = graph.exposure_stops
+        exposure_enabled = graph.exposure_enabled
     else:
         graph = graph_from_export_args(
             idt_id=idt_ids[0] if idt_ids else None,
@@ -636,6 +780,8 @@ def export_resolve_bundle(
             odt_enabled=odt_enabled,
             method=method,
             odt=odt,
+            exposure_stops=exposure_stops,
+            exposure_enabled=exposure_enabled,
         )
     seen: list[str] = []
     for i in idt_ids:
@@ -651,14 +797,22 @@ def export_resolve_bundle(
         written.append(p)
         return p
 
-    _w("README_RESOLVE.md", format_readme(idt_ids, cct, tint, include_wb))
+    _w("README_RESOLVE.md", format_readme(
+        idt_ids, cct, tint, include_wb,
+        exposure_stops=exposure_stops, exposure_enabled=exposure_enabled,
+    ))
     _w("graph.xml", format_graph_xml(idt_ids, cct, tint, include_wb, method, odt_enabled=odt_enabled, graph=graph))
-    _w("graph.dot", format_dot(idt_ids, cct, tint, include_wb))
-    _w("02_WB.cdl", format_cdl(cct, tint, method))
-    _w("02_WB.ccc", format_ccc(cct, tint, method))
-    _w("02_WB.dctl", format_dctl(cct, tint, method))
-    _w("02_WB.cube", wb_cube_bytes(cct, tint, size=lut_size, method=method))
-    _w("03_ODT_Rec709.cube", odt_cube_bytes(size=lut_size))
+    _w("graph.dot", format_dot(
+        idt_ids, cct, tint, include_wb,
+        exposure_stops=exposure_stops, exposure_enabled=exposure_enabled,
+    ))
+    _w("02_Exposure.cube", exposure_cube_bytes(exposure_stops if exposure_enabled else 0.0))
+    _w("02_Exposure.dctl", format_exposure_dctl(exposure_stops if exposure_enabled else 0.0))
+    _w("03_WB.cdl", format_cdl(cct, tint, method))
+    _w("03_WB.ccc", format_ccc(cct, tint, method))
+    _w("03_WB.dctl", format_dctl(cct, tint, method))
+    _w("03_WB.cube", wb_cube_bytes(cct, tint, size=lut_size, method=method))
+    _w("04_ODT_Rec709.cube", odt_cube_bytes(size=lut_size))
     for idt_id in idt_ids:
         _w(f"01_IDT_{idt_id}.cube", idt_cube_bytes(idt_id, size=lut_size))
     return written
