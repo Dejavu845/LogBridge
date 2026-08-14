@@ -44,9 +44,9 @@ Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable colo
 - Click a node to inspect parameters. Exposure inspector when Exposure is selected. WB / Exposure / ODT are bypassable; IDT is not.
 - WB off = IDT → Exposure → ACEScct, no bake in preview and in Resolve export (`graph.xml` `enabled="false"`).
 - WB CAT runs in ACES2065-1 (AP0) scene-linear, never on ACEScct-encoded values. Preview cache stores post-IDT linear; exposure + WB apply in linear.
-- **As-shot writes only the existing linear AP0 CAT node.** Camera-private CCT + tint (ARRI MXF, Sony Acquisition, Canon vendor, RED RMD, Apple/DJI if present). Not QuickTime nclc. Never a CAT on camera-log or ACEScct-encoded values. User can still change CCT/tint or bypass WB.
-- **Missing CCT/tint → pending / identity.** Do not guess 5600 or 6504.
-- **Grey-card pick** samples **after IDT in ACES2065-1 (AP0) linear** and overrides metadata. Implemented (unverified).
+- **As-shot writes only the existing linear AP0 CAT node** (knobs / UI only). Camera-private CCT + tint (ARRI MXF, Sony Acquisition, Canon vendor, RED RMD, Apple/DJI if present). Not QuickTime nclc. Never a CAT on camera-log or ACEScct-encoded values. Log IDTs assume already white-balanced; **default CAT is identity**. Do not treat as-shot 5600/6504 as an illuminant (double WB). Apply CAT only when the user moves CCT/tint away from as-shot, or on a grey-card override. User can still change CCT/tint or bypass WB.
+- **Missing CCT/tint → knobs empty / pending / identity.** Do not guess 5600 or 6504.
+- **Grey-card pick** samples **after IDT in ACES2065-1 (AP0) linear**, sets CCT/tint, and **that is a real CAT** (override; identity only if sampled D65). Implemented (unverified).
 - Rec.709 ODT is preview only, off by default. Off = ACEScct deliverable. UI must not imply grading on the 709 pane as a finished picture (预览·非成片).
 - Rec.2100 HLG / PQ: HDR OT via ACES/BT.2100 BuiltinTransform (unverified). No homemade HLG/PQ curve. Not supported.
 - Not a general node editor. No sat / unlisted grade nodes.
@@ -88,10 +88,12 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 
 ## As-shot white balance
 
-- Default of the existing linear AP0 CAT WB node is as-shot CCT + tint from camera-private metadata.
-- Metadata CCT 5600 uses that CAT (D65 / 6504 K CAT remains identity).
-- Missing CCT does **not** apply 5600 K. Identity / as-shot unknown pending.
-- Grey-card / pick-neutral overrides as-shot. Golden grey-card samples are still required. Labels stay **implemented (unverified)**.
+- As-shot CCT + tint from camera-private metadata fills the WB knobs (UI only).
+- Default CAT is identity. Log IDTs assume the image is already white-balanced.
+- Do **not** treat as-shot 5600/6504 as an illuminant and CAT toward D65 (double WB).
+- Apply AP0 CAT only when the user moves CCT/tint away from as-shot, or on a grey-card override.
+- Missing CCT does **not** apply 5600 K. Knobs empty / pending / identity.
+- Grey-card / pick-neutral overrides as-shot and **is** a real CAT (identity only if sampled D65). Golden grey-card samples are still required. Labels stay **implemented (unverified)**.
 
 ## Media (no manufacturer demos)
 

@@ -133,7 +133,9 @@ def white_balance_matrix(
     ACEScct-encoded values — decode to AP0 linear first (or stay in AP0
     after IDT). Identity (within numerical tolerance) at 6504 K, tint 0.
 
-    ``cct is None`` is as-shot unknown: return identity. Do not guess 5600 K.
+    ``cct is None`` is identity (pending / as-shot-unmoved at the graph
+    layer). Do not guess 5600 K. As-shot metadata must not be passed here
+    as an illuminant — that is double WB; see ``effective_cat_cct``.
     """
     if cct is None:
         return np.eye(3, dtype=np.float64)

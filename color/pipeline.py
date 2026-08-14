@@ -11,8 +11,9 @@ Rec.709 is a preview-only ODT, not the standard Resolve deliverable.
 Every IDT goes to ACES2065-1. Exposure is rgb * (2 ** stops) in that linear
 domain (default 0 = identity; not a log-code add). WB (Bradford/CAT02) runs
 in AP0 linear — never as a CAT on ACEScct-encoded values.
-As-shot CCT/tint from camera-private metadata is the WB default; missing CCT
-is identity (do not guess 5600 K). Grey-card overrides as-shot. Encode ACEScct only
+As-shot CCT/tint from camera-private metadata fills the WB knobs (UI only);
+default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT
+is identity (do not guess 5600 K). Grey-card override is a real CAT. Encode ACEScct only
 for grading / preview display. Do not use DaVinci Wide Gamut Intermediate as
 the internal reference.
 """

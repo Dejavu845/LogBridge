@@ -98,7 +98,8 @@ final class PreviewEngine: ObservableObject {
         if graph.exposureEnabled {
             PreviewColor.applyExposure(rgb: &work, stops: graph.exposureStops)
         }
-        // Pending as-shot (no CCT) is identity — do not guess 5600 or 6504.
+        // As-shot-unmoved and missing CCT are identity — do not guess 5600 or 6504.
+        // effectiveWBCCT is nil until the user moves knobs or picks a grey card.
         if graph.wbEnabled, let cct = graph.effectiveWBCCT {
             PreviewColor.applyWB(
                 rgb: &work,

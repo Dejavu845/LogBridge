@@ -1,16 +1,27 @@
-"""As-shot WB: write CCT/tint onto the existing linear AP0 CAT node.
+"""As-shot WB: fill CCT/tint knobs; default CAT is identity.
+
+Log IDTs assume the image is already white-balanced (neutrals are
+neutral after IDT). Camera CCT/tint metadata is UI only — fill the
+knobs as “as-shot”. Default CAT is identity.
+
+Apply the existing linear AP0 CAT **only** when the user moves CCT/tint
+away from the as-shot values, or applies a grey-card override.
 
 Review locks:
   * As-shot writes ONLY the existing linear AP0 CAT node. Never CAT on
     camera-log or ACEScct-encoded values.
-  * Missing CCT/tint → pending / identity. Do not guess 5600 or 6504.
-  * Grey-card pick samples after IDT in ACES2065-1 (AP0) linear and
-    overrides metadata.
+  * Do NOT treat as-shot 5600/6504 as an illuminant and CAT toward D65
+    again (double WB).
+  * Missing CCT/tint → knobs empty / pending, identity CAT, no 5600 guess.
+  * Grey-card pick samples after IDT in ACES2065-1 (AP0) linear, sets
+    CCT/tint, and THAT is a real CAT (override). Identity only if the
+    sample is D65.
   * Resolve WB node remains bypassable.
   * Status: implemented (unverified). Not a support claim.
 
 6504 K remains the D65 identity of the CAT math when a caller *explicitly*
-sets that CCT. It is never filled in when as-shot metadata is missing.
+sets that CCT (user move or grey-card). It is never filled in when
+as-shot metadata is missing.
 """
 
 from __future__ import annotations
@@ -28,7 +39,7 @@ WB_SOURCE_USER = "user"
 WB_SOURCE_MANUAL = WB_SOURCE_USER
 
 PENDING_NOTE = (
-    "Missing as-shot CCT/tint; pending / identity "
+    "Missing as-shot CCT/tint; knobs empty / pending, identity CAT "
     "(do not guess 5600 or 6504). Implemented (unverified)."
 )
 
@@ -52,7 +63,8 @@ class AsShotWB:
 
     @property
     def is_identity(self) -> bool:
-        return self.pending
+        """Pending and unmodified as-shot are identity CAT (UI only)."""
+        return self.source in (WB_SOURCE_UNKNOWN, WB_SOURCE_AS_SHOT)
 
 
 UNKNOWN_AS_SHOT = AsShotWB(
@@ -155,8 +167,10 @@ def read_as_shot_wb(meta: dict | None) -> AsShotWB:
         tint=0.0 if tint is None else float(tint),
         source=WB_SOURCE_AS_SHOT,
         note=(
-            "As-shot CCT/tint from camera-private metadata. "
-            "Writes the existing AP0 CAT node. Implemented (unverified)."
+            "As-shot CCT/tint from camera-private metadata (UI only). "
+            "Log IDT assumes already white-balanced; CAT stays identity. "
+            "Do not CAT as-shot 5600/6504 toward D65 (double WB). "
+            "Implemented (unverified)."
         ),
     )
 
@@ -178,7 +192,8 @@ def pick_neutral_from_linear_rgb(linear_rgb, rgb_space: str = "AP0") -> AsShotWB
         source=WB_SOURCE_GREY,
         note=(
             "Grey-card pick after IDT in ACES2065-1 (AP0) linear; overrides metadata. "
-            "Writes the existing AP0 CAT node. Implemented (unverified)."
+            "This is a real AP0 CAT (identity only if the sample is D65). "
+            "Implemented (unverified)."
         ),
     )
 
@@ -188,8 +203,63 @@ def grey_card_from_ap0(ap0_rgb) -> AsShotWB:
     return pick_neutral_from_linear_rgb(ap0_rgb, rgb_space="AP0")
 
 
+def knobs_match_as_shot(
+    wb_cct: float | None,
+    wb_tint: float,
+    as_shot_cct: float | None,
+    as_shot_tint: float,
+    *,
+    cct_tol: float = 0.5,
+    tint_tol: float = 1e-3,
+) -> bool:
+    """True when the knobs still sit on the as-shot metadata values."""
+    if wb_cct is None or as_shot_cct is None:
+        return False
+    return (
+        abs(float(wb_cct) - float(as_shot_cct)) <= cct_tol
+        and abs(float(wb_tint) - float(as_shot_tint)) <= tint_tol
+    )
+
+
+def effective_cat_cct(
+    *,
+    wb_cct: float | None,
+    wb_tint: float = 0.0,
+    wb_source: str = WB_SOURCE_UNKNOWN,
+    as_shot_cct: float | None = None,
+    as_shot_tint: float = 0.0,
+) -> float | None:
+    """CCT fed to the AP0 CAT, or None for identity.
+
+    Log IDTs assume the image is already white-balanced. Camera CCT/tint
+    is UI only (as-shot knobs). Default CAT is identity — do not treat
+    as-shot 5600/6504 as an illuminant and CAT toward D65 (double WB).
+
+    Apply CAT only when the user moves CCT/tint away from as-shot, or
+    on a grey-card override (real CAT; identity only if the sample is D65).
+
+    Missing CCT: identity, no 5600 guess.
+
+    An explicit CCT with source ``user`` / ``grey`` / unknown-but-set
+    (CLI / unit construction) is a real CAT. Source ``as_shot`` is never
+    a CAT, even at 3200 or 5600.
+    """
+    if wb_cct is None:
+        return None
+    if wb_source == WB_SOURCE_AS_SHOT:
+        return None
+    if wb_source == WB_SOURCE_USER and knobs_match_as_shot(
+        wb_cct, wb_tint, as_shot_cct, as_shot_tint
+    ):
+        return None
+    return float(wb_cct)
+
+
 def wb_defaults_from_as_shot(shot: AsShotWB) -> dict:
-    """SerialGraph field defaults. Pending → identity, no 5600/6504 guess."""
+    """SerialGraph field defaults. Knobs from as-shot; CAT stays identity.
+
+    Pending → knobs empty, identity, no 5600/6504 guess.
+    """
     if shot.known:
         return {
             "wb_cct": float(shot.cct),
@@ -210,6 +280,6 @@ def wb_defaults_from_as_shot(shot: AsShotWB) -> dict:
 
 
 def write_as_shot_to_graph(graph, shot: AsShotWB):
-    """Populate the existing WB node. No new node. No log/ACEScct CAT."""
+    """Populate the existing WB knobs (UI only). CAT stays identity."""
     graph.apply_as_shot(shot)
     return graph

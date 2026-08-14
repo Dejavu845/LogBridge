@@ -168,7 +168,7 @@ private struct WBInspector: View {
             }
             .frame(maxWidth: 220)
         }
-        Text("As-shot writes only this linear AP0 CAT node (not log, not ACEScct). Camera-private CCT/tint (not nclc). Grey-card pick samples after IDT in ACES2065-1 (AP0) linear and overrides metadata. Missing CCT/tint is pending / identity — do not guess 5600 or 6504. Implemented (unverified). Disable this node in Resolve (or DCTL Bypass WB) = IDT → Exposure → ACEScct, no bake.")
+        Text("As-shot CCT/tint fills these knobs (UI only). Log IDTs assume already white-balanced — default CAT is identity. Do not treat as-shot 5600/6504 as an illuminant (double WB). AP0 CAT applies only when you move CCT/tint away from as-shot, or pick a grey card (after IDT, ACES2065-1 (AP0) linear). Missing CCT/tint is pending / identity — do not guess 5600 or 6504. Implemented (unverified). Disable this node in Resolve (or DCTL Bypass WB) = IDT → Exposure → ACEScct, no bake.")
             .font(.caption)
             .foregroundStyle(.secondary)
     }

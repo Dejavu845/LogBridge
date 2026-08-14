@@ -691,7 +691,7 @@ def format_graph_xml(
     <File role="dctl">02_Exposure.dctl</File>
   </Node>
   <Node index="3" name="WB" type="Corrector" bypassable="true" enabled="{wb_enabled}" method="{_xml_escape(method)}">
-    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. As-shot writes this node only. Missing CCT/tint is pending / identity (do not guess 5600 or 6504). Bypass this node in Resolve (Color page: disable WB, or DCTL Bypass WB, or skip 03_WB.cube). Remaining graph is IDT → Exposure → ACEScct, no bake.</Description>
+    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. As-shot CCT/tint fills knobs (UI only); default CAT is identity — do not treat as-shot 5600/6504 as an illuminant (double WB). CAT applies when the user moves knobs or on a grey-card override. Missing CCT/tint is pending / identity (do not guess 5600 or 6504). Bypass this node in Resolve (Color page: disable WB, or DCTL Bypass WB, or skip 03_WB.cube). Remaining graph is IDT → Exposure → ACEScct, no bake.</Description>
     {cct_xml}
     <Tint>{tint:.6f}</Tint>
     <WBSource>{_xml_escape(wb_source)}</WBSource>
@@ -745,7 +745,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
    - `03_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in ACES2065-1 (AP0), wrapped in ACEScct so it sits on the ACEScct timeline.
    - `03_WB.dctl` — same 3×3 as a DCTL (Decode ACEScct → matrix → Encode ACEScct). Checkbox **Bypass WB** inside the DCTL, or disable the node.
    - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
-   - CCT {_cct_label(cct)}, tint {tint}, method Bradford (CAT02 selectable in code). As-shot default; missing CCT is identity (not 5600 K). Scene-linear only.
+   - CCT {_cct_label(cct)}, tint {tint}, method Bradford (CAT02 selectable in code). As-shot fills knobs (UI only); default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT is identity (not 5600 K). Scene-linear only.
 
 4. **ODT** — Off (ACEScct deliverable, default) | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ
    - Rec.709: `04_ODT_Rec709.cube` or CST. **preview only**, off by default. BT.709 OETF, no RRT.
@@ -817,6 +817,7 @@ def export_resolve_bundle(
         odt = graph.odt
         exposure_stops = graph.exposure_stops
         exposure_enabled = graph.exposure_enabled
+        cat_cct = graph.effective_wb_cct
     else:
         graph = graph_from_export_args(
             idt_id=idt_ids[0] if idt_ids else None,
@@ -829,6 +830,7 @@ def export_resolve_bundle(
             exposure_stops=exposure_stops,
             exposure_enabled=exposure_enabled,
         )
+        cat_cct = graph.effective_wb_cct
     seen: list[str] = []
     for i in idt_ids:
         if i in IDT_PAIRS and i not in seen:
@@ -854,10 +856,12 @@ def export_resolve_bundle(
     ))
     _w("02_Exposure.cube", exposure_cube_bytes(exposure_stops if exposure_enabled else 0.0))
     _w("02_Exposure.dctl", format_exposure_dctl(exposure_stops if exposure_enabled else 0.0))
-    _w("03_WB.cdl", format_cdl(cct, tint, method))
-    _w("03_WB.ccc", format_ccc(cct, tint, method))
-    _w("03_WB.dctl", format_dctl(cct, tint, method))
-    _w("03_WB.cube", wb_cube_bytes(cct, tint, size=lut_size, method=method))
+    # Knobs (cct) stay in XML/README; CAT files use effective_wb_cct
+    # so as-shot-unmoved exports identity (no double WB).
+    _w("03_WB.cdl", format_cdl(cat_cct, tint, method))
+    _w("03_WB.ccc", format_ccc(cat_cct, tint, method))
+    _w("03_WB.dctl", format_dctl(cat_cct, tint, method))
+    _w("03_WB.cube", wb_cube_bytes(cat_cct, tint, size=lut_size, method=method))
     _w("04_ODT_Rec709.cube", odt_cube_bytes(size=lut_size))
     for idt_id in idt_ids:
         _w(f"01_IDT_{idt_id}.cube", idt_cube_bytes(idt_id, size=lut_size))

@@ -7,10 +7,13 @@ Not a node editor. Used by ``pipeline`` and Resolve export.
                  Not a log-code add. Bypassable / zeroable. Own export node
                  (1D / gain); not baked into IDT or WB when stops=0.
   3. WB        — Bradford/CAT02 in ACES2065-1 scene-linear (AP0). Never a CAT
-                 on ACEScct-encoded values. Default CCT/tint is as-shot from
-                 camera-private metadata (not nclc). Grey-card / pick-neutral
-                 overrides metadata. Missing CCT is identity / as-shot unknown
-                 — do not guess 5600 K. Bypassable.
+                 on ACEScct-encoded values. As-shot CCT/tint from camera-private
+                 metadata (not nclc) fills the knobs (UI only). Default CAT is
+                 identity — Log IDTs assume already white-balanced. Do not CAT
+                 as-shot 5600/6504 toward D65 (double WB). Apply CAT only when
+                 the user moves CCT/tint away from as-shot, or on a grey-card
+                 override. Missing CCT: knobs empty / pending, identity, no
+                 5600 guess. Bypassable.
   4. ODT       — Off (ACEScct deliverable, default) | Rec.709 preview |
                  Rec.2100 HLG | Rec.2100 PQ. Rec.709 is preview only (DIY
                  BT.709 OETF, no RRT). HLG/PQ are ACES Output Transform /
@@ -50,6 +53,7 @@ from .as_shot import (
     WB_SOURCE_USER,
     AsShotWB,
     UNKNOWN_AS_SHOT,
+    effective_cat_cct,
     pick_neutral_from_linear_rgb,
     read_as_shot_wb,
     wb_defaults_from_as_shot,
@@ -108,10 +112,13 @@ class SerialGraph:
     """Fixed four-node graph: IDT → Exposure → WB → ODT.
 
     Exposure is stop-based linear gain in ACES2065-1 (default 0 = identity).
-    WB is bypassable. Default CCT/tint is as-shot camera-private metadata
-    (not nclc). ``wb_cct is None`` / ``wb_source==unknown`` is identity —
-    do not guess 5600 K. Grey-card overrides as-shot. ``odt`` selects Off |
-    Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ.
+    WB is bypassable. As-shot camera-private CCT/tint (not nclc) fills the
+    knobs (UI only). Default CAT is identity — do not treat as-shot
+    5600/6504 as an illuminant (double WB). ``wb_cct is None`` /
+    ``wb_source==as_shot`` is identity — do not guess 5600 K. CAT applies
+    when the user moves knobs away from as-shot, or on a grey-card
+    override. ``odt`` selects Off | Rec.709 preview | Rec.2100 HLG |
+    Rec.2100 PQ.
     """
 
     idt_id: str | None = None
@@ -203,7 +210,7 @@ class SerialGraph:
 
     @classmethod
     def from_as_shot(cls, as_shot: AsShotWB | None = None, **kwargs) -> "SerialGraph":
-        """Build a graph whose WB node default is as-shot (or identity if unknown)."""
+        """Build a graph whose WB knobs default to as-shot (CAT stays identity)."""
         shot = as_shot if as_shot is not None else UNKNOWN_AS_SHOT
         defaults = wb_defaults_from_as_shot(shot)
         defaults.update(kwargs)
@@ -215,7 +222,7 @@ class SerialGraph:
         return cls.from_as_shot(read_as_shot_wb(meta), **kwargs)
 
     def apply_as_shot(self, as_shot: AsShotWB) -> None:
-        """Write as-shot CCT/tint into the WB node as the default."""
+        """Write as-shot CCT/tint into the WB knobs (UI only). CAT stays identity."""
         self.as_shot_cct = as_shot.cct
         self.as_shot_tint = float(as_shot.tint)
         if as_shot.known:
@@ -246,7 +253,7 @@ class SerialGraph:
         return self.pick_neutral(ap0_rgb, rgb_space="AP0")
 
     def set_user_wb(self, cct: float, tint: float | None = None) -> None:
-        """User CCT/tint override (still bypassable)."""
+        """User CCT/tint override — a real CAT if knobs leave as-shot."""
         self.wb_cct = float(cct)
         if tint is not None:
             self.wb_tint = float(tint)
@@ -260,14 +267,21 @@ class SerialGraph:
 
     @property
     def effective_wb_cct(self) -> float | None:
-        """CCT applied by the CAT, or None when pending (identity).
+        """CCT applied by the CAT, or None when identity.
 
-        None means do not apply a guessed illuminant (including 5600 or 6504).
-        An explicit ``wb_cct`` (as-shot, grey-card, or user) is honored.
+        As-shot knobs are UI only — identity even at 3200 or 5600 (no
+        double WB). Missing CCT is identity — do not guess 5600.
+        User move away from as-shot, or grey-card override, applies CAT.
+        An explicit ``wb_cct`` with source user/grey (or a constructed
+        graph that is not as-shot) is honored.
         """
-        if self.wb_cct is None:
-            return None
-        return float(self.wb_cct)
+        return effective_cat_cct(
+            wb_cct=self.wb_cct,
+            wb_tint=self.wb_tint,
+            wb_source=self.wb_source,
+            as_shot_cct=self.as_shot_cct,
+            as_shot_tint=self.as_shot_tint,
+        )
 
     @property
     def exposure_gain(self) -> float:
@@ -313,7 +327,8 @@ class SerialGraph:
         """WB CAT in ACES2065-1 (AP0) scene-linear. Identity when disabled.
 
         Input must be ACES2065-1 linear, not ACEScct-encoded.
-        As-shot unknown (no CCT, no grey pick) is identity — not 5600 K.
+        As-shot knobs (unmoved) and missing CCT are identity — not 5600 K.
+        Do not CAT as-shot 5600/6504 toward D65 (double WB).
         """
         rgb = np.asarray(aces_ap0, dtype=np.float64)
         if not self.wb_enabled:
