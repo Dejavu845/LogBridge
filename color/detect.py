@@ -3,7 +3,7 @@
 Order:
   1. Camera-private metadata (ARRI MXF, Sony Acquisition, Canon vendor, RED RMD)
   2. Filename / model hint
-  3. User picker
+  3. User picker (paired IDTs; one-click process blocked until chosen)
 
 NEVER trust QuickTime ``nclc`` to identify S-Log3 or LogC4.
 NEVER default S-Log3 to S-Gamut3.Cine — if only S-Log3 is known, gamut is
@@ -65,6 +65,24 @@ _MODEL_HINTS = (
 )
 
 
+# UI labels for the paired IDT picker (never two independent lists).
+IDT_PAIR_LABELS = {
+    "arri_logc4_awg4": "LogC4 + AWG4",
+    "sony_slog3_sgamut3": "S-Log3 + S-Gamut3",
+    "sony_slog3_sgamut3cine": "S-Log3 + S-Gamut3.Cine",
+    "sony_slog3_sgamut3_venice": "S-Log3 + S-Gamut3 (Venice)",
+    "sony_slog3_sgamut3cine_venice": "S-Log3 + S-Gamut3.Cine (Venice)",
+    "panasonic_vlog_vgamut": "V-Log + V-Gamut",
+    "fujifilm_flog2_bt2020": "F-Log2 + BT.2020",
+    "nikon_nlog_bt2020": "N-Log + BT.2020",
+    "red_log3g10_rwg": "Log3G10 + REDWideGamutRGB",
+}
+
+SLOG3_PAIRS = ("sony_slog3_sgamut3", "sony_slog3_sgamut3cine")
+SLOG3_VENICE_PAIRS = ("sony_slog3_sgamut3_venice", "sony_slog3_sgamut3cine_venice")
+IMPLEMENTED_NON_VENICE = tuple(k for k in IDT_PAIRS if k not in VENICE_IDTS)
+
+
 @dataclass(frozen=True)
 class Detection:
     idt_id: str | None
@@ -73,11 +91,76 @@ class Detection:
     source: str  # metadata | filename | model | user | unresolved
     needs_user_picker: bool
     note: str
+    venice_detected: bool = False
 
 
 def _pair(idt_id: str, source: str, note: str) -> Detection:
     curve, gamut = IDT_PAIRS[idt_id]
-    return Detection(idt_id, curve, gamut, source, False, note)
+    return Detection(
+        idt_id,
+        curve,
+        gamut,
+        source,
+        False,
+        note,
+        venice_detected=idt_id in VENICE_IDTS,
+    )
+
+
+def _is_slog3(curve: str | None) -> bool:
+    if not curve:
+        return False
+    c = curve.lower().replace("_", "-")
+    return c in {"slog3", "s-log3"}
+
+
+def picker_pairs(
+    *,
+    curve: str | None = None,
+    venice_detected: bool = False,
+    needs_picker: bool = True,
+) -> list[str]:
+    """Paired IDTs for the user picker. Never two independent lists.
+
+    Venice pairs appear only if ``venice_detected``. S-Log3 without a locked
+    gamut offers both S-Gamut3 and S-Gamut3.Cine — never a silent Cine default.
+    """
+    if needs_picker and _is_slog3(curve):
+        return list(SLOG3_VENICE_PAIRS if venice_detected else SLOG3_PAIRS)
+    out = list(IMPLEMENTED_NON_VENICE)
+    if venice_detected:
+        try:
+            i = out.index("sony_slog3_sgamut3cine") + 1
+            out[i:i] = list(SLOG3_VENICE_PAIRS)
+        except ValueError:
+            out.extend(SLOG3_VENICE_PAIRS)
+    return out
+
+
+def picker_pairs_for_detection(d: Detection) -> list[str]:
+    return picker_pairs(
+        curve=d.curve,
+        venice_detected=d.venice_detected,
+        needs_picker=d.needs_user_picker,
+    )
+
+
+def picker_labels(ids: list[str] | None = None, **kwargs) -> list[tuple[str, str]]:
+    """``(idt_id, 'Curve + Gamut')`` rows for the paired picker."""
+    if ids is None:
+        ids = picker_pairs(**kwargs)
+    return [(i, IDT_PAIR_LABELS[i]) for i in ids]
+
+
+def can_one_click_process(detection: Detection) -> bool:
+    """False until a locked implemented pair exists. Block silent defaults."""
+    if detection.needs_user_picker or not detection.idt_id:
+        return False
+    return detection.idt_id in IDT_PAIRS
+
+
+def can_one_click_process_all(detections: list[Detection]) -> bool:
+    return bool(detections) and all(can_one_click_process(d) for d in detections)
 
 
 def detect_from_metadata(meta: dict) -> Detection | None:
@@ -124,8 +207,10 @@ def detect_from_metadata(meta: dict) -> Detection | None:
             None,
             "metadata",
             True,
-            "S-Log3 from Sony metadata without gamut; user must pick S-Gamut3 or S-Gamut3.Cine"
-            + (" (Venice IDT if this is a Venice body)" if venice else ""),
+            "S-Log3 from Sony metadata without gamut; pick a paired IDT "
+            "(S-Log3 + S-Gamut3 or S-Log3 + S-Gamut3.Cine). Never default Cine"
+            + (" (Venice pairs offered — Venice body detected)" if venice else ""),
+            venice_detected=venice,
         )
 
     canon = str(cleaned.get("canon_vendor_gamma", cleaned.get("canon_log", ""))).lower()
@@ -180,9 +265,10 @@ def detect_from_filename(path: str) -> Detection | None:
             None,
             "filename",
             True,
-            "S-Log3 in filename without gamut; user must pick S-Gamut3 or S-Gamut3.Cine (never default Cine"
-            + (" or Venice" if venice else "")
-            + ")",
+            "S-Log3 in filename without gamut; pick a paired IDT "
+            "(S-Log3 + S-Gamut3 or S-Log3 + S-Gamut3.Cine). Never default Cine"
+            + (" (Venice pairs offered)" if venice else ""),
+            venice_detected=venice,
         )
     return None
 
@@ -197,7 +283,9 @@ def detect_from_model(model: str) -> Detection | None:
             None,
             "model",
             True,
-            "Venice camera detected; user must pick S-Gamut3 or S-Gamut3.Cine (Venice Builtin). Never default.",
+            "Venice camera detected; pick a paired IDT "
+            "(S-Log3 + S-Gamut3 (Venice) or S-Log3 + S-Gamut3.Cine (Venice)). Never default.",
+            venice_detected=True,
         )
     for token, idt_id in _MODEL_HINTS:
         if token in m:

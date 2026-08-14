@@ -41,37 +41,27 @@ private struct IDTInspector: View {
                 .foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Curve")
+                    Text("Paired IDT")
                         .font(.caption.weight(.semibold))
-                    Picker("Curve", selection: Binding(
-                        get: { clip.displayCurve ?? "" },
-                        set: { session.setCurve(clip.id, curve: $0) }
+                    // One locked pair per row. Never two independent curve/gamut dropdowns.
+                    Picker("Paired IDT", selection: Binding(
+                        get: { clip.idt },
+                        set: { newValue in
+                            if let idt = newValue {
+                                session.setIDT(clip.id, idt)
+                            }
+                        }
                     )) {
-                        Text("— pick —").tag("")
-                        ForEach(IDT.implementedCurves, id: \.self) { curve in
-                            Text(curve).tag(curve)
+                        Text("— pick a paired IDT —").tag(Optional<IDT>.none)
+                        ForEach(clip.pickerPairs) { pair in
+                            Text(pair.pairLabel).tag(Optional(pair))
                         }
                     }
                     .labelsHidden()
-                    .frame(maxWidth: 200)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Gamut")
-                        .font(.caption.weight(.semibold))
-                    let curve = clip.displayCurve ?? ""
-                    let gamuts = IDT.gamuts(forCurve: curve)
-                    Picker("Gamut", selection: Binding(
-                        get: { clip.displayGamut ?? "" },
-                        set: { session.setGamut(clip.id, gamut: $0) }
-                    )) {
-                        Text(gamuts.isEmpty ? "— pick curve first —" : "— pick gamut —").tag("")
-                        ForEach(gamuts, id: \.self) { g in
-                            Text(g).tag(g)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(maxWidth: 220)
-                    .disabled(curve.isEmpty)
+                    .frame(maxWidth: 320)
+                    Text("S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine. Venice pair only if detected.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Status")
@@ -80,20 +70,25 @@ private struct IDTInspector: View {
                         .font(.caption2)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.orange.opacity(0.2))
+                        .background(clip.isPending ? Color.yellow.opacity(0.28) : Color.orange.opacity(0.2))
                         .clipShape(Capsule())
                     Text("source: \(clip.detectionSource.rawValue)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    if clip.veniceDetected {
+                        Text("Venice detected")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
-            if clip.displayCurve == "S-Log3", clip.idt == nil {
-                Text("S-Log3 requires an explicit gamut. LogBridge never defaults to S-Gamut3.Cine.")
+            if clip.isPending {
+                Text("This clip is pending. Process selected / Apply graph and export are blocked until a locked pair is chosen. Never a silent S-Gamut3.Cine default.")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
         } else {
-            Text("Select a clip. Missing metadata needs a curve and a gamut — no silent default.")
+            Text("Select a clip. Missing metadata needs a paired IDT — no silent default, no two dropdowns.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

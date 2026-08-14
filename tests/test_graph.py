@@ -8,7 +8,8 @@ import pytest
 from color.curves import linear_to_logc4, linear_to_slog3
 from color.graph import EXPORT_SLOTS, SerialGraph, graph_from_export_args
 from color.pipeline import apply_idt, process_to_rec709
-from color.working_space import aces2065_to_acescg
+from color.wb import apply_white_balance
+from color.working_space import aces2065_to_acescct
 from color.resolve_export import export_resolve_bundle, format_graph_xml
 
 
@@ -75,21 +76,40 @@ def test_wb_bypass_matches_pipeline_no_bake():
     assert not np.allclose(on, off, atol=1e-3)
 
 
-def test_odt_off_leaves_working_space_linear():
+def test_odt_off_leaves_aces2065_linear():
     log = _slog3_grey()
     g = SerialGraph(
         idt_id="sony_slog3_sgamut3", wb_enabled=False, odt_enabled=False
     )
     out = g.apply(log)
     aces = apply_idt(log, "sony_slog3_sgamut3")
-    work = aces2065_to_acescg(aces)
-    np.testing.assert_allclose(out, work, atol=1e-12)
-    # Scene-linear 18% grey, not Rec.709 OETF (~0.409).
+    np.testing.assert_allclose(out, aces, atol=1e-12)
+    # Scene-linear 18% grey in ACES2065-1, not Rec.709 OETF (~0.409).
     np.testing.assert_allclose(out, 0.18, atol=5e-4)
     rec = SerialGraph(
         idt_id="sony_slog3_sgamut3", wb_enabled=False, odt_enabled=True
     ).apply(log)
     assert not np.allclose(out, rec, atol=1e-2)
+
+
+def test_odt_defaults_off():
+    g = SerialGraph(idt_id="arri_logc4_awg4")
+    assert g.odt_enabled is False
+    assert g.node(3).enabled is False
+
+
+def test_wb_runs_in_ap0_not_on_acescct():
+    log = _logc4_chroma()
+    g = SerialGraph(
+        idt_id="arri_logc4_awg4", wb_enabled=True, wb_cct=3200.0, odt_enabled=False
+    )
+    out = g.apply(log)
+    aces = apply_idt(log, "arri_logc4_awg4")
+    expected = apply_white_balance(aces, 3200.0, rgb_space="AP0")
+    np.testing.assert_allclose(out, expected, atol=1e-12)
+    enc = aces2065_to_acescct(aces)
+    wrong = apply_white_balance(enc, 3200.0, rgb_space="AP0")
+    assert not np.allclose(out, wrong, atol=1e-3)
 
 
 def test_apply_requires_idt():

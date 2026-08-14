@@ -57,16 +57,32 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var menuLabel: String {
-        if isStub {
-            return "\(curve) / \(gamut) — stub, not implemented"
-        }
+    var isVenice: Bool {
         switch self {
         case .sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice:
-            return "\(curve) / \(gamut) (Venice) — implemented (unverified)"
+            return true
         default:
-            return "\(curve) / \(gamut) — implemented (unverified)"
+            return false
         }
+    }
+
+    /// Paired picker row. Never split into independent curve / gamut menus.
+    var pairLabel: String {
+        switch self {
+        case .sonySLog3SGamut3Venice:
+            return "S-Log3 + S-Gamut3 (Venice)"
+        case .sonySLog3SGamut3CineVenice:
+            return "S-Log3 + S-Gamut3.Cine (Venice)"
+        default:
+            return "\(curve) + \(gamut)"
+        }
+    }
+
+    var menuLabel: String {
+        if isStub {
+            return "\(pairLabel) — stub, not implemented"
+        }
+        return "\(pairLabel) — implemented (unverified)"
     }
 
     /// OCIO colorspace name in ocio/config.ocio.
@@ -95,22 +111,53 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
 
     static var implementedCurves: [String] {
         var seen: [String] = []
-        for idt in implemented where !seen.contains(idt.curve) {
+        for idt in implemented where !idt.isVenice && !seen.contains(idt.curve) {
             seen.append(idt.curve)
         }
         return seen
     }
 
-    static func pairs(forCurve curve: String) -> [IDT] {
-        implemented.filter { $0.curve == curve }
+    static func pairs(forCurve curve: String, veniceDetected: Bool = false) -> [IDT] {
+        pickerPairs(curveHint: curve, veniceDetected: veniceDetected, needsPicker: true)
     }
 
-    static func gamuts(forCurve curve: String) -> [String] {
-        pairs(forCurve: curve).map(\.gamut)
+    static func gamuts(forCurve curve: String, veniceDetected: Bool = false) -> [String] {
+        pairs(forCurve: curve, veniceDetected: veniceDetected).map(\.gamut)
     }
 
     /// Locked pair only. Nil if the curve+gamut combination is not an M1 IDT.
-    static func match(curve: String, gamut: String) -> IDT? {
-        implemented.first { $0.curve == curve && $0.gamut == gamut }
+    /// Prefers the non-Venice pair unless `veniceDetected`.
+    static func match(curve: String, gamut: String, veniceDetected: Bool = false) -> IDT? {
+        let hits = implemented.filter { $0.curve == curve && $0.gamut == gamut }
+        if veniceDetected {
+            return hits.first(where: { $0.isVenice }) ?? hits.first
+        }
+        return hits.first(where: { !$0.isVenice }) ?? hits.first
+    }
+
+    /// Paired IDTs for the picker. Venice rows appear only if Venice is detected.
+    /// S-Log3 needing a pick offers both gamuts — never a silent Cine default.
+    static func pickerPairs(curveHint: String?, veniceDetected: Bool, needsPicker: Bool) -> [IDT] {
+        let slog3 = Self.isSLog3(curveHint)
+        if needsPicker && slog3 {
+            return veniceDetected
+                ? [.sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice]
+                : [.sonySLog3SGamut3, .sonySLog3SGamut3Cine]
+        }
+        var pairs = implemented.filter { !$0.isVenice }
+        if veniceDetected {
+            if let idx = pairs.firstIndex(of: .sonySLog3SGamut3Cine) {
+                pairs.insert(contentsOf: [.sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice], at: pairs.index(after: idx))
+            } else {
+                pairs.append(contentsOf: [.sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice])
+            }
+        }
+        return pairs
+    }
+
+    static func isSLog3(_ curve: String?) -> Bool {
+        guard let curve else { return false }
+        let c = curve.lowercased().replacingOccurrences(of: "_", with: "-")
+        return c == "slog3" || c == "s-log3"
     }
 }

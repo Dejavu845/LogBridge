@@ -27,7 +27,9 @@ Unit tests already assert these encodings mathematically. Golden files are a dif
 - **Source pane is not Rec.709-tagged.** It stays camera/log or working-space / untagged so the split is a real comparison.
 - Rec.709 ODT pixels are not blit into an untagged (Display P3) surface, and are not shown in the source pane.
 
-Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable color space is BT.709 and the source drawable is not.
+Both preview panes overlay **预览·非成片**. 8-bit thumbnail is not a deliverable.
+
+Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable color space is BT.709 and the source drawable is not. Overlay badge text includes 预览·非成片.
 
 ## Serial node graph (M1)
 
@@ -50,7 +52,15 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 ## Other gates
 
 - Detection ignores QuickTime `nclc` for S-Log3 / LogC4.
-- S-Log3 without gamut metadata requires the user picker (never silent Cine).
+- S-Log3 without gamut metadata requires the paired IDT picker (never silent Cine, never two dropdowns). Venice pairs appear only if Venice is detected.
 - Nikon path does not divide 10-bit codes by 1023 before the white-paper curve.
 - Canon C-Log2 stub does not ship an invented negative toe.
 - `ocio/config.ocio` names BuiltinTransform styles; Linux 18% tests use reference curves only.
+
+## Pending IDT / process lock
+
+- Clips without a locked curve+gamut pair stay **pending**.
+- **Process selected** / **Apply graph** and Resolve export are blocked for pending clips.
+- Primary button is "Process selected" or "Apply graph" — never 一键还原.
+- IDT picker is one paired list (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine), not two dropdowns.
+- Venice pairs appear only if a Venice body is detected.

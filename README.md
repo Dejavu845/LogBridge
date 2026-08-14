@@ -6,6 +6,16 @@ M1 is a **serial node graph** (IDT → WB → optional Rec.709 preview), not a g
 
 Internal working encoding: **ACEScct** (AP1 log). Scene-linear interchange / `roles.scene_linear`: **ACES2065-1** (Linear AP0). `roles.color_timing`: ACEScct. White balance is Bradford (or CAT02) chromatic adaptation in ACES2065-1 (AP0) scene-linear only — never a CAT on ACEScct. DaVinci Wide Gamut Intermediate is **not** the default internal or deliverable.
 
+## Usability
+
+- **Empty state:** drag-and-drop a folder of mixed clips is the primary action (big drop zone, short copy: “Drop a folder of mixed clips”). Choosing files is secondary.
+- **Paired IDT picker:** when metadata cannot lock a curve+gamut pair, the UI shows locked pairs — e.g. `S-Log3 + S-Gamut3` and `S-Log3 + S-Gamut3.Cine` — **not** two independent dropdowns (curve vs gamut).
+- **Block process:** one-click process / Resolve export stays disabled until every clip has a locked pair. No silent IDT.
+- **S-Log3:** never silently default to S-Gamut3.Cine. Both pairs are offered; the user must pick one.
+- **Venice:** `S-Log3 + S-Gamut3 (Venice)` and `S-Log3 + S-Gamut3.Cine (Venice)` appear **only if** a Venice body is detected.
+- **Copy / badges:** “implemented (unverified)” — never “supported”, never 一键精准.
+- **Graph:** inspector + node strip stay: IDT → bypassable WB → Rec.709 preview ODT (off by default).
+
 ## OpenColorIO
 
 Mac OpenColorIO uses **BuiltinTransform** styles named in `ocio/config.ocio` (`ARRI_LOGC4_to_ACES2065-1`, `SONY_SLOG3-SGAMUT3_to_ACES2065-1`, `SONY_SLOG3-SGAMUT3.CINE_to_ACES2065-1`, `PANASONIC_VLOG-VGAMUT_to_ACES2065-1`, `RED_LOG3G10-RWG_to_ACES2065-1`). Venice Builtins are detect-only, never a silent S-Log3 default.
@@ -24,7 +34,7 @@ python3 scripts/generate_ocio_assets.py
 2. Open `macos/LogBridge/LogBridge.xcodeproj` in Xcode 15+ (macOS 14 deployment target).
 3. Select the **LogBridge** scheme, destination **My Mac**, and Run.
 
-Layout: drop zone + clip list (LazyVStack) | split preview | node strip | inspector.
+Layout: empty-state drop zone (folder of mixed clips) → clip list (LazyVStack) | split preview | node strip | inspector.
 
 Split preview: the **source** pane is camera/log (untagged working-space dump) and is **not** tagged Rec.709. Only the processed/ODT pane tags `CGColorSpace.itur_709`, and only when the ODT node is on. Rec.709 pixels are never blit into an untagged Display P3 surface.
 
@@ -56,7 +66,7 @@ CI: `.github/workflows/test.yml` runs pytest on Ubuntu.
 | Nikon N-Log / BT.2020 | N-Log | BT.2020 / D65 | ~372 / 10-bit | implemented (unverified) |
 | RED Log3G10 / REDWideGamutRGB | Log3G10 | RWG / D65 | 1/3 | implemented (unverified) |
 
-Sony S-Log3 is **two locked pairs**. Metadata or the user picks the gamut. LogBridge never defaults S-Log3 to S-Gamut3.Cine. Missing metadata opens a **curve and gamut** picker — no silent IDT.
+Sony S-Log3 is **two locked pairs**. Metadata or the user picks a **paired IDT** (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine) — not two dropdowns. LogBridge never defaults S-Log3 to S-Gamut3.Cine. Clips without a locked pair stay **pending**. **Process selected** / **Apply graph** and Resolve export are blocked for those clips. The primary button is never 一键还原. Venice pairs appear only if a Venice body is detected.
 
 Nikon N-Log white-paper `x` is a **10-bit code value 0–1023**. Do not divide by 1023 before the curve. 452 is the breakpoint, not 18% grey (~372). The OCIO LUT is sampled on 0–1 = code/1023 so image buffers stay normalized; the Python API takes 10-bit codes.
 
@@ -66,7 +76,7 @@ Fujifilm F-Log2 uses Data Sheet 1.0 + BT.2020 (`a=5.555556`). Not an F-Log1 LUT.
 
 1. Camera-private metadata (ARRI MXF, Sony Acquisition, Canon vendor, RED RMD)
 2. Filename / model hint
-3. User picker
+3. User picker (paired IDTs; clip stays pending until chosen)
 
 QuickTime `nclc` / `nclx` / `colr` is **never** used to identify S-Log3 or LogC4.
 
@@ -74,9 +84,9 @@ QuickTime `nclc` / `nclx` / `colr` is **never** used to identify S-Log3 or LogC4
 
 Visible graph, three slots — `color/graph.py` `SerialGraph`, used by `color/pipeline.py` and Resolve export:
 
-1. **IDT** (`01_IDT`) — locked curve+gamut pair → ACES2065-1. Not bypassable.
-2. **WB** (`02_WB`) — scene-linear Bradford/CAT02 in **ACES2065-1 (AP0)**, CCT + green-magenta tint. **Bypassable.** Node 2 off = no bake in preview or export (XML `enabled="false"`; disable the Resolve corrector / DCTL **Bypass WB**).
-3. **ODT Rec.709** (`03_ODT`) — optional. Off = ACEScct / ACES2065-1 working-space deliverable (timeline stays ACEScct). Preview tags `CGColorSpace.itur_709` only when this node is on.
+1. **IDT** (`01_IDT`) — locked curve+gamut pair → ACES2065-1. Preview cache stores this AP0 linear buffer. Not bypassable.
+2. **WB** (`02_WB`) — Bradford/CAT02 in **ACES2065-1 (AP0)** scene-linear, CCT + green-magenta tint. Never a CAT on ACEScct-encoded values. **Bypassable.** Node 2 off = IDT → ACEScct, no bake (XML `enabled="false"`; DCTL **Bypass WB**). Export WB is a linear AP0 3×3 (or DI-free DCTL on ACES2065-1 / ACEScct-decoded-to-linear).
+3. **ODT Rec.709** (`03_ODT`) — **preview only**, off by default. Off = ACEScct deliverable (or ACES2065-1 EXR). Not the standard reconstruction or default export. Preview tags `CGColorSpace.itur_709` only when this node is on.
 
 Click a node in the strip to inspect its parameters. No extra grade nodes (exposure/sat).
 
@@ -86,13 +96,13 @@ Python: `from color.graph import SerialGraph`. Swift: `SerialGraph` + `NodeSlot`
 
 Export writes a serial **node graph**, not a prose sidecar: `graph.xml`, `graph.dot`, `01_IDT_<idt>.cube`, `02_WB.cube` / `.cdl` / `.ccc` / `.dctl`, `03_ODT_Rec709.cube`, `README_RESOLVE.md`.
 
-Export default: **ACEScct** timeline / **ACES2065-1**. Rec.709 ODT is an optional preview node (off by default). Implemented (unverified).
+Export default: **ACEScct** timeline / **ACES2065-1**. Rec.709 ODT is an optional preview node (off by default). Export is blocked while any clip is pending (no locked IDT pair). Implemented (unverified).
 
 Python: `from color.resolve_export import export_resolve_bundle` (pass `graph=` or `include_wb=`). Swift: `ResolveExporter.export(to:clips:...)`. Status: implemented (unverified).
 
 ## Preview vs full render
 
-The macOS split preview is **not** a full-resolution render:
+The macOS split preview is **not** a full-resolution render. Both panes show a **预览·非成片** badge (8-bit thumbnail is not a deliverable).
 
 - One downscaled frame per clip (long edge ≤ 1920) via ImageIO thumbnail or `AVAssetImageGenerator` (VideoToolbox).
 - Cached per clip: decoded camera/log buffer + IDT **ACES2065-1 linear** buffer. IDT change invalidates linear; WB toggles that AP0 buffer. Clip change reuses the decode if the URL is unchanged.
@@ -115,6 +125,7 @@ No golden samples have been measured. Do not claim accuracy. See `ACCEPTANCE.md`
 - Camera-protocol reverse engineering, marketplace integrations
 - Treating QuickTime nclc as log identity
 - Using the preview as a substitute for a full render
+- 一键还原 / claiming a one-click restore (primary actions are Process selected / Apply graph)
 
 ## Layout
 

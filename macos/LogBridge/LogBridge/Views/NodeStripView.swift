@@ -23,6 +23,12 @@ struct NodeStripView: View {
                 .onTapGesture { session.selectedNode = slot }
             }
             Spacer(minLength: 8)
+            Button("Apply graph") {
+                session.applyGraph()
+            }
+            .controlSize(.small)
+            .disabled(!session.canProcessSelected)
+            .help("Apply the serial graph to the selected clip. Blocked while pending. Never 一键还原.")
             Text("serial only · implemented (unverified)")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)

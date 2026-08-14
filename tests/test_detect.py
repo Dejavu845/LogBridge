@@ -3,7 +3,19 @@
 Never trust QuickTime nclc. Never default S-Log3 to S-Gamut3.Cine.
 """
 
-from color.detect import detect_clip, detect_from_filename, detect_from_metadata
+from color.detect import (
+    SLOG3_PAIRS,
+    SLOG3_VENICE_PAIRS,
+    can_one_click_process,
+    can_one_click_process_all,
+    detect_clip,
+    detect_from_filename,
+    detect_from_metadata,
+    picker_labels,
+    picker_pairs,
+    picker_pairs_for_detection,
+)
+from color.gamuts import VENICE_IDTS as GAMUT_VENICE
 
 
 def test_arri_mxf_metadata_wins():
@@ -105,3 +117,91 @@ def test_venice_model_alone_does_not_default_gamut():
 def test_slog3_without_venice_is_not_venice():
     d = detect_from_filename("A001_SLog3_SGamut3.mov")
     assert d.idt_id == "sony_slog3_sgamut3"
+
+def test_picker_slog3_without_venice_is_two_paired_idts():
+    pairs = picker_pairs(curve="slog3", venice_detected=False, needs_picker=True)
+    assert pairs == list(SLOG3_PAIRS)
+    assert "sony_slog3_sgamut3cine_venice" not in pairs
+    labels = [lab for _, lab in picker_labels(pairs)]
+    assert labels == ["S-Log3 + S-Gamut3", "S-Log3 + S-Gamut3.Cine"]
+    # Never a silent Cine default: both pairs offered, Cine is not first.
+    assert pairs[0] == "sony_slog3_sgamut3"
+
+
+def test_picker_slog3_venice_only_if_detected():
+    pairs = picker_pairs(curve="slog3", venice_detected=True, needs_picker=True)
+    assert pairs == list(SLOG3_VENICE_PAIRS)
+    assert set(pairs) <= set(GAMUT_VENICE)
+    labels = [lab for _, lab in picker_labels(pairs)]
+    assert labels == [
+        "S-Log3 + S-Gamut3 (Venice)",
+        "S-Log3 + S-Gamut3.Cine (Venice)",
+    ]
+
+
+def test_picker_unresolved_excludes_venice():
+    pairs = picker_pairs(curve=None, venice_detected=False, needs_picker=True)
+    assert "sony_slog3_sgamut3" in pairs
+    assert "sony_slog3_sgamut3cine" in pairs
+    assert not (set(pairs) & set(GAMUT_VENICE))
+    # Labels are paired, not split curve/gamut.
+    for _, lab in picker_labels(pairs):
+        assert " + " in lab
+
+
+def test_picker_unresolved_includes_venice_only_when_detected():
+    pairs = picker_pairs(curve=None, venice_detected=True, needs_picker=True)
+    assert "sony_slog3_sgamut3_venice" in pairs
+    assert "sony_slog3_sgamut3cine_venice" in pairs
+
+
+def test_one_click_blocked_until_pair_chosen():
+    pending = detect_from_filename("A001_SLog3_take.mov")
+    assert pending.needs_user_picker
+    assert pending.idt_id is None
+    assert can_one_click_process(pending) is False
+    locked = detect_from_filename("A001_SLog3_SGamut3.mov")
+    assert can_one_click_process(locked) is True
+    assert can_one_click_process_all([pending, locked]) is False
+    assert can_one_click_process_all([locked]) is True
+
+
+def test_filename_venice_slog3_without_gamut_offers_venice_pairs():
+    d = detect_from_filename("A001_Venice_SLog3_take.mov")
+    assert d.needs_user_picker
+    assert d.venice_detected
+    assert d.idt_id is None
+    assert can_one_click_process(d) is False
+    pairs = picker_pairs_for_detection(d)
+    assert pairs == list(SLOG3_VENICE_PAIRS)
+
+
+def test_filename_slog3_without_venice_does_not_offer_venice_pairs():
+    d = detect_from_filename("A001_SLog3_take.mov")
+    assert d.venice_detected is False
+    pairs = picker_pairs_for_detection(d)
+    assert pairs == list(SLOG3_PAIRS)
+    assert not (set(pairs) & set(GAMUT_VENICE))
+
+
+def test_metadata_slog3_venice_body_without_gamut():
+    d = detect_from_metadata(
+        {
+            "sony_acquisition_gamma": "S-Log3",
+            "sony_camera_model": "VENICE 2",
+        }
+    )
+    assert d.needs_user_picker
+    assert d.venice_detected
+    assert d.gamut is None
+    assert can_one_click_process(d) is False
+    assert picker_pairs_for_detection(d) == list(SLOG3_VENICE_PAIRS)
+
+
+def test_user_pick_locks_pair_and_unblocks_process():
+    pending = detect_clip("A001_SLog3_take.mov")
+    assert can_one_click_process(pending) is False
+    chosen = detect_clip("A001_SLog3_take.mov", user_idt="sony_slog3_sgamut3")
+    assert chosen.idt_id == "sony_slog3_sgamut3"
+    assert chosen.source == "user"
+    assert can_one_click_process(chosen) is True

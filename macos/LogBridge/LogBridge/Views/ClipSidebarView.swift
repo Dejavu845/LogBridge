@@ -20,7 +20,7 @@ struct ClipSidebarView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
 
-            Text("Detection: camera-private metadata → filename/model → user picker. QuickTime nclc is never used. Missing metadata needs curve and gamut.")
+            Text("Detection: camera-private metadata → filename/model → paired IDT picker. QuickTime nclc is never used. Process stays blocked until a pair is locked.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
@@ -50,12 +50,20 @@ private struct DropZone: View {
         VStack(spacing: 4) {
             Image(systemName: "square.and.arrow.down")
                 .font(empty ? .title2 : .body)
-            Text(empty ? "Drop files or a folder" : "Drop to add clips")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(empty ? "Drop a folder of mixed clips" : "Drop a folder to add")
+                .font(empty ? .subheadline.weight(.semibold) : .caption)
+                .foregroundStyle(.primary)
+            if empty {
+                Text("implemented (unverified)")
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.2))
+                    .clipShape(Capsule())
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(empty ? 20 : 8)
+        .padding(empty ? 28 : 8)
         .background(targeted ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.04))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
@@ -84,7 +92,7 @@ struct ClipRow: View {
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(clip.needsUserPicker ? Color.yellow.opacity(0.25) : Color.orange.opacity(0.2))
+                    .background(clip.isPending ? Color.yellow.opacity(0.25) : Color.orange.opacity(0.2))
                     .clipShape(Capsule())
             }
         }

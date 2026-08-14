@@ -15,6 +15,7 @@ struct DetectionResult {
     var source: DetectionSource
     var needsUserPicker: Bool
     var note: String
+    var veniceDetected: Bool = false
 }
 
 enum ClipDetector {
@@ -102,7 +103,10 @@ enum ClipDetector {
                 gamut: nil,
                 source: .filename,
                 needsUserPicker: true,
-                note: "S-Log3 in filename without gamut; user must pick S-Gamut3 or S-Gamut3.Cine (never default Cine)."
+                note: venice
+                    ? "S-Log3 in filename without gamut; Venice detected — pick S-Log3 + S-Gamut3 or S-Log3 + S-Gamut3.Cine (Venice). Never default Cine."
+                    : "S-Log3 in filename without gamut; pick S-Log3 + S-Gamut3 or S-Log3 + S-Gamut3.Cine. Never default Cine.",
+                veniceDetected: venice
             )
         }
         return nil
@@ -118,7 +122,8 @@ enum ClipDetector {
                 gamut: nil,
                 source: .model,
                 needsUserPicker: true,
-                note: "Venice camera detected; user must pick S-Gamut3 or S-Gamut3.Cine (Venice Builtin). Never default."
+                note: "Venice camera detected; pick S-Log3 + S-Gamut3 (Venice) or S-Log3 + S-Gamut3.Cine (Venice). Never default.",
+                veniceDetected: true
             )
         }
         if m.contains("alexa 35") || m.contains("alexa35") || m.contains("alexa 265") {
@@ -140,7 +145,8 @@ enum ClipDetector {
             gamut: idt.gamut,
             source: source,
             needsUserPicker: false,
-            note: note
+            note: note,
+            veniceDetected: idt.isVenice
         )
     }
 
