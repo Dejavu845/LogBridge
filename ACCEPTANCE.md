@@ -92,7 +92,7 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 - Default CAT is identity. Log IDTs assume the image is already white-balanced.
 - Do **not** treat as-shot 5600/6504 as an illuminant and CAT toward D65 (double WB).
 - Apply AP0 CAT only when the user moves CCT/tint away from as-shot, or on a grey-card override.
-- User move is relative: CAT(as-shot → user) = `chromatic_adaptation_matrix(as_xy, user_xy)` in AP0. Not `CAT(user→D65) · inv(CAT(as→D65))` (backwards). Not `CAT(user→D65)` alone. First typed CCT with no as-shot is a label (identity).
+- User move is relative: `CAT(user→D65)·inv(CAT(as→D65))` == `CAT(user→as)` in AP0. 3200→5600 warms. Not `CAT(as→user)`, not `CAT(user→D65)` alone. First typed CCT with no as-shot is a label (identity).
 - Missing CCT does **not** apply 5600 K. Knobs empty / pending / identity.
 - Grey-card / pick-neutral overrides as-shot and **is** an absolute CAT of the sampled white to D65 (identity only if sampled D65). Golden grey-card samples are still required. Labels stay **implemented (unverified)**.
 

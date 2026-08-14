@@ -5,8 +5,8 @@ neutral after IDT). Camera CCT/tint metadata is UI only — fill the
 knobs as “as-shot”. Default CAT is identity.
 
 Apply the existing linear AP0 CAT **only** when the user moves CCT/tint
-away from the as-shot values (relative Bradford(as-shot → user) =
-CAT(as→user) = chromatic_adaptation_matrix(as_xy, user_xy) in AP0),
+away from the as-shot values (relative CAT(user→D65)·inv(CAT(as→D65))
+== CAT(user→as) in AP0; 3200→5600 warms),
 or applies a grey-card override (absolute CAT). First typed CCT with
 no as-shot is a label (identity).
 
@@ -239,9 +239,9 @@ def effective_cat_cct(
     as-shot 5600/6504 as an illuminant and CAT toward D65 (double WB).
 
     Apply CAT only when the user moves CCT/tint away from as-shot
-    (relative: Bradford(as-shot white → user white) = CAT(as→user)
-    = chromatic_adaptation_matrix(as_xy, user_xy) in AP0 — not the
-    inverted CAT(user→D65)·inv(CAT(as→D65)) product), or on a
+    (relative: CAT(user→D65)·inv(CAT(as→D65)) == CAT(user→as)
+    in AP0; 3200→5600 warms — not CAT(as→user), not CAT(user→D65)
+    alone), or on a
     grey-card override (absolute CAT of the sampled white to D65).
 
     First manually typed CCT with no as-shot is a label, not an

@@ -82,8 +82,9 @@ enum WhiteBalanceNode {
         catMatrix(srcXY: xy(cct: cct, tint: tint), dstXY: d65, method: method)
     }
 
-    /// Relative: Bradford(as-shot white → user white) = CAT(as→user).
-    /// Not CAT(user→D65)·inv(CAT(as→D65)) (that product is backwards).
+    /// Relative: CAT(user→D65)·inv(CAT(as→D65)) == CAT(user→as).
+    /// 3200 as-shot → 5600 user warms (in-camera Kelvin).
+    /// Not CAT(as→user), not CAT(user→D65) alone.
     static func relativeCatMatrix(
         srcCCT: Double,
         dstCCT: Double,
@@ -91,11 +92,9 @@ enum WhiteBalanceNode {
         dstTint: Double = 0,
         method: String = "bradford"
     ) -> simd_double3x3 {
-        catMatrix(
-            srcXY: xy(cct: srcCCT, tint: srcTint),
-            dstXY: xy(cct: dstCCT, tint: dstTint),
-            method: method
-        )
+        let mUser = catMatrix(cct: dstCCT, tint: dstTint, method: method)
+        let mShot = catMatrix(cct: srcCCT, tint: srcTint, method: method)
+        return simd_mul(mUser, mShot.inverse)
     }
 
     /// Apply CAT in scene-linear RGB of a D65 space (XYZ CAT conjugated by RGB<->XYZ).

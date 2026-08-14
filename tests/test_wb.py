@@ -94,3 +94,8 @@ def test_relative_cat_as_shot_3200_user_5600():
     as_to_user = white_balance_matrix(src_cct=5600.0, dst_cct=3200.0)
     assert not np.allclose(rel, cat_user, atol=1e-3)
     assert not np.allclose(rel, as_to_user, atol=1e-3)
+    grey = np.array([0.18, 0.18, 0.18])
+    warmed = apply_white_balance(grey, src_cct=3200.0, dst_cct=5600.0)
+    cooled = apply_white_balance(grey, src_cct=5600.0, dst_cct=3200.0)
+    assert warmed[0] / warmed[2] > grey[0] / grey[2]
+    assert cooled[0] / cooled[2] < grey[0] / grey[2]

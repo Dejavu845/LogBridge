@@ -2,10 +2,9 @@
 
 Absolute (grey-card): CAT(sampled white → D65).
 Relative (user moved CCT/tint away from as-shot):
-    Bradford(as-shot white → user white)
-    == CAT(as-shot → user) = chromatic_adaptation_matrix(as_xy, user_xy).
-NOT CAT(user→D65) alone — that treats the new knob as an illuminant on
-already-balanced Log.
+    CAT(user→D65)·inv(CAT(as→D65)) == CAT(user→as).
+    3200 as-shot → 5600 user warms (in-camera Kelvin).
+    Not CAT(as→user), not CAT(user→D65) alone.
 
 Apply only to ACES2065-1 (AP0) scene-linear RGB — never as a CAT on
 ACEScct-encoded values.

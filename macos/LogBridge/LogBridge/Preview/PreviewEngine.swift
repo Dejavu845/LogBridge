@@ -313,7 +313,7 @@ enum PreviewColor {
         dstTint: Double,
         method: String
     ) {
-        // Relative: CAT(as-shot → user), not the inverted 调研 product.
+        // Relative: CAT(user→D65)·inv(CAT(as→D65)) == CAT(user→as). 3200→5600 warms.
         let cat = WhiteBalanceNode.relativeCatMatrix(
             srcCCT: srcCCT, dstCCT: dstCCT, srcTint: srcTint, dstTint: dstTint, method: method
         )

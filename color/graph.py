@@ -11,10 +11,9 @@ Not a node editor. Used by ``pipeline`` and Resolve export.
                  metadata (not nclc) fills the knobs (UI only). Default CAT is
                  identity — Log IDTs assume already white-balanced. Do not CAT
                  as-shot 5600/6504 toward D65 (double WB). User move away from
-                 as-shot is relative Bradford(as-shot -> user) =
-                 CAT(as->user) = chromatic_adaptation_matrix(as_xy, user_xy)
-                 in AP0, not CAT(user->D65) alone and not the inverted
-                 CAT(user->D65)·inv(CAT(as->D65)) product. First typed CCT
+                 as-shot is relative CAT(user->D65)·inv(CAT(as->D65))
+                 == CAT(user->as) in AP0; 3200->5600 warms. Not
+                 CAT(as->user), not CAT(user->D65) alone. First typed CCT
                  with no as-shot is a label (identity).
                  Grey-card is absolute CAT. Missing CCT: knobs empty / pending,
                  identity, no 5600 guess. Bypassable.
@@ -364,8 +363,9 @@ class SerialGraph:
         Input must be ACES2065-1 linear, not ACEScct-encoded.
         As-shot knobs (unmoved) and missing CCT are identity — not 5600 K.
         User move: relative CAT via ``src_cct`` (as-shot) and ``dst_cct``
-        (user) — CAT(as->user), not CAT(user->D65) and not the inverted
-        product. First typed CCT with no as-shot is a label (identity).
+        (user) — CAT(user->D65)·inv(CAT(as->D65)) == CAT(user->as);
+        3200->5600 warms. Not CAT(as->user), not CAT(user->D65) alone.
+        First typed CCT with no as-shot is a label (identity).
         Grey-card is absolute.
         Do not CAT as-shot 5600/6504 toward D65 (double WB).
         """
