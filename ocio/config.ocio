@@ -60,7 +60,7 @@ colorspaces:
     allocationvars: [-8, 8, 0.00390625]
     description: |
       ACES2065-1 (AP0 scene-linear). LogBridge M1 interchange / scene_linear.
-      Every IDT lands here, then converts to ACEScct for WB / preview.
+      Every IDT lands here. WB CAT runs in this AP0 linear space.
 
   - !<ColorSpace>
     name: ACEScg
@@ -76,8 +76,8 @@ colorspaces:
     bitdepth: 32f
     isdata: false
     description: |
-      ACEScct (AP1 log). Internal grading / WB / preview encoding.
-      Implemented (unverified). White balance is scene-linear ACEScg, never log.
+      ACEScct (AP1 log). Timeline / grading encode. Rec.709 is preview only.
+      Implemented (unverified). White balance is ACES2065-1 (AP0) scene-linear, never log.
     to_scene_reference: !<BuiltinTransform> {style: ACEScct_to_ACES2065-1}
 
   - !<ColorSpace>

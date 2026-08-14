@@ -148,7 +148,7 @@ private struct WBInspector: View {
             }
             .frame(maxWidth: 220)
         }
-        Text("Scene-linear Bradford/CAT02 in ACEScg. Disable this node in Resolve (or DCTL Bypass WB) to restore IDT → ACEScct → optional Rec.709 ODT.")
+        Text("Scene-linear Bradford/CAT02 in ACES2065-1 (AP0). Disable this node in Resolve (or DCTL Bypass WB) = IDT → ACEScct, no bake.")
             .font(.caption)
             .foregroundStyle(.secondary)
     }
@@ -162,7 +162,7 @@ private struct ODTInspector: View {
             get: { session.graph.odtEnabled },
             set: { session.setODTEnabled($0) }
         ))
-        Text("ODT preview is tagged CGColorSpace.itur_709 only when this node is on. Source stays untagged. No RRT. Implemented (unverified).")
+        Text("Rec.709 is preview only, not the standard deliverable. Tagged CGColorSpace.itur_709 only when this node is on. Off = ACEScct deliverable. No RRT. Implemented (unverified).")
             .font(.caption)
             .foregroundStyle(.secondary)
         Text("Working space: \(session.graph.workingSpace.rawValue). Timeline export is ACEScct (ACES2065-1 interchange).")

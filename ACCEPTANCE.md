@@ -2,7 +2,7 @@
 
 Nothing below is claimed as passing. IDTs are **implemented (unverified)**.
 
-Default language is **ACEScct** / **ACES2065-1**, not DaVinci Wide Gamut Intermediate.
+Default language is **ACEScct** / **ACES2065-1**. Rec.709 is preview only. WB is ACES2065-1 (AP0) scene-linear. Implemented (unverified).
 
 ## Golden grey-card samples (per log)
 
@@ -31,18 +31,19 @@ Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable colo
 
 ## Serial node graph (M1)
 
-- UI shows three serial slots: IDT → WB → ODT Rec.709 (`color/graph.py` `SerialGraph`).
+- UI shows three serial slots: IDT → WB → ODT Rec.709 preview (`color/graph.py` `SerialGraph`).
 - Click a node to inspect parameters. WB / ODT are bypassable; IDT is not.
-- Node 2 off = no WB bake in preview and in Resolve export (`graph.xml` `enabled="false"`).
+- Node 2 off = IDT → ACEScct, no bake in preview and in Resolve export (`graph.xml` `enabled="false"`).
+- WB CAT runs in ACES2065-1 (AP0) scene-linear, never on ACEScct-encoded values. Preview cache stores IDT as ACES2065-1 linear.
+- Rec.709 node 3 is preview only, off by default. Off = ACEScct deliverable.
 - Not a general node editor. No extra grade nodes.
 
 ## Resolve export — WB toggle
 
 - Export is a Resolve-importable graph (`graph.xml` / `graph.dot`) plus `01_IDT_*.cube`, `02_WB.{cube,cdl,ccc,dctl}`, `03_ODT_Rec709.cube` — not a prose sidecar only.
 - **WB is its own corrector/node** (Color page serial node 2). Disable it, or tick DCTL **Bypass WB**, or skip `02_WB.cube` / the CDL.
-- WB is scene-linear Bradford/CAT02 (CCT + tint) in ACEScg, not baked into the IDT or Rec.709 ODT cubes.
-- Timeline/working space remains **ACEScct** (ACES workflow; scene-linear **ACES2065-1**) when WB is off. Remaining graph: IDT → ACEScct → optional Rec.709 ODT.
-- Do not bake DaVinci Wide Gamut Intermediate as the default deliverable.
+- WB is a linear AP0 Bradford/CAT02 3×3 (or DI-free DCTL on ACES2065-1 / ACEScct-decoded-to-linear), not baked into the IDT or Rec.709 cubes.
+- Standard deliverable is **ACEScct or ACES2065-1 EXR / ACES workflow**. Rec.709 is preview only (node 3 off by default). Remaining graph when WB is off: IDT → ACEScct, no bake.
 
 Gate: open the export in Resolve; bypassing the WB node must restore uncorrected camera linear (after IDT). Implemented (unverified).
 

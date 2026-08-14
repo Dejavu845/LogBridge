@@ -2,7 +2,7 @@
 
 macOS batch tool: mixed-camera Log → ACES2065-1 (IDT) → WB in ACES2065-1 linear (AP0) → ACEScct timeline / Rec.709 preview ODT.
 
-M1 is a **serial node graph** (IDT → WB → ODT Rec.709), not a general node editor and not a Resolve-like grade. Every IDT is **implemented (unverified)** until golden grey-card samples are measured. This project does not describe cameras as “supported”. There is no 一键精准.
+M1 is a **serial node graph** (IDT → WB → optional Rec.709 preview), not a general node editor and not a Resolve-like grade. Every IDT is **implemented (unverified)** until golden grey-card samples are measured. This project does not describe cameras as “supported”. There is no 一键精准.
 
 Internal working encoding: **ACEScct** (AP1 log). Scene-linear interchange / `roles.scene_linear`: **ACES2065-1** (Linear AP0). `roles.color_timing`: ACEScct. White balance is Bradford (or CAT02) chromatic adaptation in ACES2065-1 (AP0) scene-linear only — never a CAT on ACEScct. DaVinci Wide Gamut Intermediate is **not** the default internal or deliverable.
 
@@ -86,7 +86,7 @@ Python: `from color.graph import SerialGraph`. Swift: `SerialGraph` + `NodeSlot`
 
 Export writes a serial **node graph**, not a prose sidecar: `graph.xml`, `graph.dot`, `01_IDT_<idt>.cube`, `02_WB.cube` / `.cdl` / `.ccc` / `.dctl`, `03_ODT_Rec709.cube`, `README_RESOLVE.md`.
 
-Timeline: **ACEScct**, ACES workflow. Scene-linear interchange: **ACES2065-1**. Do not bake DWG Intermediate as the default deliverable.
+Export default: **ACEScct** timeline / **ACES2065-1**. Rec.709 ODT is an optional preview node (off by default). Implemented (unverified).
 
 Python: `from color.resolve_export import export_resolve_bundle` (pass `graph=` or `include_wb=`). Swift: `ResolveExporter.export(to:clips:...)`. Status: implemented (unverified).
 
@@ -95,7 +95,7 @@ Python: `from color.resolve_export import export_resolve_bundle` (pass `graph=` 
 The macOS split preview is **not** a full-resolution render:
 
 - One downscaled frame per clip (long edge ≤ 1920) via ImageIO thumbnail or `AVAssetImageGenerator` (VideoToolbox).
-- Cached per clip: decoded camera/log buffer + IDT ACES / ACEScct buffer. IDT change invalidates linear; WB/ODT reuse it. Clip change reuses the decode if the URL is unchanged.
+- Cached per clip: decoded camera/log buffer + IDT **ACES2065-1 linear** buffer. IDT change invalidates linear; WB toggles that AP0 buffer. Clip change reuses the decode if the URL is unchanged.
 - Color apply runs off the main thread. 8-bit thumbnails are a viewing proxy — do not judge IDT accuracy from the preview.
 - Source pane is untagged camera/log. Rec.709 ODT pane is tagged `CGColorSpace.itur_709` only when the ODT node is on.
 - Clip list is a `LazyVStack` (virtualized).
@@ -109,7 +109,7 @@ No golden samples have been measured. Do not claim accuracy. See `ACCEPTANCE.md`
 ## Out of scope (M1)
 
 - Full node editor / grading (serial three-slot graph only)
-- ACES RRT / a display rendering transform beyond a simple Rec.709 OETF
+- ACES RRT / treating the DIY Rec.709 OETF as a standard deliverable (it is preview only)
 - Canon C-Log2 / C-Log3, Apple Log, DJI D-Log (stubs only)
 - C-Log2 negative toe: use OCIO `CURVE - CANON_CLOG2_to_LINEAR` or ACES CLF; do not invent a mirrored toe
 - Camera-protocol reverse engineering, marketplace integrations

@@ -297,13 +297,16 @@ def format_dctl(
         cct, tint=tint, rgb_space=DEFAULT_WORKING_LINEAR, method=method
     )
     els = ", ".join(f"{m[i, j]:.10f}f" for i in range(3) for j in range(3))
-    return f"""// LogBridge M1 WB node — scene-linear Bradford/CAT02 in ACEScg (AP1).
+    return f"""// LogBridge M1 WB node — scene-linear Bradford/CAT02 in ACES2065-1 (AP0).
 // Timeline: ACEScct (ACES workflow). Scene-linear interchange: ACES2065-1.
-// Bypass this DCTL in Resolve to restore IDT → ACEScct → optional Rec.709 ODT.
+// Decode ACEScct → AP1 → AP0, apply cat_ap0, AP0 → AP1 → ACEScct.
+// Tick input_aces2065 if the clip is already ACES2065-1 linear (skip ACEScct wrap).
+// Bypass this DCTL in Resolve to restore IDT → ACEScct, no bake. Rec.709 is preview only.
 // CCT {cct:.0f} K  tint {tint}  method {method}
 // Implemented (unverified). Not a camera-support claim.
 
 DEFINE_UI_PARAMS(bypass_wb, Bypass WB, DCTLUI_CHECK_BOX, 0, 0, 1)
+DEFINE_UI_PARAMS(input_aces2065, Input is ACES2065-1 linear, DCTLUI_CHECK_BOX, 0, 0, 1)
 
 __DEVICE__ float acescct_decode(float x)
 {{
@@ -331,16 +334,44 @@ __DEVICE__ float3 transform(int p_Width, int p_Height, int p_X, int p_Y, float p
     if (bypass_wb)
         return make_float3(p_R, p_G, p_B);
 
-    float r = acescct_decode(p_R);
-    float g = acescct_decode(p_G);
-    float b = acescct_decode(p_B);
+    float r = p_R;
+    float g = p_G;
+    float b = p_B;
+    if (!input_aces2065)
+    {{
+        // ACEScct → AP1 linear
+        r = acescct_decode(p_R);
+        g = acescct_decode(p_G);
+        b = acescct_decode(p_B);
+        // AP1 → ACES2065-1 (AP0)
+        const float ap1_to_ap0[9] = {{
+            0.6954522414f, 0.1406786965f, 0.1638690622f,
+            0.0447945634f, 0.8596711185f, 0.0955343182f,
+            -0.0055258826f, 0.0040252103f, 1.0015006723f
+        }};
+        float ar = ap1_to_ap0[0] * r + ap1_to_ap0[1] * g + ap1_to_ap0[2] * b;
+        float ag = ap1_to_ap0[3] * r + ap1_to_ap0[4] * g + ap1_to_ap0[5] * b;
+        float ab = ap1_to_ap0[6] * r + ap1_to_ap0[7] * g + ap1_to_ap0[8] * b;
+        r = ar; g = ag; b = ab;
+    }}
 
-    const float m[9] = {{ {els} }};
-    float or_ = m[0] * r + m[1] * g + m[2] * b;
-    float og  = m[3] * r + m[4] * g + m[5] * b;
-    float ob  = m[6] * r + m[7] * g + m[8] * b;
+    const float cat_ap0[9] = {{ {els} }};
+    float or_ = cat_ap0[0] * r + cat_ap0[1] * g + cat_ap0[2] * b;
+    float og  = cat_ap0[3] * r + cat_ap0[4] * g + cat_ap0[5] * b;
+    float ob  = cat_ap0[6] * r + cat_ap0[7] * g + cat_ap0[8] * b;
 
-    return make_float3(acescct_encode(or_), acescct_encode(og), acescct_encode(ob));
+    if (input_aces2065)
+        return make_float3(or_, og, ob);
+
+    const float ap0_to_ap1[9] = {{
+        1.4514393161f, -0.2365107469f, -0.2149285693f,
+        -0.0765537734f, 1.1762296998f, -0.0996759264f,
+        0.0083161484f, -0.0060324498f, 0.9977163014f
+    }};
+    float pr = ap0_to_ap1[0] * or_ + ap0_to_ap1[1] * og + ap0_to_ap1[2] * ob;
+    float pg = ap0_to_ap1[3] * or_ + ap0_to_ap1[4] * og + ap0_to_ap1[5] * ob;
+    float pb = ap0_to_ap1[6] * or_ + ap0_to_ap1[7] * og + ap0_to_ap1[8] * ob;
+    return make_float3(acescct_encode(pr), acescct_encode(pg), acescct_encode(pb));
 }}
 """
 
@@ -471,14 +502,14 @@ Do not set DaVinci Wide Gamut Intermediate as the default deliverable.
    - Contains **no** white balance.
 
 2. **WB** — own corrector, **{wb_state}**
-   - `02_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in scene-linear ACEScg, wrapped in ACEScct so it sits on the ACEScct timeline.
+   - `02_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in ACES2065-1 (AP0), wrapped in ACEScct so it sits on the ACEScct timeline.
    - `02_WB.dctl` — same 3×3 as a DCTL (Decode ACEScct → matrix → Encode ACEScct). Checkbox **Bypass WB** inside the DCTL, or disable the node.
    - `02_WB.cdl` / `02_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
    - CCT {cct:.0f} K, tint {tint}, method Bradford (CAT02 selectable in code). Scene-linear only.
 
-3. **Rec.709 ODT** — `03_ODT_Rec709.cube` or CST
+3. **Rec.709 ODT** — `03_ODT_Rec709.cube` or CST (**preview only**, off by default)
    - Input: ACEScct
-   - Output: Rec.709 encoded (BT.709 OETF, no RRT)
+   - Output: Rec.709 encoded (BT.709 OETF, no RRT). Preview only — not the standard deliverable.
    - Contains **no** white balance. Optional later node.
 
 ## How to bypass WB in Resolve
@@ -491,7 +522,7 @@ Color page, serial node graph:
 
 To bypass WB: disable node 2 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). The remaining graph is **IDT → working space (ACEScct) → optional Rec.709 ODT**. Camera linear after IDT is uncorrected.
 
-Do not use a single Rec.709 file as the only deliverable. Rec.709 is a later node.
+Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview only.
 
 ## Files
 

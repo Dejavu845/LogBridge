@@ -1,6 +1,6 @@
 """LogBridge color science (M1).
 
-Internal: ACEScct (grading) after every IDT lands in ACES2065-1.
+Internal: every IDT lands in ACES2065-1; WB CAT is AP0 linear; ACEScct is the timeline encode.
 OCIO BuiltinTransform is used when PyOpenColorIO is importable and a
 Builtin exists. Otherwise white-paper reference implementations (18% codes).
 config.ocio always names the Builtins so Mac OCIO uses them.

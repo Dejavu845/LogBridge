@@ -11,8 +11,8 @@ import Combine
 ///
 /// Cache:
 ///   - decoded camera/log thumbnail per clip URL
-///   - IDT ACES / ACEScct buffer per clip+IDT
-/// Invalidate the matching stage only (IDT change drops linear; WB/ODT reuse it).
+///   - IDT ACES2065-1 linear buffer per clip+IDT
+/// Invalidate the matching stage only (IDT change drops linear; WB toggles that AP0 buffer).
 /// Heavy work runs off the main thread.
 final class PreviewEngine: ObservableObject {
     static let maxLongEdge: CGFloat = 1920
@@ -239,7 +239,7 @@ enum PreviewColor {
     }
 
     static func applyIDT(rgb: inout [Float], idt: IDT) {
-        guard let m = cameraToDWG(idt) else { return }
+        guard let m = cameraToAP0(idt) else { return }
         let n = rgb.count / 3
         for i in 0..<n {
             let r = decodeLog(Double(rgb[i * 3 + 0]), idt: idt)
@@ -253,8 +253,9 @@ enum PreviewColor {
     }
 
     static func applyWB(rgb: inout [Float], cct: Double, tint: Double, method: String) {
+        // CAT in ACES2065-1 (AP0) scene-linear. Preview cache is AP0 after IDT.
         let cat = WhiteBalanceNode.catMatrix(cct: cct, tint: tint, method: method)
-        let m = dwgToXYZ.inverse * cat * dwgToXYZ
+        let m = ap0ToXYZ.inverse * cat * ap0ToXYZ
         let n = rgb.count / 3
         for i in 0..<n {
             let v = m * SIMD3(Double(rgb[i * 3 + 0]), Double(rgb[i * 3 + 1]), Double(rgb[i * 3 + 2]))
@@ -267,7 +268,7 @@ enum PreviewColor {
     static func applyODT(rgb: inout [Float]) {
         let n = rgb.count / 3
         for i in 0..<n {
-            let v = dwgToRec709 * SIMD3(Double(rgb[i * 3 + 0]), Double(rgb[i * 3 + 1]), Double(rgb[i * 3 + 2]))
+            let v = ap0ToRec709 * SIMD3(Double(rgb[i * 3 + 0]), Double(rgb[i * 3 + 1]), Double(rgb[i * 3 + 2]))
             rgb[i * 3 + 0] = Float(rec709OETF(v.x))
             rgb[i * 3 + 1] = Float(rec709OETF(v.y))
             rgb[i * 3 + 2] = Float(rec709OETF(v.z))
@@ -276,16 +277,16 @@ enum PreviewColor {
 
     // MARK: Matrices / curves — copied from ResolveExporter (do not edit numbers)
 
-    private static let dwgToXYZ = simd_double3x3(rows: [
-        SIMD3(0.700622392094, 0.148774815123, 0.101058719835),
-        SIMD3(0.274118510907, 0.873631895940, -0.147750406847),
-        SIMD3(-0.098962912883, -0.137895325076, 1.325915988719)
+    private static let ap0ToXYZ = simd_double3x3(rows: [
+        SIMD3(0.952552395938186, 0.000000000000000, 0.000093678631660),
+        SIMD3(0.343966449765075, 0.728166096613486, -0.072132546378561),
+        SIMD3(0.000000000000000, 0.000000000000000, 1.008825184351586)
     ])
 
-    private static let dwgToRec709 = simd_double3x3(rows: [
-        SIMD3(1.898614899306, -0.792176183404, -0.106438715902),
-        SIMD3(-0.168948786476, 1.488975754118, -0.320026967642),
-        SIMD3(-0.121539160604, -0.315675853052, 1.437215013657)
+    private static let ap0ToRec709 = simd_double3x3(rows: [
+        SIMD3(2.521686186743882, -1.134130988239719, -0.387555198504164),
+        SIMD3(-0.276479914229922, 1.372719087668256, -0.096239173438334),
+        SIMD3(-0.015378064966034, -0.152975335867399, 1.168353400833433)
     ])
 
     private static let rec709Beta = 0.018053968510807
@@ -296,43 +297,43 @@ enum PreviewColor {
         return rec709Alpha * pow(max(lin, 0.0), 0.45) - (rec709Alpha - 1.0)
     }
 
-    private static func cameraToDWG(_ idt: IDT) -> simd_double3x3? {
+    private static func cameraToAP0(_ idt: IDT) -> simd_double3x3? {
         switch idt {
         case .arriLogC4AWG4:
             return simd_double3x3(rows: [
-                SIMD3(0.997395939837, -0.023165014815, 0.025769074977),
-                SIMD3(-0.009183081266, 0.917632034596, 0.091551046670),
-                SIMD3(0.073487991967, 0.093704798362, 0.832807209671)
+                SIMD3(0.751244868485, 0.143007909499, 0.105747222016),
+                SIMD3(0.001403392600, 1.005384442231, -0.006787834830),
+                SIMD3(-0.000803152607, 0.003263851374, 0.997539301233)
             ])
         case .sonySLog3SGamut3:
             return simd_double3x3(rows: [
-                SIMD3(0.996650041836, -0.026739524102, 0.030089482265),
-                SIMD3(0.008962001489, 0.925300630159, 0.065737368353),
-                SIMD3(0.068020421169, 0.097704868626, 0.834274710205)
+                SIMD3(0.753230840311, 0.141947913791, 0.104821245898),
+                SIMD3(0.022234917350, 1.013293794080, -0.035528711431),
+                SIMD3(-0.009600262790, 0.007505931314, 1.002094331476)
             ])
         case .sonySLog3SGamut3Cine:
             return simd_double3x3(rows: [
-                SIMD3(0.852787225200, 0.132475794312, 0.014736980487),
-                SIMD3(-0.014981188523, 0.987029009978, 0.027952178545),
-                SIMD3(0.037907848534, 0.091678874858, 0.870413276608)
+                SIMD3(0.639008308411, 0.270840678932, 0.090151012656),
+                SIMD3(-0.003450727728, 1.085955398170, -0.082504670442),
+                SIMD3(-0.030074188115, -0.021937342610, 1.052011530726)
             ])
         case .panasonicVLogVGamut:
             return simd_double3x3(rows: [
-                SIMD3(0.958788766787, 0.013416877789, 0.027794355424),
-                SIMD3(0.008621548181, 0.898149016914, 0.093229434905),
-                SIMD3(0.065436425015, 0.090930238374, 0.843633336611)
+                SIMD3(0.724616704132, 0.166915288194, 0.108468007675),
+                SIMD3(0.021390245413, 0.984908155703, -0.006298401116),
+                SIMD3(-0.009235562871, -0.001056905639, 1.010292468510)
             ])
         case .fujiFLog2BT2020, .nikonNLogBT2020:
             return simd_double3x3(rows: [
-                SIMD3(0.892112120946, 0.024369175871, 0.083518703182),
-                SIMD3(0.032616601764, 0.786137516904, 0.181245881332),
-                SIMD3(0.069977051186, 0.104749491904, 0.825273456911)
+                SIMD3(0.679085634707, 0.157700914643, 0.163213450650),
+                SIMD3(0.046002003080, 0.859054673003, 0.094943323917),
+                SIMD3(-0.000573943188, 0.028467768408, 0.972106174780)
             ])
         case .redLog3G10RWG:
             return simd_double3x3(rows: [
-                SIMD3(1.046183501418, -0.082175324998, 0.035991823580),
-                SIMD3(0.002998821038, 0.962281459766, 0.034719719196),
-                SIMD3(0.018301335409, -0.168020759769, 1.149719424360)
+                SIMD3(0.785058804068, 0.083858756544, 0.131082439388),
+                SIMD3(0.023173834845, 1.087897549192, -0.111071384038),
+                SIMD3(-0.073760435368, -0.314590072290, 1.388350507658)
             ])
         default:
             return nil

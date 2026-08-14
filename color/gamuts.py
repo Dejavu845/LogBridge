@@ -1,7 +1,8 @@
 """RGB primaries, white points, and RGB<->XYZ matrices (SMPTE RP 177).
 
 Internal scene-linear interchange is ACES2065-1 (AP0, ACES white ~D60).
-Grading / WB / preview encoding is ACEScct (AP1 log). Camera encodings use
+WB (Bradford/CAT02) runs in AP0 linear. ACEScct (AP1 log) is the timeline /
+grading encode only. Camera encodings use
 illuminant D65; camera RGB -> AP0 uses Bradford D65->ACES CAT.
 
 DaVinci Wide Gamut is not the internal reference. DWG primaries are not

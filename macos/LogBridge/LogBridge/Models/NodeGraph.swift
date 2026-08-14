@@ -1,10 +1,10 @@
 import Foundation
 
-/// Serial M1 graph: IDT → WB → ODT Rec.709. Not a general node editor.
+/// Serial M1 graph: IDT → WB → optional Rec.709 preview. Not a general node editor.
 ///
 /// Slots match `color/graph.py` and Resolve export (01_IDT / 02_WB / 03_ODT).
-/// Node 2 (WB) off = no bake in preview or export. Node 3 (ODT) off = ACEScct
-/// working-space deliverable (not tagged Rec.709).
+/// Node 2 (WB) off = IDT → ACEScct, no bake. Node 3 (ODT) off = ACEScct deliverable
+/// (preview only when on; not tagged Rec.709 when off).
 enum NodeSlot: Int, CaseIterable, Identifiable, Hashable {
     case idt = 1
     case wb = 2
@@ -32,7 +32,7 @@ enum NodeSlot: Int, CaseIterable, Identifiable, Hashable {
         switch self {
         case .idt: return "curve + gamut"
         case .wb: return "scene-linear CAT"
-        case .odt: return "optional 709"
+        case .odt: return "preview only"
         }
     }
 
@@ -47,7 +47,7 @@ struct SerialGraph: Equatable {
     var wbCCT: Double = 6504
     var wbTint: Double = 0
     var wbMethod: String = "bradford"
-    var odtEnabled: Bool = true
+    var odtEnabled: Bool = false
     var workingSpace: FixedPipeline.WorkingSpace = .acescct
 
     func isEnabled(_ slot: NodeSlot) -> Bool {

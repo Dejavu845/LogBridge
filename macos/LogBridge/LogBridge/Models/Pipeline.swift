@@ -3,13 +3,13 @@ import Foundation
 /// Fixed M1 pipeline. Not a node editor.
 ///
 ///   IDT (log → ACES2065-1 via OCIO Builtin or white-paper reference)
-///     → ACEScct (Academy grading; WB / preview)
-///     → optional WB node (Bradford/CAT02, CCT + tint, scene-linear ACEScg)
-///     → Rec.709 ODT (matrix + BT.709 OETF)
+///     → optional WB node (Bradford/CAT02, CCT + tint, ACES2065-1 / AP0)
+///     → ACEScct encode for timeline / grading display
+///     → optional Rec.709 preview ODT (matrix + BT.709 OETF)
 ///
-/// Resolve export keeps WB as a toggleable node rather than baking it into
-/// a Rec.709-only deliverable. Export ACEScct or ACES2065-1 EXR / ACES workflow.
-/// Do not bake DaVinci Wide Gamut Intermediate.
+/// Resolve export keeps WB as a toggleable AP0 matrix rather than baking it.
+/// Standard deliverable: ACEScct or ACES2065-1 EXR / ACES workflow.
+/// Rec.709 is preview only.
 struct FixedPipeline {
     var idt: IDT
     var workingSpace: WorkingSpace = .acescct
