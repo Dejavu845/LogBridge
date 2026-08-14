@@ -85,7 +85,7 @@ private struct IDTInspector: View {
                 }
             }
             if clip.isPending {
-                Text("This clip is pending. Process selected / Apply graph and export are blocked until a locked pair is chosen. Never a silent S-Gamut3.Cine default.")
+                Text("先选择 Log 与色域. This clip is pending. Process selected / Apply graph and export are blocked until a locked pair is chosen. Never a silent S-Gamut3.Cine default.")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
@@ -105,11 +105,10 @@ private struct WBInspector: View {
             get: { session.graph.wbEnabled },
             set: { session.setWBEnabled($0) }
         ))
-        HStack {
-            Text("Source")
-                .frame(width: 52, alignment: .leading)
-            Text(session.graph.wbSource.title)
-                .font(.caption.weight(.semibold))
+        HStack(spacing: 6) {
+            WBStateChip(title: "机内 as-shot", on: session.graph.wbSource == .asShot)
+            WBStateChip(title: "白平衡（估计）", on: session.graph.wbSource == .estimate || session.graph.autoWBCCT != nil)
+            WBStateChip(title: "灰卡", on: session.graph.wbSource == .grey)
             if session.graph.asShotUnknown {
                 Text("as-shot unknown")
                     .font(.caption2)
@@ -185,6 +184,20 @@ private struct WBInspector: View {
     }
 }
 
+private struct WBStateChip: View {
+    let title: String
+    let on: Bool
+    var body: some View {
+        Text(title)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(on ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05))
+            .foregroundStyle(on ? Color.accentColor : Color.secondary)
+            .clipShape(Capsule())
+    }
+}
+
 private struct ODTInspector: View {
     @ObservedObject var session: SessionModel
 
@@ -207,7 +220,7 @@ private struct ODTInspector: View {
                 .foregroundStyle(.secondary)
         }
         if session.graph.odt.isHDR {
-            Text("HDR OT via ACES/BT.2100 BuiltinTransform. No homemade HLG/PQ curve. Implemented (unverified). Not supported. Not 一键精准.")
+            Text("HDR OT via ACES/BT.2100 BuiltinTransform. 预览·非成片，未与 709 匹配. No homemade HLG/PQ curve. Implemented (unverified). Not supported. Not 一键精准.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

@@ -156,13 +156,13 @@ final class SessionModel: ObservableObject {
     var odtPreviewTitle: String {
         switch graph.odt {
         case .off:
-            return "ODT off — ACEScct deliverable (not Rec.709)"
+            return "成片预览关 · ACEScct"
         case .rec709:
-            return "Rec.709 ODT (preview only, unverified)"
+            return "Rec.709 预览·非成片"
         case .hlg:
-            return "Rec.2100 HLG (ACES OT / BT.2100, unverified)"
+            return "HLG 预览·非成片（未匹配 709）"
         case .pq:
-            return "Rec.2100 PQ (ACES OT / BT.2100, unverified)"
+            return "PQ 预览·非成片（未匹配 709）"
         }
     }
 
@@ -174,7 +174,7 @@ final class SessionModel: ObservableObject {
         case .rec709:
             return "Tagged CGColorSpace.itur_709. Preview only — not a finished grade on the 709 pane. \(badge) Golden grey-card samples required before any accuracy claim."
         case .hlg, .pq:
-            return "\(graph.odt.acesOTNote) Preview does not invent a homemade HLG/PQ curve. \(badge)"
+            return "\(graph.odt.acesOTNote) 未与 709 匹配，不是同一条渲染。Preview does not invent a homemade HLG/PQ curve. \(badge)"
         }
     }
 

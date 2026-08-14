@@ -6,7 +6,7 @@ struct NodeStripView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Text("Graph")
+            Text("节点")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.trailing, 8)
@@ -48,13 +48,15 @@ struct NodeStripView: View {
             }
             return "bypassed"
         case .wb:
-            if session.graph.asShotUnknown {
-                return session.graph.wbEnabled ? "as-shot unknown" : "bypassed"
+            if !session.graph.wbEnabled { return "bypassed" }
+            if session.graph.wbSource == .grey { return "灰卡" }
+            if session.graph.wbSource == .estimate {
+                if let cct = session.graph.wbCCT { return "估计 \(Int(cct)) K" }
+                return "白平衡（估计）"
             }
-            if session.graph.wbEnabled, let cct = session.graph.wbCCT {
-                return "\(Int(cct)) K · \(session.graph.wbSource.title)"
-            }
-            return "bypassed"
+            if session.graph.asShotUnknown { return "as-shot unknown" }
+            if let cct = session.graph.wbCCT { return "as-shot \(Int(cct)) K" }
+            return "as-shot"
         case .odt:
             return session.graph.odt.title
         }

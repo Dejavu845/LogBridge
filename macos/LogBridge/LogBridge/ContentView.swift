@@ -46,26 +46,20 @@ struct SplitPreview: View {
 
     var body: some View {
         HSplitView {
-            ZStack(alignment: .topLeading) {
-                SourcePreviewView(
-                    title: "Source (camera log)",
-                    caption: "Untagged. Camera/log code values. Do not blit Rec.709 pixels into this pane. 预览·非成片 — 8-bit thumbnail is not a deliverable.",
-                    image: session.preview.sourceImage
-                )
-                PreviewBadge()
-            }
-            ZStack(alignment: .topLeading) {
-                Rec709PreviewView(
-                    title: session.odtPreviewTitle,
-                    caption: session.odtPreviewCaption,
-                    image: session.preview.odtImage,
-                    pickingNeutral: session.pickingNeutral,
-                    onPick: { nx, ny in
-                        session.handlePreviewPick(nx: nx, ny: ny)
-                    }
-                )
-                PreviewBadge()
-            }
+            SourcePreviewView(
+                title: "源（相机 Log）",
+                caption: "未套 Rec.709。相机编码值。预览·非成片 — 8-bit thumbnail is not a deliverable.",
+                image: session.preview.sourceImage
+            )
+            Rec709PreviewView(
+                title: session.odtPreviewTitle,
+                caption: session.odtPreviewCaption,
+                image: session.preview.odtImage,
+                pickingNeutral: session.pickingNeutral,
+                onPick: { nx, ny in
+                    session.handlePreviewPick(nx: nx, ny: ny)
+                }
+            )
         }
         .padding(8)
     }
@@ -101,11 +95,6 @@ struct StatusBar: View {
             .buttonStyle(.borderedProminent)
             .disabled(!session.canProcessSelected)
             .help("Apply the serial graph to locked clips. Blocked until a paired IDT is chosen. Never 一键还原.")
-            Button("Apply graph") {
-                session.applyGraph()
-            }
-            .disabled(!session.canProcessSelected)
-            .help("Apply the serial graph to the selected clip. Same lock as 处理已锁定片段.")
             Button("导出 ACEScct / EXR") {
                 session.exportResolve()
             }
