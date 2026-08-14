@@ -1,7 +1,7 @@
 import Foundation
 
 /// Locked curve + gamut pair. Sony S-Log3 has two gamuts; never default to Cine.
-/// C-Log3 has two gamuts; never default to Cinema Gamut.
+/// C-Log2 and C-Log3 each have two gamuts; never default to Cinema Gamut.
 enum IDT: String, CaseIterable, Identifiable, Hashable {
     case arriLogC4AWG4 = "arri_logc4_awg4"
     case sonySLog3SGamut3 = "sony_slog3_sgamut3"
@@ -13,6 +13,7 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
     case sonySLog3SGamut3Venice = "sony_slog3_sgamut3_venice"
     case sonySLog3SGamut3CineVenice = "sony_slog3_sgamut3cine_venice"
     case canonCLog2CGamut = "canon_clog2_cgamut"
+    case canonCLog2BT2020 = "canon_clog2_bt2020"
     case canonCLog3CGamut = "canon_clog3_cgamut"
     case canonCLog3BT2020 = "canon_clog3_bt2020"
     case appleLogBT2020 = "apple_log_bt2020"
@@ -41,7 +42,7 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         case .fujiFLog2BT2020: return "F-Log2"
         case .nikonNLogBT2020: return "N-Log"
         case .redLog3G10RWG: return "Log3G10"
-        case .canonCLog2CGamut: return "C-Log2"
+        case .canonCLog2CGamut, .canonCLog2BT2020: return "C-Log2"
         case .canonCLog3CGamut, .canonCLog3BT2020: return "C-Log3"
         case .appleLogBT2020: return "Apple Log"
         case .djiDLogDGamut: return "D-Log"
@@ -60,7 +61,7 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         case .fujiFLog2BT2020, .nikonNLogBT2020: return "BT.2020"
         case .redLog3G10RWG: return "REDWideGamutRGB"
         case .canonCLog2CGamut, .canonCLog3CGamut: return "Cinema Gamut"
-        case .canonCLog3BT2020, .appleLogBT2020: return "BT.2020"
+        case .canonCLog2BT2020, .canonCLog3BT2020, .appleLogBT2020: return "BT.2020"
         case .djiDLogDGamut: return "D-Gamut"
         case .appleLog2Stub, .djiDLogMStub, .arriLogC3Stub: return "(unsupported)"
         }
@@ -107,6 +108,7 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         case .nikonNLogBT2020: return "Nikon N-Log BT.2020"
         case .redLog3G10RWG: return "RED Log3G10 REDWideGamutRGB"
         case .canonCLog2CGamut: return "Canon C-Log2 Cinema Gamut"
+        case .canonCLog2BT2020: return "Canon C-Log2 BT.2020"
         case .canonCLog3CGamut: return "Canon C-Log3 Cinema Gamut"
         case .canonCLog3BT2020: return "Canon C-Log3 BT.2020"
         case .appleLogBT2020: return "Apple Log BT.2020"
@@ -150,13 +152,16 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
 
     /// Paired IDTs for the picker. Venice rows appear only if Venice is detected.
     /// S-Log3 needing a pick offers both gamuts — never a silent Cine default.
-    /// C-Log3 needing a pick offers Cinema Gamut and BT.2020 — never a silent Cinema Gamut default.
+    /// C-Log2 / C-Log3 needing a pick offer Cinema Gamut and BT.2020 — never a silent Cinema Gamut default.
     static func pickerPairs(curveHint: String?, veniceDetected: Bool, needsPicker: Bool) -> [IDT] {
         let slog3 = Self.isSLog3(curveHint)
         if needsPicker && slog3 {
             return veniceDetected
                 ? [.sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice]
                 : [.sonySLog3SGamut3, .sonySLog3SGamut3Cine]
+        }
+        if needsPicker && Self.isCLog2(curveHint) {
+            return [.canonCLog2CGamut, .canonCLog2BT2020]
         }
         if needsPicker && Self.isCLog3(curveHint) {
             return [.canonCLog3CGamut, .canonCLog3BT2020]
@@ -176,6 +181,12 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         guard let curve else { return false }
         let c = curve.lowercased().replacingOccurrences(of: "_", with: "-")
         return c == "slog3" || c == "s-log3"
+    }
+
+    static func isCLog2(_ curve: String?) -> Bool {
+        guard let curve else { return false }
+        let c = curve.lowercased().replacingOccurrences(of: "_", with: "-")
+        return c == "clog2" || c == "c-log2"
     }
 
     static func isCLog3(_ curve: String?) -> Bool {

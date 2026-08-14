@@ -59,6 +59,8 @@ Prefer OCIO `CURVE - CANON_CLOG2_to_LINEAR` / `CANON_CLOG2-CGAMUT_to_ACES2065-1`
 - else (ACES CTL): `lin = -0.9*(10**((0.092864125-in)/0.24136077)-1)/87.099375`
 - Cinema Gamut xy: R 0.74/0.27, G 0.17/1.14, B 0.08/-0.10, D65
 - 18% grey → ~0.39825
+- Two pairs: Cinema Gamut and BT.2020. Never default C-Log2 to Cinema Gamut.
+  C-Log2+BT.2020 has no full IDT Builtin — handwritten C-Log2 curve + BT.2020→AP0.
 
 ## Canon C-Log3 (ACES / Canon v1.2, three segments)
 

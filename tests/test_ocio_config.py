@@ -33,6 +33,7 @@ def test_six_idts_declared():
         "Nikon N-Log BT.2020",
         "RED Log3G10 REDWideGamutRGB",
         "Canon C-Log2 Cinema Gamut",
+        "Canon C-Log2 BT.2020",
         "Canon C-Log3 Cinema Gamut",
         "Canon C-Log3 BT.2020",
         "Apple Log BT.2020",
@@ -95,6 +96,7 @@ def test_handwritten_luts_only_for_no_builtin():
     luts = ROOT / "ocio" / "luts"
     assert (luts / "FLog2_to_lin.spi1d").is_file()
     assert (luts / "NLog_to_lin.spi1d").is_file()
+    assert (luts / "CLog2_to_lin.spi1d").is_file()
     assert (luts / "CLog3_to_lin.spi1d").is_file()
     assert (luts / "DLog_to_lin.spi1d").is_file()
     # Builtin-replaced homemade LUTs must not remain.
@@ -103,7 +105,6 @@ def test_handwritten_luts_only_for_no_builtin():
         "SLog3_to_lin.spi1d",
         "VLog_to_lin.spi1d",
         "Log3G10_to_lin.spi1d",
-        "CLog2_to_lin.spi1d",
         "AppleLog_to_lin.spi1d",
     ):
         assert not (luts / name).is_file(), name

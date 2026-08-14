@@ -388,6 +388,7 @@ IDT_NAMES = (
     "Sony S-Log3 / S-Gamut3 (Venice)",
     "Sony S-Log3 / S-Gamut3.Cine (Venice)",
     "Canon C-Log2 / Cinema Gamut",
+    "Canon C-Log2 / BT.2020",
     "Canon C-Log3 / Cinema Gamut",
     "Canon C-Log3 / BT.2020",
     "Apple Log / BT.2020",

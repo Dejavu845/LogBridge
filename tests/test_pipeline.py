@@ -44,6 +44,8 @@ def test_idt_pairs_are_locked():
     # No implicit Cine default in the pair table.
     assert "SGamut3Cine" not in IDT_PAIRS["sony_slog3_sgamut3"]
     assert IDT_PAIRS["canon_clog2_cgamut"] == ("clog2", "CinemaGamut")
+    assert IDT_PAIRS["canon_clog2_bt2020"] == ("clog2", "BT2020")
+    assert IDT_PAIRS["canon_clog2_bt2020"][1] != "CinemaGamut"
     assert IDT_PAIRS["canon_clog3_cgamut"] == ("clog3", "CinemaGamut")
     assert IDT_PAIRS["canon_clog3_bt2020"] == ("clog3", "BT2020")
     assert IDT_PAIRS["canon_clog3_bt2020"][1] != "CinemaGamut"
@@ -124,10 +126,11 @@ def test_serial_graph_nodes():
     np.testing.assert_allclose(rec, direct, atol=1e-10)
 
 
-def test_clog2_idt_18_percent():
+def test_clog2_idt_18_percent_both_pairs():
     log = np.full(3, float(linear_to_clog2(0.18)))
-    lin = apply_idt(log, "canon_clog2_cgamut")
-    np.testing.assert_allclose(lin, 0.18, rtol=1e-6)
+    for idt_id in ("canon_clog2_cgamut", "canon_clog2_bt2020"):
+        lin = apply_idt(log, idt_id)
+        np.testing.assert_allclose(lin, 0.18, rtol=1e-6)
 
 
 def test_clog3_idt_18_percent_both_pairs():

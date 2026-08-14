@@ -114,6 +114,22 @@ enum ClipDetector {
                 note: "ARRI LogC3 is unsupported. Use LogC4 + AWG4."
             )
         }
+        if name.contains("c-log2") || name.contains("clog2") {
+            if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {
+                return locked(.canonCLog2CGamut, source: .filename, note: "filename C-Log2 + Cinema Gamut")
+            }
+            if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
+                return locked(.canonCLog2BT2020, source: .filename, note: "filename C-Log2 + BT.2020")
+            }
+            return DetectionResult(
+                idt: nil,
+                curve: "C-Log2",
+                gamut: nil,
+                source: .filename,
+                needsUserPicker: true,
+                note: "C-Log2 in filename without gamut; pick C-Log2 + Cinema Gamut or C-Log2 + BT.2020. Never default Cinema Gamut."
+            )
+        }
         if name.contains("c-log3") || name.contains("clog3") {
             if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {
                 return locked(.canonCLog3CGamut, source: .filename, note: "filename C-Log3 + Cinema Gamut")
@@ -129,9 +145,6 @@ enum ClipDetector {
                 needsUserPicker: true,
                 note: "C-Log3 in filename without gamut; pick C-Log3 + Cinema Gamut or C-Log3 + BT.2020. Never default Cinema Gamut."
             )
-        }
-        if name.contains("c-log2") || name.contains("clog2") {
-            return locked(.canonCLog2CGamut, source: .filename, note: "filename C-Log2")
         }
         if name.contains("apple log") || name.contains("applelog") {
             return locked(.appleLogBT2020, source: .filename, note: "filename Apple Log")
@@ -208,7 +221,7 @@ enum ClipDetector {
         return nil
     }
 
-    /// Canon vendor metadata. C-Log3 without gamut stays pending (no Cinema Gamut default).
+    /// Canon vendor metadata. C-Log2 / C-Log3 without gamut stay pending (no Cinema Gamut default).
     private static func readCanonVendor(url: URL) -> DetectionResult? {
         _ = url
         return nil

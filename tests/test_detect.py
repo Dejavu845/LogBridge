@@ -4,6 +4,7 @@ Never trust QuickTime nclc. Never default S-Log3 to S-Gamut3.Cine.
 """
 
 from color.detect import (
+    CLOG2_PAIRS,
     CLOG3_PAIRS,
     SLOG3_PAIRS,
     SLOG3_VENICE_PAIRS,
@@ -203,10 +204,28 @@ def test_user_pick_locks_pair_and_unblocks_process():
     assert can_one_click_process(chosen) is True
 
 
-def test_canon_clog2_metadata_locks_cinema_gamut():
+def test_canon_clog2_without_gamut_does_not_default_cinema_gamut():
     d = detect_from_metadata({"canon_vendor_gamma": "C-Log2"})
+    assert d.curve == "clog2"
+    assert d.gamut is None
+    assert d.needs_user_picker
+    assert d.idt_id is None
+    assert "Cinema Gamut" in d.note
+
+
+def test_canon_clog2_metadata_cinema_gamut_locks():
+    d = detect_from_metadata(
+        {"canon_vendor_gamma": "C-Log2", "canon_vendor_gamut": "Cinema Gamut"}
+    )
     assert d.idt_id == "canon_clog2_cgamut"
     assert d.needs_user_picker is False
+
+
+def test_canon_clog2_metadata_bt2020_locks():
+    d = detect_from_metadata(
+        {"canon_vendor_gamma": "C-Log2", "canon_vendor_gamut": "BT.2020"}
+    )
+    assert d.idt_id == "canon_clog2_bt2020"
 
 
 def test_canon_clog3_without_gamut_does_not_default_cinema_gamut():
@@ -244,9 +263,21 @@ def test_filename_clog3_cinema_gamut():
     assert d.idt_id == "canon_clog3_cgamut"
 
 
-def test_filename_clog2_locks():
+def test_filename_clog2_without_gamut_needs_picker():
     d = detect_from_filename("A001_CLog2_take.mov")
+    assert d.curve == "clog2"
+    assert d.idt_id is None
+    assert d.needs_user_picker
+
+
+def test_filename_clog2_cinema_gamut():
+    d = detect_from_filename("A001_CLog2_CinemaGamut.mov")
     assert d.idt_id == "canon_clog2_cgamut"
+
+
+def test_filename_clog2_bt2020():
+    d = detect_from_filename("A001_CLog2_BT2020.mov")
+    assert d.idt_id == "canon_clog2_bt2020"
 
 
 def test_filename_apple_log():
@@ -276,6 +307,17 @@ def test_filename_logc3_unsupported():
     d = detect_from_filename("A001_LogC3_take.mxf")
     assert d.idt_id is None
     assert "LogC3" in d.note
+
+
+def test_picker_clog2_is_two_paired_idts():
+    pairs = picker_pairs(curve="clog2", venice_detected=False, needs_picker=True)
+    assert pairs == list(CLOG2_PAIRS)
+    labels = [lab for _, lab in picker_labels(pairs)]
+    assert labels == ["C-Log2 + Cinema Gamut", "C-Log2 + BT.2020"]
+    assert set(pairs) == {"canon_clog2_cgamut", "canon_clog2_bt2020"}
+    # Never a silent Cinema Gamut default: both pairs offered.
+    assert pairs[0] == "canon_clog2_cgamut"
+    assert "canon_clog2_bt2020" in pairs
 
 
 def test_picker_clog3_is_two_paired_idts():

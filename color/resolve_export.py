@@ -88,6 +88,10 @@ RESOLVE_CST = {
         "input_color_space": "Canon Cinema Gamut",
         "input_gamma": "Canon C-Log2",
     },
+    "canon_clog2_bt2020": {
+        "input_color_space": "Rec.2020",
+        "input_gamma": "Canon C-Log2",
+    },
     "canon_clog3_cgamut": {
         "input_color_space": "Canon Cinema Gamut",
         "input_gamma": "Canon C-Log3",

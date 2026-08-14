@@ -2,9 +2,10 @@
 """Generate handwritten LUTs/matrices and ocio/config.ocio.
 
 config.ocio names OCIO BuiltinTransform styles for IDTs that have them.
-Only F-Log2, N-Log, C-Log3 (BT.2020 pair), D-Log, and the Rec.709 OETF LUT
-are generated from color/. Do not emit homemade LogC4 / S-Log3 / V-Log /
-Log3G10 / C-Log2 / Apple Log LUTs or DWG matrices.
+Only F-Log2, N-Log, C-Log2 (BT.2020 pair), C-Log3 (BT.2020 pair), D-Log,
+and the Rec.709 OETF LUT are generated from color/. Do not emit homemade
+LogC4 / S-Log3 / V-Log / Log3G10 / Apple Log LUTs or DWG matrices.
+C-Log2+Cinema Gamut keeps the full Builtin (no homemade Cinema Gamut LUT).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from color.curves import (  # noqa: E402
+    clog2_to_linear,
     clog3_to_linear,
     dlog_to_linear,
     flog2_to_linear,
@@ -68,7 +70,9 @@ def generate_luts() -> None:
     # Linux pytest uses color/ reference encode/decode for 18% codes only.
     write_spi1d(LUT_DIR / "FLog2_to_lin.spi1d", flog2_to_linear(x))
     write_spi1d(LUT_DIR / "NLog_to_lin.spi1d", nlog_normalized_to_linear(x))
-    # C-Log3+BT.2020 has no full IDT Builtin. C-Log2 / C-Log3+CG / Apple Log do.
+    # C-Log2+BT.2020 / C-Log3+BT.2020 have no full IDT Builtin.
+    # C-Log2+CG / C-Log3+CG / Apple Log use Builtins.
+    write_spi1d(LUT_DIR / "CLog2_to_lin.spi1d", clog2_to_linear(x))
     write_spi1d(LUT_DIR / "CLog3_to_lin.spi1d", clog3_to_linear(x))
     write_spi1d(LUT_DIR / "DLog_to_lin.spi1d", dlog_to_linear(x))
     write_spi1d(LUT_DIR / "lin_to_Rec709_oetf.spi1d", rec709_oetf(x))
@@ -106,8 +110,8 @@ def write_config() -> None:
 # Do NOT use DaVinci Wide Gamut Intermediate as the internal reference.
 #
 # IDTs with a standard Builtin use BuiltinTransform (Mac OCIO).
-# F-Log2, N-Log, C-Log3+BT.2020, D-Log have no full IDT Builtin.
-# C-Log2 / C-Log3+Cinema Gamut / Apple Log use BuiltinTransform.
+# F-Log2, N-Log, C-Log2+BT.2020, C-Log3+BT.2020, D-Log have no full IDT Builtin.
+# C-Log2+Cinema Gamut / C-Log3+Cinema Gamut / Apple Log use BuiltinTransform.
 # Rec.2100 HLG / PQ use ACES Output Transform / BT.2100 BuiltinTransform
 # (no homemade HLG/PQ curve). Rec.709 stays preview-only DIY OETF.
 # Python color/ calls Builtins when PyOpenColorIO is importable; otherwise
@@ -337,8 +341,28 @@ colorspaces:
 {builtin_cs(
     "Canon C-Log2 Cinema Gamut",
     "CANON_CLOG2-CGAMUT_to_ACES2065-1",
-    "Canon C-Log2 + Cinema Gamut / D65. Negative toe: OCIO CURVE - CANON_CLOG2_to_LINEAR / ACES CTL. Do not invent a mirrored toe.",
+    "Canon C-Log2 + Cinema Gamut / D65. Never the silent C-Log2 default. Negative toe: OCIO CURVE - CANON_CLOG2_to_LINEAR / ACES CTL. Do not invent a mirrored toe.",
 )}
+  - !<ColorSpace>
+    name: Canon C-Log2 BT.2020
+    family: Input/LogBridge
+    equalitygroup: ""
+    bitdepth: 32f
+    description: |
+      Canon C-Log2 + BT.2020 / D65. No full IDT Builtin (C-Log2+Cinema Gamut has one).
+      Handwritten C-Log2 curve + BT.2020→AP0 if no Builtin (prefer CURVE - CANON_CLOG2_to_LINEAR).
+      Never the silent C-Log2 default. Status: implemented (unverified).
+    isdata: false
+    allocation: uniform
+    to_scene_reference: !<GroupTransform>
+      children:
+        - !<FileTransform> {{src: CLog2_to_lin.spi1d, interpolation: linear}}
+        - !<MatrixTransform> {{matrix: [{m_2020}]}}
+    from_scene_reference: !<GroupTransform>
+      children:
+        - !<MatrixTransform> {{matrix: [{m_2020}], inverse: true}}
+        - !<FileTransform> {{src: CLog2_to_lin.spi1d, interpolation: linear, inverse: true}}
+
 {builtin_cs(
     "Canon C-Log3 Cinema Gamut",
     "CANON_CLOG3-CGAMUT_to_ACES2065-1",

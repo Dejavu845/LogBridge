@@ -70,6 +70,7 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 - S-Log3 without gamut metadata requires the paired IDT picker (never silent Cine, never two dropdowns). Venice pairs appear only if Venice is detected.
 - Nikon path does not divide 10-bit codes by 1023 before the white-paper curve.
 - C-Log2 negative toe is OCIO / ACES CTL (not an invented mirrored toe).
+- C-Log2 without gamut requires the paired picker (never silent Cinema Gamut).
 - C-Log3 without gamut requires the paired picker (never silent Cinema Gamut).
 - D-Log M, Apple Log 2, and ARRI LogC3 stay unsupported.
 - `ocio/config.ocio` names BuiltinTransform styles; Linux 18% tests use reference curves only.

@@ -6,8 +6,8 @@ ocio_profile_version: 2.2
 # Do NOT use DaVinci Wide Gamut Intermediate as the internal reference.
 #
 # IDTs with a standard Builtin use BuiltinTransform (Mac OCIO).
-# F-Log2, N-Log, C-Log3+BT.2020, D-Log have no full IDT Builtin.
-# C-Log2 / C-Log3+Cinema Gamut / Apple Log use BuiltinTransform.
+# F-Log2, N-Log, C-Log2+BT.2020, C-Log3+BT.2020, D-Log have no full IDT Builtin.
+# C-Log2+Cinema Gamut / C-Log3+Cinema Gamut / Apple Log use BuiltinTransform.
 # Rec.2100 HLG / PQ use ACES Output Transform / BT.2100 BuiltinTransform
 # (no homemade HLG/PQ curve). Rec.709 stays preview-only DIY OETF.
 # Python color/ calls Builtins when PyOpenColorIO is importable; otherwise
@@ -296,12 +296,32 @@ colorspaces:
     equalitygroup: ""
     bitdepth: 32f
     description: |
-      Canon C-Log2 + Cinema Gamut / D65. Negative toe: OCIO CURVE - CANON_CLOG2_to_LINEAR / ACES CTL. Do not invent a mirrored toe.
+      Canon C-Log2 + Cinema Gamut / D65. Never the silent C-Log2 default. Negative toe: OCIO CURVE - CANON_CLOG2_to_LINEAR / ACES CTL. Do not invent a mirrored toe.
       OCIO BuiltinTransform: CANON_CLOG2-CGAMUT_to_ACES2065-1
       Status: implemented (unverified). Not marked supported.
     isdata: false
     allocation: uniform
     to_scene_reference: !<BuiltinTransform> {style: CANON_CLOG2-CGAMUT_to_ACES2065-1}
+
+  - !<ColorSpace>
+    name: Canon C-Log2 BT.2020
+    family: Input/LogBridge
+    equalitygroup: ""
+    bitdepth: 32f
+    description: |
+      Canon C-Log2 + BT.2020 / D65. No full IDT Builtin (C-Log2+Cinema Gamut has one).
+      Handwritten C-Log2 curve + BT.2020→AP0 if no Builtin (prefer CURVE - CANON_CLOG2_to_LINEAR).
+      Never the silent C-Log2 default. Status: implemented (unverified).
+    isdata: false
+    allocation: uniform
+    to_scene_reference: !<GroupTransform>
+      children:
+        - !<FileTransform> {src: CLog2_to_lin.spi1d, interpolation: linear}
+        - !<MatrixTransform> {matrix: [0.6790856347, 0.1577009146, 0.1632134506, 0.0000000000, 0.0460020031, 0.8590546730, 0.0949433239, 0.0000000000, -0.0005739432, 0.0284677684, 0.9721061748, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000]}
+    from_scene_reference: !<GroupTransform>
+      children:
+        - !<MatrixTransform> {matrix: [0.6790856347, 0.1577009146, 0.1632134506, 0.0000000000, 0.0460020031, 0.8590546730, 0.0949433239, 0.0000000000, -0.0005739432, 0.0284677684, 0.9721061748, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 1.0000000000], inverse: true}
+        - !<FileTransform> {src: CLog2_to_lin.spi1d, interpolation: linear, inverse: true}
 
   - !<ColorSpace>
     name: Canon C-Log3 Cinema Gamut

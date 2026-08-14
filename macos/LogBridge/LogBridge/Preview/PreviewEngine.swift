@@ -358,7 +358,7 @@ enum PreviewColor {
                 SIMD3(0.004230590136, 1.104451311582, -0.108681901718),
                 SIMD3(-0.009670967662, -0.213042645554, 1.222713613216)
             ])
-        case .canonCLog3BT2020, .appleLogBT2020:
+        case .canonCLog2BT2020, .canonCLog3BT2020, .appleLogBT2020:
             return simd_double3x3(rows: [
                 SIMD3(0.679085634707, 0.157700914643, 0.163213450650),
                 SIMD3(0.046002003080, 0.859054673003, 0.094943323917),
@@ -412,7 +412,7 @@ enum PreviewColor {
                 return (pow(10.0, x / 0.224282) - 1.0) / 155.975327 - 0.01
             }
             return x / 15.1927 - 0.01
-        case .canonCLog2CGamut:
+        case .canonCLog2CGamut, .canonCLog2BT2020:
             let cut = 0.092864125
             let c1 = 0.24136077
             let c2 = 87.099375

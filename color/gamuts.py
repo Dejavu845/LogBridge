@@ -79,6 +79,7 @@ WHITE_POINTS = {
 }
 
 # Locked curve+gamut pairs for M1 IDTs. Sony is two pairs, user/metadata picks.
+# Canon C-Log2 and C-Log3 are each two pairs — never default either gamut.
 # Venice pairs are only selected when a Venice camera is detected — never default.
 IDT_PAIRS = {
     "arri_logc4_awg4": ("logc4", "AWG4"),
@@ -91,6 +92,7 @@ IDT_PAIRS = {
     "nikon_nlog_bt2020": ("nlog", "BT2020"),
     "red_log3g10_rwg": ("log3g10", "REDWideGamutRGB"),
     "canon_clog2_cgamut": ("clog2", "CinemaGamut"),
+    "canon_clog2_bt2020": ("clog2", "BT2020"),
     "canon_clog3_cgamut": ("clog3", "CinemaGamut"),
     "canon_clog3_bt2020": ("clog3", "BT2020"),
     "apple_log_bt2020": ("apple_log", "BT2020"),

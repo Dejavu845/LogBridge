@@ -177,6 +177,7 @@ class TestDispatch:
         assert any("N-Log" in n for n in names)
         assert any("Log3G10" in n for n in names)
         assert any("C-Log2" in n and "Cinema Gamut" in n for n in names)
+        assert any("C-Log2" in n and "BT.2020" in n for n in names)
         assert any("C-Log3" in n and "Cinema Gamut" in n for n in names)
         assert any("C-Log3" in n and "BT.2020" in n for n in names)
         assert any("Apple Log" in n for n in names)
