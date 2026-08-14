@@ -107,7 +107,7 @@ private struct WBInspector: View {
         ))
         HStack(spacing: 6) {
             WBStateChip(title: "机内 as-shot", on: session.graph.wbSource == .asShot)
-            WBStateChip(title: "白平衡（估计）", on: session.graph.wbSource == .estimate || session.graph.autoWBCCT != nil)
+            WBStateChip(title: "白平衡（估计）", on: session.graph.wbSource == .estimate)
             WBStateChip(title: "灰卡", on: session.graph.wbSource == .grey)
             if session.graph.asShotUnknown {
                 Text("as-shot unknown")

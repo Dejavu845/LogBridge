@@ -50,7 +50,7 @@ private struct DropZone: View {
         VStack(spacing: 4) {
             Image(systemName: "square.and.arrow.down")
                 .font(empty ? .title2 : .body)
-            Text(empty ? "Drop a folder of mixed clips" : "Drop a folder to add")
+            Text(empty ? "把混源文件夹拖进来" : "把文件夹拖进来")
                 .font(empty ? .subheadline.weight(.semibold) : .caption)
                 .foregroundStyle(.primary)
             if empty {
