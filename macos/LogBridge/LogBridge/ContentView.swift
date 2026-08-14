@@ -33,6 +33,9 @@ struct ContentView: View {
             session.handleImporter(result)
         }
         .onChange(of: session.selectedID) { _, _ in
+            if let clip = session.selectedClip {
+                session.applyClipWBToGraph(clip)
+            }
             session.refreshPreview()
         }
     }
@@ -55,7 +58,11 @@ struct SplitPreview: View {
                 Rec709PreviewView(
                     title: session.odtPreviewTitle,
                     caption: session.odtPreviewCaption,
-                    image: session.preview.odtImage
+                    image: session.preview.odtImage,
+                    pickingNeutral: session.pickingNeutral,
+                    onPick: { nx, ny in
+                        session.handlePreviewPick(nx: nx, ny: ny)
+                    }
                 )
                 PreviewBadge()
             }

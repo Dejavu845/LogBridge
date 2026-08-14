@@ -103,3 +103,31 @@ def test_no_bundled_manufacturer_demos():
     assert "drop your own" in blob.lower() or "drops their own" in blob.lower()
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
     assert "no bundled manufacturer demos" in sidebar.lower()
+
+
+def test_as_shot_wb_copy_and_no_5600_guess():
+    inspector = _read(INSPECTOR)
+    assert "as-shot" in inspector.lower() or "As-shot" in inspector
+    assert "Pick neutral" in inspector
+    assert "5600" in inspector  # named so we can say we do not guess it
+    assert "6504" in inspector
+    assert "do not guess 5600 or 6504" in inspector.lower()
+    assert "pending" in inspector.lower()
+    assert "ACES2065-1 (AP0)" in inspector
+    assert "after IDT" in inspector
+    assert "implemented (unverified)" in inspector.lower()
+    swift = _all_swift()
+    assert "pickNeutral" in swift or "Pick neutral" in swift
+    assert "asShotUnknown" in swift or "as-shot unknown" in swift
+    assert "WBSource" in swift
+    assert "handlePreviewPick" in swift
+    assert "sampleLinearRGB" in swift
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    blob = readme + "\n" + acceptance
+    assert "as-shot" in blob.lower()
+    assert "do not guess 5600 or 6504" in blob.lower()
+    assert "after IDT" in blob and "ACES2065-1 (AP0)" in blob
+    assert "Grey-card" in blob or "grey-card" in blob
+    assert "nclc" in blob.lower()
+    assert "pending / identity" in blob.lower() or "pending / identity" in inspector.lower()

@@ -84,16 +84,45 @@ enum ODTMode: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+/// As-shot / grey / user / unknown. Unknown = pending / identity. Do not guess 5600 or 6504.
+enum WBSource: String, Hashable {
+    case asShot = "as_shot"
+    case grey = "grey"
+    case user = "user"
+    case unknown = "unknown"
+
+    var title: String {
+        switch self {
+        case .asShot: return "as-shot"
+        case .grey: return "grey-card"
+        case .user: return "user"
+        case .unknown: return "as-shot unknown"
+        }
+    }
+}
+
 /// Session-level WB / ODT. IDT lives on the selected clip.
+/// WB default is as-shot camera-private CCT/tint (not nclc). Missing CCT
+/// is pending / identity — do not guess 5600 or 6504.
 struct SerialGraph: Equatable {
     var exposureEnabled: Bool = true
     var exposureStops: Double = 0
     var wbEnabled: Bool = false
-    var wbCCT: Double = 6504
+    var wbCCT: Double? = nil
     var wbTint: Double = 0
     var wbMethod: String = "bradford"
+    var wbSource: WBSource = .unknown
+    var asShotCCT: Double? = nil
+    var asShotTint: Double = 0
     var odt: ODTMode = .off
     var workingSpace: FixedPipeline.WorkingSpace = .acescct
+
+    /// CCT applied by the CAT, or nil when as-shot unknown (identity).
+    var effectiveWBCCT: Double? { wbCCT }
+
+    var asShotUnknown: Bool { wbCCT == nil }
+
+    var wbCCTDisplay: Double { wbCCT ?? 6504 }
 
     var odtEnabled: Bool {
         get { odt != .off }

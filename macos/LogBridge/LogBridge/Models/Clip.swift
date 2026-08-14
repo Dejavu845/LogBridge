@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import AppKit
+import simd
 
 /// One imported clip with a locked curve+gamut pair (or a pending picker).
 ///
@@ -16,8 +17,15 @@ struct Clip: Identifiable, Hashable {
     var needsUserPicker: Bool
     var detectionNote: String
     var veniceDetected: Bool
+    var asShotCCT: Double?
+    var asShotTint: Double
+    var wbSource: WBSource
+    var wbCCT: Double?
+    var wbTint: Double
 
     var filename: String { url.lastPathComponent }
+
+    var asShotUnknown: Bool { asShotCCT == nil && wbSource == .unknown }
 
     var lockedPairLabel: String {
         if let idt {
@@ -72,6 +80,7 @@ final class SessionModel: ObservableObject {
     @Published var showImporter = false
     @Published var dropTargeted = false
     @Published var lastExportNote: String = ""
+    @Published var pickingNeutral: Bool = false
 
     let preview = PreviewEngine()
 
@@ -212,11 +221,59 @@ final class SessionModel: ObservableObject {
     }
 
     func setWBParams(cct: Double? = nil, tint: Double? = nil, method: String? = nil) {
-        if let cct { graph.wbCCT = cct }
+        if let cct {
+            graph.wbCCT = cct
+            graph.wbSource = .user
+        }
         if let tint { graph.wbTint = tint }
         if let method { graph.wbMethod = method }
+        persistGraphWBToSelectedClip()
         preview.invalidateWBODT()
         refreshPreview()
+    }
+
+    func applyClipWBToGraph(_ clip: Clip) {
+        graph.asShotCCT = clip.asShotCCT
+        graph.asShotTint = clip.asShotTint
+        graph.wbSource = clip.wbSource
+        graph.wbCCT = clip.wbCCT
+        graph.wbTint = clip.wbTint
+        if clip.wbSource == .asShot || clip.wbSource == .grey {
+            graph.wbEnabled = true
+        }
+    }
+
+    func persistGraphWBToSelectedClip() {
+        guard let id = selectedID, let idx = clips.firstIndex(where: { $0.id == id }) else { return }
+        clips[idx].wbSource = graph.wbSource
+        clips[idx].wbCCT = graph.wbCCT
+        clips[idx].wbTint = graph.wbTint
+    }
+
+    /// Grey-card pick: sample after IDT in ACES2065-1 (AP0) linear. Overrides metadata.
+    func pickNeutral(linearRGB: SIMD3<Double>) {
+        guard let est = WhiteBalanceNode.pickNeutral(linearRGB: linearRGB, rgbToXYZ: WhiteBalanceNode.ap0ToXYZ) else { return }
+        graph.wbCCT = est.cct
+        graph.wbTint = est.tint
+        graph.wbSource = .grey
+        graph.wbEnabled = true
+        persistGraphWBToSelectedClip()
+        preview.invalidateWBODT()
+        refreshPreview()
+    }
+
+    /// Click on the processed pane: sample cached post-IDT AP0 linear (not log, not ACEScct).
+    func handlePreviewPick(nx: Double, ny: Double) {
+        guard pickingNeutral, let clip = selectedClip else { return }
+        guard let rgb = preview.sampleLinearRGB(
+            clipID: clip.id,
+            nx: nx,
+            ny: ny,
+            exposureStops: 0,
+            exposureEnabled: false
+        ) else { return }
+        pickNeutral(linearRGB: rgb)
+        pickingNeutral = false
     }
 
     func importProviders(_ providers: [NSItemProvider]) {
@@ -252,6 +309,7 @@ final class SessionModel: ObservableObject {
             let built: [Clip] = files.map { file in
                 let detection = ClipDetector.detect(url: file)
                 // Never silently assign an IDT. S-Log3 without gamut stays nil.
+                let shot = detection.asShotCCT
                 return Clip(
                     id: UUID(),
                     url: file,
@@ -261,14 +319,22 @@ final class SessionModel: ObservableObject {
                     detectionSource: detection.source,
                     needsUserPicker: detection.needsUserPicker,
                     detectionNote: detection.note,
-                    veniceDetected: detection.veniceDetected
+                    veniceDetected: detection.veniceDetected,
+                    asShotCCT: shot,
+                    asShotTint: detection.asShotTint,
+                    wbSource: shot == nil ? .unknown : .asShot,
+                    wbCCT: shot,
+                    wbTint: detection.asShotTint
                 )
             }
             DispatchQueue.main.async {
                 guard let self else { return }
                 for clip in built {
                     self.clips.append(clip)
-                    if self.selectedID == nil { self.selectedID = clip.id }
+                    if self.selectedID == nil {
+                        self.selectedID = clip.id
+                        self.applyClipWBToGraph(clip)
+                    }
                 }
                 self.refreshPreview()
             }

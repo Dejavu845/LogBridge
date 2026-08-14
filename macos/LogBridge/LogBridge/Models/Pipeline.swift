@@ -26,11 +26,15 @@ struct FixedPipeline {
 }
 
 struct WhiteBalanceSettings {
-    var cct: Double
+    var cct: Double?
     var tint: Double
     var method: String
+    var source: WBSource
 
-    static let identity = WhiteBalanceSettings(cct: 6504, tint: 0, method: "bradford")
+    /// D65 identity CAT (6504 K). Not a 5600 K guess.
+    static let identity = WhiteBalanceSettings(cct: 6504, tint: 0, method: "bradford", source: .user)
+    /// As-shot unknown: apply identity, do not guess 5600 K.
+    static let unknown = WhiteBalanceSettings(cct: nil, tint: 0, method: "bradford", source: .unknown)
 }
 
 enum PipelineStage: String, CaseIterable {

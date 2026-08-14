@@ -14,11 +14,16 @@ import simd
 enum ResolveExporter {
     static let lutSize = 17
 
-    static func exportNote(clips: [Clip], includeWBNode: Bool, cct: Double, tint: Double) -> String {
+    private static func cctLabel(_ cct: Double?) -> String {
+        cct.map { "\(Int($0)) K" } ?? "pending / identity"
+    }
+
+    static func exportNote(clips: [Clip], includeWBNode: Bool, cct: Double?, tint: Double) -> String {
         var lines: [String] = []
         lines.append("LogBridge M1 Resolve export (implemented, unverified)")
         lines.append("Working space: ACEScct timeline / ACES2065-1 interchange.")
-        lines.append("WB node: \(includeWBNode ? "ON (AP0 Bradford CAT, \(Int(cct)) K, tint \(tint))" : "present, bypassed by default")")
+        let cctLabel = cct.map { "\(Int($0)) K" } ?? "pending / identity (do not guess 5600 or 6504)"
+        lines.append("WB node: \(includeWBNode ? "ON (AP0 Bradford CAT, \(cctLabel), tint \(tint))" : "present, bypassed by default")")
         lines.append("ODT: Rec.709 is preview only, off by default. Off = ACEScct deliverable.")
         lines.append("Files: graph.xml, graph.dot, 01_IDT_*.cube, 02_Exposure.{cube,dctl}, 03_WB.{cube,cdl,ccc,dctl}, 04_ODT_Rec709.cube, README_RESOLVE.md")
         lines.append("Exposure is its own node (stops; not baked into IDT/WB at 0). Bypass WB: disable WB node (or DCTL Bypass WB).")
@@ -36,7 +41,7 @@ enum ResolveExporter {
         to directory: URL,
         clips: [Clip],
         includeWBNode: Bool,
-        cct: Double,
+        cct: Double?,
         tint: Double,
         lutSize: Int = lutSize,
         odtEnabled: Bool = false,
@@ -84,7 +89,7 @@ enum ResolveExporter {
             to: dir,
             clips: [],
             includeWBNode: includeWBNode,
-            cct: 6504,
+            cct: nil,
             tint: 0
         )
     }
@@ -195,7 +200,8 @@ enum ResolveExporter {
     }
 
     /// Scene-linear ACES2065-1 (AP0) RGB CAT: XYZ_to_AP0 * Bradford_XYZ * AP0_to_XYZ.
-    private static func wbRGBMatrix(cct: Double, tint: Double) -> simd_double3x3 {
+    private static func wbRGBMatrix(cct: Double?, tint: Double) -> simd_double3x3 {
+        guard let cct else { return matrix_identity_double3x3 }
         let cat = WhiteBalanceNode.catMatrix(cct: cct, tint: tint)
         return ap0ToXYZ.inverse * cat * ap0ToXYZ
     }
@@ -371,9 +377,9 @@ enum ResolveExporter {
         }
     }
 
-    private static func wbCube(cct: Double, tint: Double, size: Int) -> String {
+    private static func wbCube(cct: Double?, tint: Double, size: Int) -> String {
         let m = wbRGBMatrix(cct: cct, tint: tint)
-        return cubeFile(title: "LogBridge WB AP0 CAT \(Int(cct))K tint \(tint) (ACEScct decode→ACES2065-1→encode)", size: size) {
+        return cubeFile(title: "LogBridge WB AP0 CAT \(cctLabel(cct)) tint \(tint) (ACEScct decode→ACES2065-1→encode)", size: size) {
             wbInACEScct($0, matrix: m)
         }
     }
@@ -449,7 +455,7 @@ enum ResolveExporter {
         String(format: "%.10f %.10f %.10f", v.x, v.y, v.z)
     }
 
-    private static func cdlXML(cct: Double, tint: Double, collection: Bool) -> String {
+    private static func cdlXML(cct: Double?, tint: Double, collection: Bool) -> String {
         let slope = fmt3(cdlSlope(cct: cct, tint: tint))
         let sop = """
               <SOPNode>
@@ -485,7 +491,7 @@ enum ResolveExporter {
         """
     }
 
-    private static func dctl(cct: Double, tint: Double) -> String {
+    private static func dctl(cct: Double?, tint: Double) -> String {
         let m = wbRGBMatrix(cct: cct, tint: tint)
         // simd_double3x3 is column-major. Flatten row-major for the DCTL 3x3.
         let r0c0 = m.columns.0.x, r0c1 = m.columns.1.x, r0c2 = m.columns.2.x
@@ -498,7 +504,7 @@ enum ResolveExporter {
         // LogBridge M1 WB node — linear AP0 Bradford/CAT02 (ACES2065-1).
         // Timeline: ACEScct / ACES2065-1. CAT after ACEScct decode (AP1→AP0). Never on encoded ACEScct.
         // Disable node 2 (or Bypass WB) = IDT → ACEScct, no bake. Rec.709 is preview only.
-        // CCT \(Int(cct)) K  tint \(tint)  method bradford
+        // CCT \(cctLabel(cct))  tint \(tint)  method bradford
         // Implemented (unverified). Not a camera-support claim.
 
         DEFINE_UI_PARAMS(bypass_wb, Bypass WB, DCTLUI_CHECK_BOX, 0, 0, 1)
@@ -580,7 +586,7 @@ enum ResolveExporter {
             .replacingOccurrences(of: "\"", with: "&quot;")
     }
 
-    private static func graphXML(idts: [IDT], cct: Double, tint: Double, includeWB: Bool, odtEnabled: Bool = false, exposureStops: Double = 0, exposureEnabled: Bool = true) -> String {
+    private static func graphXML(idts: [IDT], cct: Double?, tint: Double, includeWB: Bool, odtEnabled: Bool = false, exposureStops: Double = 0, exposureEnabled: Bool = true) -> String {
         let enabled = includeWB ? "true" : "false"
         let odtOn = odtEnabled ? "true" : "false"
         let expOn = exposureEnabled ? "true" : "false"
@@ -609,8 +615,8 @@ enum ResolveExporter {
             <File role="dctl">02_Exposure.dctl</File>
           </Node>
           <Node index="3" name="WB" type="Corrector" bypassable="true" enabled="\(enabled)" method="bradford">
-            <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. Bypass WB = IDT → Exposure → ACEScct, no bake.</Description>
-            <CCT>\(String(format: "%.4f", cct))</CCT>
+            <Description>As-shot writes this linear AP0 CAT node only. Missing CCT/tint is pending / identity (do not guess 5600 or 6504). Bypass WB = IDT → Exposure → ACEScct, no bake.</Description>
+            \(cct == nil ? "<CCT pending=\"true\" source=\"unknown\"/>" : "<CCT>\(String(format: "%.4f", cct!))</CCT>")
             <Tint>\(String(format: "%.6f", tint))</Tint>
             <File role="lut">03_WB.cube</File>
             <File role="cdl">03_WB.cdl</File>
@@ -627,7 +633,7 @@ enum ResolveExporter {
         """
     }
 
-    private static func graphDOT(idts: [IDT], cct: Double, tint: Double, includeWB: Bool, exposureStops: Double = 0) -> String {
+    private static func graphDOT(idts: [IDT], cct: Double?, tint: Double, includeWB: Bool, exposureStops: Double = 0) -> String {
         let idtLabel = idts.isEmpty ? "(per clip CST/LUT)" : idts.map(\.rawValue).joined(separator: ", ")
         let wbStyle = includeWB ? "solid" : "dashed"
         let wbFill = includeWB ? "lightgrey" : "white"
@@ -641,7 +647,7 @@ enum ResolveExporter {
           clip [label="Clip\\ncamera log"];
           idt  [label="IDT\\n\(idtLabel)\\n01_IDT_<idt>.cube\\nor ACES IDT / CST → ACEScct"];
           exp  [label="Exposure (zeroable)\\n\(String(format: "%+.2f", exposureStops)) stops\\n02_Exposure.cube / .dctl"];
-          wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n\(Int(cct)) K  tint \(tint)\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,\(wbStyle)", fillcolor="\(wbFill)"];
+          wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n\(cctLabel(cct))  tint \(tint)\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,\(wbStyle)", fillcolor="\(wbFill)"];
           odt  [label="Rec.709 ODT (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709"];
           timeline [shape=oval, label="Timeline\\nACEScct"];
 
@@ -652,7 +658,7 @@ enum ResolveExporter {
         """
     }
 
-    private static func readme(idts: [IDT], cct: Double, tint: Double, includeWB: Bool, exposureStops: Double = 0) -> String {
+    private static func readme(idts: [IDT], cct: Double?, tint: Double, includeWB: Bool, exposureStops: Double = 0) -> String {
         let idtList = idts.isEmpty ? "(none — assign IDT in Resolve CST)" : idts.map(\.rawValue).joined(separator: ", ")
         let wbState = includeWB ? "enabled by default" : "present but bypassed by default"
         return """
@@ -673,7 +679,7 @@ enum ResolveExporter {
            - `03_WB.cube` — ACEScct wrap of the linear AP0 Bradford/CAT02 3×3 (decode → ACES2065-1 CAT → encode).
            - `03_WB.dctl` — DI-free DCTL: decode ACEScct → AP1→AP0 → AP0 3×3 → encode. **Bypass WB** or disable node 2 = IDT → ACEScct, no bake.
            - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
-           - CCT \(Int(cct)) K, tint \(tint), method Bradford. Scene-linear only.
+           - CCT \(cctLabel(cct)), tint \(tint), method Bradford. As-shot writes this node only. Missing CCT is pending / identity (do not guess 5600 or 6504). Scene-linear only.
 
         3. **Rec.709 preview** — `04_ODT_Rec709.cube` or CST
            - Optional preview node, off by default. Off = ACEScct deliverable.

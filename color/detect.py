@@ -15,9 +15,10 @@ D-Log M, Apple Log 2, and ARRI LogC3 are explicitly unsupported.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
+from .as_shot import AsShotWB, read_as_shot_wb
 from .gamuts import IDT_PAIRS, VENICE_IDTS
 
 
@@ -109,6 +110,8 @@ class Detection:
     needs_user_picker: bool
     note: str
     venice_detected: bool = False
+    as_shot_cct: float | None = None
+    as_shot_tint: float = 0.0
 
 
 def _pair(idt_id: str, source: str, note: str) -> Detection:
@@ -122,6 +125,11 @@ def _pair(idt_id: str, source: str, note: str) -> Detection:
         note,
         venice_detected=idt_id in VENICE_IDTS,
     )
+
+
+def _with_as_shot(d: Detection, as_shot: AsShotWB) -> Detection:
+    """Attach camera-private as-shot CCT/tint. nclc never contributes."""
+    return replace(d, as_shot_cct=as_shot.cct, as_shot_tint=float(as_shot.tint))
 
 
 def _is_slog3(curve: str | None) -> bool:
@@ -202,7 +210,7 @@ def can_one_click_process_all(detections: list[Detection]) -> bool:
     return bool(detections) and all(can_one_click_process(d) for d in detections)
 
 
-def detect_from_metadata(meta: dict) -> Detection | None:
+def _detect_from_metadata_idt(meta: dict) -> Detection | None:
     """Camera-private metadata only. Ignores QuickTime nclc / nclx / colr."""
     if not meta:
         return None
@@ -462,31 +470,56 @@ def detect_clip(
     model: str | None = None,
     user_idt: str | None = None,
 ) -> Detection:
-    """Full detection order. User picker is last and always honored if set."""
+    """Full detection order. User picker is last and always honored if set.
+
+    As-shot CCT/tint is read from camera-private metadata only (never nclc)
+    and attached even when the IDT pair comes from filename/model/user.
+    """
+    as_shot = read_as_shot_wb(metadata or {})
     hit = detect_from_metadata(metadata or {})
     if hit is not None and not hit.needs_user_picker:
-        return hit
+        return _with_as_shot(hit, as_shot)
     # Partial metadata (e.g. S-Log3 without gamut) still tries filename/model
     # for the missing piece, but never nclc.
     fn = detect_from_filename(path)
     if fn is not None and not fn.needs_user_picker:
-        return fn
+        return _with_as_shot(fn, as_shot)
     md = detect_from_model(model or "")
     if md is not None:
-        return md
+        return _with_as_shot(md, as_shot)
     if user_idt:
         if user_idt not in IDT_PAIRS:
             raise KeyError(f"Unknown IDT {user_idt!r}")
-        return _pair(user_idt, "user", "user picker")
+        return _with_as_shot(_pair(user_idt, "user", "user picker"), as_shot)
     # Prefer the most specific partial result so the UI can lock the curve.
     for partial in (hit, fn):
         if partial is not None:
-            return partial
-    return Detection(
-        None,
-        None,
-        None,
-        "unresolved",
-        True,
-        "No camera-private metadata or filename/model hint; user picker required. QuickTime nclc is never used.",
+            return _with_as_shot(partial, as_shot)
+    return _with_as_shot(
+        Detection(
+            None,
+            None,
+            None,
+            "unresolved",
+            True,
+            "No camera-private metadata or filename/model hint; user picker required. QuickTime nclc is never used.",
+        ),
+        as_shot,
     )
+
+
+def _attach_as_shot_from_meta(d: Detection | None, meta: dict | None) -> Detection | None:
+    if d is None:
+        return None
+    return _with_as_shot(d, read_as_shot_wb(meta or {}))
+
+
+def detect_from_metadata(meta: dict) -> Detection | None:
+    """Camera-private metadata only. Ignores QuickTime nclc / nclx / colr.
+
+    Attaches as-shot CCT/tint from the same camera-private keys (never nclc).
+    """
+    hit = _detect_from_metadata_idt(meta)
+    if hit is None:
+        return None
+    return _with_as_shot(hit, read_as_shot_wb(meta))

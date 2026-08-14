@@ -105,21 +105,44 @@ private struct WBInspector: View {
             get: { session.graph.wbEnabled },
             set: { session.setWBEnabled($0) }
         ))
+        HStack {
+            Text("Source")
+                .frame(width: 52, alignment: .leading)
+            Text(session.graph.wbSource.title)
+                .font(.caption.weight(.semibold))
+            if session.graph.asShotUnknown {
+                Text("as-shot unknown")
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.yellow.opacity(0.28))
+                    .clipShape(Capsule())
+            }
+        }
+        if session.graph.asShotUnknown {
+            Text("No camera-private CCT. WB stays pending / identity — do not guess 5600 or 6504. Pick a grey card (after IDT, AP0 linear) or set CCT.")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+        Button(session.pickingNeutral ? "Click preview to pick neutral…" : "Pick neutral") {
+            session.pickingNeutral.toggle()
+        }
+        .help("Grey-card click: sample after IDT in ACES2065-1 (AP0) linear; overrides metadata. Writes the existing CAT node.")
         if session.graph.wbEnabled {
             HStack {
                 Text("CCT")
                     .frame(width: 40, alignment: .leading)
                 Slider(
                     value: Binding(
-                        get: { session.graph.wbCCT },
+                        get: { session.graph.wbCCTDisplay },
                         set: { session.setWBParams(cct: $0) }
                     ),
                     in: 2000...10000,
                     step: 10
                 )
-                Text("\(Int(session.graph.wbCCT)) K")
+                Text(session.graph.wbCCT.map { "\(Int($0)) K" } ?? "as-shot unknown")
                     .monospacedDigit()
-                    .frame(width: 64, alignment: .trailing)
+                    .frame(width: 88, alignment: .trailing)
             }
             HStack {
                 Text("Tint")
@@ -145,7 +168,7 @@ private struct WBInspector: View {
             }
             .frame(maxWidth: 220)
         }
-        Text("Scene-linear Bradford/CAT02 in ACES2065-1 (AP0). Disable this node in Resolve (or DCTL Bypass WB) = IDT → Exposure → ACEScct, no bake.")
+        Text("As-shot writes only this linear AP0 CAT node (not log, not ACEScct). Camera-private CCT/tint (not nclc). Grey-card pick samples after IDT in ACES2065-1 (AP0) linear and overrides metadata. Missing CCT/tint is pending / identity — do not guess 5600 or 6504. Implemented (unverified). Disable this node in Resolve (or DCTL Bypass WB) = IDT → Exposure → ACEScct, no bake.")
             .font(.caption)
             .foregroundStyle(.secondary)
     }

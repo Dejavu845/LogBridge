@@ -48,8 +48,11 @@ struct NodeStripView: View {
             }
             return "bypassed"
         case .wb:
-            if session.graph.wbEnabled {
-                return "\(Int(session.graph.wbCCT)) K"
+            if session.graph.asShotUnknown {
+                return session.graph.wbEnabled ? "as-shot unknown" : "bypassed"
+            }
+            if session.graph.wbEnabled, let cct = session.graph.wbCCT {
+                return "\(Int(cct)) K · \(session.graph.wbSource.title)"
             }
             return "bypassed"
         case .odt:

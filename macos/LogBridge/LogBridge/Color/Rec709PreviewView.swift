@@ -18,6 +18,8 @@ struct Rec709PreviewView: View {
     let title: String
     let caption: String
     var image: CGImage? = nil
+    var pickingNeutral: Bool = false
+    var onPick: ((Double, Double) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -28,6 +30,23 @@ struct Rec709PreviewView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.black)
                 PreviewNotDeliverableBadge()
+            }
+            .overlay {
+                GeometryReader { geo in
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .allowsHitTesting(pickingNeutral)
+                        .gesture(
+                            DragGesture(minimumDistance: 0).onEnded { value in
+                                guard pickingNeutral, let onPick else { return }
+                                let w = max(geo.size.width, 1)
+                                let h = max(geo.size.height, 1)
+                                let nx = min(max(value.location.x / w, 0), 1)
+                                let ny = min(max(value.location.y / h, 0), 1)
+                                onPick(nx, ny)
+                            }
+                        )
+                }
             }
             Text(caption)
                 .font(.caption)

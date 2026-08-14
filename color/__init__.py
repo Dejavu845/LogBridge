@@ -55,7 +55,8 @@ from .odt import (
 )
 from .exposure import apply_exposure, stops_to_gain
 from .pipeline import apply_idt, apply_odt_rec709, apply_selected_odt, process_to_rec709
-from .wb import bradford_cat_matrix, white_balance_matrix
+from .wb import bradford_cat_matrix, linear_rgb_to_cct_tint, white_balance_matrix
+from .as_shot import AsShotWB, pick_neutral_from_linear_rgb, read_as_shot_wb
 
 __all__ = [
     "IDT_NAMES",
@@ -108,6 +109,10 @@ __all__ = [
     "stops_to_gain",
     "bradford_cat_matrix",
     "white_balance_matrix",
+    "linear_rgb_to_cct_tint",
+    "AsShotWB",
+    "read_as_shot_wb",
+    "pick_neutral_from_linear_rgb",
 ]
 
 __version__ = "0.1.0"
