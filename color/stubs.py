@@ -1,75 +1,55 @@
-"""Extension-point stubs for IDTs not in M1.
+"""Extension-point stubs for IDTs that stay unimplemented.
 
-Canon C-Log2 has a negative toe. Do not invent a mirrored-toe analytic
-curve. Use the official OCIO builtin or ACES CLF:
+Second-batch implemented IDTs (C-Log2 / C-Log3 / Apple Log 1 / D-Log) live
+in ``color.curves``. These remain stubs:
 
-    CURVE - CANON_CLOG2_to_LINEAR
+- Apple Log 2 (out of scope)
+- DJI D-Log M (unsupported; 2017 D-Log + D-Gamut only)
+- ARRI LogC3 (explicitly unsupported; M1 is LogC4)
 
-Apple Log and DJI D-Log are placeholders only.
 Status: not implemented. Do not mark these cameras as supported.
 """
 
 from __future__ import annotations
 
-CANON_CLOG2_OCIO_BUILTIN = "CURVE - CANON_CLOG2_to_LINEAR"
-CANON_CLOG2_IDT_BUILTIN = "CANON_CLOG2-CGAMUT_to_ACES2065-1"
-CANON_CLOG3_OCIO_BUILTIN = "CURVE - CANON_CLOG3_to_LINEAR"
-
 STUB_IDTS = (
     {
-        "id": "canon_clog2",
-        "curve": "clog2",
-        "gamut": "Cinema Gamut / BT.2020 (unspecified until IDT lands)",
-        "status": "stub",
-        "note": (
-            "C-Log2 negative toe: use OCIO builtin "
-            f"{CANON_CLOG2_OCIO_BUILTIN} / {CANON_CLOG2_IDT_BUILTIN} "
-            "or the ACES CLF. Do not invent a mirrored toe."
-        ),
-    },
-    {
-        "id": "canon_clog3",
-        "curve": "clog3",
-        "gamut": "Cinema Gamut / BT.2020 (unspecified until IDT lands)",
-        "status": "stub",
-        "note": f"Use OCIO builtin {CANON_CLOG3_OCIO_BUILTIN} or ACES CLF when landing this IDT.",
-    },
-    {
-        "id": "apple_log",
-        "curve": "apple_log",
+        "id": "apple_log2",
+        "curve": "apple_log2",
         "gamut": "BT.2020 (typical; unverified)",
         "status": "stub",
-        "note": "Apple Log IDT is out of scope for M1.",
+        "note": "Apple Log 2 is out of scope. Apple Log 1 + BT.2020 is implemented (unverified).",
     },
     {
-        "id": "dji_dlog",
-        "curve": "dlog",
-        "gamut": "DJI D-Gamut (unspecified until IDT lands)",
+        "id": "dji_dlog_m",
+        "curve": "dlog_m",
+        "gamut": "DJI (unspecified)",
         "status": "stub",
-        "note": "DJI D-Log IDT is out of scope for M1.",
+        "note": "D-Log M is unsupported. DJI D-Log + D-Gamut (2017 white paper) is implemented (unverified).",
+    },
+    {
+        "id": "arri_logc3",
+        "curve": "logc3",
+        "gamut": "AWG3 (unspecified)",
+        "status": "stub",
+        "note": "ARRI LogC3 is explicitly unsupported. Use LogC4 + AWG4.",
     },
 )
 
 
-def clog2_to_linear(_x):
-    """Not implemented. C-Log2 negative toe must come from OCIO/ACES CLF."""
+def apple_log2_to_linear(_x):
     raise NotImplementedError(
-        "Canon C-Log2 is a stub. Use OCIO "
-        f"{CANON_CLOG2_OCIO_BUILTIN} / {CANON_CLOG2_IDT_BUILTIN} "
-        "/ ACES CLF; do not invent a mirrored toe."
+        "Apple Log 2 is unsupported (out of scope). Use Apple Log 1 + BT.2020."
     )
 
 
-def clog3_to_linear(_x):
+def dlog_m_to_linear(_x):
     raise NotImplementedError(
-        "Canon C-Log3 is a stub. Use OCIO "
-        f"{CANON_CLOG3_OCIO_BUILTIN} / ACES CLF."
+        "DJI D-Log M is unsupported. Use D-Log + D-Gamut (2017 white paper)."
     )
 
 
-def apple_log_to_linear(_x):
-    raise NotImplementedError("Apple Log IDT is a stub (out of scope for M1).")
-
-
-def dlog_to_linear(_x):
-    raise NotImplementedError("DJI D-Log IDT is a stub (out of scope for M1).")
+def logc3_to_linear(_x):
+    raise NotImplementedError(
+        "ARRI LogC3 is unsupported. Use ARRI LogC4 + AWG4."
+    )

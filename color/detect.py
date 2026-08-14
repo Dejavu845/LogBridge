@@ -8,6 +8,9 @@ Order:
 NEVER trust QuickTime ``nclc`` to identify S-Log3 or LogC4.
 NEVER default S-Log3 to S-Gamut3.Cine — if only S-Log3 is known, gamut is
 unresolved and the user picker is required.
+NEVER default C-Log3 to Cinema Gamut — if only C-Log3 is known, gamut is
+unresolved and the user picker is required.
+D-Log M, Apple Log 2, and ARRI LogC3 are explicitly unsupported.
 """
 
 from __future__ import annotations
@@ -51,6 +54,14 @@ _FILENAME_HINTS = (
     ("log3g10", "red_log3g10_rwg"),
     ("redwidegamut", "red_log3g10_rwg"),
     ("rwg", "red_log3g10_rwg"),
+    ("c-log2", "canon_clog2_cgamut"),
+    ("clog2", "canon_clog2_cgamut"),
+    ("apple log", "apple_log_bt2020"),
+    ("applelog", "apple_log_bt2020"),
+    ("d-gamut", "dji_dlog_dgamut"),
+    ("dgamut", "dji_dlog_dgamut"),
+    ("d-log", "dji_dlog_dgamut"),
+    ("dlog", "dji_dlog_dgamut"),
 )
 
 # Model tokens. S-Log3 cameras do not imply Cine gamut.
@@ -76,10 +87,16 @@ IDT_PAIR_LABELS = {
     "fujifilm_flog2_bt2020": "F-Log2 + BT.2020",
     "nikon_nlog_bt2020": "N-Log + BT.2020",
     "red_log3g10_rwg": "Log3G10 + REDWideGamutRGB",
+    "canon_clog2_cgamut": "C-Log2 + Cinema Gamut",
+    "canon_clog3_cgamut": "C-Log3 + Cinema Gamut",
+    "canon_clog3_bt2020": "C-Log3 + BT.2020",
+    "apple_log_bt2020": "Apple Log + BT.2020",
+    "dji_dlog_dgamut": "D-Log + D-Gamut",
 }
 
 SLOG3_PAIRS = ("sony_slog3_sgamut3", "sony_slog3_sgamut3cine")
 SLOG3_VENICE_PAIRS = ("sony_slog3_sgamut3_venice", "sony_slog3_sgamut3cine_venice")
+CLOG3_PAIRS = ("canon_clog3_cgamut", "canon_clog3_bt2020")
 IMPLEMENTED_NON_VENICE = tuple(k for k in IDT_PAIRS if k not in VENICE_IDTS)
 
 
@@ -114,6 +131,13 @@ def _is_slog3(curve: str | None) -> bool:
     return c in {"slog3", "s-log3"}
 
 
+def _is_clog3(curve: str | None) -> bool:
+    if not curve:
+        return False
+    c = curve.lower().replace("_", "-")
+    return c in {"clog3", "c-log3"}
+
+
 def picker_pairs(
     *,
     curve: str | None = None,
@@ -124,9 +148,14 @@ def picker_pairs(
 
     Venice pairs appear only if ``venice_detected``. S-Log3 without a locked
     gamut offers both S-Gamut3 and S-Gamut3.Cine — never a silent Cine default.
+    C-Log3 without a locked gamut offers Cinema Gamut and BT.2020 — never a
+    silent Cinema Gamut default.
     """
     if needs_picker and _is_slog3(curve):
         return list(SLOG3_VENICE_PAIRS if venice_detected else SLOG3_PAIRS)
+    if needs_picker and _is_clog3(curve):
+        # Never a silent Cinema Gamut default.
+        return list(CLOG3_PAIRS)
     out = list(IMPLEMENTED_NON_VENICE)
     if venice_detected:
         try:
@@ -214,14 +243,24 @@ def detect_from_metadata(meta: dict) -> Detection | None:
         )
 
     canon = str(cleaned.get("canon_vendor_gamma", cleaned.get("canon_log", ""))).lower()
-    if "c-log2" in canon or "clog2" in canon or "c-log3" in canon or "clog3" in canon:
+    canon_gamut = str(
+        cleaned.get("canon_vendor_gamut", cleaned.get("canon_gamut", ""))
+    ).lower()
+    if "c-log2" in canon or "clog2" in canon:
+        return _pair("canon_clog2_cgamut", "metadata", "Canon vendor metadata (C-Log2 + Cinema Gamut)")
+    if "c-log3" in canon or "clog3" in canon:
+        if "cinema" in canon_gamut or "cgamut" in canon_gamut or "c-gamut" in canon_gamut:
+            return _pair("canon_clog3_cgamut", "metadata", "Canon vendor metadata (C-Log3 + Cinema Gamut)")
+        if "2020" in canon_gamut or "bt.2020" in canon_gamut or "bt2020" in canon_gamut:
+            return _pair("canon_clog3_bt2020", "metadata", "Canon vendor metadata (C-Log3 + BT.2020)")
         return Detection(
             None,
-            None,
+            "clog3",
             None,
             "metadata",
             True,
-            "Canon C-Log detected; IDT is a stub (use OCIO CURVE - CANON_CLOG2_to_LINEAR)",
+            "C-Log3 from Canon metadata without gamut; pick a paired IDT "
+            "(C-Log3 + Cinema Gamut or C-Log3 + BT.2020). Never default Cinema Gamut",
         )
 
     rmd = str(cleaned.get("red_rmd_colorspace", cleaned.get("red_color_space", ""))).lower()
@@ -241,11 +280,99 @@ def detect_from_metadata(meta: dict) -> Detection | None:
     if "v-log" in pana or "vlog" in pana:
         return _pair("panasonic_vlog_vgamut", "metadata", "Panasonic metadata")
 
+    apple = str(cleaned.get("apple_log", cleaned.get("apple_gamma", ""))).lower()
+    if "apple log 2" in apple or "applelog2" in apple:
+        return Detection(
+            None,
+            None,
+            None,
+            "metadata",
+            True,
+            "Apple Log 2 is unsupported (out of scope). Apple Log 1 + BT.2020 is implemented (unverified).",
+        )
+    if "apple log" in apple or "applelog" in apple:
+        return _pair("apple_log_bt2020", "metadata", "Apple Log metadata")
+
+    dji = str(cleaned.get("dji_gamma", cleaned.get("dji_log", ""))).lower()
+    if "d-log m" in dji or "dlog m" in dji or "dlogm" in dji or "d-logm" in dji:
+        return Detection(
+            None,
+            None,
+            None,
+            "metadata",
+            True,
+            "D-Log M is unsupported. D-Log + D-Gamut (2017 white paper) is implemented (unverified).",
+        )
+    if "d-log" in dji or "dlog" in dji:
+        return _pair("dji_dlog_dgamut", "metadata", "DJI D-Log metadata")
+
+    arri_logc3 = str(cleaned.get("arri_mxf_color_space", cleaned.get("arri_color_space", ""))).lower()
+    if "logc3" in arri_logc3 and "logc4" not in arri_logc3:
+        return Detection(
+            None,
+            None,
+            None,
+            "metadata",
+            True,
+            "ARRI LogC3 is unsupported. Use LogC4 + AWG4.",
+        )
+
+    return None
+
+
+def _unsupported_filename(name: str) -> Detection | None:
+    """D-Log M / Apple Log 2 / LogC3 stay unresolved — never a silent IDT."""
+    if "d-log m" in name or "dlog m" in name or "dlogm" in name or "d-logm" in name:
+        return Detection(
+            None,
+            None,
+            None,
+            "filename",
+            True,
+            "D-Log M is unsupported. D-Log + D-Gamut (2017) is implemented (unverified).",
+        )
+    if "apple log 2" in name or "applelog2" in name or "apple-log-2" in name:
+        return Detection(
+            None,
+            None,
+            None,
+            "filename",
+            True,
+            "Apple Log 2 is unsupported (out of scope). Apple Log 1 + BT.2020 is implemented (unverified).",
+        )
+    # LogC3 is not LogC4.
+    if "logc3" in name and "logc4" not in name:
+        return Detection(
+            None,
+            None,
+            None,
+            "filename",
+            True,
+            "ARRI LogC3 is unsupported. Use LogC4 + AWG4.",
+        )
     return None
 
 
 def detect_from_filename(path: str) -> Detection | None:
     name = Path(path).name.lower()
+    blocked = _unsupported_filename(name)
+    if blocked is not None:
+        return blocked
+    # C-Log3 is paired — lock only when a gamut token is present.
+    if "c-log3" in name or "clog3" in name:
+        if "cinema" in name or "cgamut" in name or "c-gamut" in name:
+            return _pair("canon_clog3_cgamut", "filename", "filename C-Log3 + Cinema Gamut")
+        if "bt.2020" in name or "bt2020" in name or "rec2020" in name or "rec.2020" in name:
+            return _pair("canon_clog3_bt2020", "filename", "filename C-Log3 + BT.2020")
+        return Detection(
+            None,
+            "clog3",
+            None,
+            "filename",
+            True,
+            "C-Log3 in filename without gamut; pick a paired IDT "
+            "(C-Log3 + Cinema Gamut or C-Log3 + BT.2020). Never default Cinema Gamut",
+        )
     # Check more specific tokens first (already ordered).
     venice = _venice_hit(name)
     for token, idt_id in _FILENAME_HINTS:

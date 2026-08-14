@@ -3,7 +3,15 @@
 import numpy as np
 import pytest
 
-from color.curves import linear_to_logc4, linear_to_nlog, linear_to_slog3
+from color.curves import (
+    linear_to_apple_log,
+    linear_to_clog2,
+    linear_to_clog3,
+    linear_to_dlog,
+    linear_to_logc4,
+    linear_to_nlog,
+    linear_to_slog3,
+)
 from color.gamuts import (
     ARRI_AWG4_TO_XYZ,
     IDT_PAIRS,
@@ -35,6 +43,12 @@ def test_idt_pairs_are_locked():
     assert IDT_PAIRS["sony_slog3_sgamut3cine"] == ("slog3", "SGamut3Cine")
     # No implicit Cine default in the pair table.
     assert "SGamut3Cine" not in IDT_PAIRS["sony_slog3_sgamut3"]
+    assert IDT_PAIRS["canon_clog2_cgamut"] == ("clog2", "CinemaGamut")
+    assert IDT_PAIRS["canon_clog3_cgamut"] == ("clog3", "CinemaGamut")
+    assert IDT_PAIRS["canon_clog3_bt2020"] == ("clog3", "BT2020")
+    assert IDT_PAIRS["canon_clog3_bt2020"][1] != "CinemaGamut"
+    assert IDT_PAIRS["apple_log_bt2020"] == ("apple_log", "BT2020")
+    assert IDT_PAIRS["dji_dlog_dgamut"] == ("dlog", "DGamut")
 
 
 def test_nlog_idt_uses_10bit_codes():
@@ -108,3 +122,28 @@ def test_serial_graph_nodes():
     rec = g.apply(log)
     direct = process_to_rec709(log, "arri_logc4_awg4", apply_wb=False)
     np.testing.assert_allclose(rec, direct, atol=1e-10)
+
+
+def test_clog2_idt_18_percent():
+    log = np.full(3, float(linear_to_clog2(0.18)))
+    lin = apply_idt(log, "canon_clog2_cgamut")
+    np.testing.assert_allclose(lin, 0.18, rtol=1e-6)
+
+
+def test_clog3_idt_18_percent_both_pairs():
+    log = np.full(3, float(linear_to_clog3(0.18)))
+    for idt_id in ("canon_clog3_cgamut", "canon_clog3_bt2020"):
+        lin = apply_idt(log, idt_id)
+        np.testing.assert_allclose(lin, 0.18, rtol=1e-6)
+
+
+def test_apple_log_idt_18_percent():
+    log = np.full(3, float(linear_to_apple_log(0.18)))
+    lin = apply_idt(log, "apple_log_bt2020")
+    np.testing.assert_allclose(lin, 0.18, rtol=1e-6)
+
+
+def test_dlog_idt_18_percent():
+    log = np.full(3, float(linear_to_dlog(0.18)))
+    lin = apply_idt(log, "dji_dlog_dgamut")
+    np.testing.assert_allclose(lin, 0.18, rtol=1e-6)

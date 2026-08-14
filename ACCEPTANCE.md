@@ -16,6 +16,10 @@ Shoot or obtain a grey card (18% reflectance) in each encoding, exposed to the m
 | Fujifilm F-Log2 | 400 / 1023 | pending golden |
 | Nikon N-Log | ~372 / 10-bit (IRE ~35%; 452 is the breakpoint) | pending golden |
 | RED Log3G10 | 1/3 | pending golden |
+| Canon C-Log2 | ~0.39825 | pending golden |
+| Canon C-Log3 | ~0.34339 | pending golden |
+| Apple Log 1 | ~0.48827 | pending golden |
+| DJI D-Log | ~0.39876 | pending golden |
 
 Sony: one grey card in **S-Gamut3** and one in **S-Gamut3.Cine**. Do not treat Cine as the default.
 
@@ -65,7 +69,9 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 - Detection ignores QuickTime `nclc` for S-Log3 / LogC4.
 - S-Log3 without gamut metadata requires the paired IDT picker (never silent Cine, never two dropdowns). Venice pairs appear only if Venice is detected.
 - Nikon path does not divide 10-bit codes by 1023 before the white-paper curve.
-- Canon C-Log2 stub does not ship an invented negative toe.
+- C-Log2 negative toe is OCIO / ACES CTL (not an invented mirrored toe).
+- C-Log3 without gamut requires the paired picker (never silent Cinema Gamut).
+- D-Log M, Apple Log 2, and ARRI LogC3 stay unsupported.
 - `ocio/config.ocio` names BuiltinTransform styles; Linux 18% tests use reference curves only.
 
 ## Pending IDT / process lock

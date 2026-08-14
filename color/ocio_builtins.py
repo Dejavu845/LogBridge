@@ -9,7 +9,8 @@ implementations that match the documented 18% codes. Those references match
 the builtins on 18% grey to well under 0.5%; they are not a second, more
 accurate IDT.
 
-F-Log2 and N-Log have no standard Builtin — keep the manufacturer papers.
+F-Log2, N-Log, C-Log3+BT.2020, and D-Log have no full IDT Builtin — keep the papers.
+C-Log2 / C-Log3+Cinema Gamut / Apple Log use Builtins when present.
 Venice Builtins are used only when a Venice camera is detected, never as a
 silent S-Log3 default.
 """
@@ -29,6 +30,9 @@ IDT_BUILTINS: dict[str, str] = {
     "sony_slog3_sgamut3cine_venice": "SONY_SLOG3-SGAMUT3.CINE-VENICE_to_ACES2065-1",
     "panasonic_vlog_vgamut": "PANASONIC_VLOG-VGAMUT_to_ACES2065-1",
     "red_log3g10_rwg": "RED_LOG3G10-RWG_to_ACES2065-1",
+    "canon_clog2_cgamut": "CANON_CLOG2-CGAMUT_to_ACES2065-1",
+    "canon_clog3_cgamut": "CANON_CLOG3-CGAMUT_to_ACES2065-1",
+    "apple_log_bt2020": "APPLE_LOG_to_ACES2065-1",
 }
 
 # No standard Builtin (checked against BuiltinTransformRegistry).
@@ -36,6 +40,10 @@ HANDWRITTEN_IDTS = frozenset(
     {
         "fujifilm_flog2_bt2020",
         "nikon_nlog_bt2020",
+        # No full IDT Builtin (curve Builtin + BT.2020 matrix, or paper).
+        "canon_clog3_bt2020",
+        # 2017 white paper. D-Log M is unsupported.
+        "dji_dlog_dgamut",
     }
 )
 
@@ -45,6 +53,10 @@ ACES_AP0_TO_XYZ_D65 = "UTILITY - ACES-AP0_to_CIE-XYZ-D65_BFD"
 ACES_AP1_TO_REC709 = "UTILITY - ACES-AP1_to_LINEAR-REC709_BFD"
 CANON_CLOG2_CURVE = "CURVE - CANON_CLOG2_to_LINEAR"
 CANON_CLOG2_IDT = "CANON_CLOG2-CGAMUT_to_ACES2065-1"
+CANON_CLOG3_CURVE = "CURVE - CANON_CLOG3_to_LINEAR"
+CANON_CLOG3_IDT = "CANON_CLOG3-CGAMUT_to_ACES2065-1"
+APPLE_LOG_CURVE = "CURVE - APPLE_LOG_to_LINEAR"
+APPLE_LOG_IDT = "APPLE_LOG_to_ACES2065-1"
 
 # ACES Output Transform / BT.2100 (Rec.2100 HLG + PQ). Prefer these
 # BuiltinTransform styles over any handwritten HLG/PQ curve.

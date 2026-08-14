@@ -46,3 +46,50 @@ User-facing control is **stops**. After IDT, in ACES2065-1 (AP0) scene-linear:
 - Do **not** add or subtract from camera-log or ACEScct code values.
 - Then WB / CAT in the same linear AP0 domain. Uniform gain and CAT commute; the locked order is still IDT → Exposure → WB.
 - Rec.709 / HLG / PQ remain preview only. ACEScct / EXR is the deliverable.
+
+# Second-batch IDTs (implemented, unverified)
+
+Public papers / ACES CTL. **No invented constants.** C-Log2 negative toe is the ACES CTL inverse, not a homemade mirrored toe.
+
+## Canon C-Log2 (ACES CTL / Canon v1.2)
+
+Prefer OCIO `CURVE - CANON_CLOG2_to_LINEAR` / `CANON_CLOG2-CGAMUT_to_ACES2065-1`.
+
+- `in >= 0.092864125`: `lin = 0.9*(10**((in-0.092864125)/0.24136077)-1)/87.099375`
+- else (ACES CTL): `lin = -0.9*(10**((0.092864125-in)/0.24136077)-1)/87.099375`
+- Cinema Gamut xy: R 0.74/0.27, G 0.17/1.14, B 0.08/-0.10, D65
+- 18% grey → ~0.39825
+
+## Canon C-Log3 (ACES / Canon v1.2, three segments)
+
+Prefer OCIO `CURVE - CANON_CLOG3_to_LINEAR` / `CANON_CLOG3-CGAMUT_to_ACES2065-1`.
+
+- `< 0.097465473`: negative log, coeffs 0.36726845 / 14.98325 (offset 0.12783901)
+- `0.097465473–0.15277891`: linear (`(in-0.12512219)/1.9754798`)
+- `> 0.15277891`: positive log (offset 0.12240537)
+- Reflectance: IRE × 0.9
+- 18% grey → ~0.34339
+- Two pairs: Cinema Gamut and BT.2020. Never default C-Log3 to Cinema Gamut.
+
+## Apple Log 1 (Apple Log Profile White Paper, Sept 2023)
+
+Prefer OCIO `APPLE_LOG_to_ACES2065-1` / `CURVE - APPLE_LOG_to_LINEAR`.
+
+- `R0=-0.05641088; Rt=0.01; c=47.28711236; β=0.00964052; γ=0.08550479; δ=0.69336945`
+- `Pt=c*(Rt-R0)**2`
+- `P>=Pt`: `lin=2**((P-δ)/γ)-β`
+- `0≤P<Pt`: `sqrt(P/c)+R0`
+- `P<0`: `R0`
+- BT.2020 / D65. 18% grey → ~0.48827
+- Apple Log 2 is out of scope.
+
+## DJI D-Log + D-Gamut (2017-10-10 white paper)
+
+No standard Builtin.
+
+- `in>0.14`: `lin=(10**(3.89616*in-2.27752)-0.0108)/0.9892`
+- else: `(in-0.0929)/6.025`
+- D-Gamut xy: R 0.71/0.31, G 0.21/0.88, B 0.09/-0.08, D65
+- 18% grey → ~0.39876
+- D-Log M is unsupported.
+

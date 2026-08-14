@@ -1,20 +1,17 @@
 import Foundation
 
-/// Extension points for IDTs not in M1. Stubs only.
+/// Extension points for IDTs that stay unimplemented.
 ///
-/// Canon C-Log2 has a negative toe. Do **not** invent a mirrored-toe analytic
-/// curve. Use the official OCIO builtin or ACES CLF:
+/// C-Log2 / C-Log3 / Apple Log 1 / D-Log are implemented (unverified).
+/// These remain stubs:
 ///
-///     CURVE - CANON_CLOG2_to_LINEAR
+/// - Apple Log 2 (out of scope)
+/// - DJI D-Log M (unsupported; 2017 D-Log + D-Gamut only)
+/// - ARRI LogC3 (unsupported; use LogC4)
 enum FutureIDTs {
-    static let canonCLog2Builtin = "CURVE - CANON_CLOG2_to_LINEAR"
-    static let canonCLog2IDTBuiltin = "CANON_CLOG2-CGAMUT_to_ACES2065-1"
-    static let canonCLog3Builtin = "CURVE - CANON_CLOG3_to_LINEAR"
-
     static let notes: [(String, String)] = [
-        ("Canon C-Log2", "Stub. Negative toe: use OCIO \(canonCLog2Builtin) / \(canonCLog2IDTBuiltin) / ACES CLF. Do not invent a mirrored toe."),
-        ("Canon C-Log3", "Stub. Use OCIO \(canonCLog3Builtin) / ACES CLF."),
-        ("Apple Log", "Stub. Out of scope for M1."),
-        ("DJI D-Log", "Stub. Out of scope for M1.")
+        ("Apple Log 2", "Unsupported. Out of scope. Apple Log 1 + BT.2020 is implemented (unverified)."),
+        ("DJI D-Log M", "Unsupported. Use D-Log + D-Gamut (2017 white paper)."),
+        ("ARRI LogC3", "Unsupported. Use LogC4 + AWG4.")
     ]
 }

@@ -5,10 +5,9 @@ import pytest
 
 from color import curves
 from color.stubs import (
-    apple_log_to_linear,
-    clog2_to_linear,
-    clog3_to_linear,
-    dlog_to_linear,
+    apple_log2_to_linear,
+    dlog_m_to_linear,
+    logc3_to_linear,
 )
 
 
@@ -177,18 +176,104 @@ class TestDispatch:
         assert any("F-Log2" in n for n in names)
         assert any("N-Log" in n for n in names)
         assert any("Log3G10" in n for n in names)
+        assert any("C-Log2" in n and "Cinema Gamut" in n for n in names)
+        assert any("C-Log3" in n and "Cinema Gamut" in n for n in names)
+        assert any("C-Log3" in n and "BT.2020" in n for n in names)
+        assert any("Apple Log" in n for n in names)
+        assert any("D-Log" in n and "D-Gamut" in n for n in names)
 
     def test_unknown_curve_raises(self):
         with pytest.raises(KeyError):
             curves.decode_log("bogus", 0.18)
 
 
-class TestStubs:
-    def test_clog2_refuses_invented_toe(self):
-        with pytest.raises(NotImplementedError, match="CANON_CLOG2_to_LINEAR"):
-            clog2_to_linear(0.18)
+class TestCLog2:
+    def test_18_percent_grey(self):
+        enc = curves.linear_to_clog2(0.18)
+        assert enc == pytest.approx(curves.CLOG2_18_PERCENT, rel=1e-10)
+        assert curves.clog2_to_linear(curves.CLOG2_18_PERCENT) == pytest.approx(0.18, rel=1e-10)
 
-    def test_other_stubs(self):
-        for fn in (clog3_to_linear, apple_log_to_linear, dlog_to_linear):
+    def test_negative_toe_is_aces_ctl_not_invented(self):
+        # ACES CTL: in < 0.092864125 uses -(10**((cut-in)/c1)-1)/c2 * 0.9
+        cut, c1, c2 = 0.092864125, 0.24136077, 87.099375
+        x = 0.05
+        expected = -0.9 * (10 ** ((cut - x) / c1) - 1.0) / c2
+        assert float(curves.clog2_to_linear(x)) == pytest.approx(expected, rel=1e-12)
+        # Official negative is below the cut, not a homemade mirror of the positive log.
+        assert float(curves.clog2_to_linear(x)) < 0.0
+
+    def test_roundtrip(self):
+        lin = np.array([-0.01, 0.0, 0.18, 1.0, 8.0])
+        _roundtrip(curves.linear_to_clog2, curves.clog2_to_linear, lin, rtol=1e-9)
+
+
+class TestCLog3:
+    def test_18_percent_grey(self):
+        enc = curves.linear_to_clog3(0.18)
+        assert enc == pytest.approx(curves.CLOG3_18_PERCENT, rel=1e-10)
+        assert curves.clog3_to_linear(curves.CLOG3_18_PERCENT) == pytest.approx(0.18, rel=1e-10)
+
+    def test_three_segments(self):
+        lo, hi = 0.097465473, 0.15277891
+        # Negative log
+        x = lo * 0.5
+        expected = -0.9 * (10 ** ((0.12783901 - x) / 0.36726845) - 1.0) / 14.98325
+        assert float(curves.clog3_to_linear(x)) == pytest.approx(expected, rel=1e-12)
+        # Linear mid
+        mid = 0.12
+        expected_mid = 0.9 * (mid - 0.12512219) / 1.9754798
+        assert float(curves.clog3_to_linear(mid)) == pytest.approx(expected_mid, rel=1e-12)
+        # Positive log
+        x = 0.4
+        expected_hi = 0.9 * (10 ** ((x - 0.12240537) / 0.36726845) - 1.0) / 14.98325
+        assert float(curves.clog3_to_linear(x)) == pytest.approx(expected_hi, rel=1e-12)
+
+    def test_roundtrip(self):
+        lin = np.array([-0.02, 0.0, 0.01, 0.18, 1.0, 8.0])
+        _roundtrip(curves.linear_to_clog3, curves.clog3_to_linear, lin, rtol=1e-9)
+
+
+class TestAppleLog:
+    def test_18_percent_grey(self):
+        enc = curves.linear_to_apple_log(0.18)
+        assert enc == pytest.approx(curves.APPLE_LOG_18_PERCENT, rel=1e-10)
+        assert curves.apple_log_to_linear(curves.APPLE_LOG_18_PERCENT) == pytest.approx(0.18, rel=1e-10)
+
+    def test_paper_segments(self):
+        r0, rt, c = -0.05641088, 0.01, 47.28711236
+        pt = c * (rt - r0) ** 2
+        # P < 0 -> R0
+        assert float(curves.apple_log_to_linear(-0.1)) == pytest.approx(r0)
+        # 0 <= P < Pt -> sqrt(P/c)+R0
+        p = pt * 0.25
+        assert float(curves.apple_log_to_linear(p)) == pytest.approx((p / c) ** 0.5 + r0, rel=1e-12)
+
+    def test_roundtrip(self):
+        lin = np.array([0.0, 0.005, 0.01, 0.18, 1.0, 8.0])
+        _roundtrip(curves.linear_to_apple_log, curves.apple_log_to_linear, lin, rtol=1e-9)
+
+
+class TestDLog:
+    def test_18_percent_grey(self):
+        enc = curves.linear_to_dlog(0.18)
+        assert enc == pytest.approx(curves.DLOG_18_PERCENT, rel=1e-10)
+        assert curves.dlog_to_linear(curves.DLOG_18_PERCENT) == pytest.approx(0.18, rel=1e-6)
+
+    def test_white_paper_segments(self):
+        x = 0.10
+        assert float(curves.dlog_to_linear(x)) == pytest.approx((x - 0.0929) / 6.025, rel=1e-12)
+        x = 0.40
+        expected = (10 ** (3.89616 * x - 2.27752) - 0.0108) / 0.9892
+        assert float(curves.dlog_to_linear(x)) == pytest.approx(expected, rel=1e-12)
+
+    def test_roundtrip(self):
+        # 2017 paper coeffs are rounded; encode/decode are not bit-identical.
+        lin = np.array([0.0, 0.005, 0.0078, 0.18, 1.0, 10.0])
+        _roundtrip(curves.linear_to_dlog, curves.dlog_to_linear, lin, rtol=1e-6)
+
+
+class TestStubs:
+    def test_unsupported_remain_stubs(self):
+        for fn in (apple_log2_to_linear, dlog_m_to_linear, logc3_to_linear):
             with pytest.raises(NotImplementedError):
                 fn(0.18)

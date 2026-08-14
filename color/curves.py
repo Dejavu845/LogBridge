@@ -18,6 +18,9 @@ References (public white papers):
 - Fujifilm F-Log2 Data Sheet Ver.1.0 / GFX ETERNA white paper
 - Nikon N-Log Specification Document 1.0.0 (2018-09-01)
 - RED OPS White Paper on REDWideGamutRGB and Log3G10 (915-0187 Rev-C)
+- Canon Log Gamma Curves white paper (revised C-Log2 / C-Log3) / ACES CTL
+- Apple Log Profile White Paper (September 2023) — Log 1 only
+- DJI White Paper on D-Log and D-Gamut (2017-10-10)
 """
 
 from __future__ import annotations
@@ -225,6 +228,140 @@ def linear_to_log3g10(lin):
 
 
 # ---------------------------------------------------------------------------
+# Canon C-Log2 (normalized 0-1). Official ACES CTL / Canon v1.2.
+# Negative toe is the ACES CTL inverse — NOT an invented mirrored toe.
+# Prefer OCIO CURVE - CANON_CLOG2_to_LINEAR / CANON_CLOG2-CGAMUT_to_ACES2065-1.
+# ---------------------------------------------------------------------------
+_CLOG2_CUT = 0.092864125
+_CLOG2_C1 = 0.24136077
+_CLOG2_C2 = 87.099375
+CLOG2_18_PERCENT = 0.39825469203794917  # encode(0.18) reflection
+
+
+def clog2_to_linear(x):
+    """Decode Canon C-Log2 (normalized 0-1) to scene-linear reflectance.
+
+    Positive: ``0.9*(10**((in-0.092864125)/0.24136077)-1)/87.099375``.
+    Negative: ACES CTL / Canon v1.2 inverse (same constants, sign-flipped
+    log). Do not replace this with an invented mirrored toe.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    lin_pos = 0.9 * (np.power(10.0, (x - _CLOG2_CUT) / _CLOG2_C1) - 1.0) / _CLOG2_C2
+    # ACES CTL: -(10**((cut-in)/c1)-1)/c2 * 0.9
+    lin_neg = -0.9 * (np.power(10.0, (_CLOG2_CUT - x) / _CLOG2_C1) - 1.0) / _CLOG2_C2
+    return np.where(x >= _CLOG2_CUT, lin_pos, lin_neg)
+
+
+def linear_to_clog2(lin):
+    """Encode scene-linear reflectance to Canon C-Log2 (ACES CTL inverse)."""
+    lin = np.asarray(lin, dtype=np.float64)
+    ire = lin / 0.9
+    log_pos = _CLOG2_C1 * np.log10(1.0 + _CLOG2_C2 * ire) + _CLOG2_CUT
+    # np.where evaluates both; keep the log argument positive.
+    log_neg = -_CLOG2_C1 * np.log10(np.maximum(1.0 - _CLOG2_C2 * ire, 1e-30)) + _CLOG2_CUT
+    return np.where(lin >= 0.0, log_pos, log_neg)
+
+
+# ---------------------------------------------------------------------------
+# Canon C-Log3 (normalized 0-1). Three segments. ACES / Canon v1.2.
+# Prefer OCIO CURVE - CANON_CLOG3_to_LINEAR / CANON_CLOG3-CGAMUT_to_ACES2065-1.
+# ---------------------------------------------------------------------------
+_CLOG3_CUT_LO = 0.097465473
+_CLOG3_CUT_HI = 0.15277891
+_CLOG3_A = 0.36726845
+_CLOG3_B = 14.98325
+_CLOG3_NEG_OFF = 0.12783901
+_CLOG3_LIN_SLOPE = 1.9754798
+_CLOG3_LIN_OFF = 0.12512219
+_CLOG3_POS_OFF = 0.12240537
+CLOG3_18_PERCENT = 0.3433893703739356  # encode(0.18) reflection
+
+
+def clog3_to_linear(x):
+    """Decode Canon C-Log3 (normalized 0-1) to scene-linear reflectance.
+
+    ``<0.097465473`` negative log, ``0.097465473–0.15277891`` linear,
+    ``>`` positive log. Coeffs 0.36726845 / 14.98325 (ACES / Canon v1.2).
+    Output is reflectance (×0.9 on the IRE result).
+    """
+    x = np.asarray(x, dtype=np.float64)
+    ire_neg = -(np.power(10.0, (_CLOG3_NEG_OFF - x) / _CLOG3_A) - 1.0) / _CLOG3_B
+    ire_mid = (x - _CLOG3_LIN_OFF) / _CLOG3_LIN_SLOPE
+    ire_pos = (np.power(10.0, (x - _CLOG3_POS_OFF) / _CLOG3_A) - 1.0) / _CLOG3_B
+    ire = np.where(x < _CLOG3_CUT_LO, ire_neg, np.where(x <= _CLOG3_CUT_HI, ire_mid, ire_pos))
+    return ire * 0.9
+
+
+def linear_to_clog3(lin):
+    """Encode scene-linear reflectance to Canon C-Log3 (ACES / Canon v1.2)."""
+    lin = np.asarray(lin, dtype=np.float64)
+    ire = lin / 0.9
+    log_neg = -_CLOG3_A * np.log10(np.maximum(-ire * _CLOG3_B + 1.0, 1e-30)) + _CLOG3_NEG_OFF
+    log_mid = _CLOG3_LIN_SLOPE * ire + _CLOG3_LIN_OFF
+    log_pos = _CLOG3_A * np.log10(ire * _CLOG3_B + 1.0) + _CLOG3_POS_OFF
+    # Segment joins in IRE (not reflectance): decode cuts at 0.097465473 / 0.15277891.
+    ire_lo = (_CLOG3_CUT_LO - _CLOG3_LIN_OFF) / _CLOG3_LIN_SLOPE
+    ire_hi = (_CLOG3_CUT_HI - _CLOG3_LIN_OFF) / _CLOG3_LIN_SLOPE
+    return np.where(ire < ire_lo, log_neg, np.where(ire <= ire_hi, log_mid, log_pos))
+
+
+# ---------------------------------------------------------------------------
+# Apple Log (Log 1 only). Apple Log Profile White Paper, Sept 2023.
+# BT.2020 / D65. Apple Log 2 is out of scope.
+# Prefer OCIO APPLE_LOG_to_ACES2065-1 / CURVE - APPLE_LOG_to_LINEAR.
+# ---------------------------------------------------------------------------
+_APPLE_R0 = -0.05641088
+_APPLE_RT = 0.01
+_APPLE_C = 47.28711236
+_APPLE_BETA = 0.00964052
+_APPLE_GAMMA = 0.08550479
+_APPLE_DELTA = 0.69336945
+_APPLE_PT = _APPLE_C * (_APPLE_RT - _APPLE_R0) ** 2
+APPLE_LOG_18_PERCENT = 0.4882724585268676  # encode(0.18)
+
+
+def apple_log_to_linear(p):
+    """Decode Apple Log 1 (normalized 0-1) to scene-linear reflectance."""
+    p = np.asarray(p, dtype=np.float64)
+    lin_hi = np.power(2.0, (p - _APPLE_DELTA) / _APPLE_GAMMA) - _APPLE_BETA
+    lin_mid = np.sqrt(np.maximum(p / _APPLE_C, 0.0)) + _APPLE_R0
+    return np.where(p >= _APPLE_PT, lin_hi, np.where(p >= 0.0, lin_mid, _APPLE_R0))
+
+
+def linear_to_apple_log(lin):
+    """Encode scene-linear reflectance to Apple Log 1."""
+    lin = np.asarray(lin, dtype=np.float64)
+    log_hi = _APPLE_GAMMA * np.log2(np.maximum(lin + _APPLE_BETA, 1e-30)) + _APPLE_DELTA
+    log_mid = _APPLE_C * (lin - _APPLE_R0) ** 2
+    return np.where(lin >= _APPLE_RT, log_hi, np.where(lin >= _APPLE_R0, log_mid, 0.0))
+
+
+# ---------------------------------------------------------------------------
+# DJI D-Log (normalized 0-1). 2017-10-10 white paper. D-Log M unsupported.
+# No standard OCIO Builtin.
+# ---------------------------------------------------------------------------
+_DLOG_CUT_LOG = 0.14
+_DLOG_CUT_LIN = 0.0078
+DLOG_18_PERCENT = 0.3987645561893306  # encode(0.18)
+
+
+def dlog_to_linear(x):
+    """Decode DJI D-Log (2017 white paper) to scene-linear."""
+    x = np.asarray(x, dtype=np.float64)
+    lin_hi = (np.power(10.0, 3.89616 * x - 2.27752) - 0.0108) / 0.9892
+    lin_lo = (x - 0.0929) / 6.025
+    return np.where(x > _DLOG_CUT_LOG, lin_hi, lin_lo)
+
+
+def linear_to_dlog(lin):
+    """Encode scene-linear to DJI D-Log (2017 white paper)."""
+    lin = np.asarray(lin, dtype=np.float64)
+    log_hi = np.log10(lin * 0.9892 + 0.0108) * 0.256663 + 0.584555
+    log_lo = 6.025 * lin + 0.0929
+    return np.where(lin > _DLOG_CUT_LIN, log_hi, log_lo)
+
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 # Curve names used by locked clip pairs. Sony has one curve, two gamuts.
@@ -234,6 +371,11 @@ CURVE_VLOG = "vlog"
 CURVE_FLOG2 = "flog2"
 CURVE_NLOG = "nlog"
 CURVE_LOG3G10 = "log3g10"
+
+CURVE_CLOG2 = "clog2"
+CURVE_CLOG3 = "clog3"
+CURVE_APPLE_LOG = "apple_log"
+CURVE_DLOG = "dlog"
 
 IDT_NAMES = (
     "ARRI LogC4 / AWG4",
@@ -245,6 +387,11 @@ IDT_NAMES = (
     "RED Log3G10 / REDWideGamutRGB",
     "Sony S-Log3 / S-Gamut3 (Venice)",
     "Sony S-Log3 / S-Gamut3.Cine (Venice)",
+    "Canon C-Log2 / Cinema Gamut",
+    "Canon C-Log3 / Cinema Gamut",
+    "Canon C-Log3 / BT.2020",
+    "Apple Log / BT.2020",
+    "DJI D-Log / D-Gamut",
 )
 
 _DECODE = {
@@ -254,6 +401,10 @@ _DECODE = {
     CURVE_FLOG2: flog2_to_linear,
     CURVE_NLOG: nlog_to_linear,
     CURVE_LOG3G10: log3g10_to_linear,
+    CURVE_CLOG2: clog2_to_linear,
+    CURVE_CLOG3: clog3_to_linear,
+    CURVE_APPLE_LOG: apple_log_to_linear,
+    CURVE_DLOG: dlog_to_linear,
 }
 
 _ENCODE = {
@@ -263,6 +414,10 @@ _ENCODE = {
     CURVE_FLOG2: linear_to_flog2,
     CURVE_NLOG: linear_to_nlog,
     CURVE_LOG3G10: linear_to_log3g10,
+    CURVE_CLOG2: linear_to_clog2,
+    CURVE_CLOG3: linear_to_clog3,
+    CURVE_APPLE_LOG: linear_to_apple_log,
+    CURVE_DLOG: linear_to_dlog,
 }
 
 

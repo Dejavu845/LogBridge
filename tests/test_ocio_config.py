@@ -32,6 +32,11 @@ def test_six_idts_declared():
         "Fujifilm F-Log2 BT.2020",
         "Nikon N-Log BT.2020",
         "RED Log3G10 REDWideGamutRGB",
+        "Canon C-Log2 Cinema Gamut",
+        "Canon C-Log3 Cinema Gamut",
+        "Canon C-Log3 BT.2020",
+        "Apple Log BT.2020",
+        "DJI D-Log D-Gamut",
     ):
         assert name in text
 
@@ -46,6 +51,9 @@ def test_builtin_styles_named():
         "SONY_SLOG3-SGAMUT3.CINE-VENICE_to_ACES2065-1",
         "PANASONIC_VLOG-VGAMUT_to_ACES2065-1",
         "RED_LOG3G10-RWG_to_ACES2065-1",
+        "CANON_CLOG2-CGAMUT_to_ACES2065-1",
+        "CANON_CLOG3-CGAMUT_to_ACES2065-1",
+        "APPLE_LOG_to_ACES2065-1",
         "ACEScct_to_ACES2065-1",
         "ACEScg_to_ACES2065-1",
     ):
@@ -67,21 +75,35 @@ def test_nlog_comment_about_10bit():
     assert "452" in text
 
 
-def test_canon_stub_points_at_ocio_builtin():
+def test_canon_uses_ocio_builtin_not_invented_toe():
     text = CONFIG.read_text(encoding="utf-8")
     assert "CURVE - CANON_CLOG2_to_LINEAR" in text
     assert "CANON_CLOG2-CGAMUT_to_ACES2065-1" in text
+    assert "CANON_CLOG3-CGAMUT_to_ACES2065-1" in text
+    assert "Do not invent a mirrored toe" in text
+    assert "name: Canon C-Log2 (stub)" not in text
+
+
+def test_unsupported_idts_named():
+    text = CONFIG.read_text(encoding="utf-8")
+    assert "Apple Log 2 (unsupported)" in text
+    assert "DJI D-Log M (unsupported)" in text
+    assert "ARRI LogC3 (unsupported)" in text
 
 
 def test_handwritten_luts_only_for_no_builtin():
     luts = ROOT / "ocio" / "luts"
     assert (luts / "FLog2_to_lin.spi1d").is_file()
     assert (luts / "NLog_to_lin.spi1d").is_file()
+    assert (luts / "CLog3_to_lin.spi1d").is_file()
+    assert (luts / "DLog_to_lin.spi1d").is_file()
     # Builtin-replaced homemade LUTs must not remain.
     for name in (
         "LogC4_to_lin.spi1d",
         "SLog3_to_lin.spi1d",
         "VLog_to_lin.spi1d",
         "Log3G10_to_lin.spi1d",
+        "CLog2_to_lin.spi1d",
+        "AppleLog_to_lin.spi1d",
     ):
         assert not (luts / name).is_file(), name
