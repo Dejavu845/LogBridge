@@ -1,15 +1,16 @@
-"""White-balance CAT tests. WB is scene-linear only."""
+"""White-balance CAT tests. WB is ACES2065-1 (AP0) scene-linear only."""
 
 import numpy as np
 import pytest
 
-from color.gamuts import D65_XY, rgb_to_xyz_matrix
+from color.gamuts import D65_XY
 from color.wb import (
     apply_white_balance,
     bradford_cat_matrix,
     cct_to_xy,
     white_balance_matrix,
 )
+from color.working_space import DEFAULT_WORKING_LINEAR
 
 
 def test_6504k_is_d65():
@@ -22,20 +23,29 @@ def test_6504k_bradford_is_identity():
     np.testing.assert_allclose(m, np.eye(3), atol=5e-3)
 
 
-def test_6504k_rgb_matrix_is_identity_on_aces_working_space():
-    m = white_balance_matrix(6504.0, tint=0.0, rgb_space="AP1")
+def test_default_wb_space_is_ap0():
+    assert DEFAULT_WORKING_LINEAR == "AP0"
+    m = white_balance_matrix(6504.0, tint=0.0)
     np.testing.assert_allclose(m, np.eye(3), atol=5e-3)
     rgb = np.array([0.18, 0.18, 0.18])
-    out = apply_white_balance(rgb, 6504.0, rgb_space="AP1")
+    out = apply_white_balance(rgb, 6504.0)
+    np.testing.assert_allclose(out, rgb, atol=1e-3)
+
+
+def test_6504k_rgb_matrix_is_identity_on_aces2065():
+    m = white_balance_matrix(6504.0, tint=0.0, rgb_space="AP0")
+    np.testing.assert_allclose(m, np.eye(3), atol=5e-3)
+    rgb = np.array([0.18, 0.18, 0.18])
+    out = apply_white_balance(rgb, 6504.0, rgb_space="AP0")
     np.testing.assert_allclose(out, rgb, atol=1e-3)
 
 
 def test_3200k_is_not_identity():
-    m = white_balance_matrix(3200.0, rgb_space="AP1")
+    m = white_balance_matrix(3200.0, rgb_space="AP0")
     diff = np.linalg.norm(m - np.eye(3))
     assert diff > 0.05
     rgb = np.array([0.18, 0.18, 0.18])
-    out = apply_white_balance(rgb, 3200.0, rgb_space="AP1")
+    out = apply_white_balance(rgb, 3200.0, rgb_space="AP0")
     assert not np.allclose(out, rgb, atol=1e-3)
 
 
@@ -45,14 +55,22 @@ def test_cat02_also_identity_at_6504k():
 
 
 def test_tint_shifts_off_locus():
-    m0 = white_balance_matrix(5600.0, tint=0.0, rgb_space="AP1")
-    mg = white_balance_matrix(5600.0, tint=5.0, rgb_space="AP1")
+    m0 = white_balance_matrix(5600.0, tint=0.0, rgb_space="AP0")
+    mg = white_balance_matrix(5600.0, tint=5.0, rgb_space="AP0")
     assert not np.allclose(m0, mg, atol=1e-6)
 
 
 def test_wb_is_linear_operator():
     """Doubling scene-linear RGB doubles the result (no log-domain WB)."""
     rgb = np.array([0.04, 0.08, 0.16])
-    a = apply_white_balance(rgb, 3200.0, rgb_space="AWG4")
-    b = apply_white_balance(2.0 * rgb, 3200.0, rgb_space="AWG4")
+    a = apply_white_balance(rgb, 3200.0, rgb_space="AP0")
+    b = apply_white_balance(2.0 * rgb, 3200.0, rgb_space="AP0")
     np.testing.assert_allclose(b, 2.0 * a, rtol=1e-12)
+
+
+def test_ap0_cat_differs_from_ap1_on_chroma():
+    """CAT conjugation is space-dependent; AP0 is the required domain."""
+    rgb = np.array([0.10, 0.18, 0.30])
+    ap0 = apply_white_balance(rgb, 3200.0, rgb_space="AP0")
+    ap1 = apply_white_balance(rgb, 3200.0, rgb_space="AP1")
+    assert not np.allclose(ap0, ap1, atol=1e-4)

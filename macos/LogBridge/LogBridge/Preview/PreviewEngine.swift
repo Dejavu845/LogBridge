@@ -86,7 +86,7 @@ final class PreviewEngine: ObservableObject {
                 source: source.cgImage,
                 odt: nil,
                 status: clip.needsUserPicker
-                    ? "Pick curve and gamut — preview ODT waits for a locked IDT"
+                    ? "Pick a paired IDT — process and preview ODT stay blocked"
                     : "Stub IDT — no preview process"
             )
             return

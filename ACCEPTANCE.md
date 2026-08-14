@@ -50,7 +50,7 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 ## Other gates
 
 - Detection ignores QuickTime `nclc` for S-Log3 / LogC4.
-- S-Log3 without gamut metadata requires the user picker (never silent Cine).
+- S-Log3 without gamut metadata requires the paired IDT picker (never silent Cine). One-click process is blocked until a pair is chosen. Venice pairs appear only if Venice is detected.
 - Nikon path does not divide 10-bit codes by 1023 before the white-paper curve.
 - Canon C-Log2 stub does not ship an invented negative toe.
 - `ocio/config.ocio` names BuiltinTransform styles; Linux 18% tests use reference curves only.

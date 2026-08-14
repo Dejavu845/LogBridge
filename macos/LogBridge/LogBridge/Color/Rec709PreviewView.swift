@@ -23,14 +23,36 @@ struct Rec709PreviewView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.headline)
-            Rec709TaggedHost(image: image)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
+            ZStack(alignment: .topLeading) {
+                Rec709TaggedHost(image: image)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
+                PreviewNotDeliverableBadge()
+            }
             Text(caption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(8)
+    }
+}
+
+/// Overlay on every preview pane. 8-bit thumbnail is not a deliverable.
+struct PreviewNotDeliverableBadge: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("预览·非成片")
+                .font(.caption.weight(.bold))
+            Text("8-bit thumbnail is not a deliverable")
+                .font(.caption2)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(.black.opacity(0.72))
+        .foregroundStyle(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .padding(8)
+        .accessibilityLabel("预览·非成片. 8-bit thumbnail is not a deliverable")
     }
 }
 
@@ -162,9 +184,12 @@ struct SourcePreviewView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.headline)
-            SourceUntaggedHost(image: image)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
+            ZStack(alignment: .topLeading) {
+                SourceUntaggedHost(image: image)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
+                PreviewNotDeliverableBadge()
+            }
             Text(caption)
                 .font(.caption)
                 .foregroundStyle(.secondary)

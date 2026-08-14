@@ -23,7 +23,6 @@ from .gamuts import IDT_PAIRS, aces_to_rec709_matrix
 from .rec709 import rec709_oetf
 from .wb import apply_white_balance
 from .working_space import (
-    DEFAULT_WORKING_LINEAR,
     aces2065_to_acescct,
     acescct_to_aces2065,
 )
