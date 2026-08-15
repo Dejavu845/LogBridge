@@ -26,6 +26,14 @@ struct ClipSidebarView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 6)
 
+            if !session.lastImportNote.isEmpty {
+                Text(session.lastImportNote)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+            }
+
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(session.clips) { clip in

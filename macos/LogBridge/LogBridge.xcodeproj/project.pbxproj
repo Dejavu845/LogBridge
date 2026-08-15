@@ -26,6 +26,7 @@
 		A10000000000000000000011 /* ClipSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* ClipSidebarView.swift */; };
 		A10000000000000000000012 /* PreviewEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* PreviewEngine.swift */; };
 		A10000000000000000000013 /* VideoToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* VideoToolbox.framework */; };
+		A10000000000000000000014 /* MediaFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* MediaFormat.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +50,7 @@
 		A20000000000000000000013 /* ClipSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipSidebarView.swift; sourceTree = "<group>"; };
 		A20000000000000000000014 /* PreviewEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewEngine.swift; sourceTree = "<group>"; };
 		A20000000000000000000015 /* VideoToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = System/Library/Frameworks/VideoToolbox.framework; sourceTree = SDKROOT; };
+		A20000000000000000000016 /* MediaFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFormat.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* LogBridge.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LogBridge.entitlements; sourceTree = "<group>"; };
 		A30000000000000000000001 /* LogBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LogBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -102,6 +104,7 @@
 				A20000000000000000000004 /* Clip.swift */,
 				A20000000000000000000005 /* Pipeline.swift */,
 				A20000000000000000000010 /* NodeGraph.swift */,
+				A20000000000000000000016 /* MediaFormat.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -259,6 +262,7 @@
 				A10000000000000000000010 /* InspectorView.swift in Sources */,
 				A10000000000000000000011 /* ClipSidebarView.swift in Sources */,
 				A10000000000000000000012 /* PreviewEngine.swift in Sources */,
+				A10000000000000000000014 /* MediaFormat.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

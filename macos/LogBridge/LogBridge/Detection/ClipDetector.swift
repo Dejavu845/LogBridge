@@ -38,7 +38,7 @@ enum ClipDetector {
                 gamut: nil,
                 source: .unresolved,
                 needsUserPicker: true,
-                note: "No camera-private metadata or filename/model hint; user picker required. QuickTime nclc is never used."
+                note: "读不到元数据，先选择 Log 与色域。QuickTime nclc is never used."
             )
         }
         let shot = readAsShotWB(url: url)

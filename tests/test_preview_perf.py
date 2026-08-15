@@ -20,8 +20,12 @@ def test_vt_decode_not_709():
     assert "AVAssetReader" in engine
     assert "YpCbCr" in engine
     assert "no 709 transfer" in engine
-    assert "copyCGImage" not in engine.split("decodeMovieVideoToolbox")[1].split("decodeStillImageIO")[0]
-    assert "movieExt" in engine
+    decode = engine.split("decodeMovieVideoToolbox")[1].split("decodeStillImageIO")[0]
+    assert "copyCGImage(" not in decode
+    assert "Never copyCGImage" in decode or "no copyCGImage" in decode
+    assert "MediaFormat.probe" in engine
+    assert "AVVideoColorPropertiesKey:" not in engine
+    assert "Never set AVVideoColorPropertiesKey" in engine
 
 
 def test_metal_same_locked_matrices():
