@@ -134,7 +134,7 @@ Python: `from color.resolve_export import export_resolve_bundle` (pass `graph=` 
 
 The macOS split preview is **not** a full-resolution render. Both panes show a **预览·非成片** badge (8-bit thumbnail is not a deliverable).
 
-- One downscaled frame per clip (long edge ≤ 1920) via ImageIO thumbnail or `AVAssetImageGenerator` (VideoToolbox).
+- One downscaled frame per clip (long edge ≤ 1920). Movies: `AVAssetReader` Y′CbCr (ProRes / H.264 / HEVC in MOV/MP4; MXF only if the system recognizes those codecs). Stills: ImageIO (TIFF / DPX / EXR). No `copyCGImage`. **ARRI MXF / R3D / BRAW are refused.** Not 全格式已支持.
 - Cached per clip: decoded camera/log buffer + IDT **ACES2065-1 linear** buffer (post-IDT, no exposure). IDT change invalidates linear; exposure + WB apply in linear on that AP0 buffer. Clip change reuses the decode if the URL is unchanged.
 - Color apply runs off the main thread. 8-bit thumbnails are a viewing proxy — do not judge IDT accuracy from the preview.
 - Source pane is untagged camera/log. Rec.709 ODT pane is tagged `CGColorSpace.itur_709` only when the ODT node is on.
@@ -152,6 +152,8 @@ No golden samples have been measured. Do not claim accuracy. See `ACCEPTANCE.md`
 - Treating the DIY Rec.709 OETF as a standard deliverable (it is preview only)
 - Homemade HLG/PQ curves (HDR OT is ACES/BT.2100 Builtin only)
 - Apple Log 2, DJI D-Log M, ARRI LogC3 (explicitly unsupported)
+- ARRI MXF (ARRIRAW), R3D, BRAW, AVI, MKV, CinemaDNG (containers refused)
+- Claiming 全格式已支持
 - Inventing a C-Log2 mirrored toe (use OCIO `CURVE - CANON_CLOG2_to_LINEAR` / `CANON_CLOG2-CGAMUT_to_ACES2065-1` / ACES CTL)
 - Camera-protocol reverse engineering, marketplace integrations
 - Treating QuickTime nclc as log identity or as-shot CCT

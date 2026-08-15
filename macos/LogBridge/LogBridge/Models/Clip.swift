@@ -22,6 +22,7 @@ struct Clip: Identifiable, Hashable {
     var wbSource: WBSource
     var wbCCT: Double?
     var wbTint: Double
+    var formatNote: String
 
     var filename: String { url.lastPathComponent }
 
@@ -80,6 +81,7 @@ final class SessionModel: ObservableObject {
     @Published var showImporter = false
     @Published var dropTargeted = false
     @Published var lastExportNote: String = ""
+    @Published var lastImportNote: String = ""
     @Published var pickingNeutral: Bool = false
 
     let preview = PreviewEngine()
@@ -339,11 +341,25 @@ final class SessionModel: ObservableObject {
         _ = url.startAccessingSecurityScopedResource()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let files = Self.expandToClipURLs(url)
-            let built: [Clip] = files.map { file in
+            var skipped: [String] = []
+            var built: [Clip] = []
+            for file in files {
+                let probe = MediaFormat.probe(url: file)
+                if probe.decision == .refuse {
+                    skipped.append("\(file.lastPathComponent)：\(probe.note)")
+                    continue
+                }
+                if probe.decision == .tryDecode {
+                    // MXF: only keep if the system can open a video track.
+                    if MediaFormat.codecFourCC(url: file) == nil {
+                        skipped.append("\(file.lastPathComponent)：\(MediaFormat.noteARRIMxf)")
+                        continue
+                    }
+                }
                 let detection = ClipDetector.detect(url: file)
                 // Never silently assign an IDT. S-Log3 without gamut stays nil.
                 let shot = detection.asShotCCT
-                return Clip(
+                built.append(Clip(
                     id: UUID(),
                     url: file,
                     idt: detection.idt,
@@ -357,8 +373,9 @@ final class SessionModel: ObservableObject {
                     asShotTint: detection.asShotTint,
                     wbSource: shot == nil ? .unknown : .asShot,
                     wbCCT: shot,
-                    wbTint: detection.asShotTint
-                )
+                    wbTint: detection.asShotTint,
+                    formatNote: probe.note
+                ))
             }
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -369,15 +386,15 @@ final class SessionModel: ObservableObject {
                         self.applyClipWBToGraph(clip)
                     }
                 }
+                if !skipped.isEmpty {
+                    self.lastImportNote = skipped.joined(separator: "\n")
+                }
                 self.refreshPreview()
             }
         }
     }
 
-    private static let clipExtensions: Set<String> = [
-        "mov", "mp4", "m4v", "mxf", "avi", "mkv", "r3d", "braw",
-        "ari", "arx", "dng", "exr", "tif", "tiff", "dpx"
-    ]
+    private static let clipExtensions: Set<String> = MediaFormat.expandExt
 
     /// Folder drop expands to media files. A single dropped file is kept as-is.
     static func expandToClipURLs(_ url: URL) -> [URL] {

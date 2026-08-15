@@ -113,3 +113,15 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 - IDT + exposure + WB stay in a graded linear cache. Scrub / ODT switch re-runs ODT only.
 - Source pane stays untagged. Rec.709 tag only on the 709 preview pane.
 - Linux cannot archive a .app. Frame-rate numbers need a Mac.
+
+## Media compatibility (containers)
+
+Decode policy only. No color-number changes. Do **not** write 全格式已支持.
+
+- **Tried:** MOV/MP4 ProRes (422 family + 4444/XQ), H.264, HEVC 8/10-bit (422 depends on the machine). Decode is still **AVAssetReader + Y′CbCr**, matrix-only. No `copyCGImage`. No `AVVideoColorPropertiesKey` Rec.709.
+- **Stills:** TIFF / DPX / EXR via ImageIO.
+- **MXF:** try only if the system recognizes ProRes / AVC / HEVC. **ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入.** Unrecognized MXF is skipped.
+- **Refused (same R3D line):** R3D / BRAW / CRM / X-OCN / N-RAW / ProRes RAW / CinemaDNG / .ari / .arx — **R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR**. Unknown fourcc (e.g. r210) is refused with a separate line, not the R3D copy.
+- Empty camera-private metadata → paired IDT picker (**先选择 Log 与色域**). Do not guess an IDT or 5600 K.
+- D-Log M / Apple Log 2 / ARRI LogC3 stay unsupported (IDT scope, not a container claim).
+

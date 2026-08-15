@@ -502,7 +502,7 @@ def detect_clip(
             None,
             "unresolved",
             True,
-            "No camera-private metadata or filename/model hint; user picker required. QuickTime nclc is never used.",
+            "读不到元数据，先选择 Log 与色域。QuickTime nclc is never used.",
         ),
         as_shot,
     )

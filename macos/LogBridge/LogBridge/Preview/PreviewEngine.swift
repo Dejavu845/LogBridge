@@ -252,19 +252,15 @@ final class PreviewEngine: ObservableObject {
         return SIMD3(r, g, b)
     }
 
-    private static let movieExt: Set<String> = [
-        "mov", "mp4", "m4v", "mxf", "avi", "mkv", "r3d", "braw"
-    ]
-
-    /// Movies: VideoToolbox via AVAssetImageGenerator. Stills: ImageIO.
+    /// Movies: AVAssetReader Y′CbCr. Stills: ImageIO. Policy in MediaFormat.
     /// VT decode only — do not let VT emit Rec.709. No Core Image Display P3.
     static func decodeDownscaled(url: URL, maxLongEdge: CGFloat) -> CGImage? {
-        let ext = url.pathExtension.lowercased()
-        if movieExt.contains(ext) {
-            return decodeMovieVideoToolbox(url: url, maxLongEdge: maxLongEdge)
+        let probe = MediaFormat.probe(url: url)
+        if probe.decision == .refuse {
+            return nil
         }
-        if let still = decodeStillImageIO(url: url, maxLongEdge: maxLongEdge) {
-            return still
+        if probe.kind == .still {
+            return decodeStillImageIO(url: url, maxLongEdge: maxLongEdge)
         }
         return decodeMovieVideoToolbox(url: url, maxLongEdge: maxLongEdge)
     }
@@ -272,12 +268,29 @@ final class PreviewEngine: ObservableObject {
     /// VideoToolbox / AVAssetReader: first frame as Y′CbCr (or BGRA bytes).
     /// YUV→RGB is matrix-only (video range). No transfer, no nclc→709, no copyCGImage.
     /// Those RGB are camera/log code values for the IDT — not display-referred.
+    /// Try 8-bit 420, then 8-bit 422, then 10-bit 420. Bit-depth only — no transfer.
+    /// Never set AVVideoColorPropertiesKey. Never copyCGImage.
     static func decodeMovieVideoToolbox(url: URL, maxLongEdge: CGFloat) -> CGImage? {
+        let formats: [OSType] = [
+            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelFormatType_422YpCbCr8,
+            kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+        ]
+        for fmt in formats {
+            if let img = readFirstYpCbCrFrame(url: url, pixelFormat: fmt, maxLongEdge: maxLongEdge) {
+                return img
+            }
+        }
+        return nil
+    }
+
+    private static func readFirstYpCbCrFrame(url: URL, pixelFormat: OSType, maxLongEdge: CGFloat) -> CGImage? {
         let asset = AVURLAsset(url: url)
         guard let track = asset.tracks(withMediaType: .video).first,
               let reader = try? AVAssetReader(asset: asset) else { return nil }
+        // Pixel format only. No AVVideoColorPropertiesKey Rec.709.
         let settings: [String: Any] = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            kCVPixelBufferPixelFormatTypeKey as String: pixelFormat
         ]
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
         output.alwaysCopiesSampleData = false
@@ -319,6 +332,42 @@ final class PreviewEngine: ObservableObject {
                     }
                 }
             }
+        } else if fmt == kCVPixelFormatType_422YpCbCr8 {
+            guard let base = CVPixelBufferGetBaseAddress(pb) else { return nil }
+            let stride = CVPixelBufferGetBytesPerRow(pb)
+            let src = base.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<h {
+                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
+                for x in 0..<w {
+                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
+                    let si = sy * stride + (sx & ~1) * 2
+                    let Y = Double(src[sy * stride + sx * 2 + 1])
+                    let Cb = Double(src[si + 0])
+                    let Cr = Double(src[si + 2])
+                    writeMatrixRGB(&rgb, di: (y * w + x) * 4, Y: Y, Cb: Cb, Cr: Cr, yOff: 16, ySpan: 219, cOff: 128, cSpan: 224)
+                }
+            }
+        } else if fmt == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange {
+            guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
+                  let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else { return nil }
+            let yStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+            let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
+            let yPtr = yPlane.assumingMemoryBound(to: UInt16.self)
+            let uvPtr = uvPlane.assumingMemoryBound(to: UInt16.self)
+            let yRow = yStride / 2
+            let uvRow = uvStride / 2
+            for y in 0..<h {
+                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
+                for x in 0..<w {
+                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
+                    let Y = Double(yPtr[sy * yRow + sx])
+                    let uv = (sy / 2) * uvRow + (sx / 2) * 2
+                    let Cb = Double(uvPtr[uv])
+                    let Cr = Double(uvPtr[uv + 1])
+                    // 10-bit video range in 16-bit samples. Matrix only — no 709 transfer.
+                    writeMatrixRGB(&rgb, di: (y * w + x) * 4, Y: Y, Cb: Cb, Cr: Cr, yOff: 64, ySpan: 876, cOff: 512, cSpan: 896)
+                }
+            }
         } else {
             guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
                   let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else { return nil }
@@ -335,17 +384,7 @@ final class PreviewEngine: ObservableObject {
                     let Cb = Double(uvPtr[uv])
                     let Cr = Double(uvPtr[uv + 1])
                     // Video-range Y′CbCr → R′G′B′. Matrix only — no 709 transfer.
-                    let yp = (Y - 16.0) / 219.0
-                    let pbv = (Cb - 128.0) / 224.0
-                    let prv = (Cr - 128.0) / 224.0
-                    let r = yp + 1.5748 * prv
-                    let g = yp - 0.1873 * pbv - 0.4681 * prv
-                    let b = yp + 1.8556 * pbv
-                    let di = (y * w + x) * 4
-                    rgb[di] = UInt8(clamping: Int((min(max(r, 0), 1) * 255).rounded()))
-                    rgb[di + 1] = UInt8(clamping: Int((min(max(g, 0), 1) * 255).rounded()))
-                    rgb[di + 2] = UInt8(clamping: Int((min(max(b, 0), 1) * 255).rounded()))
-                    rgb[di + 3] = 255
+                    writeMatrixRGB(&rgb, di: (y * w + x) * 4, Y: Y, Cb: Cb, Cr: Cr, yOff: 16, ySpan: 219, cOff: 128, cSpan: 224)
                 }
             }
         }
@@ -361,6 +400,31 @@ final class PreviewEngine: ObservableObject {
             bitmapInfo: info
         ) else { return nil }
         return ctx.makeImage()
+    }
+
+
+    /// Matrix-only Y′CbCr → R′G′B′. No OETF/EOTF. Preview 8-bit.
+    private static func writeMatrixRGB(
+        _ rgb: inout [UInt8],
+        di: Int,
+        Y: Double,
+        Cb: Double,
+        Cr: Double,
+        yOff: Double,
+        ySpan: Double,
+        cOff: Double,
+        cSpan: Double
+    ) {
+        let yp = (Y - yOff) / ySpan
+        let pbv = (Cb - cOff) / cSpan
+        let prv = (Cr - cOff) / cSpan
+        let r = yp + 1.5748 * prv
+        let g = yp - 0.1873 * pbv - 0.4681 * prv
+        let b = yp + 1.8556 * pbv
+        rgb[di] = UInt8(clamping: Int((min(max(r, 0), 1) * 255).rounded()))
+        rgb[di + 1] = UInt8(clamping: Int((min(max(g, 0), 1) * 255).rounded()))
+        rgb[di + 2] = UInt8(clamping: Int((min(max(b, 0), 1) * 255).rounded()))
+        rgb[di + 3] = 255
     }
 
     /// Stills only. Device RGB extract later — never itur_709 / displayP3 dest.
