@@ -104,3 +104,12 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 
 - LogBridge does **not** ship camera manufacturer demo clips (no ARRI / Sony / RED / Panasonic / Nikon / Fujifilm sample reels).
 - The user drops their own Log files or folders. Empty-state copy: **把混源文件夹拖进来**.
+
+
+## Preview performance (Apple silicon)
+
+- Movie decode is **AVAssetReader + Y′CbCr**, matrix-only to RGB. Do not let VT/nclc emit Rec.709 display values before IDT. No `copyCGImage` color convert. Stills use ImageIO. No Core Image Display P3.
+- Metal applies the same locked matrices / DIY 709 OETF as CPU. Algorithm numbers do not change.
+- IDT + exposure + WB stay in a graded linear cache. Scrub / ODT switch re-runs ODT only.
+- Source pane stays untagged. Rec.709 tag only on the 709 preview pane.
+- Linux cannot archive a .app. Frame-rate numbers need a Mac.

@@ -92,6 +92,11 @@ final class SessionModel: ObservableObject {
         preview.refresh(clip: selectedClip, graph: graph)
     }
 
+    /// ODT / scrub: do not invalidate graded linear (IDT+exposure+WB).
+    func refreshODTOnly() {
+        preview.refreshODT(clip: selectedClip, graph: graph)
+    }
+
     var pendingPickerCount: Int {
         clips.filter { $0.needsUserPicker || $0.idt == nil }.count
     }
@@ -210,14 +215,12 @@ final class SessionModel: ObservableObject {
 
     func setODTEnabled(_ enabled: Bool) {
         graph.setEnabled(.odt, enabled)
-        preview.invalidateWBODT()
-        refreshPreview()
+        refreshODTOnly()
     }
 
     func setODT(_ mode: ODTMode) {
         graph.odt = mode
-        preview.invalidateWBODT()
-        refreshPreview()
+        refreshODTOnly()
     }
 
     func setWBParams(cct: Double? = nil, tint: Double? = nil, method: String? = nil) {

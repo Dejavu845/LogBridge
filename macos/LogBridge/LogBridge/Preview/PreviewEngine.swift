@@ -5,15 +5,18 @@ import AVFoundation
 import CoreGraphics
 import ImageIO
 import VideoToolbox
+import Metal
+import CoreVideo
+import CoreMedia
 import Combine
 
 /// Downscaled preview (max 1920 long edge). Not a full-resolution render.
 ///
 /// Cache:
-///   - decoded camera/log thumbnail per clip URL
-///   - IDT ACES2065-1 linear buffer per clip+IDT (post-IDT linear; no exposure)
-/// Invalidate the matching stage only (IDT change drops linear; exposure+WB
-/// apply in linear on that cached AP0 buffer).
+///   - decoded camera/log thumbnail per clip URL (VideoToolbox, no VT 709)
+///   - IDT ACES2065-1 linear buffer per clip+IDT
+///   - graded linear (IDT+exposure+WB) so scrub / ODT change only re-runs ODT
+/// Metal applies the same locked matrices/LUT/ACES OT as CPU. No Core Image P3.
 /// Heavy work runs off the main thread.
 final class PreviewEngine: ObservableObject {
     static let maxLongEdge: CGFloat = 1920
@@ -28,6 +31,7 @@ final class PreviewEngine: ObservableObject {
 
     private var sourceCache: [UUID: SourceFrame] = [:]
     private var linearCache: [UUID: LinearFrame] = [:]
+    private var gradedCache: [UUID: GradedFrame] = [:]
 
     struct SourceFrame {
         let url: URL
@@ -44,17 +48,27 @@ final class PreviewEngine: ObservableObject {
         let rgb: [Float]
     }
 
+    struct GradedFrame {
+        let key: String
+        let width: Int
+        let height: Int
+        let rgb: [Float]
+    }
+
     func invalidateIDT(clipID: UUID) {
         linearCache[clipID] = nil
+        gradedCache[clipID] = nil
     }
 
     func invalidateWBODT() {
-        // Linear IDT buffer is reused; nothing to drop.
+        // IDT linear reused; drop graded so exposure/WB recompute.
+        gradedCache.removeAll()
     }
 
     func evict(clipID: UUID) {
         sourceCache[clipID] = nil
         linearCache[clipID] = nil
+        gradedCache[clipID] = nil
     }
 
     func refresh(clip: Clip?, graph: SerialGraph) {
@@ -71,11 +85,28 @@ final class PreviewEngine: ObservableObject {
         status = "Decoding preview…"
         let graphCopy = graph
         queue.async { [weak self] in
-            self?.build(clip: clip, graph: graphCopy, generation: gen)
+            self?.build(clip: clip, graph: graphCopy, generation: gen, odtOnly: false)
         }
     }
 
-    private func build(clip: Clip, graph: SerialGraph, generation: UInt64) {
+    /// Scrub / ODT switch: reuse graded linear (IDT+exposure+WB). Only re-run ODT.
+    func refreshODT(clip: Clip?, graph: SerialGraph) {
+        generation += 1
+        let gen = generation
+        guard let clip else {
+            sourceImage = nil
+            odtImage = nil
+            status = "No clip"
+            isWorking = false
+            return
+        }
+        let graphCopy = graph
+        queue.async { [weak self] in
+            self?.build(clip: clip, graph: graphCopy, generation: gen, odtOnly: true)
+        }
+    }
+
+    private func build(clip: Clip, graph: SerialGraph, generation: UInt64, odtOnly: Bool) {
         let source = cachedSource(clip: clip)
         guard let source else {
             publish(generation: generation, source: nil, odt: nil, status: "Could not decode a preview frame")
@@ -93,13 +124,46 @@ final class PreviewEngine: ObservableObject {
             return
         }
         let linear = cachedLinear(clipID: clip.id, idt: idt, source: source)
+        let graded = cachedGraded(clipID: clip.id, idt: idt, linear: linear, graph: graph)
+        var work = graded.rgb
+        var odtCG: CGImage?
+        var note = "Preview proxy (≤ \(Int(Self.maxLongEdge)) px). VideoToolbox decode, Metal grade. Not a full render."
+        if odtOnly {
+            note = "ODT only — graded linear cache hit. Scrub does not re-run IDT."
+        }
+        if graph.odt == .rec709 {
+            PreviewColor.applyODT(rgb: &work)
+            odtCG = PreviewColor.makeCGImage(
+                rgb: work,
+                width: graded.width,
+                height: graded.height,
+                colorSpace: CGColorSpace(name: CGColorSpace.itur_709)
+            )
+        } else if graph.odt.isHDR {
+            // No homemade HLG/PQ. Preview does not invent a Rec.2100 transfer.
+            note = "\(graph.odt.acesOTNote) 预览·非成片 — preview does not apply a homemade HDR curve."
+        } else {
+            note = "ODT off — ACEScct deliverable. Rec.709 pane is not tagged."
+        }
+        publish(generation: generation, source: source.cgImage, odt: odtCG, status: note)
+    }
+
+    private static func gradeKey(idt: IDT, graph: SerialGraph) -> String {
+        let cct = graph.effectiveWBCCT.map { String($0) } ?? "id"
+        let src = graph.effectiveSrcCCT.map { String($0) } ?? "-"
+        return "\(idt.rawValue)|\(graph.exposureEnabled)|\(graph.exposureStops)|\(graph.wbEnabled)|\(cct)|\(src)|\(graph.wbTint)|\(graph.wbMethod)"
+    }
+
+    private func cachedGraded(clipID: UUID, idt: IDT, linear: LinearFrame, graph: SerialGraph) -> GradedFrame {
+        let key = Self.gradeKey(idt: idt, graph: graph)
+        if let hit = gradedCache[clipID], hit.key == key,
+           hit.width == linear.width, hit.height == linear.height {
+            return hit
+        }
         var work = linear.rgb
-        // Cache is post-IDT linear. Apply exposure then WB in ACES2065-1.
         if graph.exposureEnabled {
             PreviewColor.applyExposure(rgb: &work, stops: graph.exposureStops)
         }
-        // As-shot-unmoved and missing CCT are identity — do not guess 5600 or 6504.
-        // effectiveWBCCT is nil until the user moves knobs or picks a grey card.
         if graph.wbEnabled, let cct = graph.effectiveWBCCT {
             if let src = graph.effectiveSrcCCT {
                 PreviewColor.applyWB(
@@ -119,23 +183,9 @@ final class PreviewEngine: ObservableObject {
                 )
             }
         }
-        var odtCG: CGImage?
-        var note = "Preview proxy (≤ \(Int(Self.maxLongEdge)) px). Not a full render."
-        if graph.odt == .rec709 {
-            PreviewColor.applyODT(rgb: &work)
-            odtCG = PreviewColor.makeCGImage(
-                rgb: work,
-                width: linear.width,
-                height: linear.height,
-                colorSpace: CGColorSpace(name: CGColorSpace.itur_709)
-            )
-        } else if graph.odt.isHDR {
-            // No homemade HLG/PQ. Preview does not invent a Rec.2100 transfer.
-            note = "\(graph.odt.acesOTNote) 预览·非成片 — preview does not apply a homemade HDR curve."
-        } else {
-            note = "ODT off — ACEScct deliverable. Rec.709 pane is not tagged."
-        }
-        publish(generation: generation, source: source.cgImage, odt: odtCG, status: note)
+        let frame = GradedFrame(key: key, width: linear.width, height: linear.height, rgb: work)
+        gradedCache[clipID] = frame
+        return frame
     }
 
     private func cachedSource(clip: Clip) -> SourceFrame? {
@@ -202,28 +252,132 @@ final class PreviewEngine: ObservableObject {
         return SIMD3(r, g, b)
     }
 
-    /// AVAssetImageGenerator (VideoToolbox) for movies; ImageIO thumbnail for stills.
+    private static let movieExt: Set<String> = [
+        "mov", "mp4", "m4v", "mxf", "avi", "mkv", "r3d", "braw"
+    ]
+
+    /// Movies: VideoToolbox via AVAssetImageGenerator. Stills: ImageIO.
+    /// VT decode only — do not let VT emit Rec.709. No Core Image Display P3.
     static func decodeDownscaled(url: URL, maxLongEdge: CGFloat) -> CGImage? {
-        if let src = CGImageSourceCreateWithURL(url as CFURL, nil) {
-            let count = CGImageSourceGetCount(src)
-            if count > 0 {
-                let opts: [CFString: Any] = [
-                    kCGImageSourceCreateThumbnailFromImageAlways: true,
-                    kCGImageSourceThumbnailMaxPixelSize: maxLongEdge,
-                    kCGImageSourceCreateThumbnailWithTransform: true,
-                    kCGImageSourceCreateThumbnailFromImageIfAbsent: true
-                ]
-                if let thumb = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) {
-                    return thumb
+        let ext = url.pathExtension.lowercased()
+        if movieExt.contains(ext) {
+            return decodeMovieVideoToolbox(url: url, maxLongEdge: maxLongEdge)
+        }
+        if let still = decodeStillImageIO(url: url, maxLongEdge: maxLongEdge) {
+            return still
+        }
+        return decodeMovieVideoToolbox(url: url, maxLongEdge: maxLongEdge)
+    }
+
+    /// VideoToolbox / AVAssetReader: first frame as Y′CbCr (or BGRA bytes).
+    /// YUV→RGB is matrix-only (video range). No transfer, no nclc→709, no copyCGImage.
+    /// Those RGB are camera/log code values for the IDT — not display-referred.
+    static func decodeMovieVideoToolbox(url: URL, maxLongEdge: CGFloat) -> CGImage? {
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let settings: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        ]
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { return nil }
+        reader.add(output)
+        guard reader.startReading(),
+              let sample = output.copyNextSampleBuffer(),
+              let pb = CMSampleBufferGetImageBuffer(sample) else { return nil }
+        return cgImageFromLogPixelBuffer(pb, maxLongEdge: maxLongEdge)
+    }
+
+    /// Matrix-only Y′CbCr → R′G′B′ (BT.709 video range). Does not apply an OETF/EOTF.
+    /// nclc 1-1-1 must not become a 709 display convert before IDT.
+    static func cgImageFromLogPixelBuffer(_ pb: CVPixelBuffer, maxLongEdge: CGFloat) -> CGImage? {
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        let srcW = CVPixelBufferGetWidth(pb)
+        let srcH = CVPixelBufferGetHeight(pb)
+        guard srcW > 0, srcH > 0 else { return nil }
+        let scale = min(1.0, Double(maxLongEdge) / Double(max(srcW, srcH)))
+        let w = max(1, Int((Double(srcW) * scale).rounded()))
+        let h = max(1, Int((Double(srcH) * scale).rounded()))
+        var rgb = [UInt8](repeating: 0, count: w * h * 4)
+        let fmt = CVPixelBufferGetPixelFormatType(pb)
+        if fmt == kCVPixelFormatType_32BGRA || fmt == kCVPixelFormatType_32ARGB {
+            guard let base = CVPixelBufferGetBaseAddress(pb) else { return nil }
+            let stride = CVPixelBufferGetBytesPerRow(pb)
+            let src = base.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<h {
+                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
+                for x in 0..<w {
+                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
+                    let si = sy * stride + sx * 4
+                    let di = (y * w + x) * 4
+                    if fmt == kCVPixelFormatType_32BGRA {
+                        rgb[di] = src[si + 2]; rgb[di + 1] = src[si + 1]; rgb[di + 2] = src[si + 0]; rgb[di + 3] = 255
+                    } else {
+                        rgb[di] = src[si + 1]; rgb[di + 1] = src[si + 2]; rgb[di + 2] = src[si + 3]; rgb[di + 3] = 255
+                    }
+                }
+            }
+        } else {
+            guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
+                  let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else { return nil }
+            let yStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+            let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
+            let yPtr = yPlane.assumingMemoryBound(to: UInt8.self)
+            let uvPtr = uvPlane.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<h {
+                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
+                for x in 0..<w {
+                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
+                    let Y = Double(yPtr[sy * yStride + sx])
+                    let uv = (sy / 2) * uvStride + (sx / 2) * 2
+                    let Cb = Double(uvPtr[uv])
+                    let Cr = Double(uvPtr[uv + 1])
+                    // Video-range Y′CbCr → R′G′B′. Matrix only — no 709 transfer.
+                    let yp = (Y - 16.0) / 219.0
+                    let pbv = (Cb - 128.0) / 224.0
+                    let prv = (Cr - 128.0) / 224.0
+                    let r = yp + 1.5748 * prv
+                    let g = yp - 0.1873 * pbv - 0.4681 * prv
+                    let b = yp + 1.8556 * pbv
+                    let di = (y * w + x) * 4
+                    rgb[di] = UInt8(clamping: Int((min(max(r, 0), 1) * 255).rounded()))
+                    rgb[di + 1] = UInt8(clamping: Int((min(max(g, 0), 1) * 255).rounded()))
+                    rgb[di + 2] = UInt8(clamping: Int((min(max(b, 0), 1) * 255).rounded()))
+                    rgb[di + 3] = 255
                 }
             }
         }
-        let asset = AVURLAsset(url: url)
-        let gen = AVAssetImageGenerator(asset: asset)
-        gen.appliesPreferredTrackTransform = true
-        gen.maximumSize = CGSize(width: maxLongEdge, height: maxLongEdge)
-        // VideoToolbox-backed decode of one frame — never the full-res timeline.
-        return try? gen.copyCGImage(at: .zero, actualTime: nil)
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let info = CGImageAlphaInfo.premultipliedLast.rawValue
+        guard let ctx = CGContext(
+            data: &rgb,
+            width: w,
+            height: h,
+            bitsPerComponent: 8,
+            bytesPerRow: w * 4,
+            space: cs,
+            bitmapInfo: info
+        ) else { return nil }
+        return ctx.makeImage()
+    }
+
+    /// Stills only. Device RGB extract later — never itur_709 / displayP3 dest.
+    static func decodeStillImageIO(url: URL, maxLongEdge: CGFloat) -> CGImage? {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        guard CGImageSourceGetCount(src) > 0 else { return nil }
+        let uti = (CGImageSourceGetType(src) as String?) ?? ""
+        if uti.contains("mpeg") || uti.contains("quicktime") || uti.contains("video") {
+            return nil
+        }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxLongEdge,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCache: false
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
     }
 }
 
@@ -234,6 +388,7 @@ enum PreviewColor {
         let w = image.width
         let h = image.height
         var rgba = [UInt8](repeating: 0, count: w * h * 4)
+        // Device RGB — not Display P3, not itur_709. Camera/log code values.
         let cs = CGColorSpaceCreateDeviceRGB()
         let info = CGImageAlphaInfo.premultipliedLast.rawValue
         guard let ctx = CGContext(
@@ -247,7 +402,28 @@ enum PreviewColor {
         ) else {
             return [Float](repeating: 0, count: w * h * 3)
         }
-        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        // Reinterpret bytes. Do not let a 709-tagged CGImage color-match into this context.
+        if let provider = image.dataProvider, let data = provider.data {
+            let src = CFDataGetBytePtr(data)
+            let bpp = max(image.bitsPerPixel / 8, 1)
+            let stride = max(image.bytesPerRow, w * bpp)
+            if src != nil && (image.bitsPerPixel == 32 || image.bitsPerPixel == 24) {
+                for y in 0..<h {
+                    for x in 0..<w {
+                        let si = y * stride + x * bpp
+                        let di = (y * w + x) * 4
+                        rgba[di] = src![si]
+                        rgba[di + 1] = src![si + 1]
+                        rgba[di + 2] = src![si + 2]
+                        rgba[di + 3] = 255
+                    }
+                }
+            } else {
+                ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+            }
+        } else {
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        }
         var rgb = [Float](repeating: 0, count: w * h * 3)
         for i in 0..<(w * h) {
             rgb[i * 3 + 0] = Float(rgba[i * 4 + 0]) / 255
@@ -328,6 +504,7 @@ enum PreviewColor {
 
     private static func applyCAT(rgb: inout [Float], cat: simd_double3x3) {
         let m = ap0ToXYZ.inverse * cat * ap0ToXYZ
+        if PreviewMetal.applyMatrix(&rgb, matrix: m, rec709OETF: false) { return }
         let n = rgb.count / 3
         for i in 0..<n {
             let v = m * SIMD3(Double(rgb[i * 3 + 0]), Double(rgb[i * 3 + 1]), Double(rgb[i * 3 + 2]))
@@ -338,6 +515,7 @@ enum PreviewColor {
     }
 
     static func applyODT(rgb: inout [Float]) {
+        if PreviewMetal.applyMatrix(&rgb, matrix: ap0ToRec709, rec709OETF: true) { return }
         let n = rgb.count / 3
         for i in 0..<n {
             let v = ap0ToRec709 * SIMD3(Double(rgb[i * 3 + 0]), Double(rgb[i * 3 + 1]), Double(rgb[i * 3 + 2]))
@@ -511,3 +689,77 @@ enum PreviewColor {
         }
     }
 }
+
+
+/// Metal applies the same locked 3×3 (+ optional DIY 709 OETF) as CPU.
+/// Numbers stay in PreviewColor. No Core Image, no Display P3.
+enum PreviewMetal {
+    private static let device = MTLCreateSystemDefaultDevice()
+    private static let queue = device?.makeCommandQueue()
+    private static let pipeline: MTLComputePipelineState? = {
+        guard let device else { return nil }
+        let src = """
+        #include <metal_stdlib>
+        using namespace metal;
+        kernel void apply_mtx(
+            device float *rgb [[buffer(0)]],
+            constant float3x3 &m [[buffer(1)]],
+            constant uint &count [[buffer(2)]],
+            constant uint &oetf [[buffer(3)]],
+            uint id [[thread_position_in_grid]]) {
+            if (id >= count) return;
+            float3 v = m * float3(rgb[id*3+0], rgb[id*3+1], rgb[id*3+2]);
+            if (oetf != 0) {
+                const float beta = 0.018053968510807f;
+                const float alpha = 1.09929682680944f;
+                for (int c = 0; c < 3; ++c) {
+                    float x = c == 0 ? v.x : (c == 1 ? v.y : v.z);
+                    float y = x < beta ? 4.5f * x : alpha * pow(max(x, 0.0f), 0.45f) - (alpha - 1.0f);
+                    if (c == 0) v.x = y; else if (c == 1) v.y = y; else v.z = y;
+                }
+            }
+            rgb[id*3+0] = v.x; rgb[id*3+1] = v.y; rgb[id*3+2] = v.z;
+        }
+        """
+        guard let lib = try? device.makeLibrary(source: src, options: nil),
+              let fn = lib.makeFunction(name: "apply_mtx") else { return nil }
+        return try? device.makeComputePipelineState(function: fn)
+    }()
+
+    /// Same matrix / 709 OETF as CPU. Returns false to fall back.
+    static func applyMatrix(_ rgb: inout [Float], matrix: simd_double3x3, rec709OETF: Bool) -> Bool {
+        guard let queue, let pipeline, !rgb.isEmpty else { return false }
+        let n = UInt32(rgb.count / 3)
+        guard n > 0 else { return false }
+        let m = simd_float3x3(
+            SIMD3(Float(matrix[0, 0]), Float(matrix[0, 1]), Float(matrix[0, 2])),
+            SIMD3(Float(matrix[1, 0]), Float(matrix[1, 1]), Float(matrix[1, 2])),
+            SIMD3(Float(matrix[2, 0]), Float(matrix[2, 1]), Float(matrix[2, 2]))
+        )
+        guard let buf = device?.makeBuffer(bytes: &rgb, length: rgb.count * MemoryLayout<Float>.stride, options: .storageModeShared) else {
+            return false
+        }
+        var mtx = m
+        var count = n
+        var oetf: UInt32 = rec709OETF ? 1 : 0
+        guard let cmd = queue.makeCommandBuffer(),
+              let enc = cmd.makeComputeCommandEncoder() else { return false }
+        enc.setComputePipelineState(pipeline)
+        enc.setBuffer(buf, offset: 0, index: 0)
+        enc.setBytes(&mtx, length: MemoryLayout<simd_float3x3>.stride, index: 1)
+        enc.setBytes(&count, length: MemoryLayout<UInt32>.stride, index: 2)
+        enc.setBytes(&oetf, length: MemoryLayout<UInt32>.stride, index: 3)
+        let w = pipeline.threadExecutionWidth
+        let threads = MTLSize(width: Int(n), height: 1, depth: 1)
+        let groups = MTLSize(width: (Int(n) + w - 1) / w, height: 1, depth: 1)
+        enc.dispatchThreadgroups(groups, threadsPerThreadgroup: MTLSize(width: w, height: 1, depth: 1))
+        enc.endEncoding()
+        cmd.commit()
+        cmd.waitUntilCompleted()
+        let ptr = buf.contents().bindMemory(to: Float.self, capacity: rgb.count)
+        rgb = Array(UnsafeBufferPointer(start: ptr, count: rgb.count))
+        _ = threads
+        return true
+    }
+}
+
