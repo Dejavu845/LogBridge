@@ -44,6 +44,7 @@ enum MediaFormat {
     /// Locked refuse copy (沟通).
     static let noteARRIMxf = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
     static let noteCameraRaw = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+    static let noteUnknownCodec = "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
 
     static func probe(url: URL) -> MediaProbe {
         let ext = url.pathExtension.lowercased()
@@ -72,13 +73,22 @@ enum MediaFormat {
             )
         }
         if movieExt.contains(ext) {
-            if let codecN, isCameraRaw(codecN) || !codecOK(codecN) {
+            if let codecN, isCameraRaw(codecN) {
                 return MediaProbe(
                     decision: .refuse,
                     container: ext,
                     codec: codecN,
                     kind: .movie,
                     note: noteCameraRaw
+                )
+            }
+            if let codecN, !codecOK(codecN) {
+                return MediaProbe(
+                    decision: .refuse,
+                    container: ext,
+                    codec: codecN,
+                    kind: .movie,
+                    note: noteUnknownCodec
                 )
             }
             return MediaProbe(
@@ -99,13 +109,22 @@ enum MediaFormat {
                     note: noteARRIMxf
                 )
             }
-            if let codecN, isCameraRaw(codecN) || !codecOK(codecN) {
+            if let codecN, isCameraRaw(codecN) {
                 return MediaProbe(
                     decision: .refuse,
                     container: ext,
                     codec: codecN,
                     kind: .mxf,
                     note: noteCameraRaw
+                )
+            }
+            if let codecN, !codecOK(codecN) {
+                return MediaProbe(
+                    decision: .refuse,
+                    container: ext,
+                    codec: codecN,
+                    kind: .mxf,
+                    note: noteUnknownCodec
                 )
             }
             return MediaProbe(
@@ -175,8 +194,7 @@ enum MediaFormat {
 
     private static func refuseNote(_ ext: String) -> String {
         switch ext {
-        case "ari", "arx": return noteARRIMxf
-        case "r3d", "braw", "bmd", "crm", "nev", "nraw", "xocn", "dng": return noteCameraRaw
+        case "ari", "arx", "r3d", "braw", "bmd", "crm", "nev", "nraw", "xocn", "dng": return noteCameraRaw
         case "avi", "mkv": return "\(ext.uppercased()) 不接。请用 MOV/MP4。"
         default: return ".\(ext) 不接。不写「全格式已支持」。"
         }

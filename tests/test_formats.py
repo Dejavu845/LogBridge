@@ -64,7 +64,7 @@ def test_refused_containers():
     for name in ("clip.ari", "clip.arx"):
         d = classify(name)
         assert d.action == REFUSE, name
-        assert d.note == NOTE_ARRI
+        assert d.note == NOTE_RAW
     for name, token in (("clip.avi", "AVI"), ("clip.mkv", "MKV")):
         d = classify(name)
         assert d.action == REFUSE, name
@@ -88,6 +88,9 @@ def test_crm_xocn_nraw_prores_raw_same_r3d_copy():
 def test_unknown_codec_in_mov_refused():
     d = classify("weird.mov", "r210")
     assert d.action == REFUSE
+    assert d.note == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
+    assert "R3D" not in d.note
+    assert "BRAW" not in d.note
 
 
 def test_empty_metadata_prompts_paired_idt():
@@ -121,6 +124,7 @@ def test_swift_probe_and_decode_locks():
     assert "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入" in media
     assert "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR" in media
     assert "aprn" in media
+    assert "这个编码不接。能试的是 ProRes / H.264 / HEVC。" in media
     assert "ImageIO" in media
     assert "AVAssetReader" in engine
     assert "YpCbCr" in engine

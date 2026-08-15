@@ -46,7 +46,7 @@ HEVC_NAMES = frozenset({"hevc", "h.265", "h265", "x265"})
 
 ACCEPTED_CODECS = PRORES_FOURCC | H264_FOURCC | HEVC_FOURCC | PRORES_NAMES | H264_NAMES | HEVC_NAMES
 
-ARRI_MXF_MARKERS = frozenset({"arri", "arriraw", "arri raw", "ari", "arx"})
+ARRI_MXF_EXACT = frozenset({"ari", "arx"})
 CAMERA_RAW_MARKERS = (
     "prores raw",
     "aprn",
@@ -61,6 +61,7 @@ CAMERA_RAW_MARKERS = (
 # Locked refuse copy (沟通).
 NOTE_ARRI_MXF = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
 NOTE_CAMERA_RAW = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+NOTE_UNKNOWN_CODEC = "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
 
 # Folder expand lists these so a refuse note can fire. Not a support claim.
 EXPAND_EXTENSIONS = (
@@ -120,7 +121,7 @@ def classify(path: str | Path, codec: str | None = None) -> FormatDecision:
                 action=REFUSE,
                 container=ext,
                 codec=codec_n,
-                note=NOTE_CAMERA_RAW,
+                note=NOTE_UNKNOWN_CODEC,
                 kind="movie",
             )
         return FormatDecision(
@@ -153,7 +154,7 @@ def classify(path: str | Path, codec: str | None = None) -> FormatDecision:
                 action=REFUSE,
                 container=ext,
                 codec=codec_n,
-                note=NOTE_CAMERA_RAW,
+                note=NOTE_UNKNOWN_CODEC,
                 kind="mxf",
             )
         return FormatDecision(
@@ -185,7 +186,10 @@ def _codec_ok(codec: str) -> bool:
 
 
 def _is_arri_mxf(codec: str) -> bool:
-    return any(m in codec for m in ARRI_MXF_MARKERS)
+    # Exact "ari"/"arx" — do not substring-match (Swift: == "ari" || == "arx").
+    if codec in ARRI_MXF_EXACT:
+        return True
+    return "arri" in codec
 
 
 def _is_camera_raw(codec: str) -> bool:
@@ -193,9 +197,7 @@ def _is_camera_raw(codec: str) -> bool:
 
 
 def _refuse_note(ext: str) -> str:
-    if ext in {"ari", "arx"}:
-        return NOTE_ARRI_MXF
-    if ext in {"r3d", "braw", "bmd", "crm", "nev", "nraw", "xocn", "dng"}:
+    if ext in {"ari", "arx", "r3d", "braw", "bmd", "crm", "nev", "nraw", "xocn", "dng"}:
         return NOTE_CAMERA_RAW
     if ext in {"avi", "mkv"}:
         return f"{ext.upper()} 不接。请用 MOV/MP4。"
