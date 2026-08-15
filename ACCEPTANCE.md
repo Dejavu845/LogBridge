@@ -125,3 +125,11 @@ Decode policy only. No color-number changes. Do **not** write 全格式已支持
 - Empty camera-private metadata → paired IDT picker (**先选择 Log 与色域**). Do not guess an IDT or 5600 K.
 - D-Log M / Apple Log 2 / ARRI LogC3 stay unsupported (IDT scope, not a container claim).
 
+## Chinese settings
+
+- Settings page is Chinese. Items: **默认预览** (Rec.709 / HLG / PQ), **导入后提示估计白平衡**, **未锁 IDT 挡住处理**.
+- Default preview is Rec.709 (DIY OETF, 预览·非成片). Not a deliverable. Export stays ACEScct / EXR.
+- Prompt estimate WB after import defaults **off**. When on, prompt only — do not write CAT, do not guess 5600. Confirm still required. Grey-card overrides.
+- Block process when IDT is unlocked **cannot be turned off**.
+- No 精准 / 一键还原 / 全自动校准. Color numbers do not change.
+

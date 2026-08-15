@@ -21,6 +21,7 @@ Internal working encoding: **ACEScct** (AP1 log). Scene-linear interchange / `ro
 - **Auto WB:** **白平衡（估计）** only. SoG p=6 in linear ACEScg after IDT; user confirm writes an absolute AP0 CAT. Low confidence stays empty (no 5600 guess, no Rec.709 sample). Grey-card overrides. As-shot default stays identity. Not 精准 / 一键校准. Implemented (unverified).
 - **Graph:** inspector + node strip: IDT → Exposure (stops, default 0) → bypassable WB → ODT selector: **Off (ACEScct deliverable)** | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ. Default Off. Rec.709 / HLG / PQ panes are 预览·非成片 — not a finished picture.
 - **Primary button:** **处理已锁定片段** (never 一键还原). Pending: **先选择 Log 与色域** (disabled).
+- **设置:** 默认预览 Rec.709（预览·非成片）；导入后提示估计 WB 默认关（只提示，不写入）；未锁 IDT 挡住处理不能关。
 - **Preview badge:** **预览·非成片**
 - **Export:** **导出 ACEScct / EXR**
 
