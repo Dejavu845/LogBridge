@@ -352,7 +352,7 @@ final class SessionModel: ObservableObject {
                 if probe.decision == .tryDecode {
                     // MXF: only keep if the system can open a video track.
                     if MediaFormat.codecFourCC(url: file) == nil {
-                        skipped.append("\(file.lastPathComponent)：系统认不出这个 MXF。ARRI MXF 不接。")
+                        skipped.append("\(file.lastPathComponent)：\(MediaFormat.noteARRIMxf)")
                         continue
                     }
                 }

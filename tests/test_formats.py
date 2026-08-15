@@ -41,8 +41,7 @@ def test_stills_tiff_dpx_exr_accept():
 def test_arri_mxf_refused():
     d = classify("A001C001.mxf", "ARRIRAW")
     assert d.action == REFUSE
-    assert "ARRI MXF" in d.note
-    assert "不接" in d.note
+    assert d.note == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
 
 
 def test_mxf_known_codec_is_try_not_claim():
@@ -53,19 +52,37 @@ def test_mxf_known_codec_is_try_not_claim():
     assert d2.action == TRY
 
 
+NOTE_RAW = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+NOTE_ARRI = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+
+
 def test_refused_containers():
-    for name, token in (
-        ("clip.r3d", "R3D"),
-        ("clip.braw", "BRAW"),
-        ("clip.ari", "ARRIRAW"),
-        ("clip.arx", "ARRIRAW"),
-        ("clip.avi", "AVI"),
-        ("clip.mkv", "MKV"),
-        ("clip.dng", "CinemaDNG"),
-    ):
+    for name in ("clip.r3d", "clip.braw", "clip.crm", "clip.dng", "clip.nev", "clip.xocn"):
+        d = classify(name)
+        assert d.action == REFUSE, name
+        assert d.note == NOTE_RAW
+    for name in ("clip.ari", "clip.arx"):
+        d = classify(name)
+        assert d.action == REFUSE, name
+        assert d.note == NOTE_ARRI
+    for name, token in (("clip.avi", "AVI"), ("clip.mkv", "MKV")):
         d = classify(name)
         assert d.action == REFUSE, name
         assert token in d.note
+
+
+def test_crm_xocn_nraw_prores_raw_same_r3d_copy():
+    for path, codec in (
+        ("clip.crm", None),
+        ("clip.mxf", "xocn"),
+        ("clip.mov", "nraw"),
+        ("clip.mov", "aprn"),
+        ("clip.mov", "ProRes RAW"),
+        ("clip.mov", "aprh"),
+    ):
+        d = classify(path, codec)
+        assert d.action == REFUSE, (path, codec)
+        assert d.note == NOTE_RAW
 
 
 def test_unknown_codec_in_mov_refused():
@@ -75,8 +92,7 @@ def test_unknown_codec_in_mov_refused():
 
 def test_empty_metadata_prompts_paired_idt():
     note = empty_metadata_note()
-    assert "读不到元数据" in note
-    assert "先选择 Log 与色域" in note
+    assert note == "先选择 Log 与色域"
     assert "5600" not in note
 
 
@@ -102,8 +118,9 @@ def test_swift_probe_and_decode_locks():
     clip = _read(CLIP)
     detector = _read(DETECTOR)
     assert "enum MediaFormat" in media
-    assert "ARRI MXF" in media
-    assert "ARRIRAW" in media
+    assert "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入" in media
+    assert "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR" in media
+    assert "aprn" in media
     assert "ImageIO" in media
     assert "AVAssetReader" in engine
     assert "YpCbCr" in engine

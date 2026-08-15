@@ -33,7 +33,7 @@ enum MediaFormat {
     static let stillExt: Set<String> = ["tif", "tiff", "dpx", "exr"]
     static let mxfExt = "mxf"
     static let refusedExt: Set<String> = [
-        "r3d", "braw", "ari", "arx", "avi", "mkv", "dng", "bmd", "crm"
+        "r3d", "braw", "ari", "arx", "avi", "mkv", "dng", "bmd", "crm", "nev", "nraw", "xocn"
     ]
     /// Folder expand lists these so a refuse note can fire.
     static let expandExt: Set<String> = movieExt.union(stillExt).union(refusedExt).union([mxfExt])
@@ -41,6 +41,9 @@ enum MediaFormat {
     static let proresFourCC: Set<String> = ["apcn", "apch", "apcs", "apco", "ap4h", "ap4x"]
     static let h264FourCC: Set<String> = ["avc1", "avc3", "ai5p", "ai5q"]
     static let hevcFourCC: Set<String> = ["hvc1", "hev1", "dvhe", "dvh1"]
+    /// Locked refuse copy (沟通).
+    static let noteARRIMxf = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    static let noteCameraRaw = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
 
     static func probe(url: URL) -> MediaProbe {
         let ext = url.pathExtension.lowercased()
@@ -69,13 +72,13 @@ enum MediaFormat {
             )
         }
         if movieExt.contains(ext) {
-            if let codecN, !codecOK(codecN) {
+            if let codecN, isCameraRaw(codecN) || !codecOK(codecN) {
                 return MediaProbe(
                     decision: .refuse,
                     container: ext,
                     codec: codecN,
                     kind: .movie,
-                    note: "\(ext.uppercased()) 里的 \(codecN) 不接。能试的是 ProRes / H.264 / HEVC。"
+                    note: noteCameraRaw
                 )
             }
             return MediaProbe(
@@ -93,16 +96,16 @@ enum MediaFormat {
                     container: ext,
                     codec: codecN,
                     kind: .mxf,
-                    note: "ARRI MXF（ARRIRAW）不接。"
+                    note: noteARRIMxf
                 )
             }
-            if let codecN, !codecOK(codecN) {
+            if let codecN, isCameraRaw(codecN) || !codecOK(codecN) {
                 return MediaProbe(
                     decision: .refuse,
                     container: ext,
                     codec: codecN,
                     kind: .mxf,
-                    note: "MXF 里的 \(codecN) 不接。只试系统认得出的 ProRes / AVC / HEVC。"
+                    note: noteCameraRaw
                 )
             }
             return MediaProbe(
@@ -110,7 +113,7 @@ enum MediaFormat {
                 container: ext,
                 codec: codecN,
                 kind: .mxf,
-                note: "MXF 只试系统认得出的 ProRes / AVC / HEVC。ARRI MXF 不接。认不出就跳过。"
+                note: "MXF 只试系统认得出的 ProRes / AVC / HEVC。" + noteARRIMxf
             )
         }
         return MediaProbe(
@@ -147,11 +150,22 @@ enum MediaFormat {
 
     static func codecOK(_ codec: String) -> Bool {
         let c = codec.lowercased()
+        if isCameraRaw(c) { return false }
         if proresFourCC.contains(c) || h264FourCC.contains(c) || hevcFourCC.contains(c) {
             return true
         }
-        return c.contains("prores") || c.contains("h264") || c.contains("h.264")
+        if c == "prores" || c == "apple prores" { return true }
+        return c.contains("prores 422") || c.contains("prores 4444")
+            || c.contains("h264") || c.contains("h.264")
             || c.contains("avc") || c.contains("hevc") || c.contains("h265") || c.contains("h.265")
+    }
+
+    static func isCameraRaw(_ codec: String) -> Bool {
+        let c = codec.lowercased()
+        return c.contains("prores raw") || c == "aprn" || c == "aprh"
+            || c.contains("xocn") || c.contains("x-ocn")
+            || c.contains("nraw") || c.contains("n-raw")
+            || c == "crm"
     }
 
     static func isARRIMxf(_ codec: String) -> Bool {
@@ -161,10 +175,8 @@ enum MediaFormat {
 
     private static func refuseNote(_ ext: String) -> String {
         switch ext {
-        case "r3d": return "R3D 不接。"
-        case "braw", "bmd": return "BRAW 不接。"
-        case "ari", "arx": return "ARRIRAW（.ari/.arx）不接。"
-        case "dng": return "CinemaDNG 不接。"
+        case "ari", "arx": return noteARRIMxf
+        case "r3d", "braw", "bmd", "crm", "nev", "nraw", "xocn", "dng": return noteCameraRaw
         case "avi", "mkv": return "\(ext.uppercased()) 不接。请用 MOV/MP4。"
         default: return ".\(ext) 不接。不写「全格式已支持」。"
         }
