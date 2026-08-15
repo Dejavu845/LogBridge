@@ -17,7 +17,10 @@ def test_vt_decode_not_709():
     assert "import VideoToolbox" in engine
     assert "decodeMovieVideoToolbox" in engine
     assert "do not let VT emit Rec.709" in engine or "No VT color convert to 709" in engine
-    assert "AVVideoColorPropertiesKey Rec.709" in engine
+    assert "AVAssetReader" in engine
+    assert "YpCbCr" in engine
+    assert "no 709 transfer" in engine
+    assert "copyCGImage" not in engine.split("decodeMovieVideoToolbox")[1].split("decodeStillImageIO")[0]
     assert "movieExt" in engine
 
 

@@ -6,6 +6,8 @@ import CoreGraphics
 import ImageIO
 import VideoToolbox
 import Metal
+import CoreVideo
+import CoreMedia
 import Combine
 
 /// Downscaled preview (max 1920 long edge). Not a full-resolution render.
@@ -267,17 +269,98 @@ final class PreviewEngine: ObservableObject {
         return decodeMovieVideoToolbox(url: url, maxLongEdge: maxLongEdge)
     }
 
-    /// VideoToolbox-backed one-frame decode. Downscale only. No VT color convert to 709.
+    /// VideoToolbox / AVAssetReader: first frame as Y′CbCr (or BGRA bytes).
+    /// YUV→RGB is matrix-only (video range). No transfer, no nclc→709, no copyCGImage.
+    /// Those RGB are camera/log code values for the IDT — not display-referred.
     static func decodeMovieVideoToolbox(url: URL, maxLongEdge: CGFloat) -> CGImage? {
         let asset = AVURLAsset(url: url)
-        let gen = AVAssetImageGenerator(asset: asset)
-        gen.appliesPreferredTrackTransform = true
-        gen.maximumSize = CGSize(width: maxLongEdge, height: maxLongEdge)
-        gen.requestedTimeToleranceBefore = .zero
-        gen.requestedTimeToleranceAfter = .zero
-        // Do not attach a videoComposition or AVVideoColorPropertiesKey Rec.709.
-        // Output stays camera/log code values; source pane is untagged.
-        return try? gen.copyCGImage(at: .zero, actualTime: nil)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let settings: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        ]
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { return nil }
+        reader.add(output)
+        guard reader.startReading(),
+              let sample = output.copyNextSampleBuffer(),
+              let pb = CMSampleBufferGetImageBuffer(sample) else { return nil }
+        return cgImageFromLogPixelBuffer(pb, maxLongEdge: maxLongEdge)
+    }
+
+    /// Matrix-only Y′CbCr → R′G′B′ (BT.709 video range). Does not apply an OETF/EOTF.
+    /// nclc 1-1-1 must not become a 709 display convert before IDT.
+    static func cgImageFromLogPixelBuffer(_ pb: CVPixelBuffer, maxLongEdge: CGFloat) -> CGImage? {
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        let srcW = CVPixelBufferGetWidth(pb)
+        let srcH = CVPixelBufferGetHeight(pb)
+        guard srcW > 0, srcH > 0 else { return nil }
+        let scale = min(1.0, Double(maxLongEdge) / Double(max(srcW, srcH)))
+        let w = max(1, Int((Double(srcW) * scale).rounded()))
+        let h = max(1, Int((Double(srcH) * scale).rounded()))
+        var rgb = [UInt8](repeating: 0, count: w * h * 4)
+        let fmt = CVPixelBufferGetPixelFormatType(pb)
+        if fmt == kCVPixelFormatType_32BGRA || fmt == kCVPixelFormatType_32ARGB {
+            guard let base = CVPixelBufferGetBaseAddress(pb) else { return nil }
+            let stride = CVPixelBufferGetBytesPerRow(pb)
+            let src = base.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<h {
+                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
+                for x in 0..<w {
+                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
+                    let si = sy * stride + sx * 4
+                    let di = (y * w + x) * 4
+                    if fmt == kCVPixelFormatType_32BGRA {
+                        rgb[di] = src[si + 2]; rgb[di + 1] = src[si + 1]; rgb[di + 2] = src[si + 0]; rgb[di + 3] = 255
+                    } else {
+                        rgb[di] = src[si + 1]; rgb[di + 1] = src[si + 2]; rgb[di + 2] = src[si + 3]; rgb[di + 3] = 255
+                    }
+                }
+            }
+        } else {
+            guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
+                  let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else { return nil }
+            let yStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+            let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
+            let yPtr = yPlane.assumingMemoryBound(to: UInt8.self)
+            let uvPtr = uvPlane.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<h {
+                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
+                for x in 0..<w {
+                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
+                    let Y = Double(yPtr[sy * yStride + sx])
+                    let uv = (sy / 2) * uvStride + (sx / 2) * 2
+                    let Cb = Double(uvPtr[uv])
+                    let Cr = Double(uvPtr[uv + 1])
+                    // Video-range Y′CbCr → R′G′B′. Matrix only — no 709 transfer.
+                    let yp = (Y - 16.0) / 219.0
+                    let pbv = (Cb - 128.0) / 224.0
+                    let prv = (Cr - 128.0) / 224.0
+                    let r = yp + 1.5748 * prv
+                    let g = yp - 0.1873 * pbv - 0.4681 * prv
+                    let b = yp + 1.8556 * pbv
+                    let di = (y * w + x) * 4
+                    rgb[di] = UInt8(clamping: Int((min(max(r, 0), 1) * 255).rounded()))
+                    rgb[di + 1] = UInt8(clamping: Int((min(max(g, 0), 1) * 255).rounded()))
+                    rgb[di + 2] = UInt8(clamping: Int((min(max(b, 0), 1) * 255).rounded()))
+                    rgb[di + 3] = 255
+                }
+            }
+        }
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let info = CGImageAlphaInfo.premultipliedLast.rawValue
+        guard let ctx = CGContext(
+            data: &rgb,
+            width: w,
+            height: h,
+            bitsPerComponent: 8,
+            bytesPerRow: w * 4,
+            space: cs,
+            bitmapInfo: info
+        ) else { return nil }
+        return ctx.makeImage()
     }
 
     /// Stills only. Device RGB extract later — never itur_709 / displayP3 dest.
@@ -319,7 +402,28 @@ enum PreviewColor {
         ) else {
             return [Float](repeating: 0, count: w * h * 3)
         }
-        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        // Reinterpret bytes. Do not let a 709-tagged CGImage color-match into this context.
+        if let provider = image.dataProvider, let data = provider.data {
+            let src = CFDataGetBytePtr(data)
+            let bpp = max(image.bitsPerPixel / 8, 1)
+            let stride = max(image.bytesPerRow, w * bpp)
+            if src != nil && (image.bitsPerPixel == 32 || image.bitsPerPixel == 24) {
+                for y in 0..<h {
+                    for x in 0..<w {
+                        let si = y * stride + x * bpp
+                        let di = (y * w + x) * 4
+                        rgba[di] = src![si]
+                        rgba[di + 1] = src![si + 1]
+                        rgba[di + 2] = src![si + 2]
+                        rgba[di + 3] = 255
+                    }
+                }
+            } else {
+                ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+            }
+        } else {
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        }
         var rgb = [Float](repeating: 0, count: w * h * 3)
         for i in 0..<(w * h) {
             rgb[i * 3 + 0] = Float(rgba[i * 4 + 0]) / 255

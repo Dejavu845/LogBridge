@@ -108,7 +108,7 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 
 ## Preview performance (Apple silicon)
 
-- Movie decode is **VideoToolbox** only. Do not let VT emit Rec.709. Stills use ImageIO. No Core Image Display P3.
+- Movie decode is **AVAssetReader + Y′CbCr**, matrix-only to RGB. Do not let VT/nclc emit Rec.709 display values before IDT. No `copyCGImage` color convert. Stills use ImageIO. No Core Image Display P3.
 - Metal applies the same locked matrices / DIY 709 OETF as CPU. Algorithm numbers do not change.
 - IDT + exposure + WB stay in a graded linear cache. Scrub / ODT switch re-runs ODT only.
 - Source pane stays untagged. Rec.709 tag only on the 709 preview pane.
