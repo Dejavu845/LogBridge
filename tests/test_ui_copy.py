@@ -103,6 +103,7 @@ def test_no_bundled_manufacturer_demos():
     assert "drop your own" in blob.lower() or "drops their own" in blob.lower()
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
     assert "no bundled manufacturer demos" in sidebar.lower()
+    assert "把混源文件夹拖进来" in sidebar
 
 
 def test_as_shot_wb_copy_and_no_5600_guess():

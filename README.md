@@ -10,7 +10,7 @@ Internal working encoding: **ACEScct** (AP1 log). Scene-linear interchange / `ro
 
 ## Usability
 
-- **Empty state:** drag-and-drop a folder of mixed clips is the primary action (big drop zone, short copy: “Drop a folder of mixed clips”). Choosing files is secondary. **No bundled camera manufacturer demo clips** — drop your own files.
+- **Empty state:** drag-and-drop a folder of mixed clips is the primary action (big drop zone, short copy: “把混源文件夹拖进来”). Choosing files is secondary. **No bundled camera manufacturer demo clips** — drop your own files.
 - **Paired IDT picker:** when metadata cannot lock a curve+gamut pair, the UI shows locked pairs — e.g. `S-Log3 + S-Gamut3` and `S-Log3 + S-Gamut3.Cine` — **not** two independent dropdowns (curve vs gamut).
 - **Block process:** **处理已锁定片段** stays disabled until every clip has a locked pair. Pending label: **先选择 Log 与色域**. No silent IDT.
 - **S-Log3:** never silently default to S-Gamut3.Cine. Both pairs are offered; the user must pick one.

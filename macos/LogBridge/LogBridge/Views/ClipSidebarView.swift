@@ -7,10 +7,10 @@ struct ClipSidebarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Clips")
+                Text("素材")
                     .font(.headline)
                 Spacer()
-                Button("Add…") { session.showImporter = true }
+                Button("添加…") { session.showImporter = true }
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -20,7 +20,7 @@ struct ClipSidebarView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
 
-            Text("Detection: camera-private metadata → filename/model → paired IDT picker. QuickTime nclc is never used. Process stays blocked until a pair is locked.")
+            Text("拖入 → 锁 IDT → 曝光/WB → 处理。没锁 IDT 不能处理。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
@@ -50,7 +50,7 @@ private struct DropZone: View {
         VStack(spacing: 4) {
             Image(systemName: "square.and.arrow.down")
                 .font(empty ? .title2 : .body)
-            Text(empty ? "Drop a folder of mixed clips" : "Drop a folder to add")
+            Text(empty ? "把混源文件夹拖进来" : "把文件夹拖进来")
                 .font(empty ? .subheadline.weight(.semibold) : .caption)
                 .foregroundStyle(.primary)
             if empty {

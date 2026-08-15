@@ -83,6 +83,9 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 - Clips without a locked curve+gamut pair stay **pending**.
 - **处理已锁定片段** / **Apply graph** and **导出 ACEScct / EXR** are blocked for pending clips.
 - Primary button is **处理已锁定片段** — never 一键还原. Pending (disabled): **先选择 Log 与色域**.
+- Main path: drop → lock IDT → exposure/WB → 处理已锁定片段. One primary process button.
+- WB inspector shows three states: 机内 as-shot / 白平衡（估计） / 灰卡. Estimate chip lights only after confirm. Grey-card overrides.
+- HDR preview titles say 预览·非成片 and 未匹配 709. Do not present HLG/PQ as matched to Rec.709.
 - IDT picker is one paired list (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine), not two dropdowns.
 - Venice pairs appear only if a Venice body is detected.
 
@@ -100,4 +103,4 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 ## Media (no manufacturer demos)
 
 - LogBridge does **not** ship camera manufacturer demo clips (no ARRI / Sony / RED / Panasonic / Nikon / Fujifilm sample reels).
-- The user drops their own Log files or folders. Empty-state copy: drop a folder of mixed clips.
+- The user drops their own Log files or folders. Empty-state copy: **把混源文件夹拖进来**.
