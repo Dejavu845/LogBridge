@@ -83,8 +83,14 @@ final class SessionModel: ObservableObject {
     @Published var lastExportNote: String = ""
     @Published var lastImportNote: String = ""
     @Published var pickingNeutral: Bool = false
+    @Published var showSettings = false
 
     let preview = PreviewEngine()
+    let settings = AppSettings.shared
+
+    init() {
+        graph.odt = settings.defaultPreviewODT
+    }
 
     var selectedClip: Clip? {
         clips.first { $0.id == selectedID }
@@ -116,7 +122,7 @@ final class SessionModel: ObservableObject {
     }
 
     var processBlockedReason: String? {
-        if clips.isEmpty { return "Drop a folder of mixed clips" }
+        if clips.isEmpty { return "把混源文件夹拖进来" }
         if pendingPickerCount > 0 {
             return "先选择 Log 与色域"
         }
@@ -388,6 +394,13 @@ final class SessionModel: ObservableObject {
                 }
                 if !skipped.isEmpty {
                     self.lastImportNote = skipped.joined(separator: "\n")
+                }
+                if self.settings.promptEstimateWBOnImport {
+                    let locked = built.contains { $0.hasLockedPair }
+                    let hint = "可点「估计白平衡」查看估计，确认后才写入。不是校准，不猜 5600。"
+                    if locked {
+                        self.lastImportNote = (self.lastImportNote.isEmpty ? hint : self.lastImportNote + "\n" + hint)
+                    }
                 }
                 self.refreshPreview()
             }

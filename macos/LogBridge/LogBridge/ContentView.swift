@@ -32,6 +32,9 @@ struct ContentView: View {
         ) { result in
             session.handleImporter(result)
         }
+        .sheet(isPresented: $session.showSettings) {
+            SettingsView(settings: session.settings, session: session)
+        }
         .onChange(of: session.selectedID) { _, _ in
             if let clip = session.selectedClip {
                 session.applyClipWBToGraph(clip)

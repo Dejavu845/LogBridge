@@ -11,6 +11,7 @@ struct ClipSidebarView: View {
                     .font(.headline)
                 Spacer()
                 Button("添加…") { session.showImporter = true }
+                Button("设置") { session.showSettings = true }
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
