@@ -35,7 +35,7 @@ struct Clip: Identifiable, Hashable {
         if let curve = detectedCurve {
             return "\(curve) + (pick pair)"
         }
-        return "pick a paired IDT"
+        return "先选择成对 IDT"
     }
 
     /// Paired IDTs only. Venice rows appear only if this clip is a Venice body.
@@ -57,8 +57,8 @@ struct Clip: Identifiable, Hashable {
 
     var verificationBadge: String {
         if let idt, idt.isStub { return "stub" }
-        if isPending { return "pending" }
-        return "implemented (unverified)"
+        if isPending { return "待选" }
+        return "已实现（未验证）"
     }
 
     var displayCurve: String? { idt?.curve ?? detectedCurve }

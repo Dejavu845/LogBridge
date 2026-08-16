@@ -23,13 +23,7 @@ struct NodeStripView: View {
                 .onTapGesture { session.selectedNode = slot }
             }
             Spacer(minLength: 8)
-            Button("Apply graph") {
-                session.applyGraph()
-            }
-            .controlSize(.small)
-            .disabled(!session.canProcessSelected)
-            .help("Apply the serial graph to the selected clip. Blocked while pending. Never 一键还原.")
-            Text("serial only · implemented (unverified)")
+            Text("已实现（未验证）")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -41,20 +35,20 @@ struct NodeStripView: View {
     private func chipDetail(_ slot: NodeSlot) -> String {
         switch slot {
         case .idt:
-            return session.selectedClip?.lockedPairLabel ?? "no clip"
+            return session.selectedClip?.lockedPairLabel ?? "没有素材"
         case .exposure:
             if session.graph.exposureEnabled {
                 return String(format: "%+.2f st", session.graph.exposureStops)
             }
-            return "bypassed"
+            return "已旁路"
         case .wb:
-            if !session.graph.wbEnabled { return "bypassed" }
+            if !session.graph.wbEnabled { return "已旁路" }
             if session.graph.wbSource == .grey { return "灰卡" }
             if session.graph.wbSource == .estimate {
                 if let cct = session.graph.wbCCT { return "估计 \(Int(cct)) K" }
                 return "白平衡（估计）"
             }
-            if session.graph.asShotUnknown { return "as-shot unknown" }
+            if session.graph.asShotUnknown { return "机内未知" }
             if let cct = session.graph.wbCCT { return "as-shot \(Int(cct)) K" }
             return "as-shot"
         case .odt:
@@ -91,7 +85,7 @@ private struct NodeChip: View {
                 Text(slot.title)
                     .font(.caption.weight(.semibold))
                 if slot.isBypassable && !enabled {
-                    Text("off")
+                    Text("关")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

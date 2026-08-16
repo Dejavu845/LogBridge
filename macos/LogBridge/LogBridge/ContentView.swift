@@ -16,6 +16,7 @@ struct ContentView: View {
                 SplitPreview(session: session)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 NodeStripView(session: session)
+                PairedIDTBar(session: session)
                 InspectorView(session: session)
                 StatusBar(session: session)
             }
