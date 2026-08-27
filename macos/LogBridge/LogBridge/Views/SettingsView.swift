@@ -38,7 +38,7 @@ struct SettingsView: View {
             Section {
                 Toggle("未锁 IDT 挡住处理", isOn: .constant(settings.blockUnlockedIDT))
                     .disabled(true)
-                Text("不能关。没选 Log 与色域时，「处理已锁定片段」保持灰色。不猜 IDT。")
+                Text("不能关。「处理已锁定片段」只在已锁定条数 > 0 时出现。未锁定的片段跳过（先选择 Log 与色域 / 先选择成对 IDT），不猜 IDT。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

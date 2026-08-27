@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// Parameters for the selected serial node. WB bypass matches Resolve export.
-
-/// Always visible. Do not bury the paired IDT picker in an advanced pane.
+/// Paired IDT picker pinned under the preview. Always visible.
+/// Do not bury this in 「高级」. Unlocked IDT blocks / skips process.
 struct PairedIDTBar: View {
     @ObservedObject var session: SessionModel
 
@@ -33,91 +32,10 @@ struct PairedIDTBar: View {
                 }
                 .labelsHidden()
                 .frame(maxWidth: 420)
-                if clip.isPending {
-                    Text("先选择 Log 与色域")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-            } else {
-                Text("先点一条素材。读不到元数据就在这里选成对 IDT，不猜。")
-                    .font(.caption)
+                Text("S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine. C-Log2 / C-Log3 + Cinema Gamut vs BT.2020. Venice pair only if detected.")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.accentColor.opacity(0.06))
-    }
-}
-
-struct InspectorView: View {
-    @ObservedObject var session: SessionModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(session.selectedNode.title)
-                    .font(.headline)
-                Text(session.selectedNode.exportBasename)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            switch session.selectedNode {
-            case .idt:
-                IDTInspector(session: session)
-            case .exposure:
-                ExposureInspector(session: session)
-            case .wb:
-                WBInspector(session: session)
-            case .odt:
-                ODTInspector(session: session)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.03))
-    }
-}
-
-private struct IDTInspector: View {
-    @ObservedObject var session: SessionModel
-
-    var body: some View {
-        if let clip = session.selectedClip {
-            Text(clip.filename)
-                .font(.subheadline)
-            Text(clip.detectionNote)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("成对 IDT")
-                        .font(.caption.weight(.semibold))
-                    // One locked pair per row. Never two independent curve/gamut dropdowns.
-                    Picker("Paired IDT", selection: Binding(
-                        get: { clip.idt },
-                        set: { newValue in
-                            if let idt = newValue {
-                                session.setIDT(clip.id, idt)
-                            }
-                        }
-                    )) {
-                        Text("— 先选择成对 IDT —").tag(Optional<IDT>.none)
-                        ForEach(clip.pickerPairs) { pair in
-                            Text(pair.pairLabel).tag(Optional(pair))
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(maxWidth: 320)
-                    Text("S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine. C-Log2 / C-Log3 + Cinema Gamut vs BT.2020. Venice pair only if detected.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("状态")
-                        .font(.caption.weight(.semibold))
+                HStack(spacing: 8) {
                     Text(clip.verificationBadge)
                         .font(.caption2)
                         .padding(.horizontal, 6)
@@ -133,104 +51,138 @@ private struct IDTInspector: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-            }
-            if clip.isPending {
-                Text("先选择 Log 与色域。没锁成对 IDT 不能处理、不能导出。不默认 Cine。")
+                if let reason = clip.processSkipReason {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                Text(clip.detectionNote)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("先点一条素材。读不到元数据就在这里选成对 IDT，不猜。")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.secondary)
             }
-        } else {
-            Text("先点一条素材。读不到元数据就选成对 IDT，不猜，不用两个下拉。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.06))
     }
 }
 
-private struct WBInspector: View {
+/// Right inspector: Exposure + WB three states only.
+/// IDT lives under the preview. Node strip / ODT / export live in 「高级」.
+struct InspectorView: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        Toggle("启用白平衡（可旁路，不烘焙）", isOn: Binding(
-            get: { session.graph.wbEnabled },
-            set: { session.setWBEnabled($0) }
-        ))
-        HStack(spacing: 6) {
-            WBStateChip(title: "机内 as-shot", on: session.graph.wbSource == .asShot)
-            WBStateChip(title: "白平衡（估计）", on: session.graph.wbSource == .estimate)
-            WBStateChip(title: "灰卡", on: session.graph.wbSource == .grey)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ExposureInspector(session: session)
+                Divider()
+                WBInspector(session: session)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color.primary.opacity(0.03))
+    }
+}
+
+struct WBInspector: View {
+    @ObservedObject var session: SessionModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("白平衡")
+                .font(.headline)
+            Toggle("启用白平衡（可旁路，不烘焙）", isOn: Binding(
+                get: { session.graph.wbEnabled },
+                set: { session.setWBEnabled($0) }
+            ))
+            // Three states only. Estimate chip lights AFTER confirm, never on propose.
+            HStack(spacing: 6) {
+                WBStateChip(title: "机内 as-shot", on: session.graph.wbSource == .asShot)
+                WBStateChip(
+                    title: "白平衡（估计）",
+                    on: session.graph.wbSource == .estimate
+                )
+                WBStateChip(title: "灰卡", on: session.graph.wbSource == .grey)
+                if session.graph.asShotUnknown {
+                    Text("机内未知")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.yellow.opacity(0.28))
+                        .clipShape(Capsule())
+                }
+            }
             if session.graph.asShotUnknown {
-                Text("机内未知")
-                    .font(.caption2)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.yellow.opacity(0.28))
-                    .clipShape(Capsule())
+                Text("读不到机内色温。pending / identity — do not guess 5600 or 6504。点灰卡（after IDT, ACES2065-1 (AP0) linear）或手填。implemented (unverified)。")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
-        }
-        if session.graph.asShotUnknown {
-            Text("读不到机内色温。pending / identity — do not guess 5600 or 6504。点灰卡（after IDT, ACES2065-1 (AP0) linear）或手填。implemented (unverified)。")
+            Button(session.pickingNeutral ? "在预览上点灰卡…" : "点灰卡") {
+                session.pickingNeutral.toggle()
+            }
+            .help("Pick neutral / 点灰卡: sample after IDT in ACES2065-1 (AP0) linear; overrides metadata. Writes the existing CAT node.")
+            Button("估计白平衡") {
+                session.proposeAutoWB()
+            }
+            .help("白平衡（估计）: SoG p=6 in ACEScg after IDT. Does not write CAT. Low confidence stays empty. Not 精准.")
+            if session.graph.autoWBCCT != nil {
+                Text("白平衡（估计） \(Int(session.graph.autoWBCCT ?? 0)) K — 确认后才写入，一点不会写入")
+                    .font(.caption)
+                Button("确认估计") {
+                    session.confirmAutoWB()
+                }
+            }
+            if session.graph.wbEnabled {
+                HStack {
+                    Text("CCT")
+                        .frame(width: 40, alignment: .leading)
+                    Slider(
+                        value: Binding(
+                            get: { session.graph.wbCCTDisplay },
+                            set: { session.setWBParams(cct: $0) }
+                        ),
+                        in: 2000...10000,
+                        step: 10
+                    )
+                    Text(session.graph.wbCCT.map { "\(Int($0)) K" } ?? "机内未知")
+                        .monospacedDigit()
+                        .frame(width: 88, alignment: .trailing)
+                }
+                HStack {
+                    Text("Tint")
+                        .frame(width: 40, alignment: .leading)
+                    Slider(
+                        value: Binding(
+                            get: { session.graph.wbTint },
+                            set: { session.setWBParams(tint: $0) }
+                        ),
+                        in: -10...10,
+                        step: 0.1
+                    )
+                    Text(String(format: "%.1f", session.graph.wbTint))
+                        .monospacedDigit()
+                        .frame(width: 64, alignment: .trailing)
+                }
+                Picker("CAT", selection: Binding(
+                    get: { session.graph.wbMethod },
+                    set: { session.setWBParams(method: $0) }
+                )) {
+                    Text("Bradford").tag("bradford")
+                    Text("CAT02").tag("cat02")
+                }
+                .frame(maxWidth: 220)
+            }
+            Text("As-shot CCT/tint fills these knobs (UI only). Log IDTs assume already white-balanced — default CAT is identity. Do not treat as-shot 5600/6504 as an illuminant (double WB). Moving CCT/tint away from as-shot is relative CAT(user→D65)·inv(CAT(as→D65)) = CAT(user→as); raising Kelvin warms (in-camera). Not CAT(as→user), not CAT(user→D65) alone. First typed CCT with no as-shot is a label (identity). Grey-card (after IDT, ACES2065-1 (AP0) linear) is an absolute CAT. Missing CCT/tint is pending / identity — do not guess 5600 or 6504. Implemented (unverified). Disable this node in Resolve (or DCTL Bypass WB) = IDT → Exposure → ACEScct, no bake.")
                 .font(.caption)
-                .foregroundStyle(.orange)
+                .foregroundStyle(.secondary)
         }
-        Button(session.pickingNeutral ? "在预览上点灰卡…" : "点灰卡") {
-            session.pickingNeutral.toggle()
-        }
-        .help("Pick neutral / 点灰卡: sample after IDT in ACES2065-1 (AP0) linear; overrides metadata. Writes the existing CAT node.")
-        Button("估计白平衡") {
-            session.proposeAutoWB()
-        }
-        .help("白平衡（估计）: SoG p=6 in ACEScg after IDT. Does not write CAT. Low confidence stays empty. Not 精准.")
-        if session.graph.autoWBCCT != nil {
-            Text("白平衡（估计） \(Int(session.graph.autoWBCCT ?? 0)) K — 确认后才写入，一点不会写入")
-                .font(.caption)
-            Button("确认估计") {
-                session.confirmAutoWB()
-            }
-        }
-        if session.graph.wbEnabled {
-            HStack {
-                Text("CCT")
-                    .frame(width: 40, alignment: .leading)
-                Slider(
-                    value: Binding(
-                        get: { session.graph.wbCCTDisplay },
-                        set: { session.setWBParams(cct: $0) }
-                    ),
-                    in: 2000...10000,
-                    step: 10
-                )
-                Text(session.graph.wbCCT.map { "\(Int($0)) K" } ?? "机内未知")
-                    .monospacedDigit()
-                    .frame(width: 88, alignment: .trailing)
-            }
-            HStack {
-                Text("Tint")
-                    .frame(width: 40, alignment: .leading)
-                Slider(
-                    value: Binding(
-                        get: { session.graph.wbTint },
-                        set: { session.setWBParams(tint: $0) }
-                    ),
-                    in: -10...10,
-                    step: 0.1
-                )
-                Text(String(format: "%.1f", session.graph.wbTint))
-                    .monospacedDigit()
-                    .frame(width: 64, alignment: .trailing)
-            }
-            Picker("CAT", selection: Binding(
-                get: { session.graph.wbMethod },
-                set: { session.setWBParams(method: $0) }
-            )) {
-                Text("Bradford").tag("bradford")
-                Text("CAT02").tag("cat02")
-            }
-            .frame(maxWidth: 220)
-        }
-        Text("As-shot CCT/tint fills these knobs (UI only). Log IDTs assume already white-balanced — default CAT is identity. Do not treat as-shot 5600/6504 as an illuminant (double WB). Moving CCT/tint away from as-shot is relative CAT(user→D65)·inv(CAT(as→D65)) = CAT(user→as); raising Kelvin warms (in-camera). Not CAT(as→user), not CAT(user→D65) alone. First typed CCT with no as-shot is a label (identity). Grey-card (after IDT, ACES2065-1 (AP0) linear) is an absolute CAT. Missing CCT/tint is pending / identity — do not guess 5600 or 6504. Implemented (unverified). Disable this node in Resolve (or DCTL Bypass WB) = IDT → Exposure → ACEScct, no bake.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
     }
 }
 
@@ -248,71 +200,79 @@ private struct WBStateChip: View {
     }
 }
 
-private struct ODTInspector: View {
+struct ODTInspector: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        Picker("ODT", selection: Binding(
-            get: { session.graph.odt },
-            set: { session.setODT($0) }
-        )) {
-            ForEach(ODTMode.allCases) { mode in
-                Text(mode.title).tag(mode)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("输出")
+                .font(.subheadline.weight(.semibold))
+            Picker("ODT", selection: Binding(
+                get: { session.graph.odt },
+                set: { session.setODT($0) }
+            )) {
+                ForEach(ODTMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
             }
-        }
-        .frame(maxWidth: 280)
-        Text(session.graph.odt.acesOTNote)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        if session.graph.odt == .rec709 {
-            Text("Rec.709 is preview only, not the standard deliverable. Tagged CGColorSpace.itur_709 only when this node is Rec.709. No RRT. Implemented (unverified).")
+            .frame(maxWidth: 280)
+            Text(session.graph.odt.acesOTNote)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if session.graph.odt == .rec709 {
+                Text("Rec.709 is preview only, not the standard deliverable. Tagged CGColorSpace.itur_709 only when this node is Rec.709. No RRT. Implemented (unverified).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if session.graph.odt.isHDR {
+                Text("HDR OT via ACES/BT.2100 BuiltinTransform. 预览·非成片，未与 709 匹配. No homemade HLG/PQ curve. Implemented (unverified). Not supported. Not 一键精准.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text("Working space: \(session.graph.workingSpace.rawValue). 导出 ACEScct / EXR is the timeline deliverable. Rec.709 / HLG / PQ panes are 预览·非成片 — not a finished grade.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        if session.graph.odt.isHDR {
-            Text("HDR OT via ACES/BT.2100 BuiltinTransform. 预览·非成片，未与 709 匹配. No homemade HLG/PQ curve. Implemented (unverified). Not supported. Not 一键精准.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        Text("Working space: \(session.graph.workingSpace.rawValue). 导出 ACEScct / EXR is the timeline deliverable. Rec.709 / HLG / PQ panes are 预览·非成片 — not a finished grade.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
     }
 }
 
-private struct ExposureInspector: View {
+struct ExposureInspector: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        Toggle("启用曝光（0 档 = 不动）", isOn: Binding(
-            get: { session.graph.exposureEnabled },
-            set: { session.setExposureEnabled($0) }
-        ))
-        if session.graph.exposureEnabled {
-            HStack {
-                Text("档（Stops）")
-                    .frame(width: 48, alignment: .leading)
-                Slider(
-                    value: Binding(
-                        get: { session.graph.exposureStops },
-                        set: { session.setExposureStops($0) }
-                    ),
-                    in: -8...8,
-                    step: 0.05
-                )
-                Text(String(format: "%+.2f st", session.graph.exposureStops))
-                    .monospacedDigit()
-                    .frame(width: 72, alignment: .trailing)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("曝光")
+                .font(.headline)
+            Toggle("启用曝光（0 档 = 不动）", isOn: Binding(
+                get: { session.graph.exposureEnabled },
+                set: { session.setExposureEnabled($0) }
+            ))
+            if session.graph.exposureEnabled {
+                HStack {
+                    Text("档（Stops）")
+                        .frame(width: 72, alignment: .leading)
+                    Slider(
+                        value: Binding(
+                            get: { session.graph.exposureStops },
+                            set: { session.setExposureStops($0) }
+                        ),
+                        in: -8...8,
+                        step: 0.05
+                    )
+                    Text(String(format: "%+.2f st", session.graph.exposureStops))
+                        .monospacedDigit()
+                        .frame(width: 72, alignment: .trailing)
+                }
+                Text(String(format: "Linear gain 2^stops = %.4f", pow(2.0, session.graph.exposureStops)))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
-            Text(String(format: "Linear gain 2^stops = %.4f", pow(2.0, session.graph.exposureStops)))
-                .font(.caption.monospacedDigit())
+            Text("User-facing unit is stops. After IDT, in ACES2065-1 linear: rgb × (2^stops). Do not add/subtract Log code values. Preview cache stores post-IDT linear; exposure applies in linear before WB.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("预览·非成片 — Rec.709 / HLG / PQ are preview only, not a finished picture.")
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        Text("User-facing unit is stops. After IDT, in ACES2065-1 linear: rgb × (2^stops). Do not add/subtract Log code values. Preview cache stores post-IDT linear; exposure applies in linear before WB.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        Text("预览·非成片 — Rec.709 / HLG / PQ are preview only, not a finished picture.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
     }
 }

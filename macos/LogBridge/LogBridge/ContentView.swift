@@ -1,26 +1,30 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Drop zone, clip list, split preview, node strip, inspector.
-/// UI copy uses "implemented (unverified)" — never "supported".
-/// Primary action is "处理已锁定片段" — never 一键还原.
-/// Pending IDT button: "先选择 Log 与色域" (disabled). Export: "导出 ACEScct / EXR".
+/// One primary path: list → preview + paired IDT → 处理已锁定片段.
+/// Right inspector is Exposure + WB only. Node strip / Resolve export sit
+/// behind 「高级」 (hidden by default). UI copy uses "implemented (unverified)"
+/// — never "supported". Primary action is "处理已锁定片段" — never 一键还原.
+/// Unlocked IDT is skipped, never guessed. Export: "导出 ACEScct / EXR".
 struct ContentView: View {
     @StateObject private var session = SessionModel()
+    @State private var showAdvanced = false
 
     var body: some View {
         HSplitView {
             ClipSidebarView(session: session)
-                .frame(minWidth: 240, idealWidth: 300, maxWidth: 380)
+                .frame(minWidth: 240, idealWidth: 280, maxWidth: 360)
             VStack(spacing: 0) {
                 SplitPreview(session: session)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                NodeStripView(session: session)
                 PairedIDTBar(session: session)
-                InspectorView(session: session)
+                ProcessLockedBar(session: session)
+                AdvancedPanel(session: session, isExpanded: $showAdvanced)
                 StatusBar(session: session)
             }
-            .frame(minWidth: 640)
+            .frame(minWidth: 520)
+            InspectorView(session: session)
+                .frame(minWidth: 260, idealWidth: 300, maxWidth: 380)
         }
         .onDrop(of: [.fileURL], isTargeted: $session.dropTargeted) { providers in
             session.importProviders(providers)
@@ -45,6 +49,70 @@ struct ContentView: View {
     }
 }
 
+/// Center column action. Shown only when locked-clip count > 0.
+/// Not a second process button — StatusBar has no process control.
+struct ProcessLockedBar: View {
+    @ObservedObject var session: SessionModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(session.lockStatusText)
+                .font(.subheadline.weight(.semibold))
+            if let reason = session.selectedClip?.processSkipReason {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if session.showsProcessLockedButton {
+                Button("处理已锁定片段") {
+                    session.processLockedClips()
+                }
+                .buttonStyle(.borderedProminent)
+                .help("Batch locked clips only. Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原.")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.accentColor.opacity(0.05))
+    }
+}
+
+/// Node strip + ODT + Resolve export. Hidden by default so they do not
+/// compete with preview / IDT / process.
+struct AdvancedPanel: View {
+    @ObservedObject var session: SessionModel
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        DisclosureGroup("高级", isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                NodeStripView(session: session)
+                ODTInspector(session: session)
+                HStack {
+                    Button("导出 ACEScct / EXR") {
+                        session.exportResolve()
+                    }
+                    .disabled(!session.canProcess)
+                    .help("Export ACEScct timeline / ACES2065-1 EXR. Blocked while any clip is pending.")
+                    if let reason = session.processBlockedReason {
+                        Text(reason)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.03))
+    }
+}
+
 struct SplitPreview: View {
     @ObservedObject var session: SessionModel
 
@@ -52,7 +120,7 @@ struct SplitPreview: View {
         HSplitView {
             SourcePreviewView(
                 title: "源（相机 Log）",
-                caption: "未套 Rec.709。相机编码值。预览·非成片 — 8-bit thumbnail is not a deliverable.",
+                caption: "未套 Rec.709。相机编码值。",
                 image: session.preview.sourceImage
             )
             Rec709PreviewView(
@@ -69,6 +137,7 @@ struct SplitPreview: View {
     }
 }
 
+/// Status only — no process button here (one primary path).
 struct StatusBar: View {
     @ObservedObject var session: SessionModel
 
@@ -82,45 +151,15 @@ struct StatusBar: View {
             Text(session.preview.status)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            if let reason = session.processBlockedReason {
-                Text(reason)
-                    .foregroundStyle(.orange)
-                    .lineLimit(1)
-            }
             if !session.lastExportNote.isEmpty {
                 Text(session.lastExportNote)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer()
-            Button(session.canProcessSelected ? "处理已锁定片段" : "先选择 Log 与色域") {
-                session.processSelected()
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!session.canProcessSelected)
-            .help("Apply the serial graph to locked clips. Blocked until a paired IDT is chosen. Never 一键还原.")
-            Button("导出 ACEScct / EXR") {
-                session.exportResolve()
-            }
-            .disabled(!session.canProcess)
-            .help("Export ACEScct timeline / ACES2065-1 EXR. Blocked while any clip is pending.")
         }
         .font(.caption)
         .padding(8)
         .background(.bar)
-    }
-}
-
-struct PreviewBadge: View {
-    var body: some View {
-        Text("预览·非成片")
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(.black.opacity(0.65))
-            .foregroundStyle(.white)
-            .clipShape(Capsule())
-            .padding(12)
-            .help("8-bit thumbnail / proxy. Not a color-accurate deliverable.")
     }
 }

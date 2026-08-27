@@ -23,7 +23,7 @@ def test_primary_button_is_locked_chinese():
     assert "处理已锁定片段" in content
     assert "先选择 Log 与色域" in content
     assert "导出 ACEScct / EXR" in content
-    assert "预览·非成片" in content
+    assert "预览·非成片" in _all_swift()
     assert 'Button("一键还原")' not in content
     assert 'Button("一键还原")' not in _all_swift()
     assert "一键精准" not in _all_swift() or "Not 一键精准" in _all_swift()
@@ -31,6 +31,8 @@ def test_primary_button_is_locked_chinese():
     assert "处理已锁定片段" in swift
     assert "先选择 Log 与色域" in swift
     assert "导出 ACEScct / EXR" in swift
+    assert "先选择成对 IDT" in swift
+    assert content.count('Button("处理已锁定片段")') == 1
 
 
 def test_preview_overlay_badge_feichengpian():
@@ -38,6 +40,9 @@ def test_preview_overlay_badge_feichengpian():
     assert "预览·非成片" in preview
     assert "8-bit thumbnail is not a deliverable" in preview
     assert "PreviewNotDeliverableBadge" in preview
+    badge = preview.split("struct PreviewNotDeliverableBadge")[1].split("struct Rec709TaggedHost")[0]
+    assert 'Text("预览·非成片")' in badge
+    assert 'Text("8-bit thumbnail is not a deliverable")' not in badge
 
 
 def test_paired_idt_picker_not_two_dropdowns():
@@ -58,10 +63,13 @@ def test_pending_clips_block_process_and_export():
     assert "canProcessSelected" in clip
     assert "func processSelected()" in clip
     assert "func applyGraph()" in clip
+    assert "func processLockedClips()" in clip
     assert "pending" in clip
     content = _read(CONTENT)
-    assert ".disabled(!session.canProcessSelected)" in content
+    assert "showsProcessLockedButton" in content
     assert ".disabled(!session.canProcess)" in content
+    assert "lockedClipCount" in clip
+    assert "processSkipReason" in clip
 
 
 def test_docs_name_the_review_locks():
@@ -79,6 +87,9 @@ def test_docs_name_the_review_locks():
     assert "paired IDT" in blob or "paired IDT" in blob
     assert "Rec.2100 HLG" in blob
     assert "Rec.2100 PQ" in blob
+    assert "高级" in blob
+    assert "条已锁定" in blob
+    assert "先选择成对 IDT" in blob
 
 
 def test_exposure_inspector_and_preview_not_finished_picture():
@@ -143,3 +154,19 @@ def test_idt_bar_always_visible_no_hidden_picker():
     assert 'Button("Apply graph")' not in strip
     assert "确认估计" in inspector
     assert "估计白平衡" in inspector
+    assert "高级" in content
+    assert "NodeStripView" in content.split("AdvancedPanel")[1]
+
+
+def test_forbidden_marketing_copy_stays_forbidden():
+    swift = _all_swift()
+    docs = (ROOT / "README.md").read_text(encoding="utf-8") + (ROOT / "ACCEPTANCE.md").read_text(
+        encoding="utf-8"
+    )
+    tests = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "tests").glob("*.py"))
+    for token in ("一键还原", "一键校准", "全自动校准", "全格式已支持"):
+        assert token in tests  # prohibition named in tests
+        if token in swift:
+            assert "不写" in swift or "never" in swift.lower() or "Never" in swift
+    assert "精准" in tests
+    assert "全格式已支持" in docs  # named as out of scope / do not write

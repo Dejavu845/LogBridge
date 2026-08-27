@@ -21,7 +21,7 @@ struct ClipSidebarView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
 
-            Text("拖入 → 锁 IDT → 曝光/WB → 处理。没锁 IDT 不能处理。")
+            Text("拖入 → 锁 IDT → 曝光/WB → 处理已锁定片段。未锁定的跳过，不猜。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
@@ -107,6 +107,12 @@ struct ClipRow: View {
                     .padding(.vertical, 2)
                     .background(clip.isPending ? Color.yellow.opacity(0.25) : Color.orange.opacity(0.2))
                     .clipShape(Capsule())
+            }
+            if let reason = clip.processSkipReason {
+                Text(reason)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
             }
         }
         .padding(.horizontal, 12)
