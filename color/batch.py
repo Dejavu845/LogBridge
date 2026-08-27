@@ -19,7 +19,9 @@ While writing, progress is 「写出代理 i/N · frame k」 (k/total when known
 Cancel becomes the same primary button. The in-progress ``_proxy`` folder
 is removed so a half sequence is not a finished deliverable; completed
 clips stay. Cancelled status says 已取消 and still 整段代理，不是全精度成片.
-Partial output is 不是成片.
+Partial output is 不是成片. A successful write remembers the dest folder
+(UserDefaults) and status offers 「在 Finder 中显示」. Cancel does not
+treat a deleted half-folder as success.
 
 Swift ``SessionModel.processLockedClips`` mirrors this module. Color is
 ``SerialGraph.apply`` (existing pipeline). Container is ``exr_write``.
@@ -73,6 +75,8 @@ DELIVERABLE_DIR_SUFFIX = "_ACES2065-1_proxy"
 DELIVERABLE_SUFFIX = DELIVERABLE_DIR_SUFFIX
 SEQUENCE_FRAME_PREFIX = "frame"
 SEQUENCE_FRAME_WIDTH = 6
+REVEAL_IN_FINDER = "在 Finder 中显示"
+LAST_EXPORT_DIRECTORY_KEY = "logbridge.lastExportDirectory"
 
 
 @dataclass(frozen=True)
@@ -206,9 +210,22 @@ def as_frame_sequence(value) -> list[np.ndarray]:
     return [arr]
 
 
-def processed_status_text(processed: int, skipped: int) -> str:
-    """「N 条已处理」 is sequence writes / attempts, not preview refresh."""
-    return PROCESSED_STATUS_TEMPLATE.format(processed=processed, skipped=skipped)
+def processed_status_text(processed: int, skipped: int, dest=None) -> str:
+    """「N 条已处理」 is sequence writes / attempts, not preview refresh.
+
+    ``dest`` (short last path component) is appended only for a successful
+    write. Cancelled / empty writes omit it so a deleted half-folder is
+    not treated as success.
+    """
+    note = PROCESSED_STATUS_TEMPLATE.format(processed=processed, skipped=skipped)
+    if dest is not None:
+        note += f" {short_export_path(dest)}"
+    return note
+
+
+def short_export_path(path) -> str:
+    """Short dest shown in status. Parent name, not a deliverable claim."""
+    return Path(path).name
 
 
 def progress_text(
@@ -245,6 +262,7 @@ class BatchWriteReport:
     skipped: tuple[tuple[BatchClip, str], ...]
     errors: tuple[ClipWrite, ...]
     cancelled: bool = False
+    dest: str | None = None
 
     @property
     def processed_count(self) -> int:
@@ -256,10 +274,18 @@ class BatchWriteReport:
         return len(self.skipped)
 
     @property
+    def last_reveal_paths(self) -> tuple[str, ...]:
+        """Completed ``_proxy`` folders. Empty on cancel (half-folder deleted)."""
+        if self.cancelled:
+            return ()
+        return self.written_paths
+
+    @property
     def processed_status_text(self) -> str:
         if self.cancelled:
             return cancelled_status_text(self.processed_count, self.skipped_count)
-        return processed_status_text(self.processed_count, self.skipped_count)
+        dest = self.dest if self.written else None
+        return processed_status_text(self.processed_count, self.skipped_count, dest)
 
     @property
     def written_paths(self) -> tuple[str, ...]:
@@ -356,4 +382,5 @@ def process_locked_writes(
         skipped=plan.skipped,
         errors=tuple(errors),
         cancelled=cancelled,
+        dest=str(dest),
     )

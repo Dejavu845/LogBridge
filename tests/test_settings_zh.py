@@ -36,6 +36,9 @@ def test_settings_defaults_locked():
     assert ".rec709" in app
     assert "promptEstimateWBOnImport" in app
     assert "blockUnlockedIDT: Bool = true" in app
+    assert "lastExportDirectoryPath" in app
+    assert "logbridge.lastExportDirectory" in app
+    assert "rememberExportDirectory" in app
     assert "graph.odt = settings.defaultPreviewODT" in clip
     assert "promptEstimateWBOnImport" in clip
     assert "confirmAutoWB" not in clip.split("promptEstimateWBOnImport")[1].split("refreshPreview")[0]

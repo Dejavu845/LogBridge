@@ -94,6 +94,9 @@ final class SessionModel: ObservableObject {
     @Published var pickingNeutral: Bool = false
     @Published var showSettings = false
     @Published var isWritingDeliverables = false
+    /// Completed `{stem}_ACES2065-1_proxy` folders from the last successful write.
+    /// Empty while writing, after cancel, or when nothing was written.
+    @Published var lastExportRevealURLs: [URL] = []
 
     let preview = PreviewEngine()
     let settings = AppSettings.shared
@@ -181,8 +184,13 @@ final class SessionModel: ObservableObject {
         panel.canCreateDirectories = true
         panel.prompt = "写出"
         panel.message = "已锁定片段写出 ACES2065-1 代理 EXR 序列（AP0 线性）。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。"
+        if let remembered = settings.lastExportDirectoryURL {
+            panel.directoryURL = remembered
+        }
         panel.begin { [weak self] response in
             guard let self, response == .OK, let dest = panel.url else { return }
+            _ = dest.startAccessingSecurityScopedResource()
+            self.settings.rememberExportDirectory(dest)
             self.writeLockedDeliverables(locked: locked, skippedCount: skipped.count, dest: dest)
         }
     }
@@ -193,6 +201,7 @@ final class SessionModel: ObservableObject {
         let clipTotal = locked.count
         writeCancel.reset()
         lastProgressUptime = 0
+        lastExportRevealURLs = []
         isWritingDeliverables = true
         lastExportNote = Self.exportProgressText(clipIndex: 1, clipTotal: clipTotal)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -234,16 +243,23 @@ final class SessionModel: ObservableObject {
             }
             let processed = written.count + errors.count
             var note: String
+            var reveal: [URL] = []
             if cancelled {
+                // Deleted half-folder is not a success. Do not reveal it.
                 note = Self.cancelledExportNote(processed: processed, skipped: skippedCount)
             } else {
                 note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+                if !written.isEmpty {
+                    note += " " + Self.shortExportPath(dest)
+                    reveal = written
+                }
             }
             if !errors.isEmpty {
                 note += " " + errors.joined(separator: " ")
             }
             DispatchQueue.main.async {
                 self.lastExportNote = note
+                self.lastExportRevealURLs = reveal
                 self.isWritingDeliverables = false
             }
         }
@@ -314,6 +330,24 @@ final class SessionModel: ObservableObject {
     /// Cancelled batch. 已取消 + honesty. Partial output is 不是成片.
     static func cancelledExportNote(processed: Int, skipped: Int) -> String {
         "处理已锁定片段 — 已取消。\(processed) 条已处理 / \(skipped) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+    }
+
+    /// Status dest path (short). Parent folder name, not a deliverable claim.
+    static func shortExportPath(_ url: URL) -> String {
+        url.lastPathComponent
+    }
+
+    static let revealInFinderLabel = "在 Finder 中显示"
+
+    var canRevealLastExport: Bool { !lastExportRevealURLs.isEmpty }
+
+    /// Opens completed `{stem}_ACES2065-1_proxy` folders. Skips missing paths.
+    func revealLastExportInFinder() {
+        let existing = lastExportRevealURLs.filter {
+            FileManager.default.fileExists(atPath: $0.path)
+        }
+        guard !existing.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(existing)
     }
 
     private func publishExportProgress(_ note: String, force: Bool = false) {
