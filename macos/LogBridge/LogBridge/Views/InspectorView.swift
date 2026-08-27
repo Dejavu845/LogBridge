@@ -73,7 +73,7 @@ struct PairedIDTBar: View {
 }
 
 /// Right inspector: Exposure + WB three states only.
-/// IDT lives under the preview. Node strip / ODT / export live in 「高级」.
+/// IDT lives under the preview — not in 「高级」. Node strip / export only.
 struct InspectorView: View {
     @ObservedObject var session: SessionModel
 

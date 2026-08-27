@@ -119,7 +119,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT (709 / HLG /
    - **Rec.2100 PQ** — ACES Output Transform / BT.2100 (`ACES-OUTPUT … ST2084_1.1` + `DISPLAY … REC.2100-REC2020-ST2084`). Implemented (unverified).
    - HLG/PQ are **not** “supported” and not 一键精准. No homemade HLG/PQ curve.
 
-The right inspector is Exposure + WB (three states: 机内 as-shot / 白平衡（估计） / 灰卡). Paired IDT stays under the preview. Click a node in **高级** to see the serial graph; ODT / Resolve export live there too. No sat / extra grade nodes. The Rec.709 pane is 预览·非成片 — do not treat it as a finished picture.
+The right inspector is Exposure + WB (three states: 机内 as-shot / 白平衡（估计） / 灰卡). Paired IDT stays under the preview — not inside **高级**. Node strip + Resolve export live in **高级**. No sat / extra grade nodes. The Rec.709 pane is 预览·非成片 — do not treat it as a finished picture.
 
 Python: `from color.graph import SerialGraph`. Swift: `SerialGraph` + `NodeSlot` in `Models/NodeGraph.swift`. Status: implemented (unverified).
 

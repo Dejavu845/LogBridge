@@ -155,7 +155,17 @@ def test_idt_bar_always_visible_no_hidden_picker():
     assert "确认估计" in inspector
     assert "估计白平衡" in inspector
     assert "高级" in content
-    assert "NodeStripView" in content.split("struct AdvancedPanel")[1]
+    # Main path: preview → paired IDT → process. Not inside 高级.
+    center = content.split("VStack(spacing: 0)")[1].split(".frame(minWidth: 520)")[0]
+    assert "SplitPreview" in center
+    assert center.index("PairedIDTBar") < center.index("AdvancedPanel")
+    assert "PairedIDTBar" not in content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
+    advanced = content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
+    assert "NodeStripView" in advanced
+    assert "导出 ACEScct / EXR" in advanced
+    assert "ODTInspector" not in advanced
+    assert 'Picker("Paired IDT"' not in advanced
+    assert "成对 IDT" not in advanced
 
 
 def test_forbidden_marketing_copy_stays_forbidden():

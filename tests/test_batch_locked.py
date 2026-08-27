@@ -151,5 +151,9 @@ def test_inspector_is_exposure_and_wb_only():
     assert "WBInspector" in body
     assert "IDTInspector" not in body
     assert "ODTInspector" not in body
-    assert "ODTInspector" in content  # advanced only
-    assert "NodeStripView" in content.split("struct AdvancedPanel")[1]
+    advanced = content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
+    assert "NodeStripView" in advanced
+    assert "导出 ACEScct / EXR" in advanced
+    assert "ODTInspector" not in advanced
+    assert "PairedIDTBar" not in advanced
+    assert "成对 IDT" not in advanced

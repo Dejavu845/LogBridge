@@ -2,8 +2,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// One primary path: list → preview + paired IDT → 处理已锁定片段.
-/// Right inspector is Exposure + WB only. Node strip / Resolve export sit
-/// behind 「高级」 (hidden by default). UI copy uses "implemented (unverified)"
+/// Right inspector is Exposure + WB only. Paired IDT stays under preview
+/// (never inside 「高级」). Node strip / Resolve export sit behind 「高级」
+/// (hidden by default). UI copy uses "implemented (unverified)"
 /// — never "supported". Primary action is "处理已锁定片段" — never 一键还原.
 /// Unlocked IDT is skipped, never guessed. Export: "导出 ACEScct / EXR".
 struct ContentView: View {
@@ -79,8 +80,8 @@ struct ProcessLockedBar: View {
     }
 }
 
-/// Node strip + ODT + Resolve export. Hidden by default so they do not
-/// compete with preview / IDT / process.
+/// Node strip + Resolve export only. Hidden by default.
+/// Paired IDT stays on the main path under the preview — never here.
 struct AdvancedPanel: View {
     @ObservedObject var session: SessionModel
     @Binding var isExpanded: Bool
@@ -89,7 +90,6 @@ struct AdvancedPanel: View {
         DisclosureGroup("高级", isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 8) {
                 NodeStripView(session: session)
-                ODTInspector(session: session)
                 HStack {
                     Button("导出 ACEScct / EXR") {
                         session.exportResolve()
