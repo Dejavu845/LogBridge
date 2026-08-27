@@ -284,6 +284,7 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     assert "exportGradedAP0Sequence" in engine
     assert "decodeMovieAllFrames" in engine
     assert "while let sample = output.copyNextSampleBuffer()" in engine
+    _assert_export_sequence_tries_10bit_first(engine)
     grade = engine.split("func gradeAP0")[1].split("func exportGradedAP0(")[0]
     assert "applyODT" not in grade
     assert "if graph.wbEnabled" in grade
@@ -313,6 +314,26 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     _assert_chengpian_not_a_deliverable_claim(content)
 
 
+def _assert_export_sequence_tries_10bit_first(engine: str) -> None:
+    """Export sequence prefers 10-bit Y′CbCr; preview/scrub stays 8-bit-first."""
+    export_decode = engine.split("func decodeMovieAllFrames")[1].split(
+        "func readAllYpCbCrFrames"
+    )[0]
+    preview_decode = engine.split("func decodeMovieVideoToolbox")[1].split(
+        "func readFirstYpCbCrFrame"
+    )[0]
+    ten = "kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange"
+    eight_420 = "kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange"
+    eight_422 = "kCVPixelFormatType_422YpCbCr8"
+    assert export_decode.index(ten) < export_decode.index(eight_420)
+    assert export_decode.index(eight_420) < export_decode.index(eight_422)
+    assert preview_decode.index(eight_420) < preview_decode.index(eight_422)
+    assert preview_decode.index(eight_422) < preview_decode.index(ten)
+    assert "copyCGImage(" not in export_decode
+    assert "AVVideoColorPropertiesKey:" not in export_decode
+    assert HONEST_PROXY_NOTE in engine
+
+
 def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
     """成片 may only appear as 预览·非成片 / 不是全精度成片 / 不是整段成片 / 不是成片."""
     cleaned = (
@@ -323,6 +344,20 @@ def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
         .replace("成片预览关", "")
     )
     assert "成片" not in cleaned
+
+
+def test_export_sequence_prefers_10bit_ycbcr():
+    engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    assert HONEST_PROXY_NOTE in engine
+    _assert_export_sequence_tries_10bit_first(engine)
+    assert "writeMatrixRGB" in engine
+    ten_block = engine.split("kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange")[-1]
+    assert "writeMatrixRGB" in ten_block.split("func writeMatrixRGB")[0]
+    matrix = engine.split("func writeMatrixRGB")[1]
+    assert "1.5748" in matrix
+    assert "0.1873" in matrix
+    assert "0.4681" in matrix
+    assert "1.8556" in matrix
 
 
 def test_honest_proxy_copy_and_filename():

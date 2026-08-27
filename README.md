@@ -12,7 +12,7 @@ Internal working encoding: **ACEScct** (AP1 log). Scene-linear interchange / `ro
 
 - **Empty state:** drag-and-drop a folder of mixed clips is the primary action (big drop zone, short copy: “把混源文件夹拖进来”). Choosing files is secondary. **No bundled camera manufacturer demo clips** — drop your own files.
 - **Paired IDT picker:** when metadata cannot lock a curve+gamut pair, the UI shows locked pairs — e.g. `S-Log3 + S-Gamut3` and `S-Log3 + S-Gamut3.Cine` — **not** two independent dropdowns (curve vs gamut).
-- **Block process:** a clip is processable only when its paired IDT is locked. **处理已锁定片段** appears only when locked-clip count > 0 and writes one **ACES2065-1 (AP0 linear) proxy EXR sequence** (`{stem}_ACES2065-1_proxy/frame_000000.exr`) per locked clip. **整段代理，不是全精度成片.** Decode is still 8-bit Y′CbCr upconverted to float. Not ACEScct. Not a Rec.709 .mov/.mp4. Pending / unlocked stay in the list with **先选择 Log 与色域** or **先选择成对 IDT** and produce **no** output folder. Status: **N 条已锁定 / M 条待选**. **N 条已处理** is clips that produced a sequence (or attempted with a per-clip error), not a preview refresh. A mixed bin is allowed — do not require every clip locked. No silent IDT. Never guess.
+- **Block process:** a clip is processable only when its paired IDT is locked. **处理已锁定片段** appears only when locked-clip count > 0 and writes one **ACES2065-1 (AP0 linear) proxy EXR sequence** (`{stem}_ACES2065-1_proxy/frame_000000.exr`) per locked clip. **整段代理，不是全精度成片.** Sequence decode prefers 10-bit Y′CbCr, then 8-bit fallbacks (still a proxy, not camera-original). Not ACEScct. Not a Rec.709 .mov/.mp4. Pending / unlocked stay in the list with **先选择 Log 与色域** or **先选择成对 IDT** and produce **no** output folder. Status: **N 条已锁定 / M 条待选**. **N 条已处理** is clips that produced a sequence (or attempted with a per-clip error), not a preview refresh. A mixed bin is allowed — do not require every clip locked. No silent IDT. Never guess.
 - **S-Log3:** never silently default to S-Gamut3.Cine. Both pairs are offered; the user must pick one.
 - **C-Log2 / C-Log3:** never silently default to Cinema Gamut. Both Cinema Gamut and BT.2020 pairs are offered; the user must pick one.
 - **Venice:** `S-Log3 + S-Gamut3 (Venice)` and `S-Log3 + S-Gamut3.Cine (Venice)` appear **only if** a Venice body is detected.
@@ -127,7 +127,7 @@ Python: `from color.graph import SerialGraph`. Swift: `SerialGraph` + `NodeSlot`
 
 Export writes a serial **node graph**, not a prose sidecar: `graph.xml`, `graph.dot`, `01_IDT_<idt>.cube`, `02_Exposure.cube` / `.dctl`, `03_WB.cube` / `.cdl` / `.ccc` / `.dctl`, `04_ODT_Rec709.cube`, `README_RESOLVE.md`.
 
-Export default: **ACEScct** timeline / **ACES2065-1**. **处理已锁定片段** writes `{stem}_ACES2065-1_proxy/frame_000000.exr` (ACES2065-1 AP0 linear proxy sequence, 8-bit preview decode) — **整段代理，不是全精度成片.** It does **not** write ACEScct. **导出 ACEScct / EXR** in **高级** is the Resolve graph (LUT/XML/DCTL/cube), not a movie. Rec.709 ODT is **709 预览** (DIY BT.709 OETF, not an ACES Output Transform), off by default. 预览·非成片. Rec.2100 HLG/PQ are optional ACES/BT.2100 OT nodes (unverified). Locked clips write even when other clips are still pending. WB off writes an identity CAT (no bake). Implemented (unverified).
+Export default: **ACEScct** timeline / **ACES2065-1**. **处理已锁定片段** writes `{stem}_ACES2065-1_proxy/frame_000000.exr` (ACES2065-1 AP0 linear proxy sequence; 10-bit Y′CbCr first, then 8-bit fallbacks) — **整段代理，不是全精度成片.** It does **not** write ACEScct. **导出 ACEScct / EXR** in **高级** is the Resolve graph (LUT/XML/DCTL/cube), not a movie. Rec.709 ODT is **709 预览** (DIY BT.709 OETF, not an ACES Output Transform), off by default. 预览·非成片. Rec.2100 HLG/PQ are optional ACES/BT.2100 OT nodes (unverified). Locked clips write even when other clips are still pending. WB off writes an identity CAT (no bake). Implemented (unverified).
 
 Python: `from color.resolve_export import export_locked_resolve_bundle` (locked clips only; pending keep **先选择成对 IDT** / **先选择 Log 与色域**) or `export_resolve_bundle` (pass `graph=` or `include_wb=`). Swift: `ResolveExporter.export(to:clips:...)` on locked clips. Status: implemented (unverified).
 
@@ -141,7 +141,7 @@ The macOS split preview is **not** a full-resolution render. Both panes show a *
 - Source pane is untagged camera/log. Rec.709 ODT pane is tagged `CGColorSpace.itur_709` only when the ODT node is on.
 - Clip list is a `LazyVStack` (virtualized).
 
-**处理已锁定片段** writes `{stem}_ACES2065-1_proxy/frame_000000.exr` per locked clip (same 8-bit Y′CbCr preview decode, now a whole-clip loop). **整段代理，不是全精度成片.** Not ACEScct. Not a Rec.709 .mov/.mp4. **N 条已处理** is those proxy sequences (or per-clip write errors), not the preview pane. Full-precision / camera-original bit-depth encode is later. The Resolve graph in **高级** is a separate LUT/XML export (P1), not a second process button.
+**处理已锁定片段** writes `{stem}_ACES2065-1_proxy/frame_000000.exr` per locked clip (whole-clip loop; 10-bit Y′CbCr first, then 8-bit 420/422). **整段代理，不是全精度成片.** Preview/scrub stays 8-bit-first. Not ACEScct. Not a Rec.709 .mov/.mp4. **N 条已处理** is those proxy sequences (or per-clip write errors), not the preview pane. Full-precision / camera-original encode is later. The Resolve graph in **高级** is a separate LUT/XML export (P1), not a second process button.
 
 ## Verification status
 

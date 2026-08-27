@@ -230,8 +230,9 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// Graded ACES2065-1 (AP0) linear proxy frames. Reuses PreviewColor.
-    /// ODT is not applied. Not ACEScct. Decode is still the preview path
-    /// (8-bit Y′CbCr upconverted to float) — 整段代理，不是全精度成片.
+    /// ODT is not applied. Not ACEScct. Sequence decode prefers 10-bit
+    /// Y′CbCr, then the preview 8-bit formats (still matrix-only, still a
+    /// proxy) — 整段代理，不是全精度成片.
     /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
     static let exportMaxLongEdge: CGFloat = 16384
 
@@ -329,17 +330,18 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// VideoToolbox / AVAssetReader: all frames as Y′CbCr (or BGRA bytes).
-    /// Same format list as first-frame movie decode. Loop ``copyNextSampleBuffer``.
-    /// Never copyCGImage. Never set AVVideoColorPropertiesKey.
+    /// Export sequence only: 10-bit 420 first, then 8-bit 420, then 8-bit 422.
+    /// Preview/scrub keeps the 8-bit-first list. Bit-depth only — no transfer.
+    /// Loop ``copyNextSampleBuffer``. Never copyCGImage. Never set AVVideoColorPropertiesKey.
     static func decodeMovieAllFrames(
         url: URL,
         maxLongEdge: CGFloat,
         onFrame: (CGImage) throws -> Void
     ) throws {
         let formats: [OSType] = [
+            kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
             kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-            kCVPixelFormatType_422YpCbCr8,
-            kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            kCVPixelFormatType_422YpCbCr8
         ]
         for fmt in formats {
             let count = try readAllYpCbCrFrames(

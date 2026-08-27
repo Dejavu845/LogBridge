@@ -8,8 +8,9 @@ overrides estimate.
 
 「处理已锁定片段」 writes one ACES2065-1 (AP0 linear) **proxy EXR sequence**
 per locked clip (ODT off): ``{stem}_ACES2065-1_proxy/frame_000000.exr``.
-Decode is still the preview path (8-bit Y′CbCr upconverted to float) —
-整段代理，不是全精度成片. Not ACEScct. Not a Rec.709 .mov/.mp4.
+Sequence decode prefers 10-bit Y′CbCr, then 8-bit fallbacks (still a
+proxy, not camera-original) — 整段代理，不是全精度成片. Not ACEScct.
+Not a Rec.709 .mov/.mp4.
 「N 条已处理」 is clips that produced a sequence, or locked clips attempted
 with a per-clip error — not a preview refresh. Pending clips in the same
 bin do not block.
