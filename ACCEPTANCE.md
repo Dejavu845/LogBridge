@@ -41,7 +41,7 @@ Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable colo
 - Locked order: IDT → Exposure (stops) → WB → ACEScct → preview ODT (709 / HLG / PQ).
 - Exposure is stops (default 0). Internally after IDT, in ACES2065-1 linear: `rgb * (2 ** stops)`. Not a log-code add. Bypassable / zeroable. Own export node (1D / gain) — not baked into IDT or WB when stops=0.
 - ODT selector: Off (ACEScct deliverable) | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ. Default Off.
-- Click a node to inspect parameters. Exposure inspector when Exposure is selected. WB / Exposure / ODT are bypassable; IDT is not.
+- Right inspector is Exposure + WB. Click a node in **高级** to see the serial graph. WB / Exposure / ODT are bypassable; IDT is not.
 - WB off = IDT → Exposure → ACEScct, no bake in preview and in Resolve export (`graph.xml` `enabled="false"`).
 - WB CAT runs in ACES2065-1 (AP0) scene-linear, never on ACEScct-encoded values. Preview cache stores post-IDT linear; exposure + WB apply in linear.
 - **As-shot writes only the existing linear AP0 CAT node** (knobs / UI only). Camera-private CCT + tint (ARRI MXF, Sony Acquisition, Canon vendor, RED RMD, Apple/DJI if present). Not QuickTime nclc. Never a CAT on camera-log or ACEScct-encoded values. Log IDTs assume already white-balanced; **default CAT is identity**. Do not treat as-shot 5600/6504 as an illuminant (double WB). Apply CAT only when the user moves CCT/tint away from as-shot, or on a grey-card override. User can still change CCT/tint or bypass WB.
@@ -81,8 +81,9 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 ## Pending IDT / process lock
 
 - Clips without a locked curve+gamut pair stay **pending**.
-- **处理已锁定片段** / **Apply graph** and **导出 ACEScct / EXR** are blocked for pending clips.
-- Primary button is **处理已锁定片段** — never 一键还原. Pending (disabled): **先选择 Log 与色域**.
+- **处理已锁定片段** / **Apply graph** walk **locked clips only**. Pending / unlocked stay in the list with **先选择 Log 与色域** or **先选择成对 IDT**. Never guessed.
+- Primary button is **处理已锁定片段** — never 一键还原. Shown only when locked-clip count > 0. Status: **N 条已锁定 / M 条待选**.
+- **导出 ACEScct / EXR** stays blocked while any clip is pending (behind **高级**).
 - Main path: drop → lock IDT → exposure/WB → 处理已锁定片段. One primary process button.
 - WB inspector shows three states: 机内 as-shot / 白平衡（估计） / 灰卡. Estimate chip lights only after confirm. Grey-card overrides.
 - HDR preview titles say 预览·非成片 and 未匹配 709. Do not present HLG/PQ as matched to Rec.709.
@@ -135,7 +136,9 @@ Decode policy only. No color-number changes. Do **not** write 全格式已支持
 
 ## UI (Chinese, one path)
 
-- Paired IDT picker stays visible (not buried in Advanced). One paired list, not two dropdowns.
-- Node strip labels are Chinese: 输入 → 曝光 → 白平衡 → 输出. One primary process button.
-- Estimate WB is two steps (估计 then 确认). A single tap does not write CAT.
+- Center: source / preview + paired IDT picker pinned under the preview (not buried in **高级**). One paired list, not two dropdowns. Unlocked IDT skips process.
+- Right inspector: Exposure + WB three states only (机内 as-shot / 白平衡（估计） / 灰卡). Estimate chip lights only after confirm.
+- Node strip (输入 → 曝光 → 白平衡 → 输出) and Resolve export sit behind **高级** (hidden by default). Serial graph is not removed.
+- Badge overlay is only **预览·非成片**. HDR titles may still say they are not matched to 709.
+- One primary process button. Estimate WB is two steps (估计 then 确认). A single tap does not write CAT.
 

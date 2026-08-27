@@ -12,15 +12,15 @@ Internal working encoding: **ACEScct** (AP1 log). Scene-linear interchange / `ro
 
 - **Empty state:** drag-and-drop a folder of mixed clips is the primary action (big drop zone, short copy: “把混源文件夹拖进来”). Choosing files is secondary. **No bundled camera manufacturer demo clips** — drop your own files.
 - **Paired IDT picker:** when metadata cannot lock a curve+gamut pair, the UI shows locked pairs — e.g. `S-Log3 + S-Gamut3` and `S-Log3 + S-Gamut3.Cine` — **not** two independent dropdowns (curve vs gamut).
-- **Block process:** **处理已锁定片段** stays disabled until every clip has a locked pair. Pending label: **先选择 Log 与色域**. No silent IDT.
+- **Block process:** a clip is processable only when its paired IDT is locked. **处理已锁定片段** appears only when locked-clip count > 0 and walks **locked clips only**. Pending / unlocked stay in the list with **先选择 Log 与色域** or **先选择成对 IDT**. Status: **N 条已锁定 / M 条待选**. No silent IDT. Never guess.
 - **S-Log3:** never silently default to S-Gamut3.Cine. Both pairs are offered; the user must pick one.
 - **C-Log2 / C-Log3:** never silently default to Cinema Gamut. Both Cinema Gamut and BT.2020 pairs are offered; the user must pick one.
 - **Venice:** `S-Log3 + S-Gamut3 (Venice)` and `S-Log3 + S-Gamut3.Cine (Venice)` appear **only if** a Venice body is detected.
 - **Copy / badges:** “implemented (unverified)” — never “supported”, never 一键精准.
 - **WB default:** as-shot CCT + tint from camera-private metadata fills the knobs (UI only). **Not** QuickTime nclc. Log IDTs assume already white-balanced; **default CAT is identity** — do not CAT as-shot 5600/6504 toward D65 (double WB). User move away from as-shot is **relative** `CAT(user→D65)·inv(CAT(as→D65))` == `CAT(user→as)` in AP0; 3200→5600 warms. Not `CAT(as→user)`, not `CAT(user→D65)` alone. First typed CCT with no as-shot is a label (identity). Grey-card is an absolute CAT. If CCT cannot be read and the user has not picked grey: knobs empty / identity / **as-shot unknown** — do **not** guess 5600 K. User can still change CCT/tint or bypass WB.
 - **Auto WB:** **白平衡（估计）** only. SoG p=6 in linear ACEScg after IDT; user confirm writes an absolute AP0 CAT. Low confidence stays empty (no 5600 guess, no Rec.709 sample). Grey-card overrides. As-shot default stays identity. Not 精准 / 一键校准. Implemented (unverified).
-- **Graph:** inspector + node strip: IDT → Exposure (stops, default 0) → bypassable WB → ODT selector: **Off (ACEScct deliverable)** | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ. Default Off. Rec.709 / HLG / PQ panes are 预览·非成片 — not a finished picture.
-- **Primary button:** **处理已锁定片段** (never 一键还原). Pending: **先选择 Log 与色域** (disabled).
+- **Graph:** serial IDT → Exposure (stops, default 0) → bypassable WB → ODT selector: **Off (ACEScct deliverable)** | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ. Default Off. Rec.709 / HLG / PQ panes are 预览·非成片 — not a finished picture. Node strip + Resolve export sit behind **高级** (hidden by default) so they do not compete with preview / IDT / process.
+- **Primary button:** **处理已锁定片段** (never 一键还原). Shown only when locked-clip count > 0. Unlocked clips are skipped. **Apply graph** is the same batch, not a second button.
 - **设置:** 默认预览 Rec.709（预览·非成片）；导入后提示估计 WB 默认关（只提示，不写入）；未锁 IDT 挡住处理不能关。
 - **Preview badge:** **预览·非成片**
 - **Export:** **导出 ACEScct / EXR**
@@ -45,7 +45,7 @@ python3 scripts/generate_ocio_assets.py
 2. Open `macos/LogBridge/LogBridge.xcodeproj` in Xcode 15+ (macOS 14 deployment target).
 3. Select the **LogBridge** scheme, destination **My Mac**, and Run.
 
-Layout: empty-state drop zone (folder of mixed clips) → clip list (LazyVStack) | split preview | node strip | inspector.
+Layout: empty-state drop zone (folder of mixed clips) → clip list (LazyVStack) | split preview + paired IDT + **处理已锁定片段** | Exposure / WB inspector. Node strip + **导出 ACEScct / EXR** are behind **高级**.
 
 Split preview: the **source** pane is camera/log (untagged working-space dump) and is **not** tagged Rec.709. Only the processed/ODT pane tags `CGColorSpace.itur_709`, and only when the ODT node is on. Rec.709 pixels are never blit into an untagged Display P3 surface.
 
@@ -87,7 +87,7 @@ Canon C-Log2 and C-Log3 are each **two locked pairs**. Metadata or the user pick
 
 **Explicitly unsupported:** DJI D-Log M, Apple Log 2, ARRI LogC3.
 
-Sony S-Log3 is **two locked pairs**. Metadata or the user picks a **paired IDT** (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine) — not two dropdowns. LogBridge never defaults S-Log3 to S-Gamut3.Cine. Clips without a locked pair stay **pending**. **处理已锁定片段** / **Apply graph** and **导出 ACEScct / EXR** are blocked for those clips (pending button: **先选择 Log 与色域**). The primary button is never 一键还原. Venice pairs appear only if a Venice body is detected.
+Sony S-Log3 is **two locked pairs**. Metadata or the user picks a **paired IDT** (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine) — not two dropdowns. LogBridge never defaults S-Log3 to S-Gamut3.Cine. Clips without a locked pair stay **pending**. **处理已锁定片段** / **Apply graph** skip those clips (reason: **先选择 Log 与色域** / **先选择成对 IDT**). **导出 ACEScct / EXR** stays blocked while any clip is pending. The primary button is never 一键还原. Venice pairs appear only if a Venice body is detected.
 
 Nikon N-Log white-paper `x` is a **10-bit code value 0–1023**. Do not divide by 1023 before the curve. 452 is the breakpoint, not 18% grey (~372). The OCIO LUT is sampled on 0–1 = code/1023 so image buffers stay normalized; the Python API takes 10-bit codes.
 
@@ -119,7 +119,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT (709 / HLG /
    - **Rec.2100 PQ** — ACES Output Transform / BT.2100 (`ACES-OUTPUT … ST2084_1.1` + `DISPLAY … REC.2100-REC2020-ST2084`). Implemented (unverified).
    - HLG/PQ are **not** “supported” and not 一键精准. No homemade HLG/PQ curve.
 
-Click a node in the strip to inspect its parameters. Exposure control is in the inspector when the Exposure node is selected. No sat / extra grade nodes. The Rec.709 pane is 预览·非成片 — do not treat it as a finished picture.
+The right inspector is Exposure + WB (three states: 机内 as-shot / 白平衡（估计） / 灰卡). Paired IDT stays under the preview — not inside **高级**. Node strip + Resolve export live in **高级**. No sat / extra grade nodes. The Rec.709 pane is 预览·非成片 — do not treat it as a finished picture.
 
 Python: `from color.graph import SerialGraph`. Swift: `SerialGraph` + `NodeSlot` in `Models/NodeGraph.swift`. Status: implemented (unverified).
 
@@ -160,7 +160,7 @@ No golden samples have been measured. Do not claim accuracy. See `ACCEPTANCE.md`
 - Treating QuickTime nclc as log identity or as-shot CCT
 - Guessing 5600 K when as-shot CCT is missing
 - Using the preview as a substitute for a full render
-- 一键还原 / claiming a one-click restore (primary action is 处理已锁定片段; pending is 先选择 Log 与色域)
+- 一键还原 / claiming a one-click restore (primary action is 处理已锁定片段; unlocked clips stay 先选择 Log 与色域 / 先选择成对 IDT)
 
 ## Layout
 
@@ -168,6 +168,6 @@ No golden samples have been measured. Do not claim accuracy. See `ACCEPTANCE.md`
 color/          Python source of truth (curves, WB, serial graph, pipeline, detection)
 tests/          pytest (must pass on Linux)
 ocio/           config.ocio (BuiltinTransform) + handwritten F-Log2 / N-Log LUTs
-macos/LogBridge Xcode / SwiftUI (node strip, inspector, cached preview)
+macos/LogBridge Xcode / SwiftUI (preview + IDT + process; node strip in 高级)
 scripts/        LUT/config generator
 ```

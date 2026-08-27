@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Compact serial node strip: IDT → Exposure → WB → ODT. Click a node to inspect it.
+/// Compact serial node strip: IDT → Exposure → WB → ODT.
+/// Shown inside 「高级」 (hidden by default). The graph is not removed.
 struct NodeStripView: View {
     @ObservedObject var session: SessionModel
 

@@ -47,12 +47,21 @@ struct Clip: Identifiable, Hashable {
         )
     }
 
-    /// No locked implemented pair — stays pending; process/export blocked.
+    /// No locked implemented pair — stays pending; batch skips this clip.
     var isPending: Bool { idt == nil || needsUserPicker }
 
     var hasLockedPair: Bool {
         guard let idt, !idt.isStub else { return false }
         return !needsUserPicker
+    }
+
+    /// Unlocked / pending stay in the list with this reason. Never guess an IDT.
+    var processSkipReason: String? {
+        if hasLockedPair { return nil }
+        if detectedCurve != nil || idt != nil || needsUserPicker {
+            return "先选择成对 IDT"
+        }
+        return "先选择 Log 与色域"
     }
 
     var verificationBadge: String {
@@ -109,14 +118,28 @@ final class SessionModel: ObservableObject {
         clips.filter { $0.needsUserPicker || $0.idt == nil }.count
     }
 
-    /// Batch process / Resolve export. Blocked until every clip has a locked pair.
+    var lockedClips: [Clip] { clips.filter(\.hasLockedPair) }
+    var lockedClipCount: Int { lockedClips.count }
+    var pendingClipCount: Int { clips.filter { !$0.hasLockedPair }.count }
+
+    /// 「N 条已锁定 / M 条待选」
+    var lockStatusText: String {
+        "\(lockedClipCount) 条已锁定 / \(pendingClipCount) 条待选"
+    }
+
+    /// Primary button is shown only when at least one paired IDT is locked.
+    var showsProcessLockedButton: Bool {
+        settings.blockUnlockedIDT && lockedClipCount > 0
+    }
+
+    /// Resolve export. Session graph still requires every clip locked.
     var canProcess: Bool {
         !clips.isEmpty
             && pendingPickerCount == 0
             && clips.allSatisfy { $0.hasLockedPair }
     }
 
-    /// Process selected / Apply graph — only the selected clip must be locked.
+    /// Selected clip has a locked pair (preview / inspector).
     var canProcessSelected: Bool {
         selectedClip?.hasLockedPair == true
     }
@@ -134,36 +157,32 @@ final class SessionModel: ObservableObject {
 
     var processSelectedBlockedReason: String? {
         guard let clip = selectedClip else { return "No clip selected" }
-        if clip.isPending {
-            return "先选择 Log 与色域"
-        }
-        if clip.idt?.isStub == true {
-            return "Stub IDT — 处理已锁定片段 blocked."
-        }
-        return nil
+        return clip.processSkipReason
     }
 
-    /// Primary action. Label is "处理已锁定片段" — never 一键还原.
-    /// Pending label is "先选择 Log 与色域" (disabled).
+    /// Batch: walk locked clips only. Unlocked stay listed with a Chinese reason.
+    /// Never guess an IDT. Never 一键还原. One process entry point.
+    func processLockedClips() {
+        let locked = clips.filter(\.hasLockedPair)
+        let skipped = clips.filter { !$0.hasLockedPair }
+        guard !locked.isEmpty else {
+            lastExportNote = skipped.first?.processSkipReason ?? "先选择 Log 与色域"
+            return
+        }
+        if selectedClip?.hasLockedPair == true {
+            refreshPreview()
+        }
+        lastExportNote = "处理已锁定片段 — \(locked.count) 条已处理 / \(skipped.count) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。"
+    }
+
+    /// Primary action alias. Label is "处理已锁定片段" — never 一键还原.
     func processSelected() {
-        guard canProcessSelected else {
-            lastExportNote = processSelectedBlockedReason
-                ?? "先选择 Log 与色域"
-            return
-        }
-        refreshPreview()
-        lastExportNote = "处理已锁定片段 — applied serial graph (预览·非成片; 8-bit thumbnail is not a deliverable)."
+        processLockedClips()
     }
 
-    /// Same lock as processSelected. Never 一键还原.
+    /// Same batch as processLockedClips. Never 一键还原. Not a second button.
     func applyGraph() {
-        guard canProcessSelected else {
-            lastExportNote = processSelectedBlockedReason
-                ?? "先选择 Log 与色域"
-            return
-        }
-        refreshPreview()
-        lastExportNote = "Apply graph — serial graph applied to the selected clip (preview proxy, not a deliverable)."
+        processLockedClips()
     }
 
     var odtPreviewTitle: String {
