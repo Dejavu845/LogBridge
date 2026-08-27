@@ -113,6 +113,12 @@ struct ClipRow: View {
                     .font(.caption2)
                     .foregroundStyle(.orange)
                     .lineLimit(1)
+            } else if let chip = clip.exportChip {
+                // 已写出代理 after a proxy write; failed write is a short Chinese error
+                Text(chip)
+                    .font(.caption2)
+                    .foregroundStyle(chip == SessionModel.wroteProxyChip ? Color.secondary : Color.orange)
+                    .lineLimit(1)
             }
         }
         .padding(.horizontal, 12)

@@ -22,6 +22,9 @@ from color.batch import (
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
     REVEAL_IN_FINDER,
+    WRITTEN_CHIP,
+    WRITE_FAILED_CHIP,
+    DECODE_FAILED_CHIP,
     BatchClip,
     cancelled_status_text,
     confirm_auto_wb,
@@ -37,7 +40,10 @@ from color.batch import (
     progress_text,
     propose_auto_wb,
     sequence_frame_name,
+    short_export_chip,
     short_export_path,
+    sidebar_export_chips,
+    sidebar_status_chip,
     skip_reason,
 )
 from color.curves import linear_to_slog3
@@ -166,6 +172,8 @@ def test_swift_mirrors_locked_batch_and_one_button():
     assert "proposeAutoWB" in inspector
     assert "确认估计" in inspector
     assert "processSkipReason" in sidebar
+    assert "exportChip" in sidebar
+    assert WRITTEN_CHIP in sidebar
     assert "一键还原" not in content or "Never 一键还原" in content
 
 
@@ -626,3 +634,114 @@ def test_last_export_folder_and_finder_reveal(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(content)
     _assert_chengpian_not_a_deliverable_claim(readme)
     _assert_chengpian_not_a_deliverable_claim(acceptance)
+
+
+def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
+    """Sidebar/status: 已写出代理. Never claim 成片 as success. Pending stay 待选."""
+    assert WRITTEN_CHIP == "已写出代理"
+    assert WRITE_FAILED_CHIP == "写出失败"
+    assert DECODE_FAILED_CHIP == "解码失败"
+    assert "成片" not in WRITTEN_CHIP
+    assert "成片" not in WRITE_FAILED_CHIP
+    assert "成片" not in DECODE_FAILED_CHIP
+    _assert_chengpian_not_a_deliverable_claim(WRITTEN_CHIP)
+    _assert_chengpian_not_a_deliverable_claim(WRITE_FAILED_CHIP)
+    _assert_chengpian_not_a_deliverable_claim(DECODE_FAILED_CHIP)
+    assert short_export_chip(written=True) == WRITTEN_CHIP
+    assert short_export_chip(cancelled=True) is None
+    assert short_export_chip("decode/grade failed") == DECODE_FAILED_CHIP
+    assert short_export_chip("no pixels") == DECODE_FAILED_CHIP
+    assert short_export_chip("disk full") == WRITE_FAILED_CHIP
+    assert "成片" not in (short_export_chip(written=True) or "")
+
+    clips = [
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+        BatchClip("empty.mov"),
+    ]
+    assert sidebar_status_chip(clips[1]) == REASON_PICK_PAIRED_IDT
+    assert sidebar_status_chip(clips[2]) == REASON_PICK_LOG_GAMUT
+    assert sidebar_status_chip(clips[0]) is None
+    report = process_locked_writes(
+        clips, tmp_path / "ok", frames={"locked.mov": _slog3_grey()}
+    )
+    chips = sidebar_export_chips(clips, report)
+    assert chips["locked.mov"] == WRITTEN_CHIP
+    assert chips["pending.mov"] == REASON_PICK_PAIRED_IDT
+    assert chips["empty.mov"] == REASON_PICK_LOG_GAMUT
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+    _assert_chengpian_not_a_deliverable_claim(chips["locked.mov"])
+
+    fail = process_locked_writes(clips, tmp_path / "fail", frames={})
+    fail_chips = sidebar_export_chips(clips, fail)
+    assert fail_chips["locked.mov"] == DECODE_FAILED_CHIP
+    assert fail_chips["locked.mov"] != WRITTEN_CHIP
+    assert fail_chips["pending.mov"] == REASON_PICK_PAIRED_IDT
+    _assert_chengpian_not_a_deliverable_claim(fail_chips["locked.mov"])
+
+    cancel_clips = [
+        BatchClip("done.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("long.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+    ]
+    frame = _slog3_grey()
+    seen_long = {"n": 0}
+
+    def should_cancel() -> bool:
+        return seen_long["n"] >= 2
+
+    def spy(path: Path, rgb) -> None:
+        path.write_bytes(b"x")
+        if "long" in path.parts[-2]:
+            seen_long["n"] += 1
+
+    cancelled = process_locked_writes(
+        cancel_clips,
+        tmp_path / "cancel",
+        frames={
+            "done.mov": [frame, frame],
+            "long.mov": [frame, frame, frame, frame],
+            "pending.mov": [frame, frame],
+        },
+        write_fn=spy,
+        should_cancel=should_cancel,
+    )
+    cancel_chips = sidebar_export_chips(cancel_clips, cancelled)
+    assert cancel_chips["done.mov"] == WRITTEN_CHIP
+    assert cancel_chips["long.mov"] is None
+    assert cancel_chips["pending.mov"] == REASON_PICK_PAIRED_IDT
+    assert short_export_chip(cancelled=True) != WRITTEN_CHIP
+    _assert_chengpian_not_a_deliverable_claim(cancel_chips["done.mov"])
+
+    clip = _read(CLIP)
+    sidebar = _read(SIDEBAR)
+    content = _read(CONTENT)
+    write_body = clip.split("func writeLockedDeliverables")[1].split("func exportLockedEXR")[0]
+    assert WRITTEN_CHIP in clip
+    assert WRITTEN_CHIP in sidebar
+    assert "exportChip" in clip
+    assert "sidebarStatusChip" in clip
+    assert "clearExportChips" in write_body
+    assert "setExportChip" in write_body
+    assert "wroteProxyChip" in write_body
+    assert "shortExportChip" in write_body
+    assert "LockedWriteCancel" in write_body
+    cancel_arm = write_body.split("catch is LockedWriteCancel")[1].split("} catch")[0]
+    assert "wroteProxyChip" not in cancel_arm
+    assert "setExportChip" not in cancel_arm
+    assert "解码失败" in clip
+    assert "写出失败" in clip
+    assert "exportChip" in sidebar
+    assert "processSkipReason" in sidebar
+    assert "待选" in clip
+    assert HONEST_PROXY_NOTE in clip
+    assert "精准" not in clip.split("static let wroteProxyChip")[1].split("private func clearExportChips")[0]
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "处理已锁定片段" in bar
+    assert WRITTEN_CHIP in (ROOT / "README.md").read_text(encoding="utf-8")
+    assert WRITTEN_CHIP in (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    _assert_chengpian_not_a_deliverable_claim(clip)
+    _assert_chengpian_not_a_deliverable_claim(sidebar)
+    _assert_chengpian_not_a_deliverable_claim(content)

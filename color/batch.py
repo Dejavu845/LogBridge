@@ -21,7 +21,11 @@ is removed so a half sequence is not a finished deliverable; completed
 clips stay. Cancelled status says 已取消 and still 整段代理，不是全精度成片.
 Partial output is 不是成片. A successful write remembers the dest folder
 (UserDefaults) and status offers 「在 Finder 中显示」. Cancel does not
-treat a deleted half-folder as success.
+treat a deleted half-folder as success. After a write, locked sidebar
+rows show 「已写出代理」 (or a short Chinese error). Pending stay
+「先选择 Log 与色域」 / 「先选择成对 IDT」. A cancelled in-progress
+clip is not 已写出; completed clips keep 已写出代理. Re-export clears
+or refreshes the chip.
 
 Swift ``SessionModel.processLockedClips`` mirrors this module. Color is
 ``SerialGraph.apply`` (existing pipeline). Container is ``exr_write``.
@@ -77,6 +81,9 @@ SEQUENCE_FRAME_PREFIX = "frame"
 SEQUENCE_FRAME_WIDTH = 6
 REVEAL_IN_FINDER = "在 Finder 中显示"
 LAST_EXPORT_DIRECTORY_KEY = "logbridge.lastExportDirectory"
+WRITTEN_CHIP = "已写出代理"
+WRITE_FAILED_CHIP = "写出失败"
+DECODE_FAILED_CHIP = "解码失败"
 
 
 @dataclass(frozen=True)
@@ -126,6 +133,50 @@ def skip_reason(clip: BatchClip) -> str | None:
     if clip.detected_curve or clip.is_stub or clip.needs_user_picker or clip.idt:
         return REASON_PICK_PAIRED_IDT
     return REASON_PICK_LOG_GAMUT
+
+
+def short_export_chip(
+    error: str | None = None, *, written: bool = False, cancelled: bool = False
+) -> str | None:
+    """Per-clip sidebar chip. 已写出代理 on success. Cancelled in-progress is nil."""
+    if cancelled:
+        return None
+    if written:
+        return WRITTEN_CHIP
+    if not error:
+        return None
+    if error.startswith("先选择"):
+        return error
+    low = error.lower()
+    if "decode" in low or "grade" in low or "no pixels" in low:
+        return DECODE_FAILED_CHIP
+    return WRITE_FAILED_CHIP
+
+
+def sidebar_status_chip(clip: BatchClip, export_chip: str | None = None) -> str | None:
+    """Pending keep skip reasons. Locked rows use the export chip."""
+    return skip_reason(clip) or export_chip
+
+
+def sidebar_export_chips(
+    clips: Sequence[BatchClip], report: "BatchWriteReport"
+) -> dict[str, str | None]:
+    """Sidebar chips after a batch. Cancelled in-progress is not 已写出代理."""
+    written = {w.name for w in report.written}
+    errors = {e.name: e.error for e in report.errors}
+    out: dict[str, str | None] = {}
+    for clip in clips:
+        reason = skip_reason(clip)
+        if reason:
+            out[clip.name] = reason
+            continue
+        if clip.name in written:
+            out[clip.name] = WRITTEN_CHIP
+        elif clip.name in errors:
+            out[clip.name] = short_export_chip(errors[clip.name])
+        else:
+            out[clip.name] = None
+    return out
 
 
 def plan_locked_batch(clips: Sequence[BatchClip]) -> BatchPlan:
