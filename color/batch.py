@@ -30,6 +30,14 @@ A cancelled in-progress clip is not 已写出; completed clips keep
 已写出代理. Re-export clears or refreshes the chip. Session-level
 「在 Finder 中显示」 stays.
 
+Before any EXR is written, estimate dest disk from **locked clips
+only**: frame count × pixel count × 12 bytes (uncompressed float32
+RGB; EXR header / offset table is covered by a small margin). If
+frame count is unknown, use duration×fps, or a conservative 24 fps
+× 60 s guess (said in the note). If free space < estimate + margin,
+do not start writing. Status: 「磁盘空间不足，未写出」 +
+「整段代理，不是全精度成片」.
+
 Swift ``SessionModel.processLockedClips`` mirrors this module. Color is
 ``SerialGraph.apply`` (existing pipeline). Container is ``exr_write``.
 """
@@ -37,6 +45,7 @@ Swift ``SessionModel.processLockedClips`` mirrors this module. Color is
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import ceil
 from pathlib import Path
 import shutil
 from typing import Callable, Sequence
@@ -87,6 +96,20 @@ LAST_EXPORT_DIRECTORY_KEY = "logbridge.lastExportDirectory"
 WRITTEN_CHIP = "已写出代理"
 WRITE_FAILED_CHIP = "写出失败"
 DECODE_FAILED_CHIP = "解码失败"
+DISK_SHORT_STATUS = "磁盘空间不足，未写出"
+# Uncompressed float32 RGB scanline payload (3 × 4). Not ZIP/PIZ.
+# Header + offset table are not per-pixel; DISK_MARGIN covers them.
+BYTES_PER_EXR_PIXEL = 12
+DISK_MARGIN_RATIO = 0.10
+DISK_MARGIN_MIN_BYTES = 64 * 1024 * 1024
+CONSERVATIVE_FPS = 24.0
+CONSERVATIVE_SECONDS = 60.0
+CONSERVATIVE_WIDTH = 3840
+CONSERVATIVE_HEIGHT = 2160
+DISK_ESTIMATE_ASSUMPTION = "float32 RGB 未压缩"
+DISK_SHORT_STATUS_TEMPLATE = (
+    "磁盘空间不足，未写出。整段代理，不是全精度成片。"
+)
 
 
 @dataclass(frozen=True)
@@ -96,6 +119,11 @@ class BatchClip:
     needs_user_picker: bool = False
     is_stub: bool = False
     detected_curve: str | None = None
+    frame_count: int | None = None
+    width: int | None = None
+    height: int | None = None
+    duration_seconds: float | None = None
+    fps: float | None = None
 
 
 @dataclass(frozen=True)
@@ -211,6 +239,169 @@ def plan_locked_batch(clips: Sequence[BatchClip]) -> BatchPlan:
 def process_locked_names(clips: Sequence[BatchClip]) -> list[str]:
     """Names the batch would process. Unlocked are omitted, not invented."""
     return [c.name for c in plan_locked_batch(clips).locked]
+
+
+def _positive_int(value) -> int | None:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def _positive_float(value) -> float | None:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return None
+    if n != n or n <= 0:  # noqa: PLR0124 — NaN check
+        return None
+    return n
+
+
+def clip_frame_count(
+    clip: BatchClip, rgb_frames: Sequence[np.ndarray] | None = None
+) -> tuple[int, str]:
+    """Frames for one locked clip. ``known`` / ``duration_fps`` / ``guess``.
+
+    Known: provided frames or ``frame_count``. Else duration×fps.
+    Else conservative 24 fps and/or 60 s (said in the estimate note).
+    """
+    if rgb_frames:
+        return max(1, len(rgb_frames)), "known"
+    known = _positive_int(clip.frame_count)
+    if known is not None:
+        return known, "known"
+    duration = _positive_float(clip.duration_seconds)
+    fps = _positive_float(clip.fps)
+    if duration is not None and fps is not None:
+        return max(1, int(ceil(duration * fps))), "duration_fps"
+    if duration is not None:
+        return max(1, int(ceil(duration * CONSERVATIVE_FPS))), "guess"
+    if fps is not None:
+        return max(1, int(ceil(CONSERVATIVE_SECONDS * fps))), "guess"
+    return max(1, int(ceil(CONSERVATIVE_SECONDS * CONSERVATIVE_FPS))), "guess"
+
+
+def clip_pixel_count(
+    clip: BatchClip, rgb_frames: Sequence[np.ndarray] | None = None
+) -> tuple[int, str]:
+    """Pixels per frame. Known size, else conservative 3840×2160."""
+    if rgb_frames:
+        arr = np.asarray(rgb_frames[0])
+        if arr.ndim >= 2:
+            return max(1, int(arr.shape[0]) * int(arr.shape[1])), "known"
+    width = _positive_int(clip.width)
+    height = _positive_int(clip.height)
+    if width is not None and height is not None:
+        return width * height, "known"
+    return CONSERVATIVE_WIDTH * CONSERVATIVE_HEIGHT, "guess"
+
+
+@dataclass(frozen=True)
+class ProxyDiskEstimate:
+    """Locked-only dest estimate. Uncompressed float32 RGB EXR."""
+
+    bytes: int
+    used_frame_guess: bool
+    used_pixel_guess: bool
+    used_duration_fps: bool = False
+
+    @property
+    def needed_bytes(self) -> int:
+        """Estimate plus 10% and a 64 MiB floor so headers do not sneak past."""
+        return int(self.bytes * (1.0 + DISK_MARGIN_RATIO)) + DISK_MARGIN_MIN_BYTES
+
+    @property
+    def note(self) -> str:
+        """Folder-picker / abort suffix. 不是成片. No 精准."""
+        size = format_proxy_bytes(self.bytes)
+        if self.used_frame_guess:
+            return (
+                f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}；"
+                f"帧数按每秒 {int(CONSERVATIVE_FPS)} 帧估算）"
+            )
+        if self.used_duration_fps:
+            return f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}；帧数按时长×帧率估算）"
+        return f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}）"
+
+
+def format_proxy_bytes(n: int) -> str:
+    """Short size for the picker / abort note."""
+    n = max(0, int(n))
+    if n >= 1_000_000_000:
+        return f"{n / 1_000_000_000:.1f} GB"
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.0f} MB"
+    if n >= 1000:
+        return f"{n / 1000:.0f} KB"
+    return f"{n} B"
+
+
+def estimate_locked_proxy_bytes(
+    clips: Sequence[BatchClip],
+    frames: dict[str, np.ndarray | Sequence[np.ndarray]] | None = None,
+) -> ProxyDiskEstimate:
+    """Sum locked clips only. Pending / unlocked add nothing."""
+    frames = frames or {}
+    total = 0
+    used_frame_guess = False
+    used_pixel_guess = False
+    used_duration_fps = False
+    for clip in plan_locked_batch(clips).locked:
+        rgb_frames = as_frame_sequence(frames.get(clip.name)) or None
+        n_frames, frame_src = clip_frame_count(clip, rgb_frames)
+        n_pixels, pixel_src = clip_pixel_count(clip, rgb_frames)
+        total += n_frames * n_pixels * BYTES_PER_EXR_PIXEL
+        if frame_src == "guess":
+            used_frame_guess = True
+        elif frame_src == "duration_fps":
+            used_duration_fps = True
+        if pixel_src == "guess":
+            used_pixel_guess = True
+    return ProxyDiskEstimate(
+        bytes=int(total),
+        used_frame_guess=used_frame_guess,
+        used_pixel_guess=used_pixel_guess,
+        used_duration_fps=used_duration_fps,
+    )
+
+
+def dest_free_bytes(dest, free_bytes: int | None = None) -> int | None:
+    """Volume free space. ``free_bytes`` is the tiny-disk / test mock."""
+    if free_bytes is not None:
+        return int(free_bytes)
+    probe = Path(dest)
+    if not probe.exists():
+        probe = probe.parent
+    if not probe.exists():
+        return None
+    return int(shutil.disk_usage(probe).free)
+
+
+def dest_has_space(
+    dest,
+    needed_bytes: int,
+    free_bytes: int | None = None,
+) -> bool:
+    """False when free space is known and below the estimate. Unknown → True."""
+    available = dest_free_bytes(dest, free_bytes)
+    if available is None:
+        return True
+    return available >= int(needed_bytes)
+
+
+def disk_short_status_text(estimate: ProxyDiskEstimate | None = None) -> str:
+    """Abort status. 「磁盘空间不足，未写出」 + honesty. Did not write."""
+    note = DISK_SHORT_STATUS_TEMPLATE
+    if estimate is not None:
+        return f"{DISK_SHORT_STATUS}。{estimate.note}。{HONEST_PROXY_NOTE}。"
+    return note
+
+
+def folder_picker_message_with_estimate(estimate: ProxyDiskEstimate) -> str:
+    """Existing picker copy plus the dest-size note. Not a second button."""
+    return f"{FOLDER_PICKER_MESSAGE}{estimate.note}。"
 
 
 def estimate_chip_lit(wb_source: str) -> bool:
@@ -331,6 +522,8 @@ class BatchWriteReport:
     errors: tuple[ClipWrite, ...]
     cancelled: bool = False
     dest: str | None = None
+    disk_short: bool = False
+    disk_estimate: ProxyDiskEstimate | None = None
 
     @property
     def processed_count(self) -> int:
@@ -344,12 +537,14 @@ class BatchWriteReport:
     @property
     def last_reveal_paths(self) -> tuple[str, ...]:
         """Completed ``_proxy`` folders. Empty on cancel (half-folder deleted)."""
-        if self.cancelled:
+        if self.cancelled or self.disk_short:
             return ()
         return self.written_paths
 
     @property
     def processed_status_text(self) -> str:
+        if self.disk_short:
+            return disk_short_status_text(self.disk_estimate)
         if self.cancelled:
             return cancelled_status_text(self.processed_count, self.skipped_count)
         dest = self.dest if self.written else None
@@ -368,6 +563,7 @@ def process_locked_writes(
     write_fn: Callable[[Path, np.ndarray], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
     on_progress: Callable[[str], None] | None = None,
+    free_bytes: int | None = None,
 ) -> BatchWriteReport:
     """Write an ACES2065-1 proxy EXR sequence for locked clips only.
 
@@ -388,11 +584,25 @@ def process_locked_writes(
     ``should_cancel`` stops the batch. The in-progress ``_proxy`` folder is
     removed (half sequence is not a finished deliverable). Completed clips
     stay. Cancelled clips are not 「已处理」.
+
+    ``free_bytes`` mocks dest volume free space (tiny disk). If free space
+    is below the locked-clip estimate + margin, no folder is created and
+    no EXR is written.
     """
     dest = Path(dest)
-    dest.mkdir(parents=True, exist_ok=True)
     plan = plan_locked_batch(clips)
     frames = frames or {}
+    estimate = estimate_locked_proxy_bytes(plan.locked, frames=frames)
+    if not dest_has_space(dest, estimate.needed_bytes, free_bytes=free_bytes):
+        return BatchWriteReport(
+            written=(),
+            skipped=plan.skipped,
+            errors=(),
+            dest=str(dest),
+            disk_short=True,
+            disk_estimate=estimate,
+        )
+    dest.mkdir(parents=True, exist_ok=True)
     graph = graph if graph is not None else SerialGraph()
     writer = write_fn or (lambda path, rgb: write_rgb_exr(path, rgb))
 

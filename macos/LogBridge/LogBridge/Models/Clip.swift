@@ -89,6 +89,31 @@ enum DetectionSource: String, Hashable {
     case unresolved
 }
 
+/// Locked-clip dest estimate. Uncompressed float32 RGB EXR (12 bytes / pixel).
+/// Header / offset table is covered by the 10% + 64 MiB margin. 不是成片.
+struct ProxyDiskEstimate {
+    var bytes: Int64
+    var usedFrameGuess: Bool
+    var usedDurationFps: Bool
+
+    var neededWithMargin: Int64 {
+        bytes + bytes / 10 + 64 * 1024 * 1024
+    }
+
+    var note: String {
+        let size = SessionModel.formatProxyBytes(bytes)
+        if usedFrameGuess {
+            return "约 \(size)（float32 RGB 未压缩；帧数按每秒 24 帧估算）"
+        }
+        if usedDurationFps {
+            return "约 \(size)（float32 RGB 未压缩；帧数按时长×帧率估算）"
+        }
+        return "约 \(size)（float32 RGB 未压缩）"
+    }
+
+    var pickerSuffix: String { note + "。" }
+}
+
 final class SessionModel: ObservableObject {
     @Published var clips: [Clip] = []
     @Published var selectedID: UUID?
@@ -104,6 +129,9 @@ final class SessionModel: ObservableObject {
     /// Completed `{stem}_ACES2065-1_proxy` folders from the last successful write.
     /// Empty while writing, after cancel, or when nothing was written.
     @Published var lastExportRevealURLs: [URL] = []
+    /// Tiny-disk / test mock. When set, dest free-space check uses this
+    /// instead of the volume. Nil reads the real volume.
+    var destFreeBytesOverride: Int64? = nil
 
     let preview = PreviewEngine()
     let settings = AppSettings.shared
@@ -190,7 +218,8 @@ final class SessionModel: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "写出"
-        panel.message = "已锁定片段写出 ACES2065-1 代理 EXR 序列（AP0 线性）。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。"
+        let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
+        panel.message = "已锁定片段写出 ACES2065-1 代理 EXR 序列（AP0 线性）。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。" + estimate.pickerSuffix
         if let remembered = settings.lastExportDirectoryURL {
             panel.directoryURL = remembered
         }
@@ -204,6 +233,13 @@ final class SessionModel: ObservableObject {
 
     /// Writes ACES2065-1 AP0 proxy EXR sequences for locked clips only.
     func writeLockedDeliverables(locked: [Clip], skippedCount: Int, dest: URL) {
+        let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
+        if let free = destFreeBytesOverride ?? Self.destVolumeFreeBytes(dest),
+           free < estimate.neededWithMargin {
+            lastExportRevealURLs = []
+            lastExportNote = Self.diskShortExportNote(estimate: estimate)
+            return
+        }
         let graphCopy = graph
         let clipTotal = locked.count
         writeCancel.reset()
@@ -341,6 +377,88 @@ final class SessionModel: ObservableObject {
     /// Cancelled batch. 已取消 + honesty. Partial output is 不是成片.
     static func cancelledExportNote(processed: Int, skipped: Int) -> String {
         "处理已锁定片段 — 已取消。\(processed) 条已处理 / \(skipped) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+    }
+
+    /// Uncompressed float32 RGB (3 × 4). Matches color/batch.py.
+    static let bytesPerEXRPixel: Int64 = 12
+    static let conservativeFPS = 24.0
+    static let conservativeSeconds = 60.0
+    static let conservativeWidth = 3840
+    static let conservativeHeight = 2160
+    static let diskShortStatus = "磁盘空间不足，未写出"
+    static let diskEstimateAssumption = "float32 RGB 未压缩"
+
+    static func formatProxyBytes(_ n: Int64) -> String {
+        let v = max(Int64(0), n)
+        if v >= 1_000_000_000 {
+            return String(format: "%.1f GB", Double(v) / 1_000_000_000.0)
+        }
+        if v >= 1_000_000 {
+            return String(format: "%.0f MB", Double(v) / 1_000_000.0)
+        }
+        if v >= 1000 {
+            return String(format: "%.0f KB", Double(v) / 1000.0)
+        }
+        return "\(v) B"
+    }
+
+    static func estimatedFrameCount(_ ext: MediaExtent) -> (Int, String) {
+        if let n = ext.frameCount, n > 0 { return (n, "known") }
+        if let duration = ext.durationSeconds, duration > 0, let fps = ext.fps, fps > 0 {
+            return (max(1, Int((duration * fps).rounded(.up))), "duration_fps")
+        }
+        if let duration = ext.durationSeconds, duration > 0 {
+            return (max(1, Int((duration * conservativeFPS).rounded(.up))), "guess")
+        }
+        if let fps = ext.fps, fps > 0 {
+            return (max(1, Int((conservativeSeconds * fps).rounded(.up))), "guess")
+        }
+        return (max(1, Int((conservativeSeconds * conservativeFPS).rounded(.up))), "guess")
+    }
+
+    static func estimatedPixelCount(_ ext: MediaExtent) -> Int {
+        if let w = ext.width, let h = ext.height, w > 0, h > 0 { return w * h }
+        return conservativeWidth * conservativeHeight
+    }
+
+    /// Locked clips only. Pending URLs are not passed in.
+    static func estimateLockedProxyBytes(urls: [URL]) -> ProxyDiskEstimate {
+        var total: Int64 = 0
+        var usedFrameGuess = false
+        var usedDurationFps = false
+        for url in urls {
+            let ext = MediaFormat.extent(url: url)
+            let (frames, frameSrc) = estimatedFrameCount(ext)
+            let pixels = estimatedPixelCount(ext)
+            total += Int64(frames) * Int64(pixels) * bytesPerEXRPixel
+            if frameSrc == "guess" { usedFrameGuess = true }
+            if frameSrc == "duration_fps" { usedDurationFps = true }
+        }
+        return ProxyDiskEstimate(
+            bytes: total,
+            usedFrameGuess: usedFrameGuess,
+            usedDurationFps: usedDurationFps
+        )
+    }
+
+    static func destVolumeFreeBytes(_ dest: URL) -> Int64? {
+        let keys: Set<URLResourceKey> = [
+            .volumeAvailableCapacityForImportantUsageKey,
+            .volumeAvailableCapacityKey
+        ]
+        guard let values = try? dest.resourceValues(forKeys: keys) else { return nil }
+        if let important = values.volumeAvailableCapacityForImportantUsage, important >= 0 {
+            return important
+        }
+        if let cap = values.volumeAvailableCapacity {
+            return Int64(cap)
+        }
+        return nil
+    }
+
+    /// 「磁盘空间不足，未写出」 + honesty. Did not write. No 精准.
+    static func diskShortExportNote(estimate: ProxyDiskEstimate) -> String {
+        "\(diskShortStatus)。\(estimate.note)。整段代理，不是全精度成片。"
     }
 
     /// Locked row after a proxy sequence write. Not a finished picture.
