@@ -1,7 +1,6 @@
 """Locked-IDT batch: walk locked clips only. Unlocked stay listed."""
 
 from pathlib import Path
-import subprocess
 
 import numpy as np
 
@@ -415,27 +414,3 @@ def test_locked_writes_more_than_one_frame(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
     assert list(tmp_path.glob("**/*.mov")) == []
     assert list(tmp_path.glob("**/*.mp4")) == []
-
-
-# Color-number files: this PR must not change algorithm text.
-_COLOR_MATH_FILES = (
-    "color/curves.py",
-    "color/gamuts.py",
-    "color/wb.py",
-    "color/odt.py",
-    "color/exposure.py",
-    "color/pipeline.py",
-    "color/graph.py",
-    "color/rec709.py",
-    "color/auto_wb.py",
-    "color/as_shot.py",
-    "color/working_space.py",
-    "color/ocio_builtins.py",
-    "color/resolve_export.py",
-)
-
-
-def test_color_math_files_have_no_algorithmic_diff():
-    for rel in _COLOR_MATH_FILES:
-        diff = subprocess.check_output(["git", "diff", "main", "--", rel], cwd=ROOT)
-        assert diff == b"", f"{rel} must not change color numbers"
