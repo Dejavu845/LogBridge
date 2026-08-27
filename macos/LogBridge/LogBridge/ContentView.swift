@@ -67,8 +67,18 @@ struct ProcessLockedBar: View {
             }
             Spacer()
             if session.showsProcessLockedButton {
-                Button("处理已锁定片段") {
-                    session.processLockedClips()
+                if session.isWritingDeliverables {
+                    Text(session.lastExportNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
+                    if session.isWritingDeliverables {
+                        session.cancelLockedDeliverables()
+                    } else {
+                        session.processLockedClips()
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .help("整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。 Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原.")
@@ -144,7 +154,7 @@ struct StatusBar: View {
     var body: some View {
         HStack(spacing: 12) {
             Text("LogBridge · serial graph · implemented (unverified)")
-            if session.preview.isWorking {
+            if session.preview.isWorking || session.isWritingDeliverables {
                 ProgressView()
                     .controlSize(.small)
             }

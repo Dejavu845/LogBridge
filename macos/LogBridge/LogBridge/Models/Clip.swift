@@ -93,9 +93,12 @@ final class SessionModel: ObservableObject {
     @Published var lastImportNote: String = ""
     @Published var pickingNeutral: Bool = false
     @Published var showSettings = false
+    @Published var isWritingDeliverables = false
 
     let preview = PreviewEngine()
     let settings = AppSettings.shared
+    private let writeCancel = WriteCancelFlag()
+    private var lastProgressUptime: TimeInterval = 0
 
     init() {
         graph.odt = settings.defaultPreviewODT
@@ -162,6 +165,7 @@ final class SessionModel: ObservableObject {
     /// Never guess an IDT. Never 一键还原. One process entry point.
     /// Mixed bins are allowed. 整段代理，不是全精度成片.
     func processLockedClips() {
+        if isWritingDeliverables { return }
         let locked = clips.filter(\.hasLockedPair)
         let skipped = clips.filter { !$0.hasLockedPair }
         guard !locked.isEmpty else {
@@ -186,32 +190,73 @@ final class SessionModel: ObservableObject {
     /// Writes ACES2065-1 AP0 proxy EXR sequences for locked clips only.
     func writeLockedDeliverables(locked: [Clip], skippedCount: Int, dest: URL) {
         let graphCopy = graph
+        let clipTotal = locked.count
+        writeCancel.reset()
+        lastProgressUptime = 0
+        isWritingDeliverables = true
+        lastExportNote = Self.exportProgressText(clipIndex: 1, clipTotal: clipTotal)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             var written: [URL] = []
             var errors: [String] = []
-            for clip in locked {
+            var cancelled = false
+            for (offset, clip) in locked.enumerated() {
+                if self.writeCancel.isRequested {
+                    cancelled = true
+                    break
+                }
+                let clipIndex = offset + 1
+                self.publishExportProgress(
+                    Self.exportProgressText(clipIndex: clipIndex, clipTotal: clipTotal),
+                    force: true
+                )
                 do {
-                    let url = try self.exportLockedEXR(clip: clip, graph: graphCopy, dest: dest)
+                    let url = try self.exportLockedEXR(
+                        clip: clip,
+                        graph: graphCopy,
+                        dest: dest
+                    ) { frame in
+                        self.publishExportProgress(
+                            Self.exportProgressText(
+                                clipIndex: clipIndex,
+                                clipTotal: clipTotal,
+                                frame: frame
+                            )
+                        )
+                    }
                     written.append(url)
+                } catch is LockedWriteCancel {
+                    cancelled = true
+                    break
                 } catch {
                     errors.append("\(clip.filename): \(error.localizedDescription)")
                 }
             }
             let processed = written.count + errors.count
-            var note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+            var note: String
+            if cancelled {
+                note = Self.cancelledExportNote(processed: processed, skipped: skippedCount)
+            } else {
+                note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+            }
             if !errors.isEmpty {
                 note += " " + errors.joined(separator: " ")
             }
             DispatchQueue.main.async {
                 self.lastExportNote = note
+                self.isWritingDeliverables = false
             }
         }
     }
 
     /// One ACES2065-1 AP0 proxy EXR sequence. Decode loop + PreviewColor grade; no ODT.
     /// Not ACEScct. Not a Rec.709 movie. 整段代理，不是全精度成片.
-    func exportLockedEXR(clip: Clip, graph: SerialGraph, dest: URL) throws -> URL {
+    func exportLockedEXR(
+        clip: Clip,
+        graph: SerialGraph,
+        dest: URL,
+        onFrame: ((Int) -> Void)? = nil
+    ) throws -> URL {
         guard clip.hasLockedPair else {
             throw NSError(domain: "LogBridge", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: clip.processSkipReason ?? "先选择成对 IDT"
@@ -224,6 +269,9 @@ final class SessionModel: ObservableObject {
         try FileManager.default.createDirectory(at: seqDir, withIntermediateDirectories: true)
         do {
             let count = try preview.exportGradedAP0Sequence(clip: clip, graph: graph) { index, rgb, width, height in
+                if self.writeCancel.isRequested {
+                    throw LockedWriteCancel()
+                }
                 let url = ResolveExporter.sequenceFrameURL(in: seqDir, index: index)
                 try ResolveExporter.writeACES2065EXR(
                     rgb: rgb,
@@ -231,6 +279,7 @@ final class SessionModel: ObservableObject {
                     height: height,
                     to: url
                 )
+                onFrame?(index + 1)
             }
             if count < 1 {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
@@ -242,6 +291,38 @@ final class SessionModel: ObservableObject {
             throw error
         }
         return seqDir
+    }
+
+    /// Same primary button becomes 取消 while writing. Not a second process button.
+    func cancelLockedDeliverables() {
+        writeCancel.request()
+    }
+
+    /// 「写出代理 2/5 · frame 120」. Frame total omitted when unknown.
+    static func exportProgressText(clipIndex: Int, clipTotal: Int, frame: Int? = nil, frameTotal: Int? = nil) -> String {
+        var note = "写出代理 \(clipIndex)/\(clipTotal)"
+        if let frame {
+            if let frameTotal {
+                note += " · frame \(frame)/\(frameTotal)"
+            } else {
+                note += " · frame \(frame)"
+            }
+        }
+        return note
+    }
+
+    /// Cancelled batch. 已取消 + honesty. Partial output is 不是成片.
+    static func cancelledExportNote(processed: Int, skipped: Int) -> String {
+        "处理已锁定片段 — 已取消。\(processed) 条已处理 / \(skipped) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+    }
+
+    private func publishExportProgress(_ note: String, force: Bool = false) {
+        let now = ProcessInfo.processInfo.systemUptime
+        if !force && (now - lastProgressUptime) < 0.12 { return }
+        lastProgressUptime = now
+        DispatchQueue.main.async { [weak self] in
+            self?.lastExportNote = note
+        }
     }
 
     /// Primary action alias. Label is "处理已锁定片段" — never 一键还原.
@@ -568,5 +649,32 @@ final class SessionModel: ObservableObject {
                 self.lastExportNote = "Export failed: \(error.localizedDescription)"
             }
         }
+    }
+}
+
+/// Thrown when the user cancels a locked-clip proxy write.
+struct LockedWriteCancel: Error {}
+
+/// Thread-safe cancel flag. Written from the button, read from the write queue.
+final class WriteCancelFlag {
+    private let lock = NSLock()
+    private var flagged = false
+
+    func reset() {
+        lock.lock()
+        flagged = false
+        lock.unlock()
+    }
+
+    func request() {
+        lock.lock()
+        flagged = true
+        lock.unlock()
+    }
+
+    var isRequested: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return flagged
     }
 }
