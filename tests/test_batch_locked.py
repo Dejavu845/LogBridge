@@ -2,22 +2,35 @@
 
 from pathlib import Path
 
+import numpy as np
+
 from color.as_shot import WB_SOURCE_AS_SHOT, WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from color.batch import (
     ADVANCED_DISCLOSURE,
+    DELIVERABLE_SUFFIX,
+    FOLDER_PICKER_MESSAGE,
+    HONEST_PROXY_NOTE,
     PROCESS_BUTTON,
+    PROCESS_BUTTON_HELP,
+    PROCESSED_STATUS_TEMPLATE,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
     BatchClip,
     confirm_auto_wb,
+    deliverable_name,
     estimate_chip_lit,
     has_locked_idt,
     never_guess_cct,
     plan_locked_batch,
     process_locked_names,
+    process_locked_writes,
+    processed_status_text,
     propose_auto_wb,
     skip_reason,
 )
+from color.curves import linear_to_slog3
+from color.exr_write import read_rgb_exr
+from color.graph import SerialGraph
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFT_ROOT = ROOT / "macos"
@@ -157,3 +170,167 @@ def test_inspector_is_exposure_and_wb_only():
     assert "ODTInspector" not in advanced
     assert "PairedIDTBar" not in advanced
     assert "成对 IDT" not in advanced
+
+
+def _slog3_grey(shape=(2, 2, 3)):
+    return np.full(shape, float(linear_to_slog3(0.18)), dtype=np.float64)
+
+
+def test_unlocked_never_write_locked_writes_and_counter(tmp_path: Path):
+    clips = [
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+        BatchClip("empty.mov"),
+        BatchClip("stub.mov", idt="future", is_stub=True),
+    ]
+    grey = _slog3_grey()
+    frames = {c.name: grey for c in clips}
+    called: list[str] = []
+
+    def spy(path: Path, rgb) -> None:
+        called.append(Path(path).name)
+        path.write_bytes(b"x")
+
+    report = process_locked_writes(clips, tmp_path, frames=frames, write_fn=spy)
+    assert called == [deliverable_name("locked.mov")]
+    assert report.processed_count == 1
+    assert report.skipped_count == 3
+    assert "1 条已处理" in report.processed_status_text
+    assert "3 条已跳过" in report.processed_status_text
+    assert processed_status_text(1, 3) == report.processed_status_text
+    assert (tmp_path / deliverable_name("locked.mov")).is_file()
+    assert not (tmp_path / deliverable_name("pending.mov")).exists()
+    assert not (tmp_path / deliverable_name("empty.mov")).exists()
+    assert not (tmp_path / deliverable_name("stub.mov")).exists()
+    assert list(tmp_path.glob("*" + DELIVERABLE_SUFFIX)) == [
+        tmp_path / deliverable_name("locked.mov")
+    ]
+
+
+def test_locked_exr_is_aces2065_and_mixed_bin_writes(tmp_path: Path):
+    clips = [
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+    ]
+    report = process_locked_writes(
+        clips, tmp_path, frames={"locked.mov": _slog3_grey(), "pending.mov": _slog3_grey()}
+    )
+    assert report.processed_count == 1
+    assert "1 条已处理" in report.processed_status_text
+    path = tmp_path / deliverable_name("locked.mov")
+    assert path.is_file()
+    rgb = read_rgb_exr(path)
+    assert rgb.shape == (2, 2, 3)
+    np.testing.assert_allclose(rgb[0, 0], 0.18, atol=5e-3)
+    assert not (tmp_path / deliverable_name("pending.mov")).exists()
+
+
+def test_wb_off_identity_still_writes_exr(tmp_path: Path):
+    """Existing WB toggle: off / identity must still write. Never required."""
+    clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3")]
+    frames = {"locked.mov": _slog3_grey()}
+    off = SerialGraph(wb_enabled=False, wb_cct=None)
+    assert off.wb_enabled is False
+    report = process_locked_writes(clips, tmp_path / "off", frames=frames, graph=off)
+    assert report.processed_count == 1
+    assert len(report.written) == 1
+    off_rgb = read_rgb_exr(report.written[0].path)
+    on = SerialGraph(wb_enabled=True, wb_cct=3200.0, wb_source=WB_SOURCE_GREY)
+    report_on = process_locked_writes(clips, tmp_path / "on", frames=frames, graph=on)
+    assert report_on.processed_count == 1
+    on_rgb = read_rgb_exr(report_on.written[0].path)
+    assert not np.allclose(on_rgb, off_rgb, atol=1e-3)
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+
+
+def test_write_error_counts_as_processed_no_file(tmp_path: Path):
+    clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3")]
+    report = process_locked_writes(clips, tmp_path, frames={})
+    assert report.processed_count == 1
+    assert report.written == ()
+    assert report.errors[0].name == "locked.mov"
+    assert "1 条已处理" in report.processed_status_text
+    assert list(tmp_path.glob("*.exr")) == []
+
+
+def test_swift_process_writes_exr_and_counter_is_writes():
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    body = clip.split("func processLockedClips()")[1].split("func processSelected()")[0]
+    assert "writeLockedDeliverables" in body
+    assert "条已处理" in body or "条已处理" in clip.split("func writeLockedDeliverables")[1]
+    write_body = clip.split("func writeLockedDeliverables")[1].split("func exportLockedEXR")[0]
+    assert "written.count + errors.count" in write_body
+    assert "locked.count" not in write_body
+    assert HONEST_PROXY_NOTE in write_body
+    assert HONEST_PROXY_NOTE in body
+    _assert_chengpian_not_a_deliverable_claim(write_body)
+    _assert_chengpian_not_a_deliverable_claim(body)
+    assert "exportLockedEXR" in clip
+    assert "writeACES2065EXR" in clip
+    assert "_ACES2065-1_proxy_frame0.exr" in exporter
+    assert "ACES2065-1.exr\"" not in exporter.replace("_ACES2065-1_proxy_frame0.exr", "")
+    assert "exportGradedAP0" in engine
+    export_grade = engine.split("func exportGradedAP0")[1].split("func linearAP0Frame")[0]
+    assert "applyODT" not in export_grade
+    assert "if graph.wbEnabled" in export_grade
+    can = clip.split("var canProcess")[1].split("var canProcessSelected")[0]
+    assert "pendingPickerCount == 0" not in can
+    assert "lockedClipCount" in can
+    export = clip.split("func exportResolve()")[1]
+    assert "lockedClips" in export.split("panel.begin")[0]
+    assert "clips: locked" in export or "clips: lockedClips" in export
+    assert HONEST_PROXY_NOTE in content
+    assert "不是 ACEScct" in content
+    assert "Does not require the whole bin" in content
+    _assert_chengpian_not_a_deliverable_claim(content)
+
+
+def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
+    """成片 may only appear as 预览·非成片 / 不是全精度成片 / 不是成片."""
+    cleaned = (
+        text.replace("预览·非成片", "")
+        .replace("不是全精度成片", "")
+        .replace("不是成片", "")
+        .replace("成片预览关", "")
+    )
+    assert "成片" not in cleaned
+
+
+def test_honest_proxy_copy_and_filename():
+    assert HONEST_PROXY_NOTE == "首帧代理 EXR，不是整段、不是全精度成片"
+    assert DELIVERABLE_SUFFIX == "_ACES2065-1_proxy_frame0.exr"
+    assert "proxy" in DELIVERABLE_SUFFIX and "frame0" in DELIVERABLE_SUFFIX
+    assert "acescct" not in DELIVERABLE_SUFFIX.lower()
+    assert deliverable_name("clip.mov") == "clip_ACES2065-1_proxy_frame0.exr"
+    status = processed_status_text(2, 1)
+    assert HONEST_PROXY_NOTE in status
+    assert "预览·非成片" in status
+    assert "已实现（未验证）" in status
+    assert "2 条已处理" in status
+    _assert_chengpian_not_a_deliverable_claim(status)
+    assert HONEST_PROXY_NOTE in PROCESSED_STATUS_TEMPLATE
+    assert HONEST_PROXY_NOTE in FOLDER_PICKER_MESSAGE
+    assert "ACES2065-1" in FOLDER_PICKER_MESSAGE
+    assert "ACEScct" not in FOLDER_PICKER_MESSAGE
+    assert HONEST_PROXY_NOTE in PROCESS_BUTTON_HELP
+    assert "不是 ACEScct" in PROCESS_BUTTON_HELP
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    assert FOLDER_PICKER_MESSAGE in clip
+    assert processed_status_text(0, 0).replace("0 条已处理 / 0 条已跳过", "") in clip or HONEST_PROXY_NOTE in clip
+    assert HONEST_PROXY_NOTE in content
+    assert "_ACES2065-1_proxy_frame0.exr" in exporter
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert HONEST_PROXY_NOTE in readme
+    assert HONEST_PROXY_NOTE in acceptance
+    assert "_ACES2065-1_proxy_frame0.exr" in readme
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)
+    _assert_chengpian_not_a_deliverable_claim(clip)
+    _assert_chengpian_not_a_deliverable_claim(content)

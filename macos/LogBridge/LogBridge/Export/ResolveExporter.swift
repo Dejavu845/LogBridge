@@ -730,4 +730,113 @@ enum ResolveExporter {
         M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
         """
     }
+
+    /// First-frame ACES2065-1 AP0 proxy EXR. Mirrors ``color.batch.deliverable_name``.
+    /// Not ACEScct. Filename must say proxy / frame0 so it is not a 成片 claim.
+    static func deliverableURL(for clip: Clip, in directory: URL) -> URL {
+        let stem = clip.url.deletingPathExtension().lastPathComponent
+        return directory.appendingPathComponent("\(stem)_ACES2065-1_proxy_frame0.exr")
+    }
+
+    /// Uncompressed scanline RGB float32 EXR. Container only — no color math.
+    /// Matches ``color.exr_write.write_rgb_exr``.
+    static func writeACES2065EXR(rgb: [Float], width: Int, height: Int, to url: URL) throws {
+        guard width > 0, height > 0, rgb.count >= width * height * 3 else {
+            throw NSError(domain: "LogBridge", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "empty RGB buffer"
+            ])
+        }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var data = Data()
+        func putU32(_ v: UInt32) {
+            var le = v.littleEndian
+            data.append(Data(bytes: &le, count: 4))
+        }
+        func putI32(_ v: Int32) {
+            var le = v.littleEndian
+            data.append(Data(bytes: &le, count: 4))
+        }
+        func putU64(_ v: UInt64) {
+            var le = v.littleEndian
+            data.append(Data(bytes: &le, count: 8))
+        }
+        func putAttr(_ name: String, _ type: String, _ payload: Data) {
+            data.append(contentsOf: name.utf8)
+            data.append(0)
+            data.append(contentsOf: type.utf8)
+            data.append(0)
+            putI32(Int32(payload.count))
+            data.append(payload)
+        }
+        func chlistChannel(_ name: String) -> Data {
+            var ch = Data()
+            ch.append(contentsOf: name.utf8)
+            ch.append(0)
+            var pixelType = Int32(2).littleEndian
+            ch.append(Data(bytes: &pixelType, count: 4))
+            ch.append(contentsOf: [0, 0, 0, 0])
+            var samp = Int32(1).littleEndian
+            ch.append(Data(bytes: &samp, count: 4))
+            ch.append(Data(bytes: &samp, count: 4))
+            return ch
+        }
+
+        putU32(20000630)
+        putU32(2)
+        var channels = Data()
+        channels.append(chlistChannel("B"))
+        channels.append(chlistChannel("G"))
+        channels.append(chlistChannel("R"))
+        channels.append(0)
+        putAttr("channels", "chlist", channels)
+        putAttr("compression", "compression", Data([0]))
+        var box = Data()
+        for v: Int32 in [0, 0, Int32(width - 1), Int32(height - 1)] {
+            var le = v.littleEndian
+            box.append(Data(bytes: &le, count: 4))
+        }
+        putAttr("dataWindow", "box2i", box)
+        putAttr("displayWindow", "box2i", box)
+        putAttr("lineOrder", "lineOrder", Data([0]))
+        var par: UInt32 = Float(1.0).bitPattern.littleEndian
+        putAttr("pixelAspectRatio", "float", Data(bytes: &par, count: 4))
+        var center = Data()
+        var z: UInt32 = Float(0).bitPattern.littleEndian
+        center.append(Data(bytes: &z, count: 4))
+        center.append(Data(bytes: &z, count: 4))
+        putAttr("screenWindowCenter", "v2f", center)
+        putAttr("screenWindowWidth", "float", Data(bytes: &par, count: 4))
+        data.append(0)
+
+        let rowBytes = width * 4
+        var scanlines: [Data] = []
+        for y in 0..<height {
+            var planar = Data(count: rowBytes * 3)
+            planar.withUnsafeMutableBytes { raw in
+                let dst = raw.bindMemory(to: UInt32.self)
+                for x in 0..<width {
+                    let i = (y * width + x) * 3
+                    dst[x] = rgb[i + 2].bitPattern.littleEndian
+                    dst[width + x] = rgb[i + 1].bitPattern.littleEndian
+                    dst[2 * width + x] = rgb[i].bitPattern.littleEndian
+                }
+            }
+            var payload = Data()
+            var yi = Int32(y).littleEndian
+            var nbytes = UInt32(planar.count).littleEndian
+            payload.append(Data(bytes: &yi, count: 4))
+            payload.append(Data(bytes: &nbytes, count: 4))
+            payload.append(planar)
+            scanlines.append(payload)
+        }
+        var pos = UInt64(data.count + height * 8)
+        for payload in scanlines {
+            putU64(pos)
+            pos += UInt64(payload.count)
+        }
+        for payload in scanlines {
+            data.append(payload)
+        }
+        try data.write(to: url, options: .atomic)
+    }
 }
