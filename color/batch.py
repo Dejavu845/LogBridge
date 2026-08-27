@@ -22,10 +22,13 @@ clips stay. Cancelled status says 已取消 and still 整段代理，不是全�
 Partial output is 不是成片. A successful write remembers the dest folder
 (UserDefaults) and status offers 「在 Finder 中显示」. Cancel does not
 treat a deleted half-folder as success. After a write, locked sidebar
-rows show 「已写出代理」 (or a short Chinese error). Pending stay
-「先选择 Log 与色域」 / 「先选择成对 IDT」. A cancelled in-progress
-clip is not 已写出; completed clips keep 已写出代理. Re-export clears
-or refreshes the chip.
+rows show 「已写出代理」 (or a short Chinese error). Clicking that
+row or chip reveals that clip's ``{stem}_ACES2065-1_proxy/`` from the
+last dest (``deliverable_dir_name``). Pending / failed / cancelled
+do not reveal. Pending stay 「先选择 Log 与色域」 / 「先选择成对 IDT」.
+A cancelled in-progress clip is not 已写出; completed clips keep
+已写出代理. Re-export clears or refreshes the chip. Session-level
+「在 Finder 中显示」 stays.
 
 Swift ``SessionModel.processLockedClips`` mirrors this module. Color is
 ``SerialGraph.apply`` (existing pipeline). Container is ``exr_write``.
@@ -177,6 +180,20 @@ def sidebar_export_chips(
         else:
             out[clip.name] = None
     return out
+
+
+def clip_sequence_reveal_path(
+    clip_name: str,
+    dest,
+    export_chip: str | None = None,
+) -> Path | None:
+    """Last dest + ``deliverable_dir_name``. Success chip only.
+
+    Pending / failed / cancelled (not 「已写出代理」) do not reveal.
+    """
+    if export_chip != WRITTEN_CHIP or dest is None:
+        return None
+    return Path(dest) / deliverable_dir_name(clip_name)
 
 
 def plan_locked_batch(clips: Sequence[BatchClip]) -> BatchPlan:

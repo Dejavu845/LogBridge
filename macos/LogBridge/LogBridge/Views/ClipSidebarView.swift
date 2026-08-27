@@ -38,12 +38,17 @@ struct ClipSidebarView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(session.clips) { clip in
-                        ClipRow(clip: clip, selected: session.selectedID == clip.id)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                session.selectedID = clip.id
-                                session.refreshPreview()
-                            }
+                        ClipRow(
+                            clip: clip,
+                            selected: session.selectedID == clip.id,
+                            onRevealWritten: { session.revealClipExportInFinder(clip) }
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            session.selectedID = clip.id
+                            session.refreshPreview()
+                            session.revealClipExportInFinder(clip)
+                        }
                     }
                 }
             }
@@ -89,6 +94,7 @@ private struct DropZone: View {
 struct ClipRow: View {
     let clip: Clip
     var selected: Bool = false
+    var onRevealWritten: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -115,10 +121,18 @@ struct ClipRow: View {
                     .lineLimit(1)
             } else if let chip = clip.exportChip {
                 // 已写出代理 after a proxy write; failed write is a short Chinese error
-                Text(chip)
-                    .font(.caption2)
-                    .foregroundStyle(chip == SessionModel.wroteProxyChip ? Color.secondary : Color.orange)
-                    .lineLimit(1)
+                if chip == SessionModel.wroteProxyChip {
+                    Button(chip) { onRevealWritten?() }
+                        .buttonStyle(.plain)
+                        .font(.caption2)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text(chip)
+                        .font(.caption2)
+                        .foregroundStyle(Color.orange)
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.horizontal, 12)
