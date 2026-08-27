@@ -1,12 +1,14 @@
 """Locked-IDT batch: walk locked clips only. Unlocked stay listed."""
 
 from pathlib import Path
+import subprocess
 
 import numpy as np
 
 from color.as_shot import WB_SOURCE_AS_SHOT, WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from color.batch import (
     ADVANCED_DISCLOSURE,
+    DELIVERABLE_DIR_SUFFIX,
     DELIVERABLE_SUFFIX,
     FOLDER_PICKER_MESSAGE,
     HONEST_PROXY_NOTE,
@@ -17,6 +19,7 @@ from color.batch import (
     REASON_PICK_PAIRED_IDT,
     BatchClip,
     confirm_auto_wb,
+    deliverable_dir_name,
     deliverable_name,
     estimate_chip_lit,
     has_locked_idt,
@@ -26,6 +29,7 @@ from color.batch import (
     process_locked_writes,
     processed_status_text,
     propose_auto_wb,
+    sequence_frame_name,
     skip_reason,
 )
 from color.curves import linear_to_slog3
@@ -192,18 +196,18 @@ def test_unlocked_never_write_locked_writes_and_counter(tmp_path: Path):
         path.write_bytes(b"x")
 
     report = process_locked_writes(clips, tmp_path, frames=frames, write_fn=spy)
-    assert called == [deliverable_name("locked.mov")]
+    assert called == [sequence_frame_name(0)]
     assert report.processed_count == 1
     assert report.skipped_count == 3
     assert "1 条已处理" in report.processed_status_text
     assert "3 条已跳过" in report.processed_status_text
     assert processed_status_text(1, 3) == report.processed_status_text
     assert (tmp_path / deliverable_name("locked.mov")).is_file()
-    assert not (tmp_path / deliverable_name("pending.mov")).exists()
-    assert not (tmp_path / deliverable_name("empty.mov")).exists()
-    assert not (tmp_path / deliverable_name("stub.mov")).exists()
-    assert list(tmp_path.glob("*" + DELIVERABLE_SUFFIX)) == [
-        tmp_path / deliverable_name("locked.mov")
+    assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
+    assert not (tmp_path / deliverable_dir_name("empty.mov")).exists()
+    assert not (tmp_path / deliverable_dir_name("stub.mov")).exists()
+    assert list(tmp_path.glob("*" + DELIVERABLE_DIR_SUFFIX)) == [
+        tmp_path / deliverable_dir_name("locked.mov")
     ]
 
 
@@ -222,7 +226,7 @@ def test_locked_exr_is_aces2065_and_mixed_bin_writes(tmp_path: Path):
     rgb = read_rgb_exr(path)
     assert rgb.shape == (2, 2, 3)
     np.testing.assert_allclose(rgb[0, 0], 0.18, atol=5e-3)
-    assert not (tmp_path / deliverable_name("pending.mov")).exists()
+    assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
 
 
 def test_wb_off_identity_still_writes_exr(tmp_path: Path):
@@ -234,11 +238,11 @@ def test_wb_off_identity_still_writes_exr(tmp_path: Path):
     report = process_locked_writes(clips, tmp_path / "off", frames=frames, graph=off)
     assert report.processed_count == 1
     assert len(report.written) == 1
-    off_rgb = read_rgb_exr(report.written[0].path)
+    off_rgb = read_rgb_exr(Path(report.written[0].path) / sequence_frame_name(0))
     on = SerialGraph(wb_enabled=True, wb_cct=3200.0, wb_source=WB_SOURCE_GREY)
     report_on = process_locked_writes(clips, tmp_path / "on", frames=frames, graph=on)
     assert report_on.processed_count == 1
-    on_rgb = read_rgb_exr(report_on.written[0].path)
+    on_rgb = read_rgb_exr(Path(report_on.written[0].path) / sequence_frame_name(0))
     assert not np.allclose(on_rgb, off_rgb, atol=1e-3)
     assert HONEST_PROXY_NOTE in report.processed_status_text
     _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
@@ -252,6 +256,7 @@ def test_write_error_counts_as_processed_no_file(tmp_path: Path):
     assert report.errors[0].name == "locked.mov"
     assert "1 条已处理" in report.processed_status_text
     assert list(tmp_path.glob("*.exr")) == []
+    assert list(tmp_path.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
 
 
 def test_swift_process_writes_exr_and_counter_is_writes():
@@ -271,12 +276,26 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     _assert_chengpian_not_a_deliverable_claim(body)
     assert "exportLockedEXR" in clip
     assert "writeACES2065EXR" in clip
-    assert "_ACES2065-1_proxy_frame0.exr" in exporter
-    assert "ACES2065-1.exr\"" not in exporter.replace("_ACES2065-1_proxy_frame0.exr", "")
+    assert "exportGradedAP0Sequence" in clip
+    assert "_ACES2065-1_proxy" in exporter
+    assert "frame_%06d.exr" in exporter
+    assert "_proxy_frame0.exr" not in exporter
+    assert "ACES2065-1.exr\"" not in exporter
     assert "exportGradedAP0" in engine
-    export_grade = engine.split("func exportGradedAP0")[1].split("func linearAP0Frame")[0]
-    assert "applyODT" not in export_grade
-    assert "if graph.wbEnabled" in export_grade
+    assert "exportGradedAP0Sequence" in engine
+    assert "decodeMovieAllFrames" in engine
+    assert "while let sample = output.copyNextSampleBuffer()" in engine
+    grade = engine.split("func gradeAP0")[1].split("func exportGradedAP0(")[0]
+    assert "applyODT" not in grade
+    assert "if graph.wbEnabled" in grade
+    export_seq = engine.split("func exportGradedAP0Sequence")[1].split("func decodeAllSourceFrames")[0]
+    assert "applyODT" not in export_seq
+    assert "gradeAP0" in export_seq
+    export_body = clip.split("func exportLockedEXR")[1].split("func processSelected()")[0]
+    assert "writeACES2065EXR" in export_body
+    assert "sequenceFrameURL" in export_body
+    assert "AVAssetExport" not in export_body
+    assert "AVAssetWriter" not in export_body
     can = clip.split("var canProcess")[1].split("var canProcessSelected")[0]
     assert "pendingPickerCount == 0" not in can
     assert "lockedClipCount" in can
@@ -296,10 +315,11 @@ def test_swift_process_writes_exr_and_counter_is_writes():
 
 
 def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
-    """成片 may only appear as 预览·非成片 / 不是全精度成片 / 不是成片."""
+    """成片 may only appear as 预览·非成片 / 不是全精度成片 / 不是整段成片 / 不是成片."""
     cleaned = (
         text.replace("预览·非成片", "")
         .replace("不是全精度成片", "")
+        .replace("不是整段成片", "")
         .replace("不是成片", "")
         .replace("成片预览关", "")
     )
@@ -307,19 +327,26 @@ def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
 
 
 def test_honest_proxy_copy_and_filename():
-    assert HONEST_PROXY_NOTE == "首帧代理 EXR，不是整段、不是全精度成片"
-    assert DELIVERABLE_SUFFIX == "_ACES2065-1_proxy_frame0.exr"
-    assert "proxy" in DELIVERABLE_SUFFIX and "frame0" in DELIVERABLE_SUFFIX
+    assert HONEST_PROXY_NOTE == "首帧→整段代理。代理 EXR 序列，不是全精度成片，不是整段成片"
+    assert DELIVERABLE_SUFFIX == "_ACES2065-1_proxy"
+    assert DELIVERABLE_DIR_SUFFIX == "_ACES2065-1_proxy"
+    assert "proxy" in DELIVERABLE_SUFFIX
     assert "acescct" not in DELIVERABLE_SUFFIX.lower()
-    assert deliverable_name("clip.mov") == "clip_ACES2065-1_proxy_frame0.exr"
+    assert deliverable_name("clip.mov") == "clip_ACES2065-1_proxy/frame_000000.exr"
+    assert sequence_frame_name(1) == "frame_000001.exr"
+    assert "_proxy" in deliverable_name("clip.mov")
     status = processed_status_text(2, 1)
     assert HONEST_PROXY_NOTE in status
+    assert "代理" in status
+    assert "不是全精度成片" in status
     assert "预览·非成片" in status
     assert "已实现（未验证）" in status
     assert "2 条已处理" in status
     _assert_chengpian_not_a_deliverable_claim(status)
     assert HONEST_PROXY_NOTE in PROCESSED_STATUS_TEMPLATE
-    assert HONEST_PROXY_NOTE in FOLDER_PICKER_MESSAGE
+    assert "首帧→整段代理" in FOLDER_PICKER_MESSAGE
+    assert "不是全精度成片" in FOLDER_PICKER_MESSAGE
+    assert "代理" in FOLDER_PICKER_MESSAGE
     assert "ACES2065-1" in FOLDER_PICKER_MESSAGE
     assert "ACEScct" not in FOLDER_PICKER_MESSAGE
     assert HONEST_PROXY_NOTE in PROCESS_BUTTON_HELP
@@ -330,13 +357,86 @@ def test_honest_proxy_copy_and_filename():
     assert FOLDER_PICKER_MESSAGE in clip
     assert processed_status_text(0, 0).replace("0 条已处理 / 0 条已跳过", "") in clip or HONEST_PROXY_NOTE in clip
     assert HONEST_PROXY_NOTE in content
-    assert "_ACES2065-1_proxy_frame0.exr" in exporter
+    assert "_ACES2065-1_proxy" in exporter
+    assert "frame_%06d.exr" in exporter
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
     assert HONEST_PROXY_NOTE in readme
     assert HONEST_PROXY_NOTE in acceptance
-    assert "_ACES2065-1_proxy_frame0.exr" in readme
+    assert "_ACES2065-1_proxy/frame_000000.exr" in readme
     _assert_chengpian_not_a_deliverable_claim(readme)
     _assert_chengpian_not_a_deliverable_claim(acceptance)
     _assert_chengpian_not_a_deliverable_claim(clip)
     _assert_chengpian_not_a_deliverable_claim(content)
+
+
+def test_unlocked_never_writes_sequence(tmp_path: Path):
+    clips = [
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+        BatchClip("empty.mov"),
+        BatchClip("stub.mov", idt="future", is_stub=True),
+    ]
+    stack = np.stack([_slog3_grey(), _slog3_grey()], axis=0)
+    frames = {c.name: stack for c in clips}
+    report = process_locked_writes(clips, tmp_path, frames=frames)
+    assert report.processed_count == 0
+    assert report.written == ()
+    assert report.skipped_count == 3
+    assert list(tmp_path.glob("**/*.exr")) == []
+    assert list(tmp_path.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
+
+
+def test_locked_writes_more_than_one_frame(tmp_path: Path):
+    clips = [
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+    ]
+    frame_a = _slog3_grey()
+    frame_b = np.full((2, 2, 3), float(linear_to_slog3(0.09)), dtype=np.float64)
+    report = process_locked_writes(
+        clips,
+        tmp_path,
+        frames={"locked.mov": [frame_a, frame_b], "pending.mov": [frame_a, frame_b]},
+    )
+    assert report.processed_count == 1
+    assert report.written[0].frame_count == 2
+    seq = tmp_path / deliverable_dir_name("locked.mov")
+    assert seq.is_dir()
+    assert (seq / sequence_frame_name(0)).is_file()
+    assert (seq / sequence_frame_name(1)).is_file()
+    assert not (seq / sequence_frame_name(2)).exists()
+    rgb0 = read_rgb_exr(seq / sequence_frame_name(0))
+    rgb1 = read_rgb_exr(seq / sequence_frame_name(1))
+    np.testing.assert_allclose(rgb0[0, 0], 0.18, atol=5e-3)
+    assert not np.allclose(rgb0, rgb1, atol=1e-3)
+    assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
+    assert "_proxy" in seq.name
+    assert "不是全精度成片" in report.processed_status_text
+    assert "代理" in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+    assert list(tmp_path.glob("**/*.mov")) == []
+    assert list(tmp_path.glob("**/*.mp4")) == []
+
+
+# Color-number files: this PR must not change algorithm text.
+_COLOR_MATH_FILES = (
+    "color/curves.py",
+    "color/gamuts.py",
+    "color/wb.py",
+    "color/odt.py",
+    "color/exposure.py",
+    "color/pipeline.py",
+    "color/graph.py",
+    "color/rec709.py",
+    "color/auto_wb.py",
+    "color/as_shot.py",
+    "color/working_space.py",
+    "color/ocio_builtins.py",
+    "color/resolve_export.py",
+)
+
+
+def test_color_math_files_have_no_algorithmic_diff():
+    for rel in _COLOR_MATH_FILES:
+        diff = subprocess.check_output(["git", "diff", "main", "--", rel], cwd=ROOT)
+        assert diff == b"", f"{rel} must not change color numbers"

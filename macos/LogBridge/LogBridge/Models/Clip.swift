@@ -156,10 +156,11 @@ final class SessionModel: ObservableObject {
         return clip.processSkipReason
     }
 
-    /// Batch: write one first-frame ACES2065-1 AP0 proxy EXR per locked clip.
-    /// with a Chinese reason. 「N 条已处理」 is files written or attempted
-    /// with a per-clip error — not a preview refresh. Never guess an IDT.
-    /// Never 一键还原. One process entry point. Mixed bins are allowed.
+    /// Batch: write one ACES2065-1 AP0 proxy EXR sequence per locked clip.
+    /// Unlocked stay listed with a Chinese reason. 「N 条已处理」 is sequences
+    /// written or attempted with a per-clip error — not a preview refresh.
+    /// Never guess an IDT. Never 一键还原. One process entry point.
+    /// Mixed bins are allowed. 首帧→整段代理. 不是全精度成片，不是整段成片.
     func processLockedClips() {
         let locked = clips.filter(\.hasLockedPair)
         let skipped = clips.filter { !$0.hasLockedPair }
@@ -175,14 +176,14 @@ final class SessionModel: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "写出"
-        panel.message = "已锁定片段写出 ACES2065-1 EXR（AP0 线性）。首帧代理 EXR，不是整段、不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。"
+        panel.message = "已锁定片段写出 ACES2065-1 代理 EXR 序列（AP0 线性）。首帧→整段代理。不是全精度成片，不是整段成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。"
         panel.begin { [weak self] response in
             guard let self, response == .OK, let dest = panel.url else { return }
             self.writeLockedDeliverables(locked: locked, skippedCount: skipped.count, dest: dest)
         }
     }
 
-    /// Writes first-frame ACES2065-1 AP0 proxy EXR for locked clips only.
+    /// Writes ACES2065-1 AP0 proxy EXR sequences for locked clips only.
     func writeLockedDeliverables(locked: [Clip], skippedCount: Int, dest: URL) {
         let graphCopy = graph
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -198,7 +199,7 @@ final class SessionModel: ObservableObject {
                 }
             }
             let processed = written.count + errors.count
-            var note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。首帧代理 EXR，不是整段、不是全精度成片。预览·非成片。已实现（未验证）。"
+            var note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。首帧→整段代理。代理 EXR 序列，不是全精度成片，不是整段成片。预览·非成片。已实现（未验证）。"
             if !errors.isEmpty {
                 note += " " + errors.joined(separator: " ")
             }
@@ -208,26 +209,39 @@ final class SessionModel: ObservableObject {
         }
     }
 
-    /// One first-frame ACES2065-1 AP0 proxy EXR. Decode + PreviewColor grade; no ODT. Not ACEScct.
+    /// One ACES2065-1 AP0 proxy EXR sequence. Decode loop + PreviewColor grade; no ODT.
+    /// Not ACEScct. Not a Rec.709 movie. 首帧→整段代理. 不是全精度成片.
     func exportLockedEXR(clip: Clip, graph: SerialGraph, dest: URL) throws -> URL {
         guard clip.hasLockedPair else {
             throw NSError(domain: "LogBridge", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: clip.processSkipReason ?? "先选择成对 IDT"
             ])
         }
-        guard let frame = preview.exportGradedAP0(clip: clip, graph: graph) else {
-            throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "decode/grade failed"
-            ])
+        let seqDir = ResolveExporter.deliverableSequenceDirectory(for: clip, in: dest)
+        if FileManager.default.fileExists(atPath: seqDir.path) {
+            try FileManager.default.removeItem(at: seqDir)
         }
-        let url = ResolveExporter.deliverableURL(for: clip, in: dest)
-        try ResolveExporter.writeACES2065EXR(
-            rgb: frame.rgb,
-            width: frame.width,
-            height: frame.height,
-            to: url
-        )
-        return url
+        try FileManager.default.createDirectory(at: seqDir, withIntermediateDirectories: true)
+        do {
+            let count = try preview.exportGradedAP0Sequence(clip: clip, graph: graph) { index, rgb, width, height in
+                let url = ResolveExporter.sequenceFrameURL(in: seqDir, index: index)
+                try ResolveExporter.writeACES2065EXR(
+                    rgb: rgb,
+                    width: width,
+                    height: height,
+                    to: url
+                )
+            }
+            if count < 1 {
+                throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "decode/grade failed"
+                ])
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: seqDir)
+            throw error
+        }
+        return seqDir
     }
 
     /// Primary action alias. Label is "处理已锁定片段" — never 一键还原.

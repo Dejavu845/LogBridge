@@ -750,11 +750,21 @@ enum ResolveExporter {
         """
     }
 
-    /// First-frame ACES2065-1 AP0 proxy EXR. Mirrors ``color.batch.deliverable_name``.
-    /// Not ACEScct. Filename must say proxy / frame0 so it is not a 成片 claim.
-    static func deliverableURL(for clip: Clip, in directory: URL) -> URL {
+    /// Proxy sequence folder. Mirrors ``color.batch.deliverable_dir_name``.
+    /// ``{stem}_ACES2065-1_proxy/frame_000000.exr``. Name must say proxy so it is not a 成片 claim.
+    static func deliverableSequenceDirectory(for clip: Clip, in directory: URL) -> URL {
         let stem = clip.url.deletingPathExtension().lastPathComponent
-        return directory.appendingPathComponent("\(stem)_ACES2065-1_proxy_frame0.exr")
+        return directory.appendingPathComponent("\(stem)_ACES2065-1_proxy")
+    }
+
+    /// One frame of the proxy sequence: ``frame_%06d.exr``.
+    static func sequenceFrameURL(in sequenceDirectory: URL, index: Int) -> URL {
+        sequenceDirectory.appendingPathComponent(String(format: "frame_%06d.exr", index))
+    }
+
+    /// First frame of the proxy sequence. Not a lone ``_frame0`` file.
+    static func deliverableURL(for clip: Clip, in directory: URL) -> URL {
+        sequenceFrameURL(in: deliverableSequenceDirectory(for: clip, in: directory), index: 0)
     }
 
     /// Uncompressed scanline RGB float32 EXR. Container only — no color math.

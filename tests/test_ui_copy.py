@@ -76,8 +76,13 @@ def test_pending_clips_block_process_and_export():
     assert "writeACES2065EXR" in clip
     assert "条已处理" in clip
     assert "writeLockedDeliverables" in clip
-    assert "首帧代理 EXR，不是整段、不是全精度成片" in clip
-    assert "_ACES2065-1_proxy_frame0.exr" in _read(
+    assert "首帧→整段代理" in clip
+    assert "不是全精度成片" in clip
+    assert "代理" in clip
+    assert "_ACES2065-1_proxy" in _read(
+        SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift"
+    )
+    assert "frame_%06d.exr" in _read(
         SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift"
     )
 
@@ -100,8 +105,10 @@ def test_docs_name_the_review_locks():
     assert "高级" in blob
     assert "条已锁定" in blob
     assert "先选择成对 IDT" in blob
-    assert "首帧代理 EXR，不是整段、不是全精度成片" in blob
-    assert "_ACES2065-1_proxy_frame0.exr" in blob
+    assert "首帧→整段代理" in blob
+    assert "不是全精度成片" in blob
+    assert "代理 EXR 序列" in blob
+    assert "_ACES2065-1_proxy/frame_000000.exr" in blob
     assert "709 预览" in blob
     assert "先选择成对 IDT" in blob
 

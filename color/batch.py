@@ -1,4 +1,4 @@
-"""Locked-IDT batch policy + ACEScct / ACES2065-1 EXR writes. No color-number changes.
+"""Locked-IDT batch policy + ACES2065-1 proxy EXR sequence writes. No color-number changes.
 
 A clip is processable only when its paired IDT is chosen / locked.
 Batch walks locked clips only. Pending / unlocked stay in the list with a
@@ -6,10 +6,13 @@ Chinese reason. Never guess 5600 or 6504. Never invent a second process
 button. Auto WB estimate does not write CAT until confirm; grey-card
 overrides estimate.
 
-「处理已锁定片段」 writes one first-frame ACES2065-1 (AP0 linear) proxy EXR
-per locked clip (ODT off). Not ACEScct. Not a whole-clip encode.
-「N 条已处理」 is files written, or locked clips attempted with a per-clip
-error — not a preview refresh. Pending clips in the same bin do not block.
+「处理已锁定片段」 writes one ACES2065-1 (AP0 linear) **proxy EXR sequence**
+per locked clip (ODT off): ``{stem}_ACES2065-1_proxy/frame_000000.exr``.
+Decode is still the preview path (8-bit Y′CbCr upconverted to float) —
+代理序列，不是全精度成片，不是整段成片. Not ACEScct. Not a Rec.709 .mov/.mp4.
+「N 条已处理」 is clips that produced a sequence, or locked clips attempted
+with a per-clip error — not a preview refresh. Pending clips in the same
+bin do not block.
 
 Swift ``SessionModel.processLockedClips`` mirrors this module. Color is
 ``SerialGraph.apply`` (existing pipeline). Container is ``exr_write``.
@@ -19,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import shutil
 from typing import Callable, Sequence
 
 import numpy as np
@@ -32,23 +36,27 @@ REASON_PICK_PAIRED_IDT = "先选择成对 IDT"
 PROCESS_BUTTON = "处理已锁定片段"
 ADVANCED_DISCLOSURE = "高级"
 LOCK_STATUS_TEMPLATE = "{locked} 条已锁定 / {pending} 条待选"
-HONEST_PROXY_NOTE = "首帧代理 EXR，不是整段、不是全精度成片"
+HONEST_PROXY_NOTE = "首帧→整段代理。代理 EXR 序列，不是全精度成片，不是整段成片"
 PROCESSED_STATUS_TEMPLATE = (
     "处理已锁定片段 — {processed} 条已处理 / {skipped} 条已跳过"
     "（先选择 Log 与色域 / 先选择成对 IDT）。"
-    "首帧代理 EXR，不是整段、不是全精度成片。预览·非成片。已实现（未验证）。"
+    "首帧→整段代理。代理 EXR 序列，不是全精度成片，不是整段成片。预览·非成片。已实现（未验证）。"
 )
 FOLDER_PICKER_MESSAGE = (
-    "已锁定片段写出 ACES2065-1 EXR（AP0 线性）。"
-    "首帧代理 EXR，不是整段、不是全精度成片。"
+    "已锁定片段写出 ACES2065-1 代理 EXR 序列（AP0 线性）。"
+    "首帧→整段代理。不是全精度成片，不是整段成片。"
     "未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
     "预览·非成片。已实现（未验证）。"
 )
 PROCESS_BUTTON_HELP = (
-    "首帧代理 EXR，不是整段、不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
+    "首帧→整段代理。代理 EXR 序列，不是全精度成片，不是整段成片。ACES2065-1 AP0 线性，不是 ACEScct。"
     " Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原."
 )
-DELIVERABLE_SUFFIX = "_ACES2065-1_proxy_frame0.exr"
+# Folder of per-frame EXRs. Names must include _proxy so this is not a 成片 claim.
+DELIVERABLE_DIR_SUFFIX = "_ACES2065-1_proxy"
+DELIVERABLE_SUFFIX = DELIVERABLE_DIR_SUFFIX
+SEQUENCE_FRAME_PREFIX = "frame"
+SEQUENCE_FRAME_WIDTH = 6
 
 
 @dataclass(frozen=True)
@@ -149,13 +157,41 @@ def never_guess_cct(cct: float | None) -> bool:
     return cct is None
 
 
-def deliverable_name(clip_name: str) -> str:
-    """First-frame ACES2065-1 AP0 proxy EXR. Not ACEScct. Not a second button."""
-    return f"{Path(clip_name).stem}{DELIVERABLE_SUFFIX}"
+def deliverable_dir_name(clip_name: str) -> str:
+    """Sequence folder. ``{stem}_ACES2065-1_proxy`` — proxy, not 成片."""
+    return f"{Path(clip_name).stem}{DELIVERABLE_DIR_SUFFIX}"
+
+
+def sequence_frame_name(index: int) -> str:
+    """One sequence frame: ``frame_000000.exr``. Zero-based."""
+    return f"{SEQUENCE_FRAME_PREFIX}_{index:0{SEQUENCE_FRAME_WIDTH}d}.exr"
+
+
+def deliverable_name(clip_name: str, index: int = 0) -> str:
+    """Relative path of one proxy sequence frame. Not a lone ``_frame0`` file."""
+    return f"{deliverable_dir_name(clip_name)}/{sequence_frame_name(index)}"
+
+
+def as_frame_sequence(value) -> list[np.ndarray]:
+    """Normalize a clip's pixels to a list of RGB frames.
+
+    Accepts one RGB array (still / 1-frame), a sequence of RGB arrays, or
+    an ``(N, H, W, 3)`` stack. Empty / missing → no frames.
+    """
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [np.asarray(frame) for frame in value]
+    arr = np.asarray(value)
+    if arr.ndim == 4 and arr.shape[-1] == 3:
+        return [arr[i] for i in range(arr.shape[0])]
+    if arr.size == 0:
+        return []
+    return [arr]
 
 
 def processed_status_text(processed: int, skipped: int) -> str:
-    """「N 条已处理」 is writes / attempts, not preview refresh."""
+    """「N 条已处理」 is sequence writes / attempts, not preview refresh."""
     return PROCESSED_STATUS_TEMPLATE.format(processed=processed, skipped=skipped)
 
 
@@ -164,6 +200,7 @@ class ClipWrite:
     name: str
     path: str | None = None
     error: str | None = None
+    frame_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -174,7 +211,7 @@ class BatchWriteReport:
 
     @property
     def processed_count(self) -> int:
-        """N in 「N 条已处理」: files written + per-clip write errors."""
+        """N in 「N 条已处理」: sequences written + per-clip write errors."""
         return len(self.written) + len(self.errors)
 
     @property
@@ -193,17 +230,25 @@ class BatchWriteReport:
 def process_locked_writes(
     clips: Sequence[BatchClip],
     dest,
-    frames: dict[str, np.ndarray] | None = None,
+    frames: dict[str, np.ndarray | Sequence[np.ndarray]] | None = None,
     graph: SerialGraph | None = None,
     write_fn: Callable[[Path, np.ndarray], None] | None = None,
 ) -> BatchWriteReport:
-    """Write ACES2065-1 EXR for locked clips only.
+    """Write an ACES2065-1 proxy EXR sequence for locked clips only.
 
-    Unlocked / pending stay listed and never produce a file. A mixed bin
+    Unlocked / pending stay listed and never produce a folder. A mixed bin
     (some locked, some pending) still writes the locked ones. ``graph`` is
     the existing serial graph (ODT off = ACES2065-1). ``frames`` maps clip
-    name → camera-log RGB. Missing pixels or a write failure count as
-    processed (per-clip error), not as a skip reason.
+    name → one RGB array or a sequence of arrays. Missing pixels or a write
+    failure count as processed (per-clip error), not as a skip reason.
+
+    Output layout (DaVinci image sequence)::
+
+        {stem}_ACES2065-1_proxy/frame_000000.exr
+        {stem}_ACES2065-1_proxy/frame_000001.exr
+        ...
+
+    This is still a **proxy** sequence (preview decode). Not a Rec.709 movie.
     """
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -215,23 +260,30 @@ def process_locked_writes(
     written: list[ClipWrite] = []
     errors: list[ClipWrite] = []
     for clip in plan.locked:
-        out = dest / deliverable_name(clip.name)
-        rgb = frames.get(clip.name)
-        if rgb is None:
+        seq_dir = dest / deliverable_dir_name(clip.name)
+        rgb_frames = as_frame_sequence(frames.get(clip.name))
+        if not rgb_frames:
             errors.append(ClipWrite(name=clip.name, error="no pixels"))
             continue
         if not clip.idt:
             errors.append(ClipWrite(name=clip.name, error="no IDT"))
             continue
         try:
-            linear = graph.apply(rgb, clip.idt)
-            writer(out, np.asarray(linear, dtype=np.float32))
-            if write_fn is None and not out.is_file():
-                raise OSError("write produced no file")
-            written.append(ClipWrite(name=clip.name, path=str(out)))
+            if seq_dir.exists():
+                shutil.rmtree(seq_dir)
+            seq_dir.mkdir(parents=True, exist_ok=True)
+            for index, rgb in enumerate(rgb_frames):
+                out = seq_dir / sequence_frame_name(index)
+                linear = graph.apply(rgb, clip.idt)
+                writer(out, np.asarray(linear, dtype=np.float32))
+                if write_fn is None and not out.is_file():
+                    raise OSError("write produced no file")
+            written.append(
+                ClipWrite(name=clip.name, path=str(seq_dir), frame_count=len(rgb_frames))
+            )
         except Exception as exc:  # noqa: BLE001 — per-clip error, keep going
-            if out.is_file():
-                out.unlink()
+            if seq_dir.exists():
+                shutil.rmtree(seq_dir)
             errors.append(ClipWrite(name=clip.name, error=str(exc)))
     return BatchWriteReport(
         written=tuple(written),
