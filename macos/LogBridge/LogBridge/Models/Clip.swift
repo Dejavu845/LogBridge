@@ -58,7 +58,7 @@ struct Clip: Identifiable, Hashable {
     /// Unlocked / pending stay in the list with this reason. Never guess an IDT.
     var processSkipReason: String? {
         if hasLockedPair { return nil }
-        if detectedCurve != nil || idt?.isStub == true {
+        if detectedCurve != nil || idt != nil || needsUserPicker {
             return "先选择成对 IDT"
         }
         return "先选择 Log 与色域"

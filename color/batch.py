@@ -67,7 +67,7 @@ def skip_reason(clip: BatchClip) -> str | None:
     """Chinese reason for unlocked / pending clips. None when locked."""
     if has_locked_idt(clip):
         return None
-    if clip.detected_curve or clip.is_stub:
+    if clip.detected_curve or clip.is_stub or clip.needs_user_picker or clip.idt:
         return REASON_PICK_PAIRED_IDT
     return REASON_PICK_LOG_GAMUT
 

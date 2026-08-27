@@ -155,7 +155,7 @@ def test_idt_bar_always_visible_no_hidden_picker():
     assert "确认估计" in inspector
     assert "估计白平衡" in inspector
     assert "高级" in content
-    assert "NodeStripView" in content.split("AdvancedPanel")[1]
+    assert "NodeStripView" in content.split("struct AdvancedPanel")[1]
 
 
 def test_forbidden_marketing_copy_stays_forbidden():
