@@ -26,6 +26,7 @@ from color.batch import (
 )
 from color.curves import linear_to_slog3
 from color.exr_write import read_rgb_exr
+from color.graph import SerialGraph
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFT_ROOT = ROOT / "macos"
@@ -220,6 +221,24 @@ def test_locked_exr_is_aces2065_and_mixed_bin_writes(tmp_path: Path):
     assert not (tmp_path / deliverable_name("pending.mov")).exists()
 
 
+def test_wb_off_identity_still_writes_exr(tmp_path: Path):
+    """Existing WB toggle: off / identity must still write. Never required."""
+    clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3")]
+    frames = {"locked.mov": _slog3_grey()}
+    off = SerialGraph(wb_enabled=False, wb_cct=None)
+    assert off.wb_enabled is False
+    report = process_locked_writes(clips, tmp_path / "off", frames=frames, graph=off)
+    assert report.processed_count == 1
+    assert len(report.written) == 1
+    off_rgb = read_rgb_exr(report.written[0].path)
+    on = SerialGraph(wb_enabled=True, wb_cct=3200.0, wb_source=WB_SOURCE_GREY)
+    report_on = process_locked_writes(clips, tmp_path / "on", frames=frames, graph=on)
+    assert report_on.processed_count == 1
+    on_rgb = read_rgb_exr(report_on.written[0].path)
+    assert not np.allclose(on_rgb, off_rgb, atol=1e-3)
+    assert "成片" not in report.processed_status_text
+
+
 def test_write_error_counts_as_processed_no_file(tmp_path: Path):
     clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3")]
     report = process_locked_writes(clips, tmp_path, frames={})
@@ -241,11 +260,14 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     write_body = clip.split("func writeLockedDeliverables")[1].split("func exportLockedEXR")[0]
     assert "written.count + errors.count" in write_body
     assert "locked.count" not in write_body
+    assert "成片" not in write_body
     assert "exportLockedEXR" in clip
     assert "writeACES2065EXR" in clip
     assert "ACES2065-1.exr" in exporter
     assert "exportGradedAP0" in engine
-    assert "applyODT" not in engine.split("func exportGradedAP0")[1].split("func linearAP0Frame")[0]
+    export_grade = engine.split("func exportGradedAP0")[1].split("func linearAP0Frame")[0]
+    assert "applyODT" not in export_grade
+    assert "if graph.wbEnabled" in export_grade
     can = clip.split("var canProcess")[1].split("var canProcessSelected")[0]
     assert "pendingPickerCount == 0" not in can
     assert "lockedClipCount" in can
