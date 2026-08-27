@@ -8,7 +8,11 @@ from color.as_shot import WB_SOURCE_AS_SHOT, WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from color.batch import (
     ADVANCED_DISCLOSURE,
     DELIVERABLE_SUFFIX,
+    FOLDER_PICKER_MESSAGE,
+    HONEST_PROXY_NOTE,
     PROCESS_BUTTON,
+    PROCESS_BUTTON_HELP,
+    PROCESSED_STATUS_TEMPLATE,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
     BatchClip,
@@ -236,7 +240,8 @@ def test_wb_off_identity_still_writes_exr(tmp_path: Path):
     assert report_on.processed_count == 1
     on_rgb = read_rgb_exr(report_on.written[0].path)
     assert not np.allclose(on_rgb, off_rgb, atol=1e-3)
-    assert "成片" not in report.processed_status_text
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
 
 
 def test_write_error_counts_as_processed_no_file(tmp_path: Path):
@@ -260,10 +265,14 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     write_body = clip.split("func writeLockedDeliverables")[1].split("func exportLockedEXR")[0]
     assert "written.count + errors.count" in write_body
     assert "locked.count" not in write_body
-    assert "成片" not in write_body
+    assert HONEST_PROXY_NOTE in write_body
+    assert HONEST_PROXY_NOTE in body
+    _assert_chengpian_not_a_deliverable_claim(write_body)
+    _assert_chengpian_not_a_deliverable_claim(body)
     assert "exportLockedEXR" in clip
     assert "writeACES2065EXR" in clip
-    assert "ACES2065-1.exr" in exporter
+    assert "_ACES2065-1_proxy_frame0.exr" in exporter
+    assert "ACES2065-1.exr\"" not in exporter.replace("_ACES2065-1_proxy_frame0.exr", "")
     assert "exportGradedAP0" in engine
     export_grade = engine.split("func exportGradedAP0")[1].split("func linearAP0Frame")[0]
     assert "applyODT" not in export_grade
@@ -274,5 +283,54 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     export = clip.split("func exportResolve()")[1]
     assert "lockedClips" in export.split("panel.begin")[0]
     assert "clips: locked" in export or "clips: lockedClips" in export
-    assert "Write ACEScct" in content or "ACES2065-1 EXR" in content
+    assert HONEST_PROXY_NOTE in content
+    assert "不是 ACEScct" in content
     assert "Does not require the whole bin" in content
+    _assert_chengpian_not_a_deliverable_claim(content)
+
+
+def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
+    """成片 may only appear as 预览·非成片 / 不是全精度成片 / 不是成片."""
+    cleaned = (
+        text.replace("预览·非成片", "")
+        .replace("不是全精度成片", "")
+        .replace("不是成片", "")
+        .replace("成片预览关", "")
+    )
+    assert "成片" not in cleaned
+
+
+def test_honest_proxy_copy_and_filename():
+    assert HONEST_PROXY_NOTE == "首帧代理 EXR，不是整段、不是全精度成片"
+    assert DELIVERABLE_SUFFIX == "_ACES2065-1_proxy_frame0.exr"
+    assert "proxy" in DELIVERABLE_SUFFIX and "frame0" in DELIVERABLE_SUFFIX
+    assert "acescct" not in DELIVERABLE_SUFFIX.lower()
+    assert deliverable_name("clip.mov") == "clip_ACES2065-1_proxy_frame0.exr"
+    status = processed_status_text(2, 1)
+    assert HONEST_PROXY_NOTE in status
+    assert "预览·非成片" in status
+    assert "已实现（未验证）" in status
+    assert "2 条已处理" in status
+    _assert_chengpian_not_a_deliverable_claim(status)
+    assert HONEST_PROXY_NOTE in PROCESSED_STATUS_TEMPLATE
+    assert HONEST_PROXY_NOTE in FOLDER_PICKER_MESSAGE
+    assert "ACES2065-1" in FOLDER_PICKER_MESSAGE
+    assert "ACEScct" not in FOLDER_PICKER_MESSAGE
+    assert HONEST_PROXY_NOTE in PROCESS_BUTTON_HELP
+    assert "不是 ACEScct" in PROCESS_BUTTON_HELP
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    assert FOLDER_PICKER_MESSAGE in clip
+    assert processed_status_text(0, 0).replace("0 条已处理 / 0 条已跳过", "") in clip or HONEST_PROXY_NOTE in clip
+    assert HONEST_PROXY_NOTE in content
+    assert "_ACES2065-1_proxy_frame0.exr" in exporter
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert HONEST_PROXY_NOTE in readme
+    assert HONEST_PROXY_NOTE in acceptance
+    assert "_ACES2065-1_proxy_frame0.exr" in readme
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)
+    _assert_chengpian_not_a_deliverable_claim(clip)
+    _assert_chengpian_not_a_deliverable_claim(content)

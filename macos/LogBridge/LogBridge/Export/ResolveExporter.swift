@@ -731,10 +731,11 @@ enum ResolveExporter {
         """
     }
 
-    /// One ACES2065-1 EXR per locked clip. Mirrors ``color.batch.deliverable_name``.
+    /// First-frame ACES2065-1 AP0 proxy EXR. Mirrors ``color.batch.deliverable_name``.
+    /// Not ACEScct. Filename must say proxy / frame0 so it is not a 成片 claim.
     static func deliverableURL(for clip: Clip, in directory: URL) -> URL {
         let stem = clip.url.deletingPathExtension().lastPathComponent
-        return directory.appendingPathComponent("\(stem)_ACES2065-1.exr")
+        return directory.appendingPathComponent("\(stem)_ACES2065-1_proxy_frame0.exr")
     }
 
     /// Uncompressed scanline RGB float32 EXR. Container only — no color math.

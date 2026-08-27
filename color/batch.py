@@ -6,7 +6,8 @@ Chinese reason. Never guess 5600 or 6504. Never invent a second process
 button. Auto WB estimate does not write CAT until confirm; grey-card
 overrides estimate.
 
-「处理已锁定片段」 writes one ACES2065-1 EXR per locked clip (ODT off).
+「处理已锁定片段」 writes one first-frame ACES2065-1 (AP0 linear) proxy EXR
+per locked clip (ODT off). Not ACEScct. Not a whole-clip encode.
 「N 条已处理」 is files written, or locked clips attempted with a per-clip
 error — not a preview refresh. Pending clips in the same bin do not block.
 
@@ -31,11 +32,23 @@ REASON_PICK_PAIRED_IDT = "先选择成对 IDT"
 PROCESS_BUTTON = "处理已锁定片段"
 ADVANCED_DISCLOSURE = "高级"
 LOCK_STATUS_TEMPLATE = "{locked} 条已锁定 / {pending} 条待选"
+HONEST_PROXY_NOTE = "首帧代理 EXR，不是整段、不是全精度成片"
 PROCESSED_STATUS_TEMPLATE = (
     "处理已锁定片段 — {processed} 条已处理 / {skipped} 条已跳过"
-    "（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。"
+    "（先选择 Log 与色域 / 先选择成对 IDT）。"
+    "首帧代理 EXR，不是整段、不是全精度成片。预览·非成片。已实现（未验证）。"
 )
-DELIVERABLE_SUFFIX = "_ACES2065-1.exr"
+FOLDER_PICKER_MESSAGE = (
+    "已锁定片段写出 ACES2065-1 EXR（AP0 线性）。"
+    "首帧代理 EXR，不是整段、不是全精度成片。"
+    "未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
+    "预览·非成片。已实现（未验证）。"
+)
+PROCESS_BUTTON_HELP = (
+    "首帧代理 EXR，不是整段、不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
+    " Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原."
+)
+DELIVERABLE_SUFFIX = "_ACES2065-1_proxy_frame0.exr"
 
 
 @dataclass(frozen=True)
@@ -137,7 +150,7 @@ def never_guess_cct(cct: float | None) -> bool:
 
 
 def deliverable_name(clip_name: str) -> str:
-    """One ACES2065-1 EXR per locked clip. Stem only — not a second button."""
+    """First-frame ACES2065-1 AP0 proxy EXR. Not ACEScct. Not a second button."""
     return f"{Path(clip_name).stem}{DELIVERABLE_SUFFIX}"
 
 

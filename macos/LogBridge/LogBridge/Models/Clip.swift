@@ -156,7 +156,7 @@ final class SessionModel: ObservableObject {
         return clip.processSkipReason
     }
 
-    /// Batch: write one ACES2065-1 EXR per locked clip. Unlocked stay listed
+    /// Batch: write one first-frame ACES2065-1 AP0 proxy EXR per locked clip.
     /// with a Chinese reason. 「N 条已处理」 is files written or attempted
     /// with a per-clip error — not a preview refresh. Never guess an IDT.
     /// Never 一键还原. One process entry point. Mixed bins are allowed.
@@ -175,14 +175,14 @@ final class SessionModel: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "写出"
-        panel.message = "已锁定片段写出 ACEScct / ACES2065-1 EXR。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
+        panel.message = "已锁定片段写出 ACES2065-1 EXR（AP0 线性）。首帧代理 EXR，不是整段、不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。"
         panel.begin { [weak self] response in
             guard let self, response == .OK, let dest = panel.url else { return }
             self.writeLockedDeliverables(locked: locked, skippedCount: skipped.count, dest: dest)
         }
     }
 
-    /// Writes ACES2065-1 EXR for locked clips only. Reuses PreviewColor + EXR writer.
+    /// Writes first-frame ACES2065-1 AP0 proxy EXR for locked clips only.
     func writeLockedDeliverables(locked: [Clip], skippedCount: Int, dest: URL) {
         let graphCopy = graph
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -198,7 +198,7 @@ final class SessionModel: ObservableObject {
                 }
             }
             let processed = written.count + errors.count
-            var note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。"
+            var note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。首帧代理 EXR，不是整段、不是全精度成片。预览·非成片。已实现（未验证）。"
             if !errors.isEmpty {
                 note += " " + errors.joined(separator: " ")
             }
@@ -208,7 +208,7 @@ final class SessionModel: ObservableObject {
         }
     }
 
-    /// One ACES2065-1 EXR for a locked clip. Decode + PreviewColor grade; no ODT.
+    /// One first-frame ACES2065-1 AP0 proxy EXR. Decode + PreviewColor grade; no ODT. Not ACEScct.
     func exportLockedEXR(clip: Clip, graph: SerialGraph, dest: URL) throws -> URL {
         guard clip.hasLockedPair else {
             throw NSError(domain: "LogBridge", code: 1, userInfo: [

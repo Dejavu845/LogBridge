@@ -229,8 +229,8 @@ final class PreviewEngine: ObservableObject {
         }
     }
 
-    /// Export-size graded ACES2065-1 (AP0) linear. Reuses PreviewColor.
-    /// ODT is not applied — deliverable is ACEScct / ACES2065-1 EXR.
+    /// First-frame graded ACES2065-1 (AP0) linear proxy. Reuses PreviewColor.
+    /// ODT is not applied. Not ACEScct. Not a whole-clip / full-precision write.
     /// Decode uses the existing VideoToolbox / ImageIO path at a larger long edge.
     static let exportMaxLongEdge: CGFloat = 16384
 
