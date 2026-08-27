@@ -283,6 +283,12 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     export = clip.split("func exportResolve()")[1]
     assert "lockedClips" in export.split("panel.begin")[0]
     assert "clips: locked" in export or "clips: lockedClips" in export
+    assert "先选择成对 IDT" in export
+    assert "先选择 Log 与色域" in export
+    assert "hasLockedPair" in exporter.split("uniqueImplementedIDTs")[1]
+    assert "matrixCCT = nil" in exporter
+    assert "709 预览" in exporter
+    assert "not ACES OT" in exporter
     assert HONEST_PROXY_NOTE in content
     assert "不是 ACEScct" in content
     assert "Does not require the whole bin" in content
