@@ -7,11 +7,19 @@ import numpy as np
 from color.as_shot import WB_SOURCE_AS_SHOT, WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from color.batch import (
     ADVANCED_DISCLOSURE,
+    BYTES_PER_EXR_PIXEL,
     CANCEL_BUTTON,
     CANCELLED_NOTE,
     CANCELLED_STATUS_TEMPLATE,
+    CONSERVATIVE_FPS,
+    CONSERVATIVE_HEIGHT,
+    CONSERVATIVE_SECONDS,
+    CONSERVATIVE_WIDTH,
     DELIVERABLE_DIR_SUFFIX,
     DELIVERABLE_SUFFIX,
+    DISK_ESTIMATE_ASSUMPTION,
+    DISK_SHORT_STATUS,
+    DISK_SHORT_STATUS_TEMPLATE,
     FOLDER_PICKER_MESSAGE,
     HONEST_PROXY_NOTE,
     LAST_EXPORT_DIRECTORY_KEY,
@@ -30,7 +38,11 @@ from color.batch import (
     confirm_auto_wb,
     deliverable_dir_name,
     deliverable_name,
+    dest_has_space,
+    disk_short_status_text,
     estimate_chip_lit,
+    estimate_locked_proxy_bytes,
+    folder_picker_message_with_estimate,
     has_locked_idt,
     never_guess_cct,
     plan_locked_batch,
@@ -832,3 +844,178 @@ def test_sidebar_chip_row_reveals_clip_sequence_folder(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(content)
     _assert_chengpian_not_a_deliverable_claim(readme)
     _assert_chengpian_not_a_deliverable_claim(acceptance)
+
+
+def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
+    """Too-small dest: do not start writing. No EXR / no _proxy folder."""
+    assert BYTES_PER_EXR_PIXEL == 12
+    assert DISK_ESTIMATE_ASSUMPTION == "float32 RGB 未压缩"
+    assert DISK_SHORT_STATUS == "磁盘空间不足，未写出"
+    assert HONEST_PROXY_NOTE in DISK_SHORT_STATUS_TEMPLATE
+    _assert_chengpian_not_a_deliverable_claim(DISK_SHORT_STATUS)
+    _assert_chengpian_not_a_deliverable_claim(DISK_SHORT_STATUS_TEMPLATE)
+    assert "精准" not in DISK_SHORT_STATUS
+    assert "精准" not in DISK_SHORT_STATUS_TEMPLATE
+
+    clips = [
+        BatchClip(
+            "locked.mov",
+            idt="sony_slog3_sgamut3",
+            frame_count=100,
+            width=1920,
+            height=1080,
+        ),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+        BatchClip(
+            "huge_pending.mov",
+            detected_curve="S-Log3",
+            needs_user_picker=True,
+            frame_count=99_999,
+            width=3840,
+            height=2160,
+        ),
+    ]
+    locked_only = estimate_locked_proxy_bytes(clips)
+    assert locked_only.bytes == 100 * 1920 * 1080 * BYTES_PER_EXR_PIXEL
+    assert dest_has_space(tmp_path, locked_only.needed_bytes, free_bytes=1) is False
+    assert dest_has_space(tmp_path, locked_only.needed_bytes, free_bytes=locked_only.needed_bytes) is True
+
+    duration = BatchClip(
+        "dur.mov",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=2.0,
+        fps=24.0,
+        width=100,
+        height=50,
+    )
+    dur_est = estimate_locked_proxy_bytes([duration])
+    assert dur_est.bytes == 48 * 100 * 50 * BYTES_PER_EXR_PIXEL
+    assert dur_est.used_duration_fps is True
+    assert "时长" in dur_est.note and "帧率" in dur_est.note
+    assert DISK_ESTIMATE_ASSUMPTION in dur_est.note
+    _assert_chengpian_not_a_deliverable_claim(dur_est.note)
+
+    guessed = BatchClip("guess.mov", idt="sony_slog3_sgamut3")
+    guess_est = estimate_locked_proxy_bytes([guessed])
+    assert guess_est.used_frame_guess is True
+    assert guess_est.bytes == (
+        int(CONSERVATIVE_SECONDS * CONSERVATIVE_FPS)
+        * CONSERVATIVE_WIDTH
+        * CONSERVATIVE_HEIGHT
+        * BYTES_PER_EXR_PIXEL
+    )
+    assert "每秒" in guess_est.note
+    assert str(int(CONSERVATIVE_FPS)) in guess_est.note
+    _assert_chengpian_not_a_deliverable_claim(guess_est.note)
+
+    picker = folder_picker_message_with_estimate(locked_only)
+    assert FOLDER_PICKER_MESSAGE in picker
+    assert locked_only.note in picker
+    _assert_chengpian_not_a_deliverable_claim(picker)
+
+    grey = _slog3_grey()
+    dest = tmp_path / "tiny"
+    dest.mkdir()
+    called: list[str] = []
+
+    def spy(path: Path, rgb) -> None:
+        called.append(Path(path).name)
+        path.write_bytes(b"x")
+
+    report = process_locked_writes(
+        clips,
+        dest,
+        frames={"locked.mov": [grey, grey], "pending.mov": [grey]},
+        write_fn=spy,
+        free_bytes=1,
+    )
+    assert report.disk_short is True
+    assert report.written == ()
+    assert report.errors == ()
+    assert report.processed_count == 0
+    assert report.cancelled is False
+    assert report.last_reveal_paths == ()
+    assert called == []
+    assert list(dest.glob("**/*.exr")) == []
+    assert list(dest.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
+    assert not (dest / deliverable_dir_name("locked.mov")).exists()
+    assert not (dest / deliverable_dir_name("pending.mov")).exists()
+    assert DISK_SHORT_STATUS in report.processed_status_text
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    assert "整段代理，不是全精度成片" in report.processed_status_text
+    assert "条已处理" not in report.processed_status_text
+    assert "精准" not in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+    assert disk_short_status_text(report.disk_estimate) == report.processed_status_text
+
+    # Missing pixels are a per-clip error, not a 4K×60s dest abort.
+    empty = process_locked_writes(
+        [BatchClip("locked.mov", idt="sony_slog3_sgamut3")],
+        tmp_path / "empty",
+        frames={},
+    )
+    assert empty.disk_short is False
+    assert empty.processed_count == 1
+    assert empty.written == ()
+    assert empty.errors[0].name == "locked.mov"
+    assert list((tmp_path / "empty").glob("**/*.exr")) == []
+
+    ok_dest = tmp_path / "ok"
+    ok = process_locked_writes(
+        clips, ok_dest, frames={"locked.mov": [grey]}, write_fn=spy
+    )
+    assert ok.disk_short is False
+    assert ok.written
+    assert (ok_dest / deliverable_dir_name("locked.mov")).is_dir()
+    assert not (ok_dest / deliverable_dir_name("pending.mov")).exists()
+
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    media = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/MediaFormat.swift")
+    write_body = clip.split("func writeLockedDeliverables")[1].split("func exportLockedEXR")[0]
+    process_body = clip.split("func processLockedClips()")[1].split(
+        "func writeLockedDeliverables"
+    )[0]
+    assert "estimateLockedProxyBytes" in write_body
+    assert "destFreeBytesOverride" in write_body
+    assert "destVolumeFreeBytes" in write_body
+    assert "diskShortExportNote" in write_body
+    assert "neededWithMargin" in write_body
+    assert "return" in write_body.split("neededWithMargin")[1].split("let graphCopy")[0]
+    assert "exportLockedEXR" not in write_body.split("neededWithMargin")[1].split(
+        "let graphCopy"
+    )[0]
+    assert "clearExportChips" not in write_body.split("neededWithMargin")[1].split(
+        "let graphCopy"
+    )[0]
+    assert "isWritingDeliverables = true" not in write_body.split("neededWithMargin")[1].split(
+        "let graphCopy"
+    )[0]
+    assert DISK_SHORT_STATUS in clip
+    assert DISK_ESTIMATE_ASSUMPTION in clip
+    assert HONEST_PROXY_NOTE in clip.split("func diskShortExportNote")[1]
+    assert "bytesPerEXRPixel" in clip
+    assert "12" in clip.split("bytesPerEXRPixel")[1].split("conservativeFPS")[0]
+    assert "destFreeBytesOverride" in clip
+    assert "MediaFormat.extent" in clip
+    assert "func extent(url:" in media
+    assert "volumeAvailableCapacity" in clip
+    assert FOLDER_PICKER_MESSAGE in process_body
+    assert "pickerSuffix" in process_body
+    assert "estimateLockedProxyBytes" in process_body
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "处理已锁定片段" in bar
+    assert 'Button("处理已锁定片段")' not in content.split("struct StatusBar")[1]
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert DISK_SHORT_STATUS in readme
+    assert DISK_SHORT_STATUS in acceptance
+    assert DISK_ESTIMATE_ASSUMPTION in readme or "float32 RGB" in readme
+    _assert_chengpian_not_a_deliverable_claim(write_body)
+    _assert_chengpian_not_a_deliverable_claim(clip.split("func diskShortExportNote")[1].split("static let wroteProxyChip")[0])
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)
+    assert "精准" not in clip.split("static let diskShortStatus")[1].split(
+        "static func formatProxyBytes"
+    )[0]

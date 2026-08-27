@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import CoreMedia
+import ImageIO
 
 /// Container / codec probe. Decode policy only — no color numbers.
 ///
@@ -28,6 +29,15 @@ struct MediaProbe: Equatable {
     let note: String
 }
 
+/// Timing / size for dest-disk estimate. Decode policy only — no color numbers.
+struct MediaExtent: Equatable {
+    var frameCount: Int?
+    var durationSeconds: Double?
+    var fps: Double?
+    var width: Int?
+    var height: Int?
+}
+
 enum MediaFormat {
     static let movieExt: Set<String> = ["mov", "mp4", "m4v"]
     static let stillExt: Set<String> = ["tif", "tiff", "dpx", "exr"]
@@ -50,6 +60,40 @@ enum MediaFormat {
         let ext = url.pathExtension.lowercased()
         let codec = codecFourCC(url: url)
         return classify(ext: ext, codec: codec)
+    }
+
+    /// Frame count / duration / fps / pixel size. Used only for dest-disk
+    /// estimate before writing proxy EXR. Does not decode pixels or change color.
+    static func extent(url: URL) -> MediaExtent {
+        let ext = url.pathExtension.lowercased()
+        if stillExt.contains(ext) {
+            var width: Int?
+            var height: Int?
+            if let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+               let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] {
+                if let w = props[kCGImagePropertyPixelWidth] as? NSNumber { width = w.intValue }
+                if let h = props[kCGImagePropertyPixelHeight] as? NSNumber { height = h.intValue }
+            }
+            return MediaExtent(frameCount: 1, durationSeconds: nil, fps: nil, width: width, height: height)
+        }
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first else {
+            return MediaExtent(frameCount: nil, durationSeconds: nil, fps: nil, width: nil, height: nil)
+        }
+        let fpsRaw = Double(track.nominalFrameRate)
+        let durRaw = CMTimeGetSeconds(asset.duration)
+        let size = track.naturalSize.applying(track.preferredTransform)
+        let width = Int(abs(size.width).rounded())
+        let height = Int(abs(size.height).rounded())
+        let fps = fpsRaw.isFinite && fpsRaw > 0 ? fpsRaw : nil
+        let duration = durRaw.isFinite && durRaw > 0 ? durRaw : nil
+        return MediaExtent(
+            frameCount: nil,
+            durationSeconds: duration,
+            fps: fps,
+            width: width > 0 ? width : nil,
+            height: height > 0 ? height : nil
+        )
     }
 
     static func classify(ext: String, codec: String?) -> MediaProbe {
