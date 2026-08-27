@@ -23,6 +23,9 @@ struct Clip: Identifiable, Hashable {
     var wbCCT: Double?
     var wbTint: Double
     var formatNote: String
+    /// Sidebar chip after 「处理已锁定片段」. `已写出代理`, a short Chinese error, or nil.
+    /// Cleared on re-export. Cancelled in-progress stays nil. 不是成片.
+    var exportChip: String? = nil
 
     var filename: String { url.lastPathComponent }
 
@@ -69,6 +72,10 @@ struct Clip: Identifiable, Hashable {
         if isPending { return "待选" }
         return "已实现（未验证）"
     }
+
+    /// Sidebar row under the pair. Pending keep skip reasons.
+    /// After a write: 已写出代理 or a short Chinese error.
+    var sidebarStatusChip: String? { processSkipReason ?? exportChip }
 
     var displayCurve: String? { idt?.curve ?? detectedCurve }
     var displayGamut: String? { idt?.gamut ?? detectedGamut }
@@ -202,6 +209,7 @@ final class SessionModel: ObservableObject {
         writeCancel.reset()
         lastProgressUptime = 0
         lastExportRevealURLs = []
+        clearExportChips(for: locked)
         isWritingDeliverables = true
         lastExportNote = Self.exportProgressText(clipIndex: 1, clipTotal: clipTotal)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -234,11 +242,14 @@ final class SessionModel: ObservableObject {
                         )
                     }
                     written.append(url)
+                    self.setExportChip(clipID: clip.id, Self.wroteProxyChip)
                 } catch is LockedWriteCancel {
                     cancelled = true
                     break
                 } catch {
-                    errors.append("\(clip.filename): \(error.localizedDescription)")
+                    let chip = Self.shortExportChip(for: error)
+                    errors.append("\(clip.filename)：\(chip)")
+                    self.setExportChip(clipID: clip.id, chip)
                 }
             }
             let processed = written.count + errors.count
@@ -330,6 +341,38 @@ final class SessionModel: ObservableObject {
     /// Cancelled batch. 已取消 + honesty. Partial output is 不是成片.
     static func cancelledExportNote(processed: Int, skipped: Int) -> String {
         "处理已锁定片段 — 已取消。\(processed) 条已处理 / \(skipped) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+    }
+
+    /// Locked row after a proxy sequence write. Not a finished picture.
+    static let wroteProxyChip = "已写出代理"
+    static let decodeFailedChip = "解码失败"
+    static let writeFailedChip = "写出失败"
+
+    /// Short Chinese sidebar / status error. Failed write is not silent.
+    static func shortExportChip(for error: Error) -> String {
+        if error is LockedWriteCancel { return writeFailedChip }
+        let desc = error.localizedDescription
+        if desc.hasPrefix("先选择") { return desc }
+        let lower = desc.lowercased()
+        if lower.contains("decode") || lower.contains("grade") {
+            return decodeFailedChip
+        }
+        return writeFailedChip
+    }
+
+    /// Re-export clears the chip so a previous 已写出代理 does not linger.
+    private func clearExportChips(for locked: [Clip]) {
+        let ids = Set(locked.map(\.id))
+        for i in clips.indices where ids.contains(clips[i].id) {
+            clips[i].exportChip = nil
+        }
+    }
+
+    private func setExportChip(clipID: UUID, _ chip: String?) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let idx = self.clips.firstIndex(where: { $0.id == clipID }) else { return }
+            self.clips[idx].exportChip = chip
+        }
     }
 
     /// Status dest path (short). Parent folder name, not a deliverable claim.
