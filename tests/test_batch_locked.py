@@ -44,6 +44,7 @@ from color.batch import (
     short_export_path,
     sidebar_export_chips,
     sidebar_status_chip,
+    clip_sequence_reveal_path,
     skip_reason,
 )
 from color.curves import linear_to_slog3
@@ -745,3 +746,89 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(clip)
     _assert_chengpian_not_a_deliverable_claim(sidebar)
     _assert_chengpian_not_a_deliverable_claim(content)
+
+
+def test_sidebar_chip_row_reveals_clip_sequence_folder(tmp_path: Path):
+    """Reveal-on-chip/row uses last dest + deliverable_dir_name. 成片 is not success."""
+    dest = tmp_path / "Exports"
+    dest.mkdir()
+    clips = [
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+        BatchClip("empty.mov"),
+    ]
+    report = process_locked_writes(
+        clips, dest, frames={"locked.mov": _slog3_grey()}
+    )
+    chips = sidebar_export_chips(clips, report)
+    written = clip_sequence_reveal_path("locked.mov", dest, chips["locked.mov"])
+    assert chips["locked.mov"] == WRITTEN_CHIP
+    assert written == dest / deliverable_dir_name("locked.mov")
+    assert written is not None
+    assert written.name.endswith("_ACES2065-1_proxy")
+    assert written == dest / "locked_ACES2065-1_proxy"
+    assert written.is_dir()
+    assert "成片" not in WRITTEN_CHIP
+    _assert_chengpian_not_a_deliverable_claim(WRITTEN_CHIP)
+    _assert_chengpian_not_a_deliverable_claim(str(written))
+
+    assert clip_sequence_reveal_path("pending.mov", dest, chips["pending.mov"]) is None
+    assert clip_sequence_reveal_path("empty.mov", dest, chips["empty.mov"]) is None
+    fail = process_locked_writes(clips, tmp_path / "fail", frames={})
+    fail_chips = sidebar_export_chips(clips, fail)
+    assert fail_chips["locked.mov"] == DECODE_FAILED_CHIP
+    assert clip_sequence_reveal_path(
+        "locked.mov", tmp_path / "fail", fail_chips["locked.mov"]
+    ) is None
+    assert clip_sequence_reveal_path("locked.mov", dest, short_export_chip(cancelled=True)) is None
+    assert clip_sequence_reveal_path("locked.mov", dest, WRITE_FAILED_CHIP) is None
+    assert clip_sequence_reveal_path("locked.mov", dest, None) is None
+    assert clip_sequence_reveal_path("locked.mov", None, WRITTEN_CHIP) is None
+
+    clip = _read(CLIP)
+    sidebar = _read(SIDEBAR)
+    content = _read(CONTENT)
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert "clip_sequence_reveal_path" in _read(ROOT / "color/batch.py")
+    assert "clipSequenceRevealURL" in clip
+    assert "revealClipExportInFinder" in clip
+    assert "lastExportDirectoryURL" in clip.split("func revealClipExportInFinder")[1].split(
+        "private func publishExportProgress"
+    )[0]
+    assert "deliverableSequenceDirectory" in clip.split("clipSequenceRevealURL")[1].split(
+        "func revealClipExportInFinder"
+    )[0]
+    assert "wroteProxyChip" in clip.split("clipSequenceRevealURL")[1].split(
+        "func revealClipExportInFinder"
+    )[0]
+    assert "revealClipExportInFinder" in sidebar
+    assert "onRevealWritten" in sidebar
+    assert WRITTEN_CHIP in sidebar
+    assert "onTapGesture" in sidebar
+    row_tap = sidebar.split(".onTapGesture")[1].split("}")[0]
+    assert "revealClipExportInFinder" in row_tap
+    chip = sidebar.split("if chip == SessionModel.wroteProxyChip")[1].split("} else {")[0]
+    assert "onRevealWritten" in chip
+    assert "Button(" in chip
+    assert WRITTEN_CHIP not in sidebar.split("if let reason = clip.processSkipReason")[1].split(
+        "} else if let chip"
+    )[0]
+    status = content.split("struct StatusBar")[1]
+    assert REVEAL_IN_FINDER in status
+    assert "revealLastExportInFinder" in status
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "处理已锁定片段" in bar
+    assert WRITTEN_CHIP in readme
+    assert WRITTEN_CHIP in acceptance
+    assert "deliverable_dir_name" in readme or "_ACES2065-1_proxy" in readme
+    assert HONEST_PROXY_NOTE in clip
+    assert "精准" not in clip.split("func revealClipExportInFinder")[1].split(
+        "private func publishExportProgress"
+    )[0]
+    _assert_chengpian_not_a_deliverable_claim(clip.split("func revealClipExportInFinder")[0][-400:])
+    _assert_chengpian_not_a_deliverable_claim(sidebar)
+    _assert_chengpian_not_a_deliverable_claim(content)
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)

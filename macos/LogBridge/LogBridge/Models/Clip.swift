@@ -393,6 +393,22 @@ final class SessionModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting(existing)
     }
 
+    /// Last dest + `{stem}_ACES2065-1_proxy`. Success chip only.
+    /// Pending / failed / cancelled do not reveal. 不是成片.
+    static func clipSequenceRevealURL(for clip: Clip, dest: URL) -> URL? {
+        guard clip.exportChip == wroteProxyChip else { return nil }
+        return ResolveExporter.deliverableSequenceDirectory(for: clip, in: dest)
+    }
+
+    /// Sidebar row / 「已写出代理」 chip. Reuses last dest. No-op unless written.
+    func revealClipExportInFinder(_ clip: Clip) {
+        guard let dest = settings.lastExportDirectoryURL,
+              let seqDir = Self.clipSequenceRevealURL(for: clip, dest: dest),
+              FileManager.default.fileExists(atPath: seqDir.path)
+        else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([seqDir])
+    }
+
     private func publishExportProgress(_ note: String, force: Bool = false) {
         let now = ProcessInfo.processInfo.systemUptime
         if !force && (now - lastProgressUptime) < 0.12 { return }

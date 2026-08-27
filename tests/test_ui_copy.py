@@ -84,6 +84,8 @@ def test_pending_clips_block_process_and_export():
     assert "整段代理，不是全精度成片" in clip
     assert "已写出代理" in clip
     assert "exportChip" in clip
+    assert "revealClipExportInFinder" in clip
+    assert "clipSequenceRevealURL" in clip
     assert "_proxy" in _read(
         SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift"
     )
