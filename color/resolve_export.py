@@ -22,10 +22,13 @@ implemented (unverified).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 
+from .batch import BatchClip, plan_locked_batch
 from .curves import decode_log, nlog_normalized_to_linear
 from .gamuts import IDT_PAIRS
 from .exposure import apply_exposure, stops_to_gain
@@ -113,6 +116,15 @@ RESOLVE_CST = {
 RESOLVE_OUTPUT_CS = "ACEScct"
 RESOLVE_OUTPUT_GAMMA = "ACEScct"
 RESOLVE_SCENE_LINEAR = "ACES2065-1"
+# Rec.709 cube / XML label. DIY BT.709 OETF preview — never ACES OT.
+REC709_PREVIEW_LABEL = "709 预览"
+REC709_CUBE_TITLE = (
+    "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+)
+REC709_CUBE_COMMENT = (
+    "# 709 预览. 预览·非成片. DIY BT.709 OETF preview. "
+    "Not an ACES Output Transform / RRT."
+)
 
 
 def _cct_label(cct) -> str:
@@ -256,10 +268,11 @@ def _cube_sample_grid(size: int) -> np.ndarray:
     return np.stack([r, g, b], axis=-1).reshape(-1, 3)
 
 
-def format_cube(title: str, rgb: np.ndarray, size: int) -> str:
+def format_cube(title: str, rgb: np.ndarray, size: int, extra_comments: tuple[str, ...] = ()) -> str:
     lines = [
         f'TITLE "{title}"',
         "# LogBridge M1 — implemented (unverified). Not a camera-support claim.",
+        *extra_comments,
         f"LUT_3D_SIZE {size}",
         "DOMAIN_MIN 0.0 0.0 0.0",
         "DOMAIN_MAX 1.0 1.0 1.0",
@@ -298,7 +311,10 @@ def odt_cube_bytes(size: int = 17) -> str:
     grid = _cube_sample_grid(size)
     out = odt_from_acescct(grid)
     return format_cube(
-        "LogBridge ODT ACEScct → Rec.709 (no WB)", out, size
+        REC709_CUBE_TITLE,
+        out,
+        size,
+        extra_comments=(REC709_CUBE_COMMENT,),
     )
 
 
@@ -591,7 +607,7 @@ def format_dot(
   idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\nor Resolve CST → ACEScct (ACES workflow)"];
   exp  [label="Exposure (bypassable/zeroable)\\nACES2065-1 linear gain\\n{exposure_stops:+.2f} stops  gain {gain:.4f}\\n02_Exposure.cube / .dctl", style="filled,{exp_style}", fillcolor="{exp_fill}"];
   wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n{_cct_label(cct)}  tint {tint}\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,{wb_style}", fillcolor="{wb_fill}"];
-  odt  [label="Rec.709 ODT (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709"];
+  odt  [label="709 预览 (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\nBT.709 OETF, not ACES OT"];
   timeline [shape=oval, label="Timeline\\nACEScct"];
 
   clip -> idt -> exp -> wb -> odt;
@@ -700,8 +716,9 @@ def format_graph_xml(
     else:
         odt_type = "LUT_or_CST"
         odt_desc = (
-            "Rec.709 preview ODT only. Not the standard deliverable. "
-            "Off = ACEScct deliverable (or ACES2065-1 EXR). No RRT."
+            "Rec.709 预览 preview ODT only (BT.709 OETF, no RRT). "
+            "Not an ACES Output Transform. 预览·非成片. "
+            "Off = ACEScct deliverable (or ACES2065-1 EXR)."
         )
         odt_payload = (
             '    <File role="lut">04_ODT_Rec709.cube</File>\n'
@@ -779,8 +796,8 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
    - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
    - CCT {_cct_label(cct)}, tint {tint}, method Bradford (CAT02 selectable in code). As-shot fills knobs (UI only); default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT is identity (not 5600 K). Scene-linear only.
 
-4. **ODT** — Off (ACEScct deliverable, default) | Rec.709 preview | Rec.2100 HLG | Rec.2100 PQ
-   - Rec.709: `04_ODT_Rec709.cube` or CST. **preview only**, off by default. BT.709 OETF, no RRT.
+4. **ODT** — Off (ACEScct deliverable, default) | Rec.709 预览 | Rec.2100 HLG | Rec.2100 PQ
+   - Rec.709: `04_ODT_Rec709.cube` or CST. **709 预览**, preview only, off by default. DIY BT.709 OETF, no RRT. Not an ACES Output Transform. 预览·非成片.
    - Rec.2100 HLG / PQ: ACES Output Transform / BT.2100 OCIO Builtin (no homemade curve). Implemented (unverified). Not a support claim.
    - Contains **no** white balance and **no** exposure. Optional later node.
 
@@ -791,7 +808,7 @@ Color page, serial node graph:
 - Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or CST camera → ACEScct, ACES workflow).
 - Apply **Exposure** (node 2: LUT `02_Exposure.cube` or DCTL `02_Exposure.dctl`). Zero stops or bypass = identity.
 - Apply **WB** (node 3: LUT `03_WB.cube`, **or** DCTL `03_WB.dctl`, **or** import `03_WB.cdl` onto a Color Corrector).
-- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) if you need a 709 viewing/output node.
+- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) if you need a **709 预览** viewing node (not ACES OT). 预览·非成片.
 
 To bypass Exposure: disable node 2 (or tick DCTL **Bypass Exposure**, or leave stops at 0). To bypass WB: disable node 3 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). The remaining graph is **IDT → (optional Exposure) → ACEScct → optional Rec.709 ODT**.
 
@@ -809,7 +826,7 @@ Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview onl
 | `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |
 | `03_WB.cdl` / `03_WB.ccc` | WB as ASC CDL Color Corrector |
 | `03_WB.dctl` | WB as DCTL (exact 3×3) |
-| `04_ODT_Rec709.cube` | Rec.709 ODT (no WB) |
+| `04_ODT_Rec709.cube` | 709 预览 (BT.709 OETF, not ACES OT) |
 | `README_RESOLVE.md` | This file |
 
 M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
@@ -890,8 +907,12 @@ def export_resolve_bundle(
     ))
     _w("02_Exposure.cube", exposure_cube_bytes(exposure_stops if exposure_enabled else 0.0))
     _w("02_Exposure.dctl", format_exposure_dctl(exposure_stops if exposure_enabled else 0.0))
-    # Knobs (cct) stay in XML/README; CAT files use effective_wb_cct
+    # Knobs (cct) stay in XML/README. CAT files use effective_wb_cct
     # so as-shot-unmoved exports identity (no double WB).
+    # WB off: identity CAT — do not bake the knob CCT into cube/DCTL/CDL.
+    if not include_wb:
+        cat_cct = None
+        cat_src = None
     _w("03_WB.cdl", format_cdl(cat_cct, tint, method, src_cct=cat_src))
     _w("03_WB.ccc", format_ccc(cat_cct, tint, method, src_cct=cat_src))
     _w("03_WB.dctl", format_dctl(cat_cct, tint, method, src_cct=cat_src))
@@ -900,3 +921,52 @@ def export_resolve_bundle(
     for idt_id in idt_ids:
         _w(f"01_IDT_{idt_id}.cube", idt_cube_bytes(idt_id, size=lut_size))
     return written
+
+
+@dataclass(frozen=True)
+class LockedResolveReport:
+    """Session-level Resolve package: locked IDTs only. Pending stay listed."""
+
+    written: tuple[Path, ...]
+    skipped: tuple[tuple[BatchClip, str], ...]
+
+    @property
+    def written_names(self) -> tuple[str, ...]:
+        return tuple(p.name for p in self.written)
+
+    @property
+    def skipped_reasons(self) -> dict[str, str]:
+        return {c.name: reason for c, reason in self.skipped}
+
+
+def export_locked_resolve_bundle(
+    dest,
+    clips: Sequence[BatchClip],
+    *,
+    graph: SerialGraph | None = None,
+    lut_size: int = 17,
+    method: str = "bradford",
+) -> LockedResolveReport:
+    """Write one session Resolve package for locked paired-IDT clips only.
+
+    Pending / unlocked stay listed with the existing Chinese reasons
+    (先选择成对 IDT / 先选择 Log 与色域) and never produce a file.
+    Same serial graph as ``export_resolve_bundle``. WB off = identity CAT.
+    """
+    plan = plan_locked_batch(clips)
+    if not plan.locked:
+        return LockedResolveReport(written=(), skipped=plan.skipped)
+    idt_ids: list[str] = []
+    seen: set[str] = set()
+    for clip in plan.locked:
+        if clip.idt and clip.idt not in seen:
+            seen.add(clip.idt)
+            idt_ids.append(clip.idt)
+    written = export_resolve_bundle(
+        dest,
+        idt_ids=idt_ids,
+        graph=graph,
+        lut_size=lut_size,
+        method=method,
+    )
+    return LockedResolveReport(written=tuple(written), skipped=plan.skipped)

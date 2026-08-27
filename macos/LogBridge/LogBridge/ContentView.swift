@@ -95,7 +95,7 @@ struct AdvancedPanel: View {
                         session.exportResolve()
                     }
                     .disabled(!session.canProcess)
-                    .help("Locked clips only. Pending stay listed. Does not require the whole bin.")
+                    .help("Locked clips only. Pending stay listed. 709 预览. 预览·非成片. Does not require the whole bin.")
                     if let reason = session.processBlockedReason {
                         Text(reason)
                             .font(.caption)

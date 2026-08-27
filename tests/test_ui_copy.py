@@ -102,6 +102,8 @@ def test_docs_name_the_review_locks():
     assert "先选择成对 IDT" in blob
     assert "首帧代理 EXR，不是整段、不是全精度成片" in blob
     assert "_ACES2065-1_proxy_frame0.exr" in blob
+    assert "709 预览" in blob
+    assert "先选择成对 IDT" in blob
 
 
 def test_exposure_inspector_and_preview_not_finished_picture():

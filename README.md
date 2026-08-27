@@ -127,9 +127,9 @@ Python: `from color.graph import SerialGraph`. Swift: `SerialGraph` + `NodeSlot`
 
 Export writes a serial **node graph**, not a prose sidecar: `graph.xml`, `graph.dot`, `01_IDT_<idt>.cube`, `02_Exposure.cube` / `.dctl`, `03_WB.cube` / `.cdl` / `.ccc` / `.dctl`, `04_ODT_Rec709.cube`, `README_RESOLVE.md`.
 
-Export default: **ACEScct** timeline / **ACES2065-1**. **处理已锁定片段** writes `{stem}_ACES2065-1_proxy_frame0.exr` (ACES2065-1 AP0 linear, first frame, 8-bit preview decode) — **首帧代理 EXR，不是整段、不是全精度成片.** It does **not** write ACEScct. **导出 ACEScct / EXR** in **高级** is the Resolve graph (LUT/XML), not a movie. Rec.709 ODT is an optional preview node (off by default). Rec.2100 HLG/PQ are optional ACES/BT.2100 OT nodes (unverified). Locked clips write even when other clips are still pending. Implemented (unverified).
+Export default: **ACEScct** timeline / **ACES2065-1**. **处理已锁定片段** writes `{stem}_ACES2065-1_proxy_frame0.exr` (ACES2065-1 AP0 linear, first frame, 8-bit preview decode) — **首帧代理 EXR，不是整段、不是全精度成片.** It does **not** write ACEScct. **导出 ACEScct / EXR** in **高级** is the Resolve graph (LUT/XML/DCTL/cube), not a movie. Rec.709 ODT is **709 预览** (DIY BT.709 OETF, not an ACES Output Transform), off by default. 预览·非成片. Rec.2100 HLG/PQ are optional ACES/BT.2100 OT nodes (unverified). Locked clips write even when other clips are still pending. WB off writes an identity CAT (no bake). Implemented (unverified).
 
-Python: `from color.resolve_export import export_resolve_bundle` (pass `graph=` or `include_wb=`). Swift: `ResolveExporter.export(to:clips:...)`. Status: implemented (unverified).
+Python: `from color.resolve_export import export_locked_resolve_bundle` (locked clips only; pending keep **先选择成对 IDT** / **先选择 Log 与色域**) or `export_resolve_bundle` (pass `graph=` or `include_wb=`). Swift: `ResolveExporter.export(to:clips:...)` on locked clips. Status: implemented (unverified).
 
 ## Preview vs full render
 

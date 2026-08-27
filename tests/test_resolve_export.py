@@ -7,8 +7,18 @@ import pytest
 
 from color.curves import linear_to_logc4, linear_to_slog3
 from color.pipeline import process_to_rec709
+from color.as_shot import WB_SOURCE_GREY
+from color.batch import (
+    REASON_PICK_LOG_GAMUT,
+    REASON_PICK_PAIRED_IDT,
+    BatchClip,
+)
+from color.graph import SerialGraph
 from color.resolve_export import (
+    REC709_CUBE_TITLE,
+    REC709_PREVIEW_LABEL,
     cdl_slope_offset_power,
+    export_locked_resolve_bundle,
     export_resolve_bundle,
     format_ccc,
     format_cdl,
@@ -17,7 +27,9 @@ from color.resolve_export import (
     format_graph_xml,
     format_readme,
     idt_to_acescct,
+    odt_cube_bytes,
     odt_from_acescct,
+    wb_cube_bytes,
     wb_in_aces2065,
     wb_in_acescct,
 )
@@ -205,4 +217,186 @@ def test_export_default_odt_off_acescct_deliverable(tmp_path: Path):
     assert "03_WB.dctl" in names
     dctl = (tmp_path / "03_WB.dctl").read_text(encoding="utf-8")
     assert "AP0" in dctl or "ACES2065-1" in dctl
+
+
+def _cube_rgb_lines(text: str) -> list[str]:
+    return [
+        ln
+        for ln in text.splitlines()
+        if ln.strip()
+        and not ln.startswith("#")
+        and not ln.startswith("TITLE")
+        and not ln.startswith("LUT_")
+        and not ln.startswith("DOMAIN")
+    ]
+
+
+def _dctl_cat_is_identity(text: str, atol: float = 1e-8) -> bool:
+    start = text.find("cat_ap0[9]")
+    if start < 0:
+        start = text.find("const float m[9]")
+    assert start >= 0, "DCTL is missing the AP0 CAT matrix"
+    brace = text.find("{", start)
+    end = text.find("}", brace)
+    nums = [
+        float(tok.replace("f", ""))
+        for tok in text[brace + 1 : end].replace("\n", " ").split(",")
+        if tok.strip()
+    ]
+    assert len(nums) == 9
+    ident = np.eye(3).reshape(-1)
+    return bool(np.allclose(nums, ident, atol=atol))
+
+
+def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
+    cleaned = (
+        text.replace("预览·非成片", "")
+        .replace("不是全精度成片", "")
+        .replace("不是成片", "")
+        .replace("成片预览关", "")
+    )
+    assert "成片" not in cleaned
+    assert "精准" not in cleaned
+    assert "一键还原" not in cleaned
+    assert "一键校准" not in cleaned
+
+
+def test_unlocked_never_exported(tmp_path: Path):
+    clips = [
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+        BatchClip("empty.mov"),
+        BatchClip("stub.mov", idt="future", is_stub=True),
+    ]
+    dest = tmp_path / "empty_pkg"
+    report = export_locked_resolve_bundle(dest, clips, lut_size=5)
+    assert report.written == ()
+    assert not dest.exists()
+    assert report.skipped_reasons["pending.mov"] == REASON_PICK_PAIRED_IDT
+    assert report.skipped_reasons["empty.mov"] == REASON_PICK_LOG_GAMUT
+    assert report.skipped_reasons["stub.mov"] == REASON_PICK_PAIRED_IDT
+
+
+def test_locked_session_package_skips_pending(tmp_path: Path):
+    clips = [
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("also.mov", idt="arri_logc4_awg4"),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+        BatchClip("empty.mov"),
+    ]
+    dest = tmp_path / "pkg"
+    report = export_locked_resolve_bundle(dest, clips, lut_size=5)
+    names = set(report.written_names)
+    assert "graph.xml" in names
+    assert "03_WB.dctl" in names
+    assert "04_ODT_Rec709.cube" in names
+    assert "01_IDT_sony_slog3_sgamut3.cube" in names
+    assert "01_IDT_arri_logc4_awg4.cube" in names
+    assert not any("pending" in n for n in names)
+    assert not any("empty" in n for n in names)
+    assert report.skipped_reasons["pending.mov"] == REASON_PICK_PAIRED_IDT
+    assert report.skipped_reasons["empty.mov"] == REASON_PICK_LOG_GAMUT
+    xml = (dest / "graph.xml").read_text(encoding="utf-8")
+    assert "sony_slog3_sgamut3" in xml
+    assert "arri_logc4_awg4" in xml
+    assert "pending.mov" not in xml
+
+
+def test_wb_off_has_no_baked_cat(tmp_path: Path):
+    """WB off + grey-card CCT must not bake CAT(user) into DCTL/cube/CDL."""
+    g = SerialGraph(
+        idt_id="arri_logc4_awg4",
+        wb_enabled=False,
+        wb_cct=3200.0,
+        wb_tint=0.4,
+        wb_source=WB_SOURCE_GREY,
+    )
+    assert g.effective_wb_cct == pytest.approx(3200.0)
+    export_resolve_bundle(tmp_path / "off", idt_ids=["arri_logc4_awg4"], graph=g, lut_size=5)
+    off_dctl = (tmp_path / "off" / "03_WB.dctl").read_text(encoding="utf-8")
+    off_cube = (tmp_path / "off" / "03_WB.cube").read_text(encoding="utf-8")
+    off_cdl = (tmp_path / "off" / "03_WB.cdl").read_text(encoding="utf-8")
+    xml = (tmp_path / "off" / "graph.xml").read_text(encoding="utf-8")
+    assert 'name="WB" type="Corrector" bypassable="true" enabled="false"' in xml
+    assert _dctl_cat_is_identity(off_dctl)
+    identity_cube = wb_cube_bytes(None, 0.0, size=5)
+    assert _cube_rgb_lines(off_cube) == _cube_rgb_lines(identity_cube)
+    baked = wb_cube_bytes(3200.0, 0.4, size=5)
+    assert _cube_rgb_lines(off_cube) != _cube_rgb_lines(baked)
+    assert "<Slope>1.0000000000 1.0000000000 1.0000000000</Slope>" in off_cdl
+
+    export_resolve_bundle(
+        tmp_path / "flag",
+        idt_ids=["arri_logc4_awg4"],
+        include_wb=False,
+        cct=3200.0,
+        tint=0.4,
+        lut_size=5,
+    )
+    flag_dctl = (tmp_path / "flag" / "03_WB.dctl").read_text(encoding="utf-8")
+    assert _dctl_cat_is_identity(flag_dctl)
+    xml_flag = (tmp_path / "flag" / "graph.xml").read_text(encoding="utf-8")
+    assert 'enabled="false"' in xml_flag
+
+    on = SerialGraph(
+        idt_id="arri_logc4_awg4",
+        wb_enabled=True,
+        wb_cct=3200.0,
+        wb_tint=0.4,
+        wb_source=WB_SOURCE_GREY,
+    )
+    export_resolve_bundle(tmp_path / "on", idt_ids=["arri_logc4_awg4"], graph=on, lut_size=5)
+    on_dctl = (tmp_path / "on" / "03_WB.dctl").read_text(encoding="utf-8")
+    on_cube = (tmp_path / "on" / "03_WB.cube").read_text(encoding="utf-8")
+    assert not _dctl_cat_is_identity(on_dctl)
+    assert _cube_rgb_lines(on_cube) == _cube_rgb_lines(baked)
+
+
+def test_709_cube_labeled_preview_not_aces_ot(tmp_path: Path):
+    export_resolve_bundle(tmp_path, idt_ids=["arri_logc4_awg4"], lut_size=5)
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
+    readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
+    assert REC709_PREVIEW_LABEL in cube
+    assert REC709_CUBE_TITLE in cube
+    assert "ACES Output Transform" not in cube.replace("Not an ACES Output Transform", "")
+    assert "ACES OT" not in cube.replace("not ACES OT", "")
+    assert "成片" not in cube.replace("预览·非成片", "")
+    assert REC709_PREVIEW_LABEL in xml
+    assert 'type="ACES_OT"' not in xml
+    assert "Not an ACES Output Transform" in xml
+    assert "预览·非成片" in xml
+    assert REC709_PREVIEW_LABEL in readme
+    assert "Not an ACES Output Transform" in readme
+    generated = odt_cube_bytes(size=5)
+    assert generated.splitlines()[0] == f'TITLE "{REC709_CUBE_TITLE}"'
+    _assert_chengpian_not_a_deliverable_claim(cube)
+    _assert_chengpian_not_a_deliverable_claim(xml)
+    _assert_chengpian_not_a_deliverable_claim(readme)
+
+
+def test_resolve_copy_has_no_precision_or_chengpian_claims(tmp_path: Path):
+    written = export_resolve_bundle(
+        tmp_path, idt_ids=["arri_logc4_awg4"], include_wb=False, lut_size=5
+    )
+    blob = "\n".join(p.read_text(encoding="utf-8") for p in written)
+    _assert_chengpian_not_a_deliverable_claim(blob)
+    assert "implemented (unverified)" in blob.lower() or "已实现（未验证）" in blob
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    clip = (root / "macos/LogBridge/LogBridge/Models/Clip.swift").read_text(encoding="utf-8")
+    idt_fn = swift.split("func uniqueImplementedIDTs")[1].split("ap0ToXYZ")[0]
+    assert "hasLockedPair" in idt_fn
+    assert "includeWBNode" in swift
+    assert "matrixCCT = nil" in swift
+    assert REC709_PREVIEW_LABEL in swift
+    assert "not ACES OT" in swift
+    export_fn = clip.split("func exportResolve()")[1]
+    assert "先选择成对 IDT" in export_fn
+    assert "先选择 Log 与色域" in export_fn
+    _assert_chengpian_not_a_deliverable_claim(
+        swift.split("enum ResolveExporter")[1].split("First-frame ACES2065-1")[0]
+    )
+    _assert_chengpian_not_a_deliverable_claim(export_fn)
 

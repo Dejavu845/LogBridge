@@ -54,9 +54,11 @@ Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable colo
 ## Resolve export — WB toggle
 
 - Export is a Resolve-importable graph (`graph.xml` / `graph.dot`) plus `01_IDT_*.cube`, `02_Exposure.{cube,dctl}`, `03_WB.{cube,cdl,ccc,dctl}`, `04_ODT_Rec709.cube` — not a prose sidecar only.
-- **Exposure is its own 1D/gain node** (Color page serial node 2). **WB is its own corrector/node** (Color page serial node 3). Disable it, or tick DCTL **Bypass WB**, or skip `02_WB.cube` / the CDL.
+- **Locked paired-IDT clips only** (session package). Pending stay listed with **先选择成对 IDT** / **先选择 Log 与色域**. Never guess an IDT or 5600/6504. Python: `export_locked_resolve_bundle`. Swift: `ResolveExporter.export` on `lockedClips`.
+- **Exposure is its own 1D/gain node** (Color page serial node 2). **WB is its own corrector/node** (Color page serial node 3). Disable it, or tick DCTL **Bypass WB**, or skip `03_WB.cube` / the CDL.
+- **WB off = identity / no-op bake.** Do not write a CAT into the DCTL / cube / CDL when WB is bypassed (`graph.xml` `enabled="false"`; cube/DCTL are identity).
 - WB is a linear AP0 Bradford/CAT02 3×3 (or DI-free DCTL on ACES2065-1 / ACEScct-decoded-to-linear), not baked into the IDT or Rec.709 cubes.
-- Standard deliverable is **ACEScct or ACES2065-1 EXR / ACES workflow** (**导出 ACEScct / EXR**). Rec.709 is preview only (node 3 off by default). Rec.2100 HLG/PQ are optional ACES/BT.2100 OT (unverified). Remaining graph when WB is off: IDT → ACEScct, no bake.
+- Standard deliverable is **ACEScct or ACES2065-1 EXR / ACES workflow** (**导出 ACEScct / EXR**). Rec.709 cube is **709 预览** (DIY BT.709 OETF, no RRT) — never an ACES Output Transform. 预览·非成片. Rec.2100 HLG/PQ are optional ACES/BT.2100 OT (unverified). Remaining graph when WB is off: IDT → ACEScct, no bake.
 
 Gate: open the export in Resolve; bypassing the WB node must restore uncorrected camera linear (after IDT). Implemented (unverified).
 

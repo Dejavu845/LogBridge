@@ -513,16 +513,18 @@ final class SessionModel: ObservableObject {
     func exportResolve() {
         guard canProcess else {
             lastExportNote = processBlockedReason
+                ?? clips.first?.processSkipReason
                 ?? "先选择 Log 与色域"
             return
         }
         let locked = lockedClips
+        let skipped = clips.filter { !$0.hasLockedPair }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "Export"
-        panel.message = "Folder for the Resolve node graph (LUT / CDL / DCTL). Locked clips only; pending stay listed."
+        panel.message = "已锁定片段写出 Resolve 节点图（XML / DCTL / .cube）。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。预览·非成片。已实现（未验证）。"
         panel.begin { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
             do {
@@ -540,12 +542,14 @@ final class SessionModel: ObservableObject {
                     exposureStops: self.graph.exposureStops,
                     exposureEnabled: self.graph.exposureEnabled
                 )
-                self.lastExportNote = ResolveExporter.exportNote(
+                var note = ResolveExporter.exportNote(
                     clips: locked,
                     includeWBNode: self.graph.wbEnabled,
                     cct: self.graph.wbCCT,
                     tint: self.graph.wbTint
-                ) + "\nWrote \(written.count) files to \(url.path)"
+                )
+                note += "\nWrote \(written.count) files to \(url.path). \(locked.count) 条已锁定 / \(skipped.count) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。预览·非成片。已实现（未验证）。"
+                self.lastExportNote = note
             } catch {
                 self.lastExportNote = "Export failed: \(error.localizedDescription)"
             }

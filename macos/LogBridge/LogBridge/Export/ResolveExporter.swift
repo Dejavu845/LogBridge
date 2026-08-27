@@ -24,8 +24,9 @@ enum ResolveExporter {
         lines.append("Working space: ACEScct timeline / ACES2065-1 interchange.")
         let cctLabel = cct.map { "\(Int($0)) K" } ?? "pending / identity (do not guess 5600 or 6504)"
         lines.append("WB node: \(includeWBNode ? "ON (AP0 Bradford CAT, \(cctLabel), tint \(tint))" : "present, bypassed by default")")
-        lines.append("ODT: Rec.709 is preview only, off by default. Off = ACEScct deliverable.")
+        lines.append("ODT: 709 预览 (BT.709 OETF preview, not ACES OT), off by default. Off = ACEScct deliverable. 预览·非成片.")
         lines.append("Files: graph.xml, graph.dot, 01_IDT_*.cube, 02_Exposure.{cube,dctl}, 03_WB.{cube,cdl,ccc,dctl}, 04_ODT_Rec709.cube, README_RESOLVE.md")
+        lines.append("Locked paired-IDT clips only. Pending stay listed (先选择成对 IDT / 先选择 Log 与色域).")
         lines.append("Exposure is its own node (stops; not baked into IDT/WB at 0). Bypass WB: disable WB node (or DCTL Bypass WB).")
         lines.append("Clips:")
         for clip in clips {
@@ -57,7 +58,16 @@ enum ResolveExporter {
         var written: [URL] = []
         // Knobs (`cct`) stay in XML/README. CAT files use effective CCT so
         // as-shot-unmoved exports identity (no double WB).
-        let matrixCCT = useEffectiveCAT ? catCCT : cct
+        // WB off: identity CAT — do not bake the knob CCT into cube/DCTL/CDL.
+        let matrixCCT: Double?
+        let matrixSrc: Double?
+        if includeWBNode {
+            matrixCCT = useEffectiveCAT ? catCCT : cct
+            matrixSrc = srcCCT
+        } else {
+            matrixCCT = nil
+            matrixSrc = nil
+        }
 
         func write(_ name: String, _ body: String) throws {
             let url = directory.appendingPathComponent(name)
@@ -70,10 +80,10 @@ enum ResolveExporter {
         try write("graph.dot", graphDOT(idts: idts, cct: cct, tint: tint, includeWB: includeWBNode, exposureStops: exposureStops))
         try write("02_Exposure.cube", exposureCube(stops: exposureEnabled ? exposureStops : 0))
         try write("02_Exposure.dctl", exposureDCTL(stops: exposureEnabled ? exposureStops : 0))
-        try write("03_WB.cdl", cdlXML(cct: matrixCCT, tint: tint, collection: false, srcCCT: srcCCT, srcTint: srcTint))
-        try write("03_WB.ccc", cdlXML(cct: matrixCCT, tint: tint, collection: true, srcCCT: srcCCT, srcTint: srcTint))
-        try write("03_WB.dctl", dctl(cct: matrixCCT, tint: tint, srcCCT: srcCCT, srcTint: srcTint))
-        try write("03_WB.cube", wbCube(cct: matrixCCT, tint: tint, size: lutSize, srcCCT: srcCCT, srcTint: srcTint))
+        try write("03_WB.cdl", cdlXML(cct: matrixCCT, tint: tint, collection: false, srcCCT: matrixSrc, srcTint: srcTint))
+        try write("03_WB.ccc", cdlXML(cct: matrixCCT, tint: tint, collection: true, srcCCT: matrixSrc, srcTint: srcTint))
+        try write("03_WB.dctl", dctl(cct: matrixCCT, tint: tint, srcCCT: matrixSrc, srcTint: srcTint))
+        try write("03_WB.cube", wbCube(cct: matrixCCT, tint: tint, size: lutSize, srcCCT: matrixSrc, srcTint: srcTint))
         try write("04_ODT_Rec709.cube", odtCube(size: lutSize))
         for idt in idts {
             try write("01_IDT_\(idt.rawValue).cube", idtCube(idt: idt, size: lutSize))
@@ -105,7 +115,7 @@ enum ResolveExporter {
         var seen = Set<IDT>()
         var out: [IDT] = []
         for clip in clips {
-            guard let idt = clip.idt, !idt.isStub else { continue }
+            guard clip.hasLockedPair, let idt = clip.idt, !idt.isStub else { continue }
             if seen.insert(idt).inserted {
                 out.append(idt)
             }
@@ -367,14 +377,17 @@ enum ResolveExporter {
 
     // MARK: - .cube (Adobe/IRIDAS: R fastest, then G, then B)
 
-    private static func cubeFile(title: String, size: Int, map: (SIMD3<Double>) -> SIMD3<Double>) -> String {
+    private static func cubeFile(title: String, size: Int, extraComments: [String] = [], map: (SIMD3<Double>) -> SIMD3<Double>) -> String {
         var lines: [String] = [
             "TITLE \"\(title)\"",
-            "# LogBridge M1 — implemented (unverified). Not a camera-support claim.",
+            "# LogBridge M1 — implemented (unverified). Not a camera-support claim."
+        ]
+        lines.append(contentsOf: extraComments)
+        lines.append(contentsOf: [
             "LUT_3D_SIZE \(size)",
             "DOMAIN_MIN 0.0 0.0 0.0",
             "DOMAIN_MAX 1.0 1.0 1.0"
-        ]
+        ])
         if size > 1 {
             let den = Double(size - 1)
             for bi in 0..<size {
@@ -404,7 +417,13 @@ enum ResolveExporter {
     }
 
     private static func odtCube(size: Int) -> String {
-        cubeFile(title: "LogBridge ODT ACEScct → Rec.709 (no WB)", size: size) {
+        cubeFile(
+            title: "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)",
+            size: size,
+            extraComments: [
+                "# 709 预览. 预览·非成片. DIY BT.709 OETF preview. Not an ACES Output Transform / RRT."
+            ]
+        ) {
             odtFromACEScct($0)
         }
     }
@@ -643,7 +662,7 @@ enum ResolveExporter {
             <File role="dctl">03_WB.dctl</File>
           </Node>
           <Node index="4" name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="\(odtOn)">
-            <Description>Rec.709 preview ODT only. Not the standard deliverable. Off = ACEScct deliverable (or ACES2065-1 EXR). Not a finished picture.</Description>
+            <Description>Rec.709 预览 preview ODT only (BT.709 OETF, no RRT). Not an ACES Output Transform. 预览·非成片. Off = ACEScct deliverable (or ACES2065-1 EXR). Not a finished picture.</Description>
             <File role="lut">04_ODT_Rec709.cube</File>
             <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" outputColorSpace="Rec.709" outputGamma="Rec.709"/>
           </Node>
@@ -667,7 +686,7 @@ enum ResolveExporter {
           idt  [label="IDT\\n\(idtLabel)\\n01_IDT_<idt>.cube\\nor ACES IDT / CST → ACEScct"];
           exp  [label="Exposure (zeroable)\\n\(String(format: "%+.2f", exposureStops)) stops\\n02_Exposure.cube / .dctl"];
           wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n\(cctLabel(cct))  tint \(tint)\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,\(wbStyle)", fillcolor="\(wbFill)"];
-          odt  [label="Rec.709 ODT (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709"];
+          odt  [label="709 预览 (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\nBT.709 OETF, not ACES OT"];
           timeline [shape=oval, label="Timeline\\nACEScct"];
 
           clip -> idt -> exp -> wb -> odt;
@@ -687,7 +706,7 @@ enum ResolveExporter {
 
         ## Graph (serial nodes)
 
-        Standard Resolve deliverable: **ACEScct** timeline or **ACES2065-1** EXR / ACES workflow. Rec.709 is preview only.
+        Standard Resolve deliverable: **ACEScct** timeline or **ACES2065-1** EXR / ACES workflow. Rec.709 is **709 预览** only (not ACES OT).
 
         1. **IDT** — `01_IDT_<idt>.cube` or Color Space Transform
            - Input: camera log / camera gamut (`\(idtList)`)
@@ -700,9 +719,9 @@ enum ResolveExporter {
            - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
            - CCT \(cctLabel(cct)), tint \(tint), method Bradford. As-shot fills knobs (UI only); default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT is pending / identity (do not guess 5600 or 6504). Scene-linear only.
 
-        3. **Rec.709 preview** — `04_ODT_Rec709.cube` or CST
+        3. **709 预览** — `04_ODT_Rec709.cube` or CST
            - Optional preview node, off by default. Off = ACEScct deliverable.
-           - BT.709 OETF, no RRT. Not the standard deliverable.
+           - DIY BT.709 OETF, preview only, no RRT. Not an ACES Output Transform. 预览·非成片.
 
         ## How to bypass WB in Resolve
 
@@ -710,7 +729,7 @@ enum ResolveExporter {
 
         - Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or ACES IDT / CST camera → ACEScct).
         - Apply **WB** (node 3: LUT `03_WB.cube`, **or** DCTL `03_WB.dctl`, **or** import `03_WB.cdl` onto a Color Corrector).
-        - Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) if you need a 709 viewing/output node.
+        - Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) if you need a **709 预览** viewing node (not ACES OT). 预览·非成片.
 
         To bypass WB: disable node 2 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). Remaining graph: **IDT → ACEScct**, no bake.
 
@@ -724,7 +743,7 @@ enum ResolveExporter {
         | `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |
         | `03_WB.cdl` / `03_WB.ccc` | WB as ASC CDL Color Corrector |
         | `03_WB.dctl` | WB as DCTL (exact 3×3) |
-        | `04_ODT_Rec709.cube` | Rec.709 ODT (no WB) |
+        | `04_ODT_Rec709.cube` | 709 预览 (BT.709 OETF, not ACES OT) |
         | `README_RESOLVE.md` | This file |
 
         M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
