@@ -132,3 +132,14 @@ def test_as_shot_wb_copy_and_no_5600_guess():
     assert "Grey-card" in blob or "grey-card" in blob
     assert "nclc" in blob.lower()
     assert "pending / identity" in blob.lower() or "pending / identity" in inspector.lower()
+
+
+def test_idt_bar_always_visible_no_hidden_picker():
+    content = _read(CONTENT)
+    inspector = _read(INSPECTOR)
+    strip = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/NodeStripView.swift")
+    assert "PairedIDTBar" in content
+    assert "成对 IDT" in inspector
+    assert 'Button("Apply graph")' not in strip
+    assert "确认估计" in inspector
+    assert "估计白平衡" in inspector

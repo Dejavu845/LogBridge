@@ -1,6 +1,56 @@
 import SwiftUI
 
 /// Parameters for the selected serial node. WB bypass matches Resolve export.
+
+/// Always visible. Do not bury the paired IDT picker in an advanced pane.
+struct PairedIDTBar: View {
+    @ObservedObject var session: SessionModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("成对 IDT")
+                    .font(.subheadline.weight(.semibold))
+                Text("先选 Log 与色域，才能处理")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            if let clip = session.selectedClip {
+                // One locked pair per row. Never two independent curve/gamut dropdowns.
+                Picker("Paired IDT", selection: Binding(
+                    get: { clip.idt },
+                    set: { newValue in
+                        if let idt = newValue {
+                            session.setIDT(clip.id, idt)
+                        }
+                    }
+                )) {
+                    Text("— 先选择成对 IDT —").tag(Optional<IDT>.none)
+                    ForEach(clip.pickerPairs) { pair in
+                        Text(pair.pairLabel).tag(Optional(pair))
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 420)
+                if clip.isPending {
+                    Text("先选择 Log 与色域")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            } else {
+                Text("先点一条素材。读不到元数据就在这里选成对 IDT，不猜。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.06))
+    }
+}
+
 struct InspectorView: View {
     @ObservedObject var session: SessionModel
 
@@ -43,7 +93,7 @@ private struct IDTInspector: View {
                 .foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Paired IDT")
+                    Text("成对 IDT")
                         .font(.caption.weight(.semibold))
                     // One locked pair per row. Never two independent curve/gamut dropdowns.
                     Picker("Paired IDT", selection: Binding(
@@ -54,7 +104,7 @@ private struct IDTInspector: View {
                             }
                         }
                     )) {
-                        Text("— pick a paired IDT —").tag(Optional<IDT>.none)
+                        Text("— 先选择成对 IDT —").tag(Optional<IDT>.none)
                         ForEach(clip.pickerPairs) { pair in
                             Text(pair.pairLabel).tag(Optional(pair))
                         }
@@ -66,7 +116,7 @@ private struct IDTInspector: View {
                         .foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Status")
+                    Text("状态")
                         .font(.caption.weight(.semibold))
                     Text(clip.verificationBadge)
                         .font(.caption2)
@@ -74,23 +124,23 @@ private struct IDTInspector: View {
                         .padding(.vertical, 2)
                         .background(clip.isPending ? Color.yellow.opacity(0.28) : Color.orange.opacity(0.2))
                         .clipShape(Capsule())
-                    Text("source: \(clip.detectionSource.rawValue)")
+                    Text("来源：\(clip.detectionSource.rawValue)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     if clip.veniceDetected {
-                        Text("Venice detected")
+                        Text("检测到 Venice")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
             if clip.isPending {
-                Text("先选择 Log 与色域. This clip is pending. Process selected / Apply graph and export are blocked until a locked pair is chosen. Never a silent S-Gamut3.Cine default.")
+                Text("先选择 Log 与色域。没锁成对 IDT 不能处理、不能导出。不默认 Cine。")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
         } else {
-            Text("Select a clip. Missing metadata needs a paired IDT — no silent default, no two dropdowns.")
+            Text("先点一条素材。读不到元数据就选成对 IDT，不猜，不用两个下拉。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -101,7 +151,7 @@ private struct WBInspector: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        Toggle("Enable WB (node 3). Off = bypass, no bake in preview or Resolve export.", isOn: Binding(
+        Toggle("启用白平衡（可旁路，不烘焙）", isOn: Binding(
             get: { session.graph.wbEnabled },
             set: { session.setWBEnabled($0) }
         ))
@@ -110,7 +160,7 @@ private struct WBInspector: View {
             WBStateChip(title: "白平衡（估计）", on: session.graph.wbSource == .estimate)
             WBStateChip(title: "灰卡", on: session.graph.wbSource == .grey)
             if session.graph.asShotUnknown {
-                Text("as-shot unknown")
+                Text("机内未知")
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -119,20 +169,20 @@ private struct WBInspector: View {
             }
         }
         if session.graph.asShotUnknown {
-            Text("No camera-private CCT. WB stays pending / identity — do not guess 5600 or 6504. Pick a grey card (after IDT, AP0 linear) or set CCT.")
+            Text("读不到机内色温。pending / identity — do not guess 5600 or 6504。点灰卡（after IDT, ACES2065-1 (AP0) linear）或手填。implemented (unverified)。")
                 .font(.caption)
                 .foregroundStyle(.orange)
         }
-        Button(session.pickingNeutral ? "Click preview to pick neutral…" : "Pick neutral") {
+        Button(session.pickingNeutral ? "在预览上点灰卡…" : "点灰卡") {
             session.pickingNeutral.toggle()
         }
-        .help("Grey-card click: sample after IDT in ACES2065-1 (AP0) linear; overrides metadata. Writes the existing CAT node.")
+        .help("Pick neutral / 点灰卡: sample after IDT in ACES2065-1 (AP0) linear; overrides metadata. Writes the existing CAT node.")
         Button("估计白平衡") {
             session.proposeAutoWB()
         }
         .help("白平衡（估计）: SoG p=6 in ACEScg after IDT. Does not write CAT. Low confidence stays empty. Not 精准.")
         if session.graph.autoWBCCT != nil {
-            Text("白平衡（估计） \(Int(session.graph.autoWBCCT ?? 0)) K — confirm to write absolute CAT")
+            Text("白平衡（估计） \(Int(session.graph.autoWBCCT ?? 0)) K — 确认后才写入，一点不会写入")
                 .font(.caption)
             Button("确认估计") {
                 session.confirmAutoWB()
@@ -150,7 +200,7 @@ private struct WBInspector: View {
                     in: 2000...10000,
                     step: 10
                 )
-                Text(session.graph.wbCCT.map { "\(Int($0)) K" } ?? "as-shot unknown")
+                Text(session.graph.wbCCT.map { "\(Int($0)) K" } ?? "机内未知")
                     .monospacedDigit()
                     .frame(width: 88, alignment: .trailing)
             }
@@ -234,13 +284,13 @@ private struct ExposureInspector: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        Toggle("Enable Exposure (node 2). Off / 0 stops = identity, not baked into IDT or WB.", isOn: Binding(
+        Toggle("启用曝光（0 档 = 不动）", isOn: Binding(
             get: { session.graph.exposureEnabled },
             set: { session.setExposureEnabled($0) }
         ))
         if session.graph.exposureEnabled {
             HStack {
-                Text("Stops")
+                Text("档（Stops）")
                     .frame(width: 48, alignment: .leading)
                 Slider(
                     value: Binding(

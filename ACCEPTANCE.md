@@ -133,3 +133,9 @@ Decode policy only. No color-number changes. Do **not** write 全格式已支持
 - Block process when IDT is unlocked **cannot be turned off**.
 - No 精准 / 一键还原 / 全自动校准. Color numbers do not change.
 
+## UI (Chinese, one path)
+
+- Paired IDT picker stays visible (not buried in Advanced). One paired list, not two dropdowns.
+- Node strip labels are Chinese: 输入 → 曝光 → 白平衡 → 输出. One primary process button.
+- Estimate WB is two steps (估计 then 确认). A single tap does not write CAT.
+

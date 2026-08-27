@@ -17,10 +17,10 @@ enum NodeSlot: Int, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .idt: return "IDT"
-        case .exposure: return "Exposure"
-        case .wb: return "WB"
-        case .odt: return "ODT"
+        case .idt: return "输入"
+        case .exposure: return "曝光"
+        case .wb: return "白平衡"
+        case .odt: return "输出"
         }
     }
 
@@ -35,10 +35,10 @@ enum NodeSlot: Int, CaseIterable, Identifiable, Hashable {
 
     var subtitle: String {
         switch self {
-        case .idt: return "curve + gamut"
-        case .exposure: return "stops (linear gain)"
-        case .wb: return "scene-linear CAT"
-        case .odt: return "Off / 709 / HLG / PQ"
+        case .idt: return "Log + 色域"
+        case .exposure: return "档（线性增益）"
+        case .wb: return "线性 CAT"
+        case .odt: return "关 / 709 / HLG / PQ"
         }
     }
 
@@ -58,8 +58,8 @@ enum ODTMode: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .off: return "Off (ACEScct)"
-        case .rec709: return "Rec.709 preview"
+        case .off: return "关（ACEScct）"
+        case .rec709: return "Rec.709 预览"
         case .hlg: return "Rec.2100 HLG"
         case .pq: return "Rec.2100 PQ"
         }
