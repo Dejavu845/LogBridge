@@ -170,7 +170,7 @@ struct StatusBar: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .help(SessionModel.revealInFinderLabel)
-                    Button(SessionModel.revealInFinderLabel) {
+                    Button("在 Finder 中显示") {
                         session.revealLastExportInFinder()
                     }
                     .buttonStyle(.plain)

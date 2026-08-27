@@ -213,7 +213,8 @@ def test_unlocked_never_write_locked_writes_and_counter(tmp_path: Path):
     assert report.skipped_count == 3
     assert "1 条已处理" in report.processed_status_text
     assert "3 条已跳过" in report.processed_status_text
-    assert processed_status_text(1, 3) == report.processed_status_text
+    assert processed_status_text(1, 3, tmp_path) == report.processed_status_text
+    assert short_export_path(tmp_path) in report.processed_status_text
     assert (tmp_path / deliverable_name("locked.mov")).is_file()
     assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
     assert not (tmp_path / deliverable_dir_name("empty.mov")).exists()
