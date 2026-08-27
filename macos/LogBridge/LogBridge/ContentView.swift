@@ -162,9 +162,23 @@ struct StatusBar: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             if !session.lastExportNote.isEmpty {
-                Text(session.lastExportNote)
+                if session.canRevealLastExport {
+                    Button(session.lastExportNote) {
+                        session.revealLastExportInFinder()
+                    }
+                    .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .help(SessionModel.revealInFinderLabel)
+                    Button("在 Finder 中显示") {
+                        session.revealLastExportInFinder()
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(session.lastExportNote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
         }

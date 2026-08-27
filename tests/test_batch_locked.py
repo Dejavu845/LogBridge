@@ -14,12 +14,14 @@ from color.batch import (
     DELIVERABLE_SUFFIX,
     FOLDER_PICKER_MESSAGE,
     HONEST_PROXY_NOTE,
+    LAST_EXPORT_DIRECTORY_KEY,
     PROCESS_BUTTON,
     PROCESS_BUTTON_HELP,
     PROCESSED_STATUS_TEMPLATE,
     PROGRESS_PREFIX,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
+    REVEAL_IN_FINDER,
     BatchClip,
     cancelled_status_text,
     confirm_auto_wb,
@@ -35,6 +37,7 @@ from color.batch import (
     progress_text,
     propose_auto_wb,
     sequence_frame_name,
+    short_export_path,
     skip_reason,
 )
 from color.curves import linear_to_slog3
@@ -210,7 +213,8 @@ def test_unlocked_never_write_locked_writes_and_counter(tmp_path: Path):
     assert report.skipped_count == 3
     assert "1 条已处理" in report.processed_status_text
     assert "3 条已跳过" in report.processed_status_text
-    assert processed_status_text(1, 3) == report.processed_status_text
+    assert processed_status_text(1, 3, tmp_path) == report.processed_status_text
+    assert short_export_path(tmp_path) in report.processed_status_text
     assert (tmp_path / deliverable_name("locked.mov")).is_file()
     assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
     assert not (tmp_path / deliverable_dir_name("empty.mov")).exists()
@@ -555,6 +559,9 @@ def test_cancel_removes_in_progress_folder_keeps_completed(tmp_path: Path):
     assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
     assert CANCELLED_NOTE in report.processed_status_text
     assert HONEST_PROXY_NOTE in report.processed_status_text
+    assert report.last_reveal_paths == ()
+    assert REVEAL_IN_FINDER not in report.processed_status_text
+    assert short_export_path(tmp_path) not in report.processed_status_text
     _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
     assert any(n.startswith("写出代理 1/2") for n in notes)
     assert any("frame" in n for n in notes)
@@ -562,3 +569,60 @@ def test_cancel_removes_in_progress_folder_keeps_completed(tmp_path: Path):
     export_body = clip.split("func exportLockedEXR")[1].split("func cancelLockedDeliverables")[0]
     assert "LockedWriteCancel" in export_body
     assert "removeItem(at: seqDir)" in export_body
+
+
+def test_last_export_folder_and_finder_reveal(tmp_path: Path):
+    """Last dest is remembered. Finder reveal is success-only. 成片 is not a success claim."""
+    assert REVEAL_IN_FINDER == "在 Finder 中显示"
+    assert LAST_EXPORT_DIRECTORY_KEY == "logbridge.lastExportDirectory"
+    dest = tmp_path / "Exports"
+    dest.mkdir()
+    assert short_export_path(dest) == "Exports"
+    clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3")]
+    report = process_locked_writes(clips, dest, frames={"locked.mov": _slog3_grey()})
+    assert report.cancelled is False
+    assert report.written
+    assert short_export_path(dest) in report.processed_status_text
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    assert report.last_reveal_paths == report.written_paths
+    assert all(Path(p).name.endswith("_ACES2065-1_proxy") for p in report.last_reveal_paths)
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+    _assert_chengpian_not_a_deliverable_claim(REVEAL_IN_FINDER)
+
+    settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/AppSettings.swift")
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    assert LAST_EXPORT_DIRECTORY_KEY in settings
+    assert "lastExportDirectoryPath" in settings
+    assert "lastExportDirectoryURL" in settings
+    assert "rememberExportDirectory" in settings
+    assert "directoryURL" in clip.split("func processLockedClips()")[1].split(
+        "func writeLockedDeliverables"
+    )[0]
+    assert "rememberExportDirectory" in clip.split("func processLockedClips()")[1]
+    write_body = clip.split("func writeLockedDeliverables")[1].split("func exportLockedEXR")[0]
+    assert "lastExportRevealURLs" in write_body
+    assert "shortExportPath" in write_body
+    assert "cancelled" in write_body
+    assert REVEAL_IN_FINDER in clip
+    assert "revealLastExportInFinder" in clip
+    assert "activateFileViewerSelecting" in clip
+    assert "canRevealLastExport" in clip
+    assert REVEAL_IN_FINDER in content
+    assert "revealLastExportInFinder" in content
+    assert "canRevealLastExport" in content
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "处理已锁定片段" in bar
+    status = content.split("struct StatusBar")[1]
+    assert 'Button("处理已锁定片段")' not in status
+    assert REVEAL_IN_FINDER in status
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert REVEAL_IN_FINDER in readme
+    assert REVEAL_IN_FINDER in acceptance
+    assert LAST_EXPORT_DIRECTORY_KEY.split(".")[-1] in clip or "lastExportDirectory" in clip
+    _assert_chengpian_not_a_deliverable_claim(write_body)
+    _assert_chengpian_not_a_deliverable_claim(content)
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)
