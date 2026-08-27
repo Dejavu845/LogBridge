@@ -342,7 +342,14 @@ def estimate_locked_proxy_bytes(
     clips: Sequence[BatchClip],
     frames: dict[str, np.ndarray | Sequence[np.ndarray]] | None = None,
 ) -> ProxyDiskEstimate:
-    """Sum locked clips only. Pending / unlocked add nothing."""
+    """Sum locked clips only. Pending / unlocked add nothing.
+
+    When ``frames`` is passed (a real write), only clips with RGB frames
+    are counted — missing pixels error without a folder and must not
+    invent a 4K×60s guess. When ``frames`` is omitted (folder picker),
+    use clip timing or the conservative per-second guess.
+    """
+    frames_supplied = frames is not None
     frames = frames or {}
     total = 0
     used_frame_guess = False
@@ -350,6 +357,8 @@ def estimate_locked_proxy_bytes(
     used_duration_fps = False
     for clip in plan_locked_batch(clips).locked:
         rgb_frames = as_frame_sequence(frames.get(clip.name)) or None
+        if frames_supplied and not rgb_frames:
+            continue
         n_frames, frame_src = clip_frame_count(clip, rgb_frames)
         n_pixels, pixel_src = clip_pixel_count(clip, rgb_frames)
         total += n_frames * n_pixels * BYTES_PER_EXR_PIXEL
@@ -593,7 +602,10 @@ def process_locked_writes(
     plan = plan_locked_batch(clips)
     frames = frames or {}
     estimate = estimate_locked_proxy_bytes(plan.locked, frames=frames)
-    if not dest_has_space(dest, estimate.needed_bytes, free_bytes=free_bytes):
+    # Nothing to write (decode errors only) is not a dest-size abort.
+    if estimate.bytes > 0 and not dest_has_space(
+        dest, estimate.needed_bytes, free_bytes=free_bytes
+    ):
         return BatchWriteReport(
             written=(),
             skipped=plan.skipped,

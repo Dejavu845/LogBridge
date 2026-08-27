@@ -948,6 +948,18 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
     assert disk_short_status_text(report.disk_estimate) == report.processed_status_text
 
+    # Missing pixels are a per-clip error, not a 4K×60s dest abort.
+    empty = process_locked_writes(
+        [BatchClip("locked.mov", idt="sony_slog3_sgamut3")],
+        tmp_path / "empty",
+        frames={},
+    )
+    assert empty.disk_short is False
+    assert empty.processed_count == 1
+    assert empty.written == ()
+    assert empty.errors[0].name == "locked.mov"
+    assert list((tmp_path / "empty").glob("**/*.exr")) == []
+
     ok_dest = tmp_path / "ok"
     ok = process_locked_writes(
         clips, ok_dest, frames={"locked.mov": [grey]}, write_fn=spy
