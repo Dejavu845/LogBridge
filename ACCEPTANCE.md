@@ -83,7 +83,7 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 ## Pending IDT / process lock
 
 - Clips without a locked curve+gamut pair stay **pending**.
-- **处理已锁定片段** / **Apply graph** write one **ACES2065-1 AP0 proxy EXR sequence** (`{stem}_ACES2065-1_proxy/frame_000000.exr`) per locked clip. **整段代理，不是全精度成片.** Decode is still 8-bit Y′CbCr upconverted to float. Not ACEScct. Not a Rec.709 .mov/.mp4. Pending / unlocked stay in the list with **先选择 Log 与色域** or **先选择成对 IDT** and produce no folder. Never guessed.
+- **处理已锁定片段** / **Apply graph** write one **ACES2065-1 AP0 proxy EXR sequence** (`{stem}_ACES2065-1_proxy/frame_000000.exr`) per locked clip. **整段代理，不是全精度成片.** Sequence decode prefers 10-bit Y′CbCr, then 8-bit fallbacks (still a proxy, not camera-original). Not ACEScct. Not a Rec.709 .mov/.mp4. Pending / unlocked stay in the list with **先选择 Log 与色域** or **先选择成对 IDT** and produce no folder. Never guessed.
 - Primary button is **处理已锁定片段** — never 一键还原. Shown only when locked-clip count > 0. Status: **N 条已锁定 / M 条待选**. **N 条已处理** means N clips that produced a proxy sequence (or attempted with a per-clip error), not a preview refresh. Status copy must include **整段代理，不是全精度成片**.
 - Locked-clip export works when other clips in the session are still pending. Do not require the whole bin to be locked. **导出 ACEScct / EXR** in **高级** is the same locked-only rule (behind **高级**).
 - Main path: drop → lock IDT → exposure/WB → 处理已锁定片段 (writes proxy EXR sequence). One primary process button. Full-precision / camera-original bit-depth is later.
