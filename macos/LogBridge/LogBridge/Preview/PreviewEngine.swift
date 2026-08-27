@@ -229,11 +229,40 @@ final class PreviewEngine: ObservableObject {
         }
     }
 
-    /// First-frame graded ACES2065-1 (AP0) linear proxy. Reuses PreviewColor.
-    /// ODT is not applied. Not ACEScct. Not a whole-clip / full-precision write.
-    /// Decode uses the existing VideoToolbox / ImageIO path at a larger long edge.
+    /// Graded ACES2065-1 (AP0) linear proxy frames. Reuses PreviewColor.
+    /// ODT is not applied. Not ACEScct. Decode is still the preview path
+    /// (8-bit Y′CbCr upconverted to float) — 整段代理，不是全精度成片.
+    /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
     static let exportMaxLongEdge: CGFloat = 16384
 
+    /// Same IDT / exposure / WB as the first-frame helper. No ODT.
+    private static func gradeAP0(rgb: inout [Float], idt: IDT, graph: SerialGraph) {
+        PreviewColor.applyIDT(rgb: &rgb, idt: idt)
+        if graph.exposureEnabled {
+            PreviewColor.applyExposure(rgb: &rgb, stops: graph.exposureStops)
+        }
+        if graph.wbEnabled, let cct = graph.effectiveWBCCT {
+            if let src = graph.effectiveSrcCCT {
+                PreviewColor.applyWB(
+                    rgb: &rgb,
+                    srcCCT: src,
+                    dstCCT: cct,
+                    srcTint: graph.asShotTint,
+                    dstTint: graph.wbTint,
+                    method: graph.wbMethod
+                )
+            } else {
+                PreviewColor.applyWB(
+                    rgb: &rgb,
+                    cct: cct,
+                    tint: graph.wbTint,
+                    method: graph.wbMethod
+                )
+            }
+        }
+    }
+
+    /// First-frame graded ACES2065-1 (AP0) linear proxy. Reuses PreviewColor.
     func exportGradedAP0(clip: Clip, graph: SerialGraph) -> (rgb: [Float], width: Int, height: Int)? {
         queue.sync {
             guard let idt = clip.idt, !idt.isStub, !clip.needsUserPicker else { return nil }
@@ -241,31 +270,124 @@ final class PreviewEngine: ObservableObject {
                 return nil
             }
             var rgb = PreviewColor.extractRGB(cg)
-            PreviewColor.applyIDT(rgb: &rgb, idt: idt)
-            if graph.exposureEnabled {
-                PreviewColor.applyExposure(rgb: &rgb, stops: graph.exposureStops)
-            }
-            if graph.wbEnabled, let cct = graph.effectiveWBCCT {
-                if let src = graph.effectiveSrcCCT {
-                    PreviewColor.applyWB(
-                        rgb: &rgb,
-                        srcCCT: src,
-                        dstCCT: cct,
-                        srcTint: graph.asShotTint,
-                        dstTint: graph.wbTint,
-                        method: graph.wbMethod
-                    )
-                } else {
-                    PreviewColor.applyWB(
-                        rgb: &rgb,
-                        cct: cct,
-                        tint: graph.wbTint,
-                        method: graph.wbMethod
-                    )
-                }
-            }
+            Self.gradeAP0(rgb: &rgb, idt: idt, graph: graph)
             return (rgb, cg.width, cg.height)
         }
+    }
+
+    /// Whole-clip proxy sequence. Writes as frames are decoded (no full-timeline buffer).
+    /// Returns the number of frames handed to ``writeFrame``. Linux cannot run this.
+    func exportGradedAP0Sequence(
+        clip: Clip,
+        graph: SerialGraph,
+        writeFrame: (Int, [Float], Int, Int) throws -> Void
+    ) throws -> Int {
+        try queue.sync {
+            guard let idt = clip.idt, !idt.isStub, !clip.needsUserPicker else {
+                throw NSError(domain: "LogBridge", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: clip.processSkipReason ?? "先选择成对 IDT"
+                ])
+            }
+            var count = 0
+            try Self.decodeAllSourceFrames(url: clip.url, maxLongEdge: Self.exportMaxLongEdge) { cg in
+                var rgb = PreviewColor.extractRGB(cg)
+                Self.gradeAP0(rgb: &rgb, idt: idt, graph: graph)
+                try writeFrame(count, rgb, cg.width, cg.height)
+                count += 1
+            }
+            if count < 1 {
+                throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "decode/grade failed"
+                ])
+            }
+            return count
+        }
+    }
+
+    /// Movies: every sample. Stills: one ImageIO frame. Same matrix-only Y′CbCr as preview.
+    static func decodeAllSourceFrames(
+        url: URL,
+        maxLongEdge: CGFloat,
+        onFrame: (CGImage) throws -> Void
+    ) throws {
+        let probe = MediaFormat.probe(url: url)
+        if probe.decision == .refuse {
+            throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: probe.note
+            ])
+        }
+        if probe.kind == .still {
+            guard let img = decodeStillImageIO(url: url, maxLongEdge: maxLongEdge) else {
+                throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "decode/grade failed"
+                ])
+            }
+            try onFrame(img)
+            return
+        }
+        try decodeMovieAllFrames(url: url, maxLongEdge: maxLongEdge, onFrame: onFrame)
+    }
+
+    /// VideoToolbox / AVAssetReader: all frames as Y′CbCr (or BGRA bytes).
+    /// Same format list as first-frame movie decode. Loop ``copyNextSampleBuffer``.
+    /// Never copyCGImage. Never set AVVideoColorPropertiesKey.
+    static func decodeMovieAllFrames(
+        url: URL,
+        maxLongEdge: CGFloat,
+        onFrame: (CGImage) throws -> Void
+    ) throws {
+        let formats: [OSType] = [
+            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelFormatType_422YpCbCr8,
+            kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+        ]
+        for fmt in formats {
+            let count = try readAllYpCbCrFrames(
+                url: url,
+                pixelFormat: fmt,
+                maxLongEdge: maxLongEdge,
+                onFrame: onFrame
+            )
+            if count > 0 { return }
+        }
+        throw NSError(domain: "LogBridge", code: 2, userInfo: [
+            NSLocalizedDescriptionKey: "decode/grade failed"
+        ])
+    }
+
+    /// AVAssetReader loop. Returns 0 when this pixel format produced no frames
+    /// (caller tries the next format). Mid-sequence convert failure throws.
+    private static func readAllYpCbCrFrames(
+        url: URL,
+        pixelFormat: OSType,
+        maxLongEdge: CGFloat,
+        onFrame: (CGImage) throws -> Void
+    ) throws -> Int {
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else { return 0 }
+        // Pixel format only. No AVVideoColorPropertiesKey Rec.709.
+        let settings: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: pixelFormat
+        ]
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { return 0 }
+        reader.add(output)
+        guard reader.startReading() else { return 0 }
+        var count = 0
+        while let sample = output.copyNextSampleBuffer() {
+            guard let pb = CMSampleBufferGetImageBuffer(sample),
+                  let img = cgImageFromLogPixelBuffer(pb, maxLongEdge: maxLongEdge) else {
+                if count == 0 { return 0 }
+                throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "decode/grade failed"
+                ])
+            }
+            try onFrame(img)
+            count += 1
+        }
+        return count
     }
 
     /// Full cached post-IDT AP0 linear buffer. Never Rec.709 / ACEScct / log.

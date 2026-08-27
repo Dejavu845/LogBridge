@@ -252,6 +252,7 @@ def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
     cleaned = (
         text.replace("预览·非成片", "")
         .replace("不是全精度成片", "")
+        .replace("不是整段成片", "")
         .replace("不是成片", "")
         .replace("成片预览关", "")
     )
@@ -396,7 +397,7 @@ def test_resolve_copy_has_no_precision_or_chengpian_claims(tmp_path: Path):
     assert "先选择成对 IDT" in export_fn
     assert "先选择 Log 与色域" in export_fn
     _assert_chengpian_not_a_deliverable_claim(
-        swift.split("enum ResolveExporter")[1].split("First-frame ACES2065-1")[0]
+        swift.split("enum ResolveExporter")[1].split("Proxy sequence folder")[0]
     )
     _assert_chengpian_not_a_deliverable_claim(export_fn)
 

@@ -46,6 +46,16 @@ def as_rgb_image(rgb) -> np.ndarray:
     raise ValueError(f"RGB must be (..., 3), got {arr.shape}")
 
 
+def write_rgb_exr_sequence(directory, frames, name_prefix: str = "frame") -> list[Path]:
+    """Write ``frame_000000.exr`` … per RGB array. Container only — no color."""
+    dest = Path(directory)
+    dest.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for index, rgb in enumerate(frames):
+        written.append(write_rgb_exr(dest / f"{name_prefix}_{index:06d}.exr", rgb))
+    return written
+
+
 def write_rgb_exr(path, rgb) -> Path:
     """Write uncompressed RGB float32 scanline EXR. Container only."""
     dest = Path(path)

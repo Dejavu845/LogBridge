@@ -71,7 +71,7 @@ struct ProcessLockedBar: View {
                     session.processLockedClips()
                 }
                 .buttonStyle(.borderedProminent)
-                .help("首帧代理 EXR，不是整段、不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原.")
+                .help("整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。 Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原.")
             }
         }
         .padding(.horizontal, 12)
