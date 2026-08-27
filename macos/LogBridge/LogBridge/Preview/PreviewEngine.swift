@@ -229,6 +229,45 @@ final class PreviewEngine: ObservableObject {
         }
     }
 
+    /// Export-size graded ACES2065-1 (AP0) linear. Reuses PreviewColor.
+    /// ODT is not applied — deliverable is ACEScct / ACES2065-1 EXR.
+    /// Decode uses the existing VideoToolbox / ImageIO path at a larger long edge.
+    static let exportMaxLongEdge: CGFloat = 16384
+
+    func exportGradedAP0(clip: Clip, graph: SerialGraph) -> (rgb: [Float], width: Int, height: Int)? {
+        queue.sync {
+            guard let idt = clip.idt, !idt.isStub, !clip.needsUserPicker else { return nil }
+            guard let cg = Self.decodeDownscaled(url: clip.url, maxLongEdge: Self.exportMaxLongEdge) else {
+                return nil
+            }
+            var rgb = PreviewColor.extractRGB(cg)
+            PreviewColor.applyIDT(rgb: &rgb, idt: idt)
+            if graph.exposureEnabled {
+                PreviewColor.applyExposure(rgb: &rgb, stops: graph.exposureStops)
+            }
+            if graph.wbEnabled, let cct = graph.effectiveWBCCT {
+                if let src = graph.effectiveSrcCCT {
+                    PreviewColor.applyWB(
+                        rgb: &rgb,
+                        srcCCT: src,
+                        dstCCT: cct,
+                        srcTint: graph.asShotTint,
+                        dstTint: graph.wbTint,
+                        method: graph.wbMethod
+                    )
+                } else {
+                    PreviewColor.applyWB(
+                        rgb: &rgb,
+                        cct: cct,
+                        tint: graph.wbTint,
+                        method: graph.wbMethod
+                    )
+                }
+            }
+            return (rgb, cg.width, cg.height)
+        }
+    }
+
     /// Full cached post-IDT AP0 linear buffer. Never Rec.709 / ACEScct / log.
     func linearAP0Frame(clipID: UUID) -> (rgb: [Float], width: Int, height: Int)? {
         guard let linear = linearCache[clipID] else { return nil }

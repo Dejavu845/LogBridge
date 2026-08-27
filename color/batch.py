@@ -1,4 +1,4 @@
-"""Locked-IDT batch policy. No color-number changes.
+"""Locked-IDT batch policy + ACEScct / ACES2065-1 EXR writes. No color-number changes.
 
 A clip is processable only when its paired IDT is chosen / locked.
 Batch walks locked clips only. Pending / unlocked stay in the list with a
@@ -6,21 +6,36 @@ Chinese reason. Never guess 5600 or 6504. Never invent a second process
 button. Auto WB estimate does not write CAT until confirm; grey-card
 overrides estimate.
 
-Swift ``SessionModel.processLockedClips`` mirrors this module.
+「处理已锁定片段」 writes one ACES2065-1 EXR per locked clip (ODT off).
+「N 条已处理」 is files written, or locked clips attempted with a per-clip
+error — not a preview refresh. Pending clips in the same bin do not block.
+
+Swift ``SessionModel.processLockedClips`` mirrors this module. Color is
+``SerialGraph.apply`` (existing pipeline). Container is ``exr_write``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from pathlib import Path
+from typing import Callable, Sequence
+
+import numpy as np
 
 from .as_shot import WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
+from .exr_write import write_rgb_exr
+from .graph import SerialGraph
 
 REASON_PICK_LOG_GAMUT = "先选择 Log 与色域"
 REASON_PICK_PAIRED_IDT = "先选择成对 IDT"
 PROCESS_BUTTON = "处理已锁定片段"
 ADVANCED_DISCLOSURE = "高级"
 LOCK_STATUS_TEMPLATE = "{locked} 条已锁定 / {pending} 条待选"
+PROCESSED_STATUS_TEMPLATE = (
+    "处理已锁定片段 — {processed} 条已处理 / {skipped} 条已跳过"
+    "（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。"
+)
+DELIVERABLE_SUFFIX = "_ACES2065-1.exr"
 
 
 @dataclass(frozen=True)
@@ -119,3 +134,94 @@ def confirm_auto_wb(state: dict) -> dict:
 def never_guess_cct(cct: float | None) -> bool:
     """Missing CCT stays empty. Never fill 5600 or 6504."""
     return cct is None
+
+
+def deliverable_name(clip_name: str) -> str:
+    """One ACES2065-1 EXR per locked clip. Stem only — not a second button."""
+    return f"{Path(clip_name).stem}{DELIVERABLE_SUFFIX}"
+
+
+def processed_status_text(processed: int, skipped: int) -> str:
+    """「N 条已处理」 is writes / attempts, not preview refresh."""
+    return PROCESSED_STATUS_TEMPLATE.format(processed=processed, skipped=skipped)
+
+
+@dataclass(frozen=True)
+class ClipWrite:
+    name: str
+    path: str | None = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class BatchWriteReport:
+    written: tuple[ClipWrite, ...]
+    skipped: tuple[tuple[BatchClip, str], ...]
+    errors: tuple[ClipWrite, ...]
+
+    @property
+    def processed_count(self) -> int:
+        """N in 「N 条已处理」: files written + per-clip write errors."""
+        return len(self.written) + len(self.errors)
+
+    @property
+    def skipped_count(self) -> int:
+        return len(self.skipped)
+
+    @property
+    def processed_status_text(self) -> str:
+        return processed_status_text(self.processed_count, self.skipped_count)
+
+    @property
+    def written_paths(self) -> tuple[str, ...]:
+        return tuple(w.path for w in self.written if w.path)
+
+
+def process_locked_writes(
+    clips: Sequence[BatchClip],
+    dest,
+    frames: dict[str, np.ndarray] | None = None,
+    graph: SerialGraph | None = None,
+    write_fn: Callable[[Path, np.ndarray], None] | None = None,
+) -> BatchWriteReport:
+    """Write ACES2065-1 EXR for locked clips only.
+
+    Unlocked / pending stay listed and never produce a file. A mixed bin
+    (some locked, some pending) still writes the locked ones. ``graph`` is
+    the existing serial graph (ODT off = ACES2065-1). ``frames`` maps clip
+    name → camera-log RGB. Missing pixels or a write failure count as
+    processed (per-clip error), not as a skip reason.
+    """
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    plan = plan_locked_batch(clips)
+    frames = frames or {}
+    graph = graph if graph is not None else SerialGraph()
+    writer = write_fn or (lambda path, rgb: write_rgb_exr(path, rgb))
+
+    written: list[ClipWrite] = []
+    errors: list[ClipWrite] = []
+    for clip in plan.locked:
+        out = dest / deliverable_name(clip.name)
+        rgb = frames.get(clip.name)
+        if rgb is None:
+            errors.append(ClipWrite(name=clip.name, error="no pixels"))
+            continue
+        if not clip.idt:
+            errors.append(ClipWrite(name=clip.name, error="no IDT"))
+            continue
+        try:
+            linear = graph.apply(rgb, clip.idt)
+            writer(out, np.asarray(linear, dtype=np.float32))
+            if write_fn is None and not out.is_file():
+                raise OSError("write produced no file")
+            written.append(ClipWrite(name=clip.name, path=str(out)))
+        except Exception as exc:  # noqa: BLE001 — per-clip error, keep going
+            if out.is_file():
+                out.unlink()
+            errors.append(ClipWrite(name=clip.name, error=str(exc)))
+    return BatchWriteReport(
+        written=tuple(written),
+        skipped=plan.skipped,
+        errors=tuple(errors),
+    )

@@ -2,22 +2,30 @@
 
 from pathlib import Path
 
+import numpy as np
+
 from color.as_shot import WB_SOURCE_AS_SHOT, WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from color.batch import (
     ADVANCED_DISCLOSURE,
+    DELIVERABLE_SUFFIX,
     PROCESS_BUTTON,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
     BatchClip,
     confirm_auto_wb,
+    deliverable_name,
     estimate_chip_lit,
     has_locked_idt,
     never_guess_cct,
     plan_locked_batch,
     process_locked_names,
+    process_locked_writes,
+    processed_status_text,
     propose_auto_wb,
     skip_reason,
 )
+from color.curves import linear_to_slog3
+from color.exr_write import read_rgb_exr
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFT_ROOT = ROOT / "macos"
@@ -157,3 +165,92 @@ def test_inspector_is_exposure_and_wb_only():
     assert "ODTInspector" not in advanced
     assert "PairedIDTBar" not in advanced
     assert "成对 IDT" not in advanced
+
+
+def _slog3_grey(shape=(2, 2, 3)):
+    return np.full(shape, float(linear_to_slog3(0.18)), dtype=np.float64)
+
+
+def test_unlocked_never_write_locked_writes_and_counter(tmp_path: Path):
+    clips = [
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+        BatchClip("empty.mov"),
+        BatchClip("stub.mov", idt="future", is_stub=True),
+    ]
+    grey = _slog3_grey()
+    frames = {c.name: grey for c in clips}
+    called: list[str] = []
+
+    def spy(path: Path, rgb) -> None:
+        called.append(Path(path).name)
+        path.write_bytes(b"x")
+
+    report = process_locked_writes(clips, tmp_path, frames=frames, write_fn=spy)
+    assert called == [deliverable_name("locked.mov")]
+    assert report.processed_count == 1
+    assert report.skipped_count == 3
+    assert "1 条已处理" in report.processed_status_text
+    assert "3 条已跳过" in report.processed_status_text
+    assert processed_status_text(1, 3) == report.processed_status_text
+    assert (tmp_path / deliverable_name("locked.mov")).is_file()
+    assert not (tmp_path / deliverable_name("pending.mov")).exists()
+    assert not (tmp_path / deliverable_name("empty.mov")).exists()
+    assert not (tmp_path / deliverable_name("stub.mov")).exists()
+    assert list(tmp_path.glob("*" + DELIVERABLE_SUFFIX)) == [
+        tmp_path / deliverable_name("locked.mov")
+    ]
+
+
+def test_locked_exr_is_aces2065_and_mixed_bin_writes(tmp_path: Path):
+    clips = [
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+    ]
+    report = process_locked_writes(
+        clips, tmp_path, frames={"locked.mov": _slog3_grey(), "pending.mov": _slog3_grey()}
+    )
+    assert report.processed_count == 1
+    assert "1 条已处理" in report.processed_status_text
+    path = tmp_path / deliverable_name("locked.mov")
+    assert path.is_file()
+    rgb = read_rgb_exr(path)
+    assert rgb.shape == (2, 2, 3)
+    np.testing.assert_allclose(rgb[0, 0], 0.18, atol=5e-3)
+    assert not (tmp_path / deliverable_name("pending.mov")).exists()
+
+
+def test_write_error_counts_as_processed_no_file(tmp_path: Path):
+    clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3")]
+    report = process_locked_writes(clips, tmp_path, frames={})
+    assert report.processed_count == 1
+    assert report.written == ()
+    assert report.errors[0].name == "locked.mov"
+    assert "1 条已处理" in report.processed_status_text
+    assert list(tmp_path.glob("*.exr")) == []
+
+
+def test_swift_process_writes_exr_and_counter_is_writes():
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    body = clip.split("func processLockedClips()")[1].split("func processSelected()")[0]
+    assert "writeLockedDeliverables" in body
+    assert "条已处理" in body or "条已处理" in clip.split("func writeLockedDeliverables")[1]
+    write_body = clip.split("func writeLockedDeliverables")[1].split("func exportLockedEXR")[0]
+    assert "written.count + errors.count" in write_body
+    assert "locked.count" not in write_body
+    assert "exportLockedEXR" in clip
+    assert "writeACES2065EXR" in clip
+    assert "ACES2065-1.exr" in exporter
+    assert "exportGradedAP0" in engine
+    assert "applyODT" not in engine.split("func exportGradedAP0")[1].split("func linearAP0Frame")[0]
+    can = clip.split("var canProcess")[1].split("var canProcessSelected")[0]
+    assert "pendingPickerCount == 0" not in can
+    assert "lockedClipCount" in can
+    export = clip.split("func exportResolve()")[1]
+    assert "lockedClips" in export.split("panel.begin")[0]
+    assert "clips: locked" in export or "clips: lockedClips" in export
+    assert "Write ACEScct" in content or "ACES2065-1 EXR" in content
+    assert "Does not require the whole bin" in content

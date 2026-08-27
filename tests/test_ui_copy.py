@@ -70,6 +70,12 @@ def test_pending_clips_block_process_and_export():
     assert ".disabled(!session.canProcess)" in content
     assert "lockedClipCount" in clip
     assert "processSkipReason" in clip
+    can = clip.split("var canProcess")[1].split("var canProcessSelected")[0]
+    assert "pendingPickerCount == 0" not in can
+    assert "lockedClipCount" in can
+    assert "writeACES2065EXR" in clip
+    assert "条已处理" in clip
+    assert "writeLockedDeliverables" in clip
 
 
 def test_docs_name_the_review_locks():

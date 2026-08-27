@@ -132,11 +132,10 @@ final class SessionModel: ObservableObject {
         settings.blockUnlockedIDT && lockedClipCount > 0
     }
 
-    /// Resolve export. Session graph still requires every clip locked.
+    /// ACEScct / EXR export for locked clips. Pending clips in the same bin
+    /// do not block — they stay listed and are skipped.
     var canProcess: Bool {
-        !clips.isEmpty
-            && pendingPickerCount == 0
-            && clips.allSatisfy { $0.hasLockedPair }
+        !clips.isEmpty && lockedClipCount > 0
     }
 
     /// Selected clip has a locked pair (preview / inspector).
@@ -146,11 +145,8 @@ final class SessionModel: ObservableObject {
 
     var processBlockedReason: String? {
         if clips.isEmpty { return "把混源文件夹拖进来" }
-        if pendingPickerCount > 0 {
-            return "先选择 Log 与色域"
-        }
-        if clips.contains(where: { $0.idt?.isStub == true }) {
-            return "Stub IDT — process/export blocked"
+        if lockedClipCount == 0 {
+            return clips.first?.processSkipReason ?? "先选择 Log 与色域"
         }
         return nil
     }
@@ -160,8 +156,10 @@ final class SessionModel: ObservableObject {
         return clip.processSkipReason
     }
 
-    /// Batch: walk locked clips only. Unlocked stay listed with a Chinese reason.
-    /// Never guess an IDT. Never 一键还原. One process entry point.
+    /// Batch: write one ACES2065-1 EXR per locked clip. Unlocked stay listed
+    /// with a Chinese reason. 「N 条已处理」 is files written or attempted
+    /// with a per-clip error — not a preview refresh. Never guess an IDT.
+    /// Never 一键还原. One process entry point. Mixed bins are allowed.
     func processLockedClips() {
         let locked = clips.filter(\.hasLockedPair)
         let skipped = clips.filter { !$0.hasLockedPair }
@@ -172,7 +170,64 @@ final class SessionModel: ObservableObject {
         if selectedClip?.hasLockedPair == true {
             refreshPreview()
         }
-        lastExportNote = "处理已锁定片段 — \(locked.count) 条已处理 / \(skipped.count) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。"
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "写出"
+        panel.message = "已锁定片段写出 ACEScct / ACES2065-1 EXR。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
+        panel.begin { [weak self] response in
+            guard let self, response == .OK, let dest = panel.url else { return }
+            self.writeLockedDeliverables(locked: locked, skippedCount: skipped.count, dest: dest)
+        }
+    }
+
+    /// Writes ACES2065-1 EXR for locked clips only. Reuses PreviewColor + EXR writer.
+    func writeLockedDeliverables(locked: [Clip], skippedCount: Int, dest: URL) {
+        let graphCopy = graph
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            var written: [URL] = []
+            var errors: [String] = []
+            for clip in locked {
+                do {
+                    let url = try self.exportLockedEXR(clip: clip, graph: graphCopy, dest: dest)
+                    written.append(url)
+                } catch {
+                    errors.append("\(clip.filename): \(error.localizedDescription)")
+                }
+            }
+            let processed = written.count + errors.count
+            var note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。"
+            if !errors.isEmpty {
+                note += " " + errors.joined(separator: " ")
+            }
+            DispatchQueue.main.async {
+                self.lastExportNote = note
+            }
+        }
+    }
+
+    /// One ACES2065-1 EXR for a locked clip. Decode + PreviewColor grade; no ODT.
+    func exportLockedEXR(clip: Clip, graph: SerialGraph, dest: URL) throws -> URL {
+        guard clip.hasLockedPair else {
+            throw NSError(domain: "LogBridge", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: clip.processSkipReason ?? "先选择成对 IDT"
+            ])
+        }
+        guard let frame = preview.exportGradedAP0(clip: clip, graph: graph) else {
+            throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "decode/grade failed"
+            ])
+        }
+        let url = ResolveExporter.deliverableURL(for: clip, in: dest)
+        try ResolveExporter.writeACES2065EXR(
+            rgb: frame.rgb,
+            width: frame.width,
+            height: frame.height,
+            to: url
+        )
+        return url
     }
 
     /// Primary action alias. Label is "处理已锁定片段" — never 一键还原.
@@ -461,18 +516,19 @@ final class SessionModel: ObservableObject {
                 ?? "先选择 Log 与色域"
             return
         }
+        let locked = lockedClips
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "Export"
-        panel.message = "Folder for the Resolve node graph (LUT / CDL / DCTL). Exposure is its own node. WB off = no bake."
+        panel.message = "Folder for the Resolve node graph (LUT / CDL / DCTL). Locked clips only; pending stay listed."
         panel.begin { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
             do {
                 let written = try ResolveExporter.export(
                     to: url,
-                    clips: self.clips,
+                    clips: locked,
                     includeWBNode: self.graph.wbEnabled,
                     cct: self.graph.wbCCT,
                     tint: self.graph.wbTint,
@@ -485,7 +541,7 @@ final class SessionModel: ObservableObject {
                     exposureEnabled: self.graph.exposureEnabled
                 )
                 self.lastExportNote = ResolveExporter.exportNote(
-                    clips: self.clips,
+                    clips: locked,
                     includeWBNode: self.graph.wbEnabled,
                     cct: self.graph.wbCCT,
                     tint: self.graph.wbTint

@@ -81,10 +81,10 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 ## Pending IDT / process lock
 
 - Clips without a locked curve+gamut pair stay **pending**.
-- **处理已锁定片段** / **Apply graph** walk **locked clips only**. Pending / unlocked stay in the list with **先选择 Log 与色域** or **先选择成对 IDT**. Never guessed.
-- Primary button is **处理已锁定片段** — never 一键还原. Shown only when locked-clip count > 0. Status: **N 条已锁定 / M 条待选**.
-- **导出 ACEScct / EXR** stays blocked while any clip is pending (behind **高级**).
-- Main path: drop → lock IDT → exposure/WB → 处理已锁定片段. One primary process button.
+- **处理已锁定片段** / **Apply graph** **write one ACES2065-1 EXR per locked clip**. Pending / unlocked stay in the list with **先选择 Log 与色域** or **先选择成对 IDT** and produce no file. Never guessed.
+- Primary button is **处理已锁定片段** — never 一键还原. Shown only when locked-clip count > 0. Status: **N 条已锁定 / M 条待选**. **N 条已处理** means N output files written (or attempted with a per-clip error), not a preview refresh.
+- Locked-clip export works when other clips in the session are still pending. Do not require the whole bin to be locked. **导出 ACEScct / EXR** in **高级** is the same locked-only rule (behind **高级**).
+- Main path: drop → lock IDT → exposure/WB → 处理已锁定片段 (writes EXR). One primary process button.
 - WB inspector shows three states: 机内 as-shot / 白平衡（估计） / 灰卡. Estimate chip lights only after confirm. Grey-card overrides.
 - HDR preview titles say 预览·非成片 and 未匹配 709. Do not present HLG/PQ as matched to Rec.709.
 - IDT picker is one paired list (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine), not two dropdowns.
