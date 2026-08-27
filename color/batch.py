@@ -15,6 +15,12 @@ Not a Rec.709 .mov/.mp4.
 with a per-clip error — not a preview refresh. Pending clips in the same
 bin do not block.
 
+While writing, progress is 「写出代理 i/N · frame k」 (k/total when known).
+Cancel becomes the same primary button. The in-progress ``_proxy`` folder
+is removed so a half sequence is not a finished deliverable; completed
+clips stay. Cancelled status says 已取消 and still 整段代理，不是全精度成片.
+Partial output is 不是成片.
+
 Swift ``SessionModel.processLockedClips`` mirrors this module. Color is
 ``SerialGraph.apply`` (existing pipeline). Container is ``exr_write``.
 """
@@ -52,6 +58,15 @@ FOLDER_PICKER_MESSAGE = (
 PROCESS_BUTTON_HELP = (
     "整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
     " Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原."
+)
+CANCEL_BUTTON = "取消"
+CANCELLED_NOTE = "已取消"
+PROGRESS_PREFIX = "写出代理"
+CANCELLED_STATUS_TEMPLATE = (
+    "处理已锁定片段 — 已取消。"
+    "{processed} 条已处理 / {skipped} 条已跳过"
+    "（先选择 Log 与色域 / 先选择成对 IDT）。"
+    "整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
 )
 # Folder of per-frame EXRs. Names must include _proxy so this is not a 成片 claim.
 DELIVERABLE_DIR_SUFFIX = "_ACES2065-1_proxy"
@@ -196,6 +211,26 @@ def processed_status_text(processed: int, skipped: int) -> str:
     return PROCESSED_STATUS_TEMPLATE.format(processed=processed, skipped=skipped)
 
 
+def progress_text(
+    clip_index: int,
+    clip_total: int,
+    frame: int | None = None,
+    frame_total: int | None = None,
+) -> str:
+    """Chinese write progress. Example: 「写出代理 2/5 · frame 120」."""
+    note = f"{PROGRESS_PREFIX} {clip_index}/{clip_total}"
+    if frame is None:
+        return note
+    if frame_total is not None:
+        return f"{note} · frame {frame}/{frame_total}"
+    return f"{note} · frame {frame}"
+
+
+def cancelled_status_text(processed: int, skipped: int) -> str:
+    """Cancel status. 已取消 + honesty. Partial output is 不是成片."""
+    return CANCELLED_STATUS_TEMPLATE.format(processed=processed, skipped=skipped)
+
+
 @dataclass(frozen=True)
 class ClipWrite:
     name: str
@@ -209,6 +244,7 @@ class BatchWriteReport:
     written: tuple[ClipWrite, ...]
     skipped: tuple[tuple[BatchClip, str], ...]
     errors: tuple[ClipWrite, ...]
+    cancelled: bool = False
 
     @property
     def processed_count(self) -> int:
@@ -221,6 +257,8 @@ class BatchWriteReport:
 
     @property
     def processed_status_text(self) -> str:
+        if self.cancelled:
+            return cancelled_status_text(self.processed_count, self.skipped_count)
         return processed_status_text(self.processed_count, self.skipped_count)
 
     @property
@@ -234,6 +272,8 @@ def process_locked_writes(
     frames: dict[str, np.ndarray | Sequence[np.ndarray]] | None = None,
     graph: SerialGraph | None = None,
     write_fn: Callable[[Path, np.ndarray], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> BatchWriteReport:
     """Write an ACES2065-1 proxy EXR sequence for locked clips only.
 
@@ -250,6 +290,10 @@ def process_locked_writes(
         ...
 
     This is still a **proxy** sequence (preview decode). Not a Rec.709 movie.
+
+    ``should_cancel`` stops the batch. The in-progress ``_proxy`` folder is
+    removed (half sequence is not a finished deliverable). Completed clips
+    stay. Cancelled clips are not 「已处理」.
     """
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -260,7 +304,12 @@ def process_locked_writes(
 
     written: list[ClipWrite] = []
     errors: list[ClipWrite] = []
-    for clip in plan.locked:
+    cancelled = False
+    clip_total = len(plan.locked)
+    for clip_index, clip in enumerate(plan.locked, start=1):
+        if should_cancel and should_cancel():
+            cancelled = True
+            break
         seq_dir = dest / deliverable_dir_name(clip.name)
         rgb_frames = as_frame_sequence(frames.get(clip.name))
         if not rgb_frames:
@@ -273,12 +322,28 @@ def process_locked_writes(
             if seq_dir.exists():
                 shutil.rmtree(seq_dir)
             seq_dir.mkdir(parents=True, exist_ok=True)
+            if on_progress:
+                on_progress(progress_text(clip_index, clip_total))
+            frame_total = len(rgb_frames)
             for index, rgb in enumerate(rgb_frames):
+                if should_cancel and should_cancel():
+                    if seq_dir.exists():
+                        shutil.rmtree(seq_dir)
+                    cancelled = True
+                    break
                 out = seq_dir / sequence_frame_name(index)
                 linear = graph.apply(rgb, clip.idt)
                 writer(out, np.asarray(linear, dtype=np.float32))
                 if write_fn is None and not out.is_file():
                     raise OSError("write produced no file")
+                if on_progress:
+                    on_progress(
+                        progress_text(
+                            clip_index, clip_total, index + 1, frame_total
+                        )
+                    )
+            if cancelled:
+                break
             written.append(
                 ClipWrite(name=clip.name, path=str(seq_dir), frame_count=len(rgb_frames))
             )
@@ -290,4 +355,5 @@ def process_locked_writes(
         written=tuple(written),
         skipped=plan.skipped,
         errors=tuple(errors),
+        cancelled=cancelled,
     )

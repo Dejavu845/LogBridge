@@ -7,6 +7,9 @@ import numpy as np
 from color.as_shot import WB_SOURCE_AS_SHOT, WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from color.batch import (
     ADVANCED_DISCLOSURE,
+    CANCEL_BUTTON,
+    CANCELLED_NOTE,
+    CANCELLED_STATUS_TEMPLATE,
     DELIVERABLE_DIR_SUFFIX,
     DELIVERABLE_SUFFIX,
     FOLDER_PICKER_MESSAGE,
@@ -14,9 +17,11 @@ from color.batch import (
     PROCESS_BUTTON,
     PROCESS_BUTTON_HELP,
     PROCESSED_STATUS_TEMPLATE,
+    PROGRESS_PREFIX,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
     BatchClip,
+    cancelled_status_text,
     confirm_auto_wb,
     deliverable_dir_name,
     deliverable_name,
@@ -27,6 +32,7 @@ from color.batch import (
     process_locked_names,
     process_locked_writes,
     processed_status_text,
+    progress_text,
     propose_auto_wb,
     sequence_frame_name,
     skip_reason,
@@ -134,10 +140,14 @@ def test_swift_mirrors_locked_batch_and_one_button():
     assert "先选择成对 IDT" in clip
     assert "先选择 Log 与色域" in clip
     assert "条已锁定" in clip and "条待选" in clip
-    assert 'Button("处理已锁定片段")' in content
+    assert "处理已锁定片段" in content
     assert "showsProcessLockedButton" in content
     assert "ProcessLockedBar" in content
     assert content.count("处理已锁定片段") >= 1
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "取消" in bar
+    assert "isWritingDeliverables" in bar
     assert 'Button("处理已锁定片段")' not in content.split("struct StatusBar")[1]
     assert 'Button("导出 ACEScct / EXR")' in content.split("struct AdvancedPanel")[1]
     assert ADVANCED_DISCLOSURE in content
@@ -268,7 +278,8 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     assert "条已处理" in body or "条已处理" in clip.split("func writeLockedDeliverables")[1]
     write_body = clip.split("func writeLockedDeliverables")[1].split("func exportLockedEXR")[0]
     assert "written.count + errors.count" in write_body
-    assert "locked.count" not in write_body
+    assert "let processed = written.count + errors.count" in write_body
+    assert "processed = locked.count" not in write_body
     assert HONEST_PROXY_NOTE in write_body
     assert HONEST_PROXY_NOTE in body
     _assert_chengpian_not_a_deliverable_claim(write_body)
@@ -449,3 +460,105 @@ def test_locked_writes_more_than_one_frame(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
     assert list(tmp_path.glob("**/*.mov")) == []
     assert list(tmp_path.glob("**/*.mp4")) == []
+
+
+def test_progress_and_cancel_copy_is_honest_not_chengpian():
+    """Cancel/progress strings exist. 成片 is not a success claim."""
+    assert PROCESS_BUTTON == "处理已锁定片段"
+    assert CANCEL_BUTTON == "取消"
+    assert CANCELLED_NOTE == "已取消"
+    assert PROGRESS_PREFIX == "写出代理"
+    assert progress_text(2, 5, 120) == "写出代理 2/5 · frame 120"
+    assert progress_text(2, 5, 120, 240) == "写出代理 2/5 · frame 120/240"
+    assert progress_text(1, 3) == "写出代理 1/3"
+    cancelled = cancelled_status_text(1, 2)
+    assert CANCELLED_NOTE in cancelled
+    assert HONEST_PROXY_NOTE in cancelled
+    assert "整段代理，不是全精度成片" in cancelled
+    assert "1 条已处理" in cancelled
+    assert "2 条已跳过" in cancelled
+    assert CANCELLED_NOTE in CANCELLED_STATUS_TEMPLATE
+    assert HONEST_PROXY_NOTE in CANCELLED_STATUS_TEMPLATE
+    _assert_chengpian_not_a_deliverable_claim(cancelled)
+    _assert_chengpian_not_a_deliverable_claim(progress_text(2, 5, 120))
+    _assert_chengpian_not_a_deliverable_claim(CANCELLED_STATUS_TEMPLATE)
+
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    assert "写出代理" in clip
+    assert "已取消" in clip
+    assert "exportProgressText" in clip
+    assert "cancelledExportNote" in clip
+    assert "cancelLockedDeliverables" in clip
+    assert "isWritingDeliverables" in clip
+    assert "LockedWriteCancel" in clip
+    assert HONEST_PROXY_NOTE in clip.split("func cancelledExportNote")[1]
+    assert CANCELLED_NOTE in clip.split("func cancelledExportNote")[1]
+    _assert_chengpian_not_a_deliverable_claim(clip.split("func cancelledExportNote")[1].split("func publishExportProgress")[0])
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "处理已锁定片段" in bar
+    assert "取消" in bar
+    assert "isWritingDeliverables" in bar
+    assert "cancelLockedDeliverables" in bar
+    assert "processLockedClips" in bar
+    assert 'Button("处理已锁定片段")' not in content.split("struct StatusBar")[1]
+    assert 'Button("处理已锁定片段")' not in content.split("struct AdvancedPanel")[1]
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert "写出代理" in readme and "已取消" in readme
+    assert "写出代理" in acceptance and "已取消" in acceptance
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)
+    _assert_chengpian_not_a_deliverable_claim(content)
+
+
+def test_cancel_removes_in_progress_folder_keeps_completed(tmp_path: Path):
+    """Safer cancel: drop the current half `_proxy` folder. Completed clips stay."""
+    clips = [
+        BatchClip("done.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("long.mov", idt="sony_slog3_sgamut3"),
+        BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
+    ]
+    frame = _slog3_grey()
+    frames = {
+        "done.mov": [frame, frame],
+        "long.mov": [frame, frame, frame, frame],
+        "pending.mov": [frame, frame],
+    }
+    notes: list[str] = []
+    seen_long = {"n": 0}
+
+    def should_cancel() -> bool:
+        return seen_long["n"] >= 2
+
+    def spy(path: Path, rgb) -> None:
+        path.write_bytes(b"x")
+        if "long" in path.parts[-2]:
+            seen_long["n"] += 1
+
+    report = process_locked_writes(
+        clips,
+        tmp_path,
+        frames=frames,
+        write_fn=spy,
+        should_cancel=should_cancel,
+        on_progress=notes.append,
+    )
+    assert report.cancelled is True
+    assert report.processed_count == 1
+    assert report.written[0].name == "done.mov"
+    assert (tmp_path / deliverable_dir_name("done.mov")).is_dir()
+    assert (tmp_path / deliverable_name("done.mov", 0)).is_file()
+    assert (tmp_path / deliverable_name("done.mov", 1)).is_file()
+    assert not (tmp_path / deliverable_dir_name("long.mov")).exists()
+    assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
+    assert CANCELLED_NOTE in report.processed_status_text
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+    assert any(n.startswith("写出代理 1/2") for n in notes)
+    assert any("frame" in n for n in notes)
+    clip = _read(CLIP)
+    export_body = clip.split("func exportLockedEXR")[1].split("func cancelLockedDeliverables")[0]
+    assert "LockedWriteCancel" in export_body
+    assert "removeItem(at: seqDir)" in export_body

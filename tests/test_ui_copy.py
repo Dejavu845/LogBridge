@@ -32,7 +32,12 @@ def test_primary_button_is_locked_chinese():
     assert "先选择 Log 与色域" in swift
     assert "导出 ACEScct / EXR" in swift
     assert "先选择成对 IDT" in swift
-    assert content.count('Button("处理已锁定片段")') == 1
+    assert "处理已锁定片段" in content
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "取消" in bar
+    assert "isWritingDeliverables" in bar
+    assert "cancelLockedDeliverables" in bar
 
 
 def test_preview_overlay_badge_feichengpian():
