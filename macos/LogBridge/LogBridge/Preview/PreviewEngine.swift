@@ -329,7 +329,8 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// VideoToolbox / AVAssetReader: all frames as Y′CbCr (or BGRA bytes).
-    /// Same format list as ``decodeMovieVideoToolbox``. Loop ``copyNextSampleBuffer``.
+    /// Same format list as first-frame movie decode. Loop ``copyNextSampleBuffer``.
+    /// Never copyCGImage. Never set AVVideoColorPropertiesKey.
     static func decodeMovieAllFrames(
         url: URL,
         maxLongEdge: CGFloat,
