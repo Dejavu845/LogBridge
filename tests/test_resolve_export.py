@@ -358,7 +358,7 @@ def test_709_cube_labeled_preview_not_aces_ot(tmp_path: Path):
     readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
     assert REC709_PREVIEW_LABEL in cube
     assert REC709_CUBE_TITLE in cube
-    assert "ACES Output Transform" not in cube
+    assert "ACES Output Transform" not in cube.replace("Not an ACES Output Transform", "")
     assert "ACES OT" not in cube.replace("not ACES OT", "")
     assert "成片" not in cube.replace("预览·非成片", "")
     assert REC709_PREVIEW_LABEL in xml
@@ -386,7 +386,7 @@ def test_resolve_copy_has_no_precision_or_chengpian_claims(tmp_path: Path):
         encoding="utf-8"
     )
     clip = (root / "macos/LogBridge/LogBridge/Models/Clip.swift").read_text(encoding="utf-8")
-    idt_fn = swift.split("uniqueImplementedIDTs")[1].split("ap0ToXYZ")[0]
+    idt_fn = swift.split("func uniqueImplementedIDTs")[1].split("ap0ToXYZ")[0]
     assert "hasLockedPair" in idt_fn
     assert "includeWBNode" in swift
     assert "matrixCCT = nil" in swift
@@ -395,6 +395,8 @@ def test_resolve_copy_has_no_precision_or_chengpian_claims(tmp_path: Path):
     export_fn = clip.split("func exportResolve()")[1]
     assert "先选择成对 IDT" in export_fn
     assert "先选择 Log 与色域" in export_fn
-    _assert_chengpian_not_a_deliverable_claim(swift.split("enum ResolveExporter")[1].split("deliverableURL")[0])
+    _assert_chengpian_not_a_deliverable_claim(
+        swift.split("enum ResolveExporter")[1].split("First-frame ACES2065-1")[0]
+    )
     _assert_chengpian_not_a_deliverable_claim(export_fn)
 
