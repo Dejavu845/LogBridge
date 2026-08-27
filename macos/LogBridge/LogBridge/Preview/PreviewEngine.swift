@@ -231,7 +231,7 @@ final class PreviewEngine: ObservableObject {
 
     /// Graded ACES2065-1 (AP0) linear proxy frames. Reuses PreviewColor.
     /// ODT is not applied. Not ACEScct. Decode is still the preview path
-    /// (8-bit Y′CbCr upconverted to float) — 代理序列，不是全精度成片.
+    /// (8-bit Y′CbCr upconverted to float) — 整段代理，不是全精度成片.
     /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
     static let exportMaxLongEdge: CGFloat = 16384
 

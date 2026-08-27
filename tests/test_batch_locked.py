@@ -327,26 +327,25 @@ def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
 
 
 def test_honest_proxy_copy_and_filename():
-    assert HONEST_PROXY_NOTE == "首帧→整段代理。代理 EXR 序列，不是全精度成片，不是整段成片"
+    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
     assert DELIVERABLE_SUFFIX == "_ACES2065-1_proxy"
     assert DELIVERABLE_DIR_SUFFIX == "_ACES2065-1_proxy"
     assert "proxy" in DELIVERABLE_SUFFIX
+    assert "_proxy" in DELIVERABLE_SUFFIX
     assert "acescct" not in DELIVERABLE_SUFFIX.lower()
     assert deliverable_name("clip.mov") == "clip_ACES2065-1_proxy/frame_000000.exr"
     assert sequence_frame_name(1) == "frame_000001.exr"
     assert "_proxy" in deliverable_name("clip.mov")
     status = processed_status_text(2, 1)
     assert HONEST_PROXY_NOTE in status
-    assert "代理" in status
-    assert "不是全精度成片" in status
+    assert "整段代理，不是全精度成片" in status
     assert "预览·非成片" in status
     assert "已实现（未验证）" in status
     assert "2 条已处理" in status
     _assert_chengpian_not_a_deliverable_claim(status)
     assert HONEST_PROXY_NOTE in PROCESSED_STATUS_TEMPLATE
-    assert "首帧→整段代理" in FOLDER_PICKER_MESSAGE
-    assert "不是全精度成片" in FOLDER_PICKER_MESSAGE
-    assert "代理" in FOLDER_PICKER_MESSAGE
+    assert HONEST_PROXY_NOTE in FOLDER_PICKER_MESSAGE
+    assert "整段代理，不是全精度成片" in FOLDER_PICKER_MESSAGE
     assert "ACES2065-1" in FOLDER_PICKER_MESSAGE
     assert "ACEScct" not in FOLDER_PICKER_MESSAGE
     assert HONEST_PROXY_NOTE in PROCESS_BUTTON_HELP
@@ -411,8 +410,8 @@ def test_locked_writes_more_than_one_frame(tmp_path: Path):
     assert not np.allclose(rgb0, rgb1, atol=1e-3)
     assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
     assert "_proxy" in seq.name
-    assert "不是全精度成片" in report.processed_status_text
-    assert "代理" in report.processed_status_text
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    assert "整段代理，不是全精度成片" in report.processed_status_text
     _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
     assert list(tmp_path.glob("**/*.mov")) == []
     assert list(tmp_path.glob("**/*.mp4")) == []

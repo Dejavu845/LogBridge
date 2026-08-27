@@ -160,7 +160,7 @@ final class SessionModel: ObservableObject {
     /// Unlocked stay listed with a Chinese reason. 「N 条已处理」 is sequences
     /// written or attempted with a per-clip error — not a preview refresh.
     /// Never guess an IDT. Never 一键还原. One process entry point.
-    /// Mixed bins are allowed. 首帧→整段代理. 不是全精度成片，不是整段成片.
+    /// Mixed bins are allowed. 整段代理，不是全精度成片.
     func processLockedClips() {
         let locked = clips.filter(\.hasLockedPair)
         let skipped = clips.filter { !$0.hasLockedPair }
@@ -176,7 +176,7 @@ final class SessionModel: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "写出"
-        panel.message = "已锁定片段写出 ACES2065-1 代理 EXR 序列（AP0 线性）。首帧→整段代理。不是全精度成片，不是整段成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。"
+        panel.message = "已锁定片段写出 ACES2065-1 代理 EXR 序列（AP0 线性）。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。"
         panel.begin { [weak self] response in
             guard let self, response == .OK, let dest = panel.url else { return }
             self.writeLockedDeliverables(locked: locked, skippedCount: skipped.count, dest: dest)
@@ -199,7 +199,7 @@ final class SessionModel: ObservableObject {
                 }
             }
             let processed = written.count + errors.count
-            var note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。首帧→整段代理。代理 EXR 序列，不是全精度成片，不是整段成片。预览·非成片。已实现（未验证）。"
+            var note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
             if !errors.isEmpty {
                 note += " " + errors.joined(separator: " ")
             }
@@ -210,7 +210,7 @@ final class SessionModel: ObservableObject {
     }
 
     /// One ACES2065-1 AP0 proxy EXR sequence. Decode loop + PreviewColor grade; no ODT.
-    /// Not ACEScct. Not a Rec.709 movie. 首帧→整段代理. 不是全精度成片.
+    /// Not ACEScct. Not a Rec.709 movie. 整段代理，不是全精度成片.
     func exportLockedEXR(clip: Clip, graph: SerialGraph, dest: URL) throws -> URL {
         guard clip.hasLockedPair else {
             throw NSError(domain: "LogBridge", code: 1, userInfo: [

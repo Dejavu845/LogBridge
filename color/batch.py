@@ -9,7 +9,7 @@ overrides estimate.
 「处理已锁定片段」 writes one ACES2065-1 (AP0 linear) **proxy EXR sequence**
 per locked clip (ODT off): ``{stem}_ACES2065-1_proxy/frame_000000.exr``.
 Decode is still the preview path (8-bit Y′CbCr upconverted to float) —
-代理序列，不是全精度成片，不是整段成片. Not ACEScct. Not a Rec.709 .mov/.mp4.
+整段代理，不是全精度成片. Not ACEScct. Not a Rec.709 .mov/.mp4.
 「N 条已处理」 is clips that produced a sequence, or locked clips attempted
 with a per-clip error — not a preview refresh. Pending clips in the same
 bin do not block.
@@ -36,20 +36,20 @@ REASON_PICK_PAIRED_IDT = "先选择成对 IDT"
 PROCESS_BUTTON = "处理已锁定片段"
 ADVANCED_DISCLOSURE = "高级"
 LOCK_STATUS_TEMPLATE = "{locked} 条已锁定 / {pending} 条待选"
-HONEST_PROXY_NOTE = "首帧→整段代理。代理 EXR 序列，不是全精度成片，不是整段成片"
+HONEST_PROXY_NOTE = "整段代理，不是全精度成片"
 PROCESSED_STATUS_TEMPLATE = (
     "处理已锁定片段 — {processed} 条已处理 / {skipped} 条已跳过"
     "（先选择 Log 与色域 / 先选择成对 IDT）。"
-    "首帧→整段代理。代理 EXR 序列，不是全精度成片，不是整段成片。预览·非成片。已实现（未验证）。"
+    "整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
 )
 FOLDER_PICKER_MESSAGE = (
     "已锁定片段写出 ACES2065-1 代理 EXR 序列（AP0 线性）。"
-    "首帧→整段代理。不是全精度成片，不是整段成片。"
+    "整段代理，不是全精度成片。"
     "未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
     "预览·非成片。已实现（未验证）。"
 )
 PROCESS_BUTTON_HELP = (
-    "首帧→整段代理。代理 EXR 序列，不是全精度成片，不是整段成片。ACES2065-1 AP0 线性，不是 ACEScct。"
+    "整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
     " Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原."
 )
 # Folder of per-frame EXRs. Names must include _proxy so this is not a 成片 claim.
