@@ -17,6 +17,7 @@ from color.graph import SerialGraph
 from color.resolve_export import (
     REC709_CUBE_TITLE,
     REC709_PREVIEW_LABEL,
+    RESOLVE_README_HONESTY,
     cdl_slope_offset_power,
     export_locked_resolve_bundle,
     export_resolve_bundle,
@@ -350,6 +351,58 @@ def test_wb_off_has_no_baked_cat(tmp_path: Path):
     on_cube = (tmp_path / "on" / "03_WB.cube").read_text(encoding="utf-8")
     assert not _dctl_cat_is_identity(on_dctl)
     assert _cube_rgb_lines(on_cube) == _cube_rgb_lines(baked)
+
+
+def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
+    """高级 Resolve 导出 README：中文诚实说明，不改色彩数字。"""
+    export_resolve_bundle(
+        tmp_path, idt_ids=["arri_logc4_awg4"], include_wb=False, lut_size=5
+    )
+    readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
+    assert "709 预览" in readme
+    assert "整段代理，不是全精度成片" in readme
+    assert "已实现（未验证）" in readme
+    assert RESOLVE_README_HONESTY.strip() in readme
+    assert "identity / `enabled=false`" in readme
+    assert "不烘焙 CAT" in readme
+    assert "机内色温只填旋钮，默认 CAT 是单位阵。" in readme
+    assert "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。" in readme
+    assert "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。" in readme
+    assert "机内白转到 D65" not in readme
+    assert "精准" not in readme
+    assert "一键还原" not in readme
+    assert readme.index("诚实说明") < readme.index("Graph (serial nodes)")
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    assert "DIY BT.709 OETF" in readme
+    assert "不是** ACES OT / RRT" in readme
+    assert "Not an ACES Output Transform" in readme
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    assert REC709_PREVIEW_LABEL in cube
+    assert "ACES Output Transform" not in cube.replace("Not an ACES Output Transform", "")
+    assert "ACES OT" not in cube.replace("not ACES OT", "")
+    _assert_chengpian_not_a_deliverable_claim(cube)
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    note_fn = swift.split("static func exportNote")[1].split("static func export(")[0]
+    readme_fn = swift.split("private static func readme")[1].split("/// Proxy sequence folder")[0]
+    for blob in (note_fn, readme_fn):
+        assert "709 预览" in blob
+        assert "整段代理，不是全精度成片" in blob
+        assert "已实现（未验证）" in blob
+        assert "identity" in blob and "enabled=false" in blob
+        assert "机内色温只填旋钮，默认 CAT 是单位阵。" in blob
+        assert "CAT(user→D65)·inv(CAT(as→D65))" in blob
+        assert "3200→5600 变暖" in blob
+        assert "不猜 5600" in blob
+        assert "机内白转到 D65" not in blob
+        assert "精准" not in blob
+        assert "一键还原" not in blob
+        stripped = blob.replace("CAT(user→D65)·inv(CAT(as→D65))", "")
+        assert "CAT(as→D65)" not in stripped
+        _assert_chengpian_not_a_deliverable_claim(blob)
 
 
 def test_709_cube_labeled_preview_not_aces_ot(tmp_path: Path):
