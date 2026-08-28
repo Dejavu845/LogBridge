@@ -166,6 +166,8 @@ def test_as_shot_wb_copy_and_no_5600_guess():
     assert "after IDT" in inspector
     assert "已实现（未验证）" in inspector
     assert "CAT(user→D65)·inv(CAT(as→D65))" in inspector
+    assert "单位阵" in inspector
+    assert "3200→5600 变暖" in inspector
     swift = _all_swift()
     assert "pickNeutral" in swift or "Pick neutral" in swift
     assert "asShotUnknown" in swift or "as-shot unknown" in swift
@@ -214,9 +216,9 @@ def test_user_visible_english_leftovers_are_chinese():
     wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
     assert 'Text("绿品")' in wb
     assert 'Text("Tint")' not in wb
-    assert "机内色温只填旋钮，默认 CAT 是单位矩阵，不把 5600 当光源。" in wb
-    assert "改色温是相对变换 CAT(user→D65)·inv(CAT(as→D65))，升高开尔文变暖。" in wb
-    assert "灰卡是绝对 CAT；读不到就保持 identity，不猜 5600。" in wb
+    assert "机内色温只填旋钮，默认 CAT 是单位阵。" in wb
+    assert "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。" in wb
+    assert "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。" in wb
     assert "As-shot CCT/tint fills these knobs" not in wb
     assert "do not guess 5600 or 6504" not in wb.lower()
     assert "implemented (unverified)" not in wb.lower()
@@ -227,6 +229,25 @@ def test_user_visible_english_leftovers_are_chinese():
     export_fn = clip.split("func exportResolve()")[1]
     assert 'panel.prompt = "导出"' in export_fn
     assert 'panel.prompt = "Export"' not in export_fn
+
+
+def test_inspector_cat_three_sentences_review_lock():
+    """As-shot default is 单位阵. Relative CAT only on user move. No 机内白转到 D65."""
+    inspector = _read(INSPECTOR)
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    assert "机内色温只填旋钮，默认 CAT 是单位阵。" in wb
+    assert "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。" in wb
+    assert "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。" in wb
+    assert "单位阵" in wb
+    assert "CAT(user→D65)·inv(CAT(as→D65))" in wb
+    assert "3200→5600 变暖" in wb
+    stripped = wb.replace("CAT(user→D65)·inv(CAT(as→D65))", "")
+    assert "CAT(as→D65)" not in stripped
+    assert "机内白转到 D65" not in wb
+    clip = _read(CLIP)
+    assert "已写出代理" in clip
+    assert "待选跳过" in clip
+    assert "失败原因" in clip
 
 
 def test_idt_bar_always_visible_no_hidden_picker():

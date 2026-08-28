@@ -120,7 +120,7 @@ struct WBInspector: View {
                 }
             }
             if session.graph.asShotUnknown {
-                Text("读不到机内色温。保持未填、单位矩阵，不猜 5600 或 6504。点灰卡或手填。已实现（未验证）。")
+                Text("读不到机内色温。保持未填、单位阵，不猜 5600 或 6504。点灰卡或手填。已实现（未验证）。")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
@@ -179,7 +179,7 @@ struct WBInspector: View {
                 }
                 .frame(maxWidth: 220)
             }
-            Text("机内色温只填旋钮，默认 CAT 是单位矩阵，不把 5600 当光源。改色温是相对变换 CAT(user→D65)·inv(CAT(as→D65))，升高开尔文变暖。灰卡是绝对 CAT；读不到就保持 identity，不猜 5600。")
+            Text("机内色温只填旋钮，默认 CAT 是单位阵。用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
