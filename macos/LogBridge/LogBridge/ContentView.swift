@@ -56,32 +56,40 @@ struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text(session.lockStatusText)
-                .font(.subheadline.weight(.semibold))
-            if let reason = session.selectedClip?.processSkipReason {
-                Text(reason)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .lineLimit(1)
-            }
-            Spacer()
-            if session.showsProcessLockedButton {
-                if session.isWritingDeliverables {
-                    Text(session.lastExportNote)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                Text(session.lockStatusText)
+                    .font(.subheadline.weight(.semibold))
+                if let reason = session.selectedClip?.processSkipReason {
+                    Text(reason)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.orange)
                         .lineLimit(1)
                 }
-                Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
+                Spacer()
+                if session.showsProcessLockedButton {
                     if session.isWritingDeliverables {
-                        session.cancelLockedDeliverables()
-                    } else {
-                        session.processLockedClips()
+                        Text(session.lastExportNote)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
+                    Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
+                        if session.isWritingDeliverables {
+                            session.cancelLockedDeliverables()
+                        } else {
+                            session.processLockedClips()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .help("整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。 Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原.")
                 }
-                .buttonStyle(.borderedProminent)
-                .help("整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。 Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原.")
+            }
+            if session.showsBatchSummary {
+                Text(session.lastExportNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, 12)

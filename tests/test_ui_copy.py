@@ -79,7 +79,9 @@ def test_pending_clips_block_process_and_export():
     assert "pendingPickerCount == 0" not in can
     assert "lockedClipCount" in can
     assert "writeACES2065EXR" in clip
-    assert "条已处理" in clip
+    assert "条已写出代理" in clip
+    assert "待选跳过" in clip
+    assert "失败原因" in clip
     assert "writeLockedDeliverables" in clip
     assert "整段代理，不是全精度成片" in clip
     assert "已写出代理" in clip
@@ -117,6 +119,8 @@ def test_docs_name_the_review_locks():
     assert "先选择成对 IDT" in blob
     assert "整段代理，不是全精度成片" in blob
     assert "已写出代理" in blob
+    assert "待选跳过" in blob
+    assert "失败原因" in blob
     assert "帧数对不上" in blob
     assert "读不到帧率，未核对" in blob
     assert "_proxy" in blob
