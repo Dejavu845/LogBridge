@@ -682,6 +682,7 @@ final class SessionModel: ObservableObject {
 
     func setIDT(_ id: UUID, _ idt: IDT) {
         guard let idx = clips.firstIndex(where: { $0.id == id }) else { return }
+        let wasPending = !clips[idx].hasLockedPair
         clips[idx].idt = idt
         clips[idx].detectedCurve = idt.curve
         clips[idx].detectedGamut = idt.gamut
@@ -689,7 +690,29 @@ final class SessionModel: ObservableObject {
         clips[idx].needsUserPicker = false
         clips[idx].detectionNote = "user picker (paired IDT)"
         preview.invalidateIDT(clipID: id)
+        // Lock of the selected pending clip: land on the next 待选.
+        // Mid-write (#32) does not change selection. Does not lock the next IDT.
+        if wasPending, !isWritingDeliverables {
+            selectNextPendingAfterLock(lockedID: id)
+        }
         refreshPreview()
+    }
+
+    /// After locking the selected pending clip, select the next pending/unlocked
+    /// (after current index, else wrap to the first pending that is not the
+    /// one just locked). Stay if none remain. Does not lock IDT. Does not write.
+    func selectNextPendingAfterLock(lockedID: UUID) {
+        guard selectedID == lockedID else { return }
+        guard let currentIdx = clips.firstIndex(where: { $0.id == lockedID }) else { return }
+        if let next = clips.dropFirst(currentIdx + 1).first(where: { !$0.hasLockedPair }) {
+            selectedID = next.id
+            applyClipWBToGraph(next)
+            return
+        }
+        if let wrap = clips.first(where: { $0.id != lockedID && !$0.hasLockedPair }) {
+            selectedID = wrap.id
+            applyClipWBToGraph(wrap)
+        }
     }
 
     func setExposureEnabled(_ enabled: Bool) {
