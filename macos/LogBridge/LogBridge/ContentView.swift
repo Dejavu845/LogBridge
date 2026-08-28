@@ -154,13 +154,15 @@ struct SplitPreview: View {
             .padding(2)
             if session.isExporting {
                 WriteProgressLine(text: session.lastExportNote)
+            } else if let caption = session.selectedClip?.previewCaption {
+                WriteProgressLine(text: caption)
             }
         }
     }
 }
 
-/// One Chinese progress line on the preview while writing. Not a second widget.
-/// Wording stays 「写出代理 i/N · frame k」. No cancel / process button here.
+/// One Chinese line on the preview: write progress, or selected 待选 / 失败 / 已写出代理.
+/// Mid-write wording stays 「写出代理 i/N · frame k」. No cancel / process / retry button here.
 struct WriteProgressLine: View {
     let text: String
 

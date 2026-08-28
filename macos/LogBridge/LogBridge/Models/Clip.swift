@@ -77,6 +77,10 @@ struct Clip: Identifiable, Hashable {
     /// After a write: 已写出代理 or a short Chinese error.
     var sidebarStatusChip: String? { processSkipReason ?? exportChip }
 
+    /// Preview chrome when selected and not mid-export. Existing phrases only.
+    /// Pending / unlocked → that clip's processSkipReason. Failed / success → exportChip.
+    var previewCaption: String? { processSkipReason ?? exportChip }
+
     var displayCurve: String? { idt?.curve ?? detectedCurve }
     var displayGamut: String? { idt?.gamut ?? detectedGamut }
 }
