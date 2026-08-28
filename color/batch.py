@@ -8,6 +8,10 @@ overrides estimate.
 
 「处理已锁定片段」 writes one ACES2065-1 (AP0 linear) **proxy EXR sequence**
 per locked clip (ODT off): ``{stem}_ACES2065-1_proxy/frame_000000.exr``.
+The write loop is decode → IDT → exposure → WB → EXR. It uses
+``apply_ap0`` (clip-constant CAT via ``ap0_write_setup``), not
+``graph.apply``, so a 709 preview ODT is never baked. Preview/scrub
+still runs ODT only on the linear cache.
 Movie write decode uses source 10-bit / native-depth Y′CbCr → float
 (matrix-only; no Rec.709 transfer before IDT). YUV matrix and
 full/video range follow the buffer / nclc attachments — not a
@@ -999,6 +1003,9 @@ def process_locked_writes(
             if on_progress:
                 on_progress(progress_text(clip_index, clip_total))
             frame_total = len(rgb_frames)
+            # Clip-constant CAT / exposure. One IDT+WB pass per write frame.
+            # Never graph.apply — that bakes preview ODT (709 / HLG / PQ).
+            write_setup = graph.ap0_write_setup()
             for index, rgb in enumerate(rgb_frames):
                 if should_cancel and should_cancel():
                     if seq_dir.exists():
@@ -1006,7 +1013,7 @@ def process_locked_writes(
                     cancelled = True
                     break
                 out = seq_dir / sequence_frame_name(index)
-                linear = graph.apply(rgb, clip.idt)
+                linear = graph.apply_ap0(rgb, clip.idt, setup=write_setup)
                 writer(out, np.asarray(linear, dtype=np.float32))
                 if write_fn is None and not out.is_file():
                     raise OSError("write produced no file")

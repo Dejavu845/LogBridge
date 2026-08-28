@@ -422,12 +422,30 @@ class SerialGraph:
         rec_lin = np.asarray(aces_ap0, dtype=np.float64) @ m.T
         return rec709_oetf(np.clip(rec_lin, 0.0, None))
 
-    def apply(self, log_rgb, idt_id: str | None = None) -> np.ndarray:
-        """Run IDT → Exposure (AP0 linear) → optional WB (AP0) → optional ODT.
+    def ap0_write_setup(self) -> tuple[float, np.ndarray | None]:
+        """Clip-constant exposure gain + CAT for a locked write.
 
-        ODT off: ACES2065-1 scene-linear (ACEScct deliverable when encoded
-        for the Resolve timeline). Rec.709 is preview only. HLG/PQ use
-        ACES Output Transform / BT.2100 (OCIO Builtin; no homemade curve).
+        Long sequences reuse this. Do not rebuild the CAT per write frame.
+        WB off → ``None`` (skip the matrix). Numbers match ``exposure_node``
+        / ``wb_node``.
+        """
+        gain = float(self.exposure_gain)
+        cat = self.wb_matrix() if self.wb_enabled else None
+        return gain, cat
+
+    def apply_ap0(
+        self,
+        log_rgb,
+        idt_id: str | None = None,
+        *,
+        setup: tuple[float, np.ndarray | None] | None = None,
+    ) -> np.ndarray:
+        """Write / linear-cache path: IDT → exposure → WB. Never ODT.
+
+        EXR stays ACES2065-1 AP0 linear proxy. Preview ODT (709 / HLG / PQ)
+        is not applied here — ``apply`` still runs ODT for preview/scrub.
+        ``setup`` is ``ap0_write_setup()`` so a long clip does not rebuild
+        the CAT per frame. Pixel math matches ``exposure_node`` / ``wb_node``.
         """
         chosen = idt_id or self.idt_id
         if not chosen:
@@ -435,8 +453,27 @@ class SerialGraph:
         if chosen not in IDT_PAIRS:
             raise KeyError(f"Unknown IDT {chosen!r}")
         work = self.idt_node(log_rgb, chosen)
-        work = self.exposure_node(work)
-        work = self.wb_node(work)
+        if setup is None:
+            work = self.exposure_node(work)
+            return self.wb_node(work)
+        gain, cat = setup
+        work = np.asarray(work, dtype=np.float64)
+        if gain != 1.0:
+            work = work * float(gain)
+        if cat is not None:
+            work = work @ np.asarray(cat, dtype=np.float64).T
+        return work
+
+    def apply(self, log_rgb, idt_id: str | None = None) -> np.ndarray:
+        """Run IDT → Exposure (AP0 linear) → optional WB (AP0) → optional ODT.
+
+        ODT off: ACES2065-1 scene-linear (ACEScct deliverable when encoded
+        for the Resolve timeline). Rec.709 is preview only. HLG/PQ use
+        ACES Output Transform / BT.2100 (OCIO Builtin; no homemade curve).
+        Locked proxy EXR writes use ``apply_ap0`` — not this method —
+        so a 709 preview ODT is not baked into the sequence.
+        """
+        work = self.apply_ap0(log_rgb, idt_id)
         if self.odt == ODT_REC709:
             return self.odt_node(work)
         if self.odt in HDR_ODTS:

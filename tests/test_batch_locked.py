@@ -615,6 +615,94 @@ def test_missing_ycbcr_tags_fails_closed_no_709_default(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(require)
 
 
+def test_write_loop_one_pass_no_preview_8bit_no_odt(tmp_path: Path, monkeypatch):
+    """Locked write: one IDT+WB per frame, no preview /255, no ODT, still 代理."""
+    clips = [
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=4.0, fps=1.0)
+    ]
+    grey = _slog3_grey()
+    frames = {"locked.mov": [grey, grey, grey, grey]}
+    off = SerialGraph(idt_id="sony_slog3_sgamut3", odt_enabled=False)
+    on = SerialGraph(idt_id="sony_slog3_sgamut3", odt_enabled=True)
+    dest_off = tmp_path / "off"
+    dest_on = tmp_path / "on"
+    report_off = process_locked_writes(clips, dest_off, frames=frames, graph=off)
+    report_on = process_locked_writes(clips, dest_on, frames=frames, graph=on)
+    assert report_off.processed_count == 1
+    assert report_on.processed_count == 1
+    assert report_off.written[0].frame_count == 4
+    off_rgb = read_rgb_exr(Path(report_off.written[0].path) / sequence_frame_name(0))
+    on_rgb = read_rgb_exr(Path(report_on.written[0].path) / sequence_frame_name(0))
+    np.testing.assert_allclose(off_rgb, on_rgb, atol=1e-12)
+    np.testing.assert_allclose(off_rgb[0, 0], 0.18, atol=5e-3)
+    preview_709 = on.apply(grey)
+    assert not np.allclose(on_rgb[0, 0], preview_709, atol=1e-2)
+    assert Path(report_on.written[0].path).name.endswith("_ACES2065-1_proxy")
+    assert HONEST_PROXY_NOTE in report_on.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report_on.processed_status_text)
+    assert "精准" not in report_on.processed_status_text
+
+    wb_calls: list[int] = []
+    orig = SerialGraph.wb_matrix
+
+    def counted(self):
+        wb_calls.append(1)
+        return orig(self)
+
+    monkeypatch.setattr(SerialGraph, "wb_matrix", counted)
+    wb = SerialGraph(
+        idt_id="sony_slog3_sgamut3",
+        wb_enabled=True,
+        wb_cct=3200.0,
+        wb_source=WB_SOURCE_GREY,
+    )
+    process_locked_writes(clips, tmp_path / "wb", frames=frames, graph=wb)
+    assert len(wb_calls) == 1
+
+    engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    clip = _read(CLIP)
+    batch = _read(ROOT / "color/batch.py")
+    graph_py = _read(ROOT / "color/graph.py")
+    export_seq = engine.split("func exportGradedAP0Sequence")[1].split(
+        "func decodeAllSourceFrames"
+    )[0]
+    movie = engine.split("func decodeMovieAllFrames")[1].split(
+        "func linearAP0Frame"
+    )[0]
+    write_py = batch.split("write_setup = graph.ap0_write_setup()")[1].split(
+        "if cancelled:"
+    )[0]
+    assert "apply_ap0" in write_py
+    assert "graph.apply(" not in write_py
+    assert "ap0_write_setup" in graph_py
+    assert "Never ODT" in graph_py.split("def apply_ap0")[1].split("def apply(")[0]
+    assert "writeCAT" in export_seq
+    assert "gradeAP0" in export_seq
+    assert "applyODT" not in export_seq
+    assert "extractRGB" not in export_seq
+    assert "/ 255" not in export_seq
+    assert "gradedCache" not in export_seq
+    assert "refreshODT" not in export_seq
+    assert "copyNextSampleBuffer" in movie
+    assert "requestedTime" not in movie
+    assert "AVAssetImageGenerator" not in movie
+    assert "seek(" not in movie
+    assert "applyODT" not in movie
+    assert "rec709OETF" not in movie
+    assert "writeMatrixRGB(" not in movie
+    assert "applyYCbCrMatrixToFloat" in movie
+    grade = engine.split("func gradeAP0")[1].split("func exportGradedAP0(")[0]
+    assert "applyODT" not in grade
+    assert "applyPreparedCAT" in grade
+    export_body = clip.split("func exportLockedEXR")[1].split(
+        "func cancelLockedDeliverables"
+    )[0]
+    assert "exportGradedAP0Sequence" in export_body
+    assert "writeACES2065EXR" in export_body
+    assert "applyODT" not in export_body
+    _assert_export_decode_is_source_ycbcr_float(engine)
+
+
 def test_honest_proxy_copy_and_filename():
     assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
     assert DELIVERABLE_SUFFIX == "_ACES2065-1_proxy"
