@@ -20,15 +20,19 @@ enum ResolveExporter {
 
     static func exportNote(clips: [Clip], includeWBNode: Bool, cct: Double?, tint: Double) -> String {
         var lines: [String] = []
-        lines.append("LogBridge M1 Resolve export (implemented, unverified)")
-        lines.append("Working space: ACEScct timeline / ACES2065-1 interchange.")
-        let cctLabel = cct.map { "\(Int($0)) K" } ?? "pending / identity (do not guess 5600 or 6504)"
-        lines.append("WB node: \(includeWBNode ? "ON (AP0 Bradford CAT, \(cctLabel), tint \(tint))" : "present, bypassed by default")")
-        lines.append("ODT: 709 预览 (BT.709 OETF preview, not ACES OT), off by default. Off = ACEScct deliverable. 预览·非成片.")
-        lines.append("Files: graph.xml, graph.dot, 01_IDT_*.cube, 02_Exposure.{cube,dctl}, 03_WB.{cube,cdl,ccc,dctl}, 04_ODT_Rec709.cube, README_RESOLVE.md")
-        lines.append("Locked paired-IDT clips only. Pending stay listed (先选择成对 IDT / 先选择 Log 与色域).")
-        lines.append("Exposure is its own node (stops; not baked into IDT/WB at 0). Bypass WB: disable WB node (or DCTL Bypass WB).")
-        lines.append("Clips:")
+        lines.append("LogBridge M1 Resolve 导出（已实现（未验证））")
+        lines.append("工作空间：ACEScct 时间线 / ACES2065-1 交换。")
+        lines.append("Rec.709 cube 是 709 预览，DIY BT.709 OETF，不是 ACES OT / RRT，不是成片。")
+        lines.append("关闭白平衡时写出 identity / enabled=false，不烘焙 CAT。")
+        lines.append("主按钮时间线/EXR 是整段代理，不是全精度成片（ACES2065-1 _proxy 序列），不是 ACEScct。")
+        lines.append("机内色温只填旋钮，默认 CAT 是单位阵。用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。")
+        let cctLabel = cct.map { "\(Int($0)) K" } ?? "pending / identity（不猜 5600 或 6504）"
+        lines.append("WB 节点：\(includeWBNode ? "开（AP0 Bradford CAT，\(cctLabel)，tint \(tint)）" : "已写出但默认旁路（identity / enabled=false，不烘焙 CAT）")")
+        lines.append("ODT：709 预览（BT.709 OETF preview，不是 ACES OT），默认关。预览·非成片。")
+        lines.append("文件：graph.xml, graph.dot, 01_IDT_*.cube, 02_Exposure.{cube,dctl}, 03_WB.{cube,cdl,ccc,dctl}, 04_ODT_Rec709.cube, README_RESOLVE.md")
+        lines.append("仅已锁定成对 IDT 片段。待选仍列出（先选择成对 IDT / 先选择 Log 与色域）。")
+        lines.append("Exposure 是独立节点（stops；0 时不烘焙进 IDT/WB）。旁路 WB：关掉 WB 节点（或 DCTL Bypass WB）。")
+        lines.append("片段：")
         for clip in clips {
             let name = clip.idt?.ocioName ?? clip.lockedPairLabel
             lines.append("  - \(clip.url.lastPathComponent): \(name) [\(clip.verificationBadge)]")
@@ -698,11 +702,18 @@ enum ResolveExporter {
 
     private static func readme(idts: [IDT], cct: Double?, tint: Double, includeWB: Bool, exposureStops: Double = 0) -> String {
         let idtList = idts.isEmpty ? "(none — assign IDT in Resolve CST)" : idts.map(\.rawValue).joined(separator: ", ")
-        let wbState = includeWB ? "enabled by default" : "present but bypassed by default"
+        let wbState = includeWB ? "默认开启" : "已写出但默认旁路（identity / enabled=false，不烘焙 CAT）"
         return """
-        # LogBridge Resolve export
+        # LogBridge Resolve 导出
 
-        Status: **implemented (unverified)**. This is not a camera-support claim.
+        状态：**已实现（未验证）** / implemented (unverified)。不是相机支持声明。
+
+        ## 诚实说明
+
+        - Rec.709 cube 是 **709 预览**，DIY BT.709 OETF，**不是** ACES OT / RRT，不是成片。preview only. Not an ACES Output Transform.
+        - 关闭白平衡时写出 identity / `enabled=false`，不烘焙 CAT。
+        - 主按钮时间线/EXR 是 **整段代理，不是全精度成片**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
+        - 机内色温只填旋钮，默认 CAT 是单位阵。用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。
 
         ## Graph (serial nodes)
 
