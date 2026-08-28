@@ -364,6 +364,54 @@ def test_write_progress_on_preview_inspector_locks():
     assert "预览·非成片" in _all_swift()
 
 
+def test_selected_clip_glanceable_on_preview():
+    """Selected clip 待选 / 失败 / 已写出代理 on preview chrome. No new buttons."""
+    content = _read(CONTENT)
+    clip = _read(CLIP)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+
+    cap = clip.split("var previewCaption")[1].split("var displayCurve")[0]
+    assert "processSkipReason" in cap
+    assert '"先选择 Log 与色域"' in cap
+    assert "exportChip" in cap
+    assert "已写出代理" in clip
+    assert "重试" not in cap
+    assert "精准" not in cap
+
+    preview = content.split("struct SplitPreview")[1].split("struct StatusBar")[0]
+    assert "previewCaption" in preview
+    assert "WriteProgressLine" in preview
+    assert "isExporting" in preview
+    assert "lastExportNote" in preview
+    assert preview.index("isExporting") < preview.index("previewCaption")
+    assert 'Button(' not in preview
+    assert "重试" not in preview
+    assert "取消" not in preview
+    assert "处理已锁定片段" not in preview
+    assert "精准" not in preview
+    line = content.split("struct WriteProgressLine")[1].split("struct StatusBar")[0]
+    assert line.count("Button(") == 0
+    assert "重试" not in line
+    assert "ProgressView" not in line
+    assert "Text(text)" in line
+
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "showsProcessLockedButton" in bar
+    assert "lockedClipCount" in clip
+    assert "重试" not in bar
+
+    row = sidebar.split("struct ClipRow")[1]
+    assert "exportChip" in row
+    assert "已写出代理" in row
+    assert 'Button("重试")' not in sidebar
+    assert "精准" not in sidebar
+
+    assert "整段代理，不是全精度成片" in content
+    assert "预览·非成片" in _all_swift()
+    assert "成片预览关" in clip or "预览·非成片" in clip or "不是成片" in clip
+
+
 def test_forbidden_marketing_copy_stays_forbidden():
     swift = _all_swift()
     docs = (ROOT / "README.md").read_text(encoding="utf-8") + (ROOT / "ACCEPTANCE.md").read_text(
