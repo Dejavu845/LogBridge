@@ -672,7 +672,7 @@ final class SessionModel: ObservableObject {
     var odtPreviewTitle: String {
         switch graph.odt {
         case .off:
-            return "成片预览关 · ACEScct"
+            return "709 预览关"
         case .rec709:
             return "Rec.709 预览·非成片"
         case .hlg:
