@@ -930,7 +930,7 @@ final class SessionModel: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.prompt = "Export"
+        panel.prompt = "导出"
         panel.message = "已锁定片段写出 Resolve 节点图（XML / DCTL / .cube）。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。预览·非成片。已实现（未验证）。"
         panel.begin { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }

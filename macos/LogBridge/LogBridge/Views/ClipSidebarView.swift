@@ -72,7 +72,7 @@ private struct DropZone: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Text("implemented (unverified)")
+                Text("已实现（未验证）")
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)

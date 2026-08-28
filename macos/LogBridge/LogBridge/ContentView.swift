@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 /// One primary path: list → preview + paired IDT → 处理已锁定片段.
 /// Right inspector is Exposure + WB only. Paired IDT stays under preview
 /// (never inside 「高级」). Node strip / Resolve export sit behind 「高级」
-/// (hidden by default). UI copy uses "implemented (unverified)"
+/// (hidden by default). UI copy uses "已实现（未验证）"
 /// — never "supported". Primary action is "处理已锁定片段" — never 一键还原.
 /// Unlocked IDT is skipped, never guessed. Export: "导出 ACEScct / EXR".
 struct ContentView: View {
@@ -161,7 +161,7 @@ struct StatusBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text("LogBridge · serial graph · implemented (unverified)")
+            Text("LogBridge · 已实现（未验证）")
             if session.preview.isWorking || session.isWritingDeliverables {
                 ProgressView()
                     .controlSize(.small)
