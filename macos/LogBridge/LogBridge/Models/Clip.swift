@@ -683,14 +683,12 @@ final class SessionModel: ObservableObject {
     }
 
     var odtPreviewCaption: String {
-        let badge = "预览·非成片 — 8-bit thumbnail is not a deliverable."
+        // Hover on the Rec.709 pane. Existing phrases only (#43 / #47).
         switch graph.odt {
         case .off:
-            return "Node 4 off: ACEScct deliverable. This pane is not tagged Rec.709. Not a finished picture. \(badge)"
-        case .rec709:
-            return "Tagged CGColorSpace.itur_709. Preview only — not a finished grade on the 709 pane. \(badge) Golden grey-card samples required before any accuracy claim."
-        case .hlg, .pq:
-            return "\(graph.odt.acesOTNote) 未与 709 匹配，不是同一条渲染。Preview does not invent a homemade HLG/PQ curve. \(badge)"
+            return "709 预览关"
+        case .rec709, .hlg, .pq:
+            return "预览·非成片"
         }
     }
 
