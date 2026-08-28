@@ -153,8 +153,9 @@ final class SessionModel: ObservableObject {
     }
 
     func refreshPreview() {
-        // Selected clip (or grade) changed. PreviewEngine drops a stale
-        // first-frame if selection already moved on.
+        // Selected clip (or grade) changed. PreviewEngine keeps only this
+        // clip's preview source/linear/graded and drops a stale first-frame
+        // if selection already moved on. Write path is not this cache.
         preview.refresh(clip: selectedClip, graph: graph)
     }
 

@@ -12,10 +12,14 @@ import Combine
 
 /// Downscaled preview (max 1920 long edge). Not a full-resolution render.
 ///
-/// Cache:
-///   - decoded camera/log thumbnail per clip URL (VideoToolbox, no VT 709)
-///   - IDT ACES2065-1 linear buffer per clip+IDT
+/// Cache (selected clip only — not every clip in a mixed bin):
+///   - decoded camera/log thumbnail (VideoToolbox, no VT 709)
+///   - IDT ACES2065-1 linear buffer
 ///   - graded linear (IDT+exposure+WB) so scrub / ODT change only re-runs ODT
+/// Selection change drops source/linear/graded for clips that are no longer
+/// selected. Current clip stays so #35 ODT-only still hits; a later visit
+/// re-decodes once, then ODT-only again. Write path does not use these
+/// dictionaries and is not evicted here.
 /// Metal applies the same locked matrices/LUT/ACES OT as CPU. No Core Image P3.
 /// Heavy work runs off the main thread on one serial queue — not a thread pool.
 /// Arrow / click can outrun first-frame decode. Only the latest selected
@@ -72,10 +76,24 @@ final class PreviewEngine: ObservableObject {
         gradedCache.removeAll()
     }
 
+    /// Preview dictionaries only. Does not touch write-path decode buffers.
     func evict(clipID: UUID) {
         sourceCache[clipID] = nil
         linearCache[clipID] = nil
         gradedCache[clipID] = nil
+    }
+
+    /// Keep the selected clip's preview source / linear / graded.
+    /// Drop the rest so a mixed bin does not hold every visit forever.
+    /// Write path (`exportGradedAP0` / sequence) does not read these
+    /// dictionaries and is not evicted here.
+    func retainPreviewCaches(keeping clipID: UUID?) {
+        let ids = Set(sourceCache.keys)
+            .union(linearCache.keys)
+            .union(gradedCache.keys)
+        for id in ids where id != clipID {
+            evict(clipID: id)
+        }
     }
 
     /// Bump generation, remember the selected clip, cancel queued preview work.
@@ -111,11 +129,16 @@ final class PreviewEngine: ObservableObject {
 
     func refresh(clip: Clip?, graph: SerialGraph) {
         let gen = beginPreviewRequest(clipID: clip?.id)
+        retainPreviewCaches(keeping: clip?.id)
         guard let clip else {
             sourceImage = nil
             odtImage = nil
             status = "没有素材"
             isWorking = false
+            // In-flight first-frame may refill after this; drop again on the queue.
+            enqueuePreview { [weak self] in
+                self?.retainPreviewCaches(keeping: nil)
+            }
             return
         }
         isWorking = true
@@ -129,11 +152,15 @@ final class PreviewEngine: ObservableObject {
     /// Scrub / ODT switch: reuse graded linear (IDT+exposure+WB). Only re-run ODT.
     func refreshODT(clip: Clip?, graph: SerialGraph) {
         let gen = beginPreviewRequest(clipID: clip?.id)
+        retainPreviewCaches(keeping: clip?.id)
         guard let clip else {
             sourceImage = nil
             odtImage = nil
             status = "没有素材"
             isWorking = false
+            enqueuePreview { [weak self] in
+                self?.retainPreviewCaches(keeping: nil)
+            }
             return
         }
         let graphCopy = graph
@@ -149,6 +176,8 @@ final class PreviewEngine: ObservableObject {
     /// rebuild linear once, then ODT-only again.
     private func applyODTFromGradedOrRebuild(clip: Clip, graph: SerialGraph, generation: UInt64) {
         guard isCurrentPreview(generation: generation, clipID: clip.id) else { return }
+        // Stale work may have refilled another clip after the main-thread retain.
+        retainPreviewCaches(keeping: clip.id)
         if let idt = clip.idt, !idt.isStub,
            let graded = gradedCacheHit(clipID: clip.id, idt: idt, graph: graph) {
             let (odtCG, note) = renderODTFromGraded(graded: graded, graph: graph, cacheHit: true)
@@ -201,6 +230,7 @@ final class PreviewEngine: ObservableObject {
 
     private func build(clip: Clip, graph: SerialGraph, generation: UInt64) {
         guard isCurrentPreview(generation: generation, clipID: clip.id) else { return }
+        retainPreviewCaches(keeping: clip.id)
         let source = cachedSource(clip: clip, generation: generation)
         guard isCurrentPreview(generation: generation, clipID: clip.id) else { return }
         guard let source else {

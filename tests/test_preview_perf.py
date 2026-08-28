@@ -203,6 +203,87 @@ def test_stale_preview_decode_dropped_on_selection_change():
     assert "精准" not in session_refresh
 
 
+def test_preview_caches_keep_only_selected_clip():
+    """Mixed-bin preview must not keep every clip's source/linear/graded forever."""
+    engine = _read(ENGINE)
+    clip = _read(CLIP)
+
+    assert "func retainPreviewCaches" in engine
+    assert "func evict(clipID:" in engine
+    retain = engine.split("func retainPreviewCaches")[1].split("func beginPreviewRequest")[0]
+    assert "evict(clipID:" in retain
+    assert "sourceCache" in retain
+    assert "linearCache" in retain
+    assert "gradedCache" in retain
+    assert "exportGradedAP0" not in retain
+    assert "decodeAllSourceFrames" not in retain
+    assert "精准" not in retain
+
+    refresh = engine.split("func refresh(")[1].split("func refreshODT(")[0]
+    assert "retainPreviewCaches(keeping: clip?.id)" in refresh
+    assert "beginPreviewRequest(clipID: clip?.id)" in refresh
+    assert "enqueuePreview" in refresh
+    assert "OperationQueue" not in refresh
+    assert "精准" not in refresh
+
+    refresh_odt = engine.split("func refreshODT(")[1].split(
+        "private func applyODTFromGradedOrRebuild"
+    )[0]
+    assert "retainPreviewCaches(keeping: clip?.id)" in refresh_odt
+    assert "beginPreviewRequest(clipID: clip?.id)" in refresh_odt
+    assert "精准" not in refresh_odt
+
+    odt = engine.split("private func applyODTFromGradedOrRebuild")[1].split(
+        "private func gradedCacheHit"
+    )[0]
+    assert "retainPreviewCaches(keeping: clip.id)" in odt
+    assert odt.index("isCurrentPreview") < odt.index("retainPreviewCaches")
+    assert "gradedCacheHit" in odt
+    assert "精准" not in odt
+
+    build = engine.split("private func build(")[1].split("private static func gradeKey")[0]
+    assert "retainPreviewCaches(keeping: clip.id)" in build
+    assert build.index("isCurrentPreview") < build.index("retainPreviewCaches")
+    assert "cachedSource" in build
+    assert "精准" not in build
+
+    odt_hit = engine.split("func refreshODT(")[1].split("private func build(")[0]
+    assert "gradedCacheHit" in odt_hit
+    assert "publishODTOnly" in odt_hit
+    assert "decodeDownscaled" not in odt_hit
+    assert "decodeMovieVideoToolbox" not in odt_hit
+    assert "rgbFloatFromLogPixelBuffer" not in odt_hit
+
+    export_first = engine.split("func exportGradedAP0(")[1].split(
+        "func exportGradedAP0Sequence"
+    )[0]
+    assert "retainPreviewCaches" not in export_first
+    assert "evict(" not in export_first
+    assert "beginPreviewRequest" not in export_first
+    assert "pendingPreviewWork" not in export_first
+
+    export_seq = engine.split("func exportGradedAP0Sequence")[1].split(
+        "func decodeAllSourceFrames"
+    )[0]
+    assert "retainPreviewCaches" not in export_seq
+    assert "evict(" not in export_seq
+    assert "beginPreviewRequest" not in export_seq
+    assert "pendingPreviewWork" not in export_seq
+    assert "writeCAT" in export_seq
+
+    assert "OperationQueue" not in engine
+    assert "ThreadPool" not in engine
+    assert 'DispatchQueue(label: "app.logbridge.preview"' in engine
+    assert "not a thread pool" in engine
+    assert "预览·非成片" in engine
+    assert "整段代理，不是全精度成片" in engine
+
+    session_refresh = clip.split("func refreshPreview()")[1].split("func refreshODTOnly()")[0]
+    assert "preview.refresh(clip: selectedClip" in session_refresh
+    assert "preview.exportGradedAP0" not in session_refresh
+    assert "精准" not in session_refresh
+
+
 def test_preview_decode_stays_8bit_first_and_scrub_odt_only():
     """Preview may stay 8-bit. Write-path 10-bit float must not steal scrub caches."""
     engine = _read(ENGINE)
