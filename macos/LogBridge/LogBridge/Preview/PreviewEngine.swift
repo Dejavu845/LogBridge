@@ -85,7 +85,7 @@ final class PreviewEngine: ObservableObject {
         status = "正在解码预览…"
         let graphCopy = graph
         queue.async { [weak self] in
-            self?.build(clip: clip, graph: graphCopy, generation: gen, odtOnly: false)
+            self?.build(clip: clip, graph: graphCopy, generation: gen)
         }
     }
 
@@ -102,11 +102,67 @@ final class PreviewEngine: ObservableObject {
         }
         let graphCopy = graph
         queue.async { [weak self] in
-            self?.build(clip: clip, graph: graphCopy, generation: gen, odtOnly: true)
+            self?.applyODTFromGradedOrRebuild(clip: clip, graph: graphCopy, generation: gen)
         }
     }
 
-    private func build(clip: Clip, graph: SerialGraph, generation: UInt64, odtOnly: Bool) {
+    /// Cache hit: ODT only on existing graded linear.
+    /// Does not decode Y′CbCr. Does not re-run IDT. Does not re-run exposure/WB.
+    /// Does not go through the write-path unpack. Preview stays 8-bit-first.
+    /// Cache miss (new clip, exposure/WB/IDT change, or no graded buffer):
+    /// rebuild linear once, then ODT-only again.
+    private func applyODTFromGradedOrRebuild(clip: Clip, graph: SerialGraph, generation: UInt64) {
+        if let idt = clip.idt, !idt.isStub,
+           let graded = gradedCacheHit(clipID: clip.id, idt: idt, graph: graph) {
+            let (odtCG, note) = renderODTFromGraded(graded: graded, graph: graph, cacheHit: true)
+            publishODTOnly(generation: generation, odt: odtCG, status: note)
+            return
+        }
+        build(clip: clip, graph: graph, generation: generation)
+    }
+
+    private func gradedCacheHit(clipID: UUID, idt: IDT, graph: SerialGraph) -> GradedFrame? {
+        let key = Self.gradeKey(idt: idt, graph: graph)
+        guard let hit = gradedCache[clipID], hit.key == key else { return nil }
+        return hit
+    }
+
+    /// ODT from a graded linear buffer. No decode, no IDT, no exposure/WB.
+    private func renderODTFromGraded(graded: GradedFrame, graph: SerialGraph, cacheHit: Bool) -> (CGImage?, String) {
+        var work = graded.rgb
+        var odtCG: CGImage?
+        var note = "预览代理，不是成片"
+        if cacheHit {
+            note = "ODT only — graded linear cache hit. Scrub does not re-run IDT."
+        }
+        if graph.odt == .rec709 {
+            PreviewColor.applyODT(rgb: &work)
+            odtCG = PreviewColor.makeCGImage(
+                rgb: work,
+                width: graded.width,
+                height: graded.height,
+                colorSpace: CGColorSpace(name: CGColorSpace.itur_709)
+            )
+        } else if graph.odt.isHDR {
+            // No homemade HLG/PQ. Preview does not invent a Rec.2100 transfer.
+            note = "\(graph.odt.acesOTNote) 预览·非成片 — preview does not apply a homemade HDR curve."
+        } else {
+            note = "ODT off — ACEScct deliverable. Rec.709 pane is not tagged."
+        }
+        return (odtCG, note)
+    }
+
+    /// Scrub / ODT hit: replace the 709 pane only. Source thumbnail stays.
+    private func publishODTOnly(generation: UInt64, odt: CGImage?, status: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.generation == generation else { return }
+            self.odtImage = odt
+            self.status = status
+            self.isWorking = false
+        }
+    }
+
+    private func build(clip: Clip, graph: SerialGraph, generation: UInt64) {
         let source = cachedSource(clip: clip)
         guard let source else {
             publish(generation: generation, source: nil, odt: nil, status: "解不出预览帧")
@@ -125,26 +181,7 @@ final class PreviewEngine: ObservableObject {
         }
         let linear = cachedLinear(clipID: clip.id, idt: idt, source: source)
         let graded = cachedGraded(clipID: clip.id, idt: idt, linear: linear, graph: graph)
-        var work = graded.rgb
-        var odtCG: CGImage?
-        var note = "预览代理，不是成片"
-        if odtOnly {
-            note = "ODT only — graded linear cache hit. Scrub does not re-run IDT."
-        }
-        if graph.odt == .rec709 {
-            PreviewColor.applyODT(rgb: &work)
-            odtCG = PreviewColor.makeCGImage(
-                rgb: work,
-                width: graded.width,
-                height: graded.height,
-                colorSpace: CGColorSpace(name: CGColorSpace.itur_709)
-            )
-        } else if graph.odt.isHDR {
-            // No homemade HLG/PQ. Preview does not invent a Rec.2100 transfer.
-            note = "\(graph.odt.acesOTNote) 预览·非成片 — preview does not apply a homemade HDR curve."
-        } else {
-            note = "ODT off — ACEScct deliverable. Rec.709 pane is not tagged."
-        }
+        let (odtCG, note) = renderODTFromGraded(graded: graded, graph: graph, cacheHit: false)
         publish(generation: generation, source: source.cgImage, odt: odtCG, status: note)
     }
 

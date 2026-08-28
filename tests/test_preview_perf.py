@@ -49,6 +49,54 @@ def test_graded_cache_scrub_skips_idt():
     assert "refreshODTOnly()" in clip
 
 
+def test_set_odt_uses_refresh_odt_only():
+    """setODT / setODTEnabled must call refreshODTOnly, not a full rebuild."""
+    clip = _read(CLIP)
+    set_odt = clip.split("func setODT(")[1].split("func setWBParams")[0]
+    assert "refreshODTOnly()" in set_odt
+    assert "refreshPreview()" not in set_odt
+    assert "invalidateWBODT" not in set_odt
+    assert "invalidateIDT" not in set_odt
+    set_en = clip.split("func setODTEnabled")[1].split("func setODT(")[0]
+    assert "refreshODTOnly()" in set_en
+    assert "refreshPreview()" not in set_en
+    assert "invalidateWBODT" not in set_en
+    only = clip.split("func refreshODTOnly()")[1].split("var pendingPickerCount")[0]
+    assert "preview.refreshODT" in only
+    assert "preview.refresh(" not in only
+    exp = clip.split("func setExposureStops")[1].split("func setWBEnabled")[0]
+    assert "invalidateWBODT" in exp
+    assert "refreshPreview()" in exp
+    assert "refreshODTOnly()" not in exp
+
+
+def test_odt_only_refresh_skips_decode_and_write_unpack():
+    """Scrub / ODT hit: ODT only. No Y′CbCr decode, IDT, exposure/WB, or #31 unpack."""
+    engine = _read(ENGINE)
+    odt_hit = engine.split("func refreshODT(")[1].split("private func build(")[0]
+    assert "applyODTFromGradedOrRebuild" in odt_hit
+    assert "gradedCacheHit" in odt_hit
+    assert "renderODTFromGraded" in odt_hit
+    assert "publishODTOnly" in odt_hit
+    assert "PreviewColor.applyODT" in odt_hit
+    assert "decodeMovieAllFrames" not in odt_hit
+    assert "rgbFloatFromLogPixelBuffer" not in odt_hit
+    assert "requireSourceYCbCrUnpack" not in odt_hit
+    assert "decodeAllSourceFrames" not in odt_hit
+    assert "decodeMovieVideoToolbox" not in odt_hit
+    assert "decodeDownscaled" not in odt_hit
+    assert "cachedSource" not in odt_hit
+    assert "applyIDT" not in odt_hit
+    assert "applyExposure" not in odt_hit
+    assert "applyWB" not in odt_hit
+    assert "extractRGB" not in odt_hit
+    assert "正在解码预览" not in odt_hit
+    key = engine.split("func gradeKey")[1].split("func cachedGraded")[0]
+    assert "graph.odt" not in key
+    assert "exposureStops" in key
+    assert "wbEnabled" in key
+
+
 def test_source_not_tagged_709_extract_device_rgb():
     engine = _read(ENGINE)
     source = _read(SOURCE)
@@ -76,3 +124,5 @@ def test_preview_decode_stays_8bit_first_and_scrub_odt_only():
     assert "gradedCache" in engine
     assert "Scrub does not re-run IDT" in engine
     assert "rgbFloatFromLogPixelBuffer" not in cached
+    assert "预览·非成片" in engine
+    assert "整段代理，不是全精度成片" in engine
