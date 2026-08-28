@@ -153,6 +153,8 @@ final class SessionModel: ObservableObject {
     }
 
     func refreshPreview() {
+        // Selected clip (or grade) changed. PreviewEngine drops a stale
+        // first-frame if selection already moved on.
         preview.refresh(clip: selectedClip, graph: graph)
     }
 

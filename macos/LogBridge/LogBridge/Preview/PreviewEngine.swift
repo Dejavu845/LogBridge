@@ -17,7 +17,11 @@ import Combine
 ///   - IDT ACES2065-1 linear buffer per clip+IDT
 ///   - graded linear (IDT+exposure+WB) so scrub / ODT change only re-runs ODT
 /// Metal applies the same locked matrices/LUT/ACES OT as CPU. No Core Image P3.
-/// Heavy work runs off the main thread.
+/// Heavy work runs off the main thread on one serial queue — not a thread pool.
+/// Arrow / click can outrun first-frame decode. Only the latest selected
+/// clip's preview may publish. Queued preview work is cancelled; an already
+/// running first-frame (one AVAssetReader sample) is dropped by generation
+/// + selected-id. Write path does not use this cancel.
 final class PreviewEngine: ObservableObject {
     static let maxLongEdge: CGFloat = 1920
 
@@ -27,7 +31,10 @@ final class PreviewEngine: ObservableObject {
     @Published var isWorking = false
 
     private let queue = DispatchQueue(label: "app.logbridge.preview", qos: .userInitiated)
+    private let genLock = NSLock()
     private var generation: UInt64 = 0
+    private var requestedClipID: UUID?
+    private var pendingPreviewWork: DispatchWorkItem?
 
     private var sourceCache: [UUID: SourceFrame] = [:]
     private var linearCache: [UUID: LinearFrame] = [:]
@@ -71,9 +78,38 @@ final class PreviewEngine: ObservableObject {
         gradedCache[clipID] = nil
     }
 
-    func refresh(clip: Clip?, graph: SerialGraph) {
+    /// Bump generation, remember the selected clip, cancel queued preview work.
+    /// Does not cancel a write (`exportGradedAP0` / sequence stays `queue.sync`).
+    @discardableResult
+    private func beginPreviewRequest(clipID: UUID?) -> UInt64 {
+        pendingPreviewWork?.cancel()
+        pendingPreviewWork = nil
+        genLock.lock()
         generation += 1
+        requestedClipID = clipID
         let gen = generation
+        genLock.unlock()
+        return gen
+    }
+
+    /// Latest selection + generation. Stale first-frame must not publish.
+    private func isCurrentPreview(generation gen: UInt64, clipID: UUID?) -> Bool {
+        genLock.lock()
+        defer { genLock.unlock() }
+        if generation != gen { return false }
+        if requestedClipID != clipID { return false }
+        return true
+    }
+
+    /// One serial queue. Cancel drops work that has not started. No thread pool.
+    private func enqueuePreview(_ body: @escaping () -> Void) {
+        let work = DispatchWorkItem(block: body)
+        pendingPreviewWork = work
+        queue.async(execute: work)
+    }
+
+    func refresh(clip: Clip?, graph: SerialGraph) {
+        let gen = beginPreviewRequest(clipID: clip?.id)
         guard let clip else {
             sourceImage = nil
             odtImage = nil
@@ -84,15 +120,14 @@ final class PreviewEngine: ObservableObject {
         isWorking = true
         status = "正在解码预览…"
         let graphCopy = graph
-        queue.async { [weak self] in
+        enqueuePreview { [weak self] in
             self?.build(clip: clip, graph: graphCopy, generation: gen)
         }
     }
 
     /// Scrub / ODT switch: reuse graded linear (IDT+exposure+WB). Only re-run ODT.
     func refreshODT(clip: Clip?, graph: SerialGraph) {
-        generation += 1
-        let gen = generation
+        let gen = beginPreviewRequest(clipID: clip?.id)
         guard let clip else {
             sourceImage = nil
             odtImage = nil
@@ -101,7 +136,7 @@ final class PreviewEngine: ObservableObject {
             return
         }
         let graphCopy = graph
-        queue.async { [weak self] in
+        enqueuePreview { [weak self] in
             self?.applyODTFromGradedOrRebuild(clip: clip, graph: graphCopy, generation: gen)
         }
     }
@@ -112,10 +147,11 @@ final class PreviewEngine: ObservableObject {
     /// Cache miss (new clip, exposure/WB/IDT change, or no graded buffer):
     /// rebuild linear once, then ODT-only again.
     private func applyODTFromGradedOrRebuild(clip: Clip, graph: SerialGraph, generation: UInt64) {
+        guard isCurrentPreview(generation: generation, clipID: clip.id) else { return }
         if let idt = clip.idt, !idt.isStub,
            let graded = gradedCacheHit(clipID: clip.id, idt: idt, graph: graph) {
             let (odtCG, note) = renderODTFromGraded(graded: graded, graph: graph, cacheHit: true)
-            publishODTOnly(generation: generation, odt: odtCG, status: note)
+            publishODTOnly(generation: generation, clipID: clip.id, odt: odtCG, status: note)
             return
         }
         build(clip: clip, graph: graph, generation: generation)
@@ -153,9 +189,9 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// Scrub / ODT hit: replace the 709 pane only. Source thumbnail stays.
-    private func publishODTOnly(generation: UInt64, odt: CGImage?, status: String) {
+    private func publishODTOnly(generation: UInt64, clipID: UUID, odt: CGImage?, status: String) {
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.generation == generation else { return }
+            guard let self, self.isCurrentPreview(generation: generation, clipID: clipID) else { return }
             self.odtImage = odt
             self.status = status
             self.isWorking = false
@@ -163,14 +199,17 @@ final class PreviewEngine: ObservableObject {
     }
 
     private func build(clip: Clip, graph: SerialGraph, generation: UInt64) {
-        let source = cachedSource(clip: clip)
+        guard isCurrentPreview(generation: generation, clipID: clip.id) else { return }
+        let source = cachedSource(clip: clip, generation: generation)
+        guard isCurrentPreview(generation: generation, clipID: clip.id) else { return }
         guard let source else {
-            publish(generation: generation, source: nil, odt: nil, status: "解不出预览帧")
+            publish(generation: generation, clipID: clip.id, source: nil, odt: nil, status: "解不出预览帧")
             return
         }
         guard let idt = clip.idt, !idt.isStub else {
             publish(
                 generation: generation,
+                clipID: clip.id,
                 source: source.cgImage,
                 odt: nil,
                 status: clip.needsUserPicker
@@ -182,7 +221,7 @@ final class PreviewEngine: ObservableObject {
         let linear = cachedLinear(clipID: clip.id, idt: idt, source: source)
         let graded = cachedGraded(clipID: clip.id, idt: idt, linear: linear, graph: graph)
         let (odtCG, note) = renderODTFromGraded(graded: graded, graph: graph, cacheHit: false)
-        publish(generation: generation, source: source.cgImage, odt: odtCG, status: note)
+        publish(generation: generation, clipID: clip.id, source: source.cgImage, odt: odtCG, status: note)
     }
 
     private static func gradeKey(idt: IDT, graph: SerialGraph) -> String {
@@ -225,10 +264,12 @@ final class PreviewEngine: ObservableObject {
         return frame
     }
 
-    private func cachedSource(clip: Clip) -> SourceFrame? {
+    private func cachedSource(clip: Clip, generation: UInt64) -> SourceFrame? {
         if let hit = sourceCache[clip.id], hit.url == clip.url {
             return hit
         }
+        // Selection already moved: do not start a stale first-frame decode.
+        guard isCurrentPreview(generation: generation, clipID: clip.id) else { return nil }
         guard let cg = Self.decodeDownscaled(url: clip.url, maxLongEdge: Self.maxLongEdge) else {
             return nil
         }
@@ -256,9 +297,9 @@ final class PreviewEngine: ObservableObject {
         return frame
     }
 
-    private func publish(generation: UInt64, source: CGImage?, odt: CGImage?, status: String) {
+    private func publish(generation: UInt64, clipID: UUID, source: CGImage?, odt: CGImage?, status: String) {
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.generation == generation else { return }
+            guard let self, self.isCurrentPreview(generation: generation, clipID: clipID) else { return }
             self.sourceImage = source
             self.odtImage = odt
             self.status = status
