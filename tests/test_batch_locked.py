@@ -683,11 +683,22 @@ def test_write_loop_one_pass_no_preview_8bit_no_odt(tmp_path: Path, monkeypatch)
     assert "Never ODT" in graph_py.split("def apply_ap0")[1].split("def apply(")[0]
     assert "writeCAT" in export_seq
     assert "gradeAP0" in export_seq
+    assert "joinExportWrite" in export_seq
+    assert "exportWriteQueue.async" in export_seq
+    assert "one write overlap" in export_seq
+    on_frame = export_seq.split("decodeAllSourceFrames")[1]
+    assert on_frame.index("gradeAP0") < on_frame.index("joinExportWrite")
+    assert on_frame.index("joinExportWrite") < on_frame.index(
+        "exportWriteQueue.async"
+    )
+    assert "writeFrame(index, pixels, w, h)" in on_frame.split("DispatchWorkItem")[1]
+    assert "try writeFrame(count, rgb, width, height)" not in export_seq
     assert "applyODT" not in export_seq
     assert "extractRGB" not in export_seq
     assert "/ 255" not in export_seq
     assert "gradedCache" not in export_seq
     assert "refreshODT" not in export_seq
+    assert "retainPreviewCaches" not in export_seq
     assert "copyNextSampleBuffer" in movie
     assert "requestedTime" not in movie
     assert "AVAssetImageGenerator" not in movie
