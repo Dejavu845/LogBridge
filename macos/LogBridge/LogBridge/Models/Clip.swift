@@ -337,7 +337,7 @@ final class SessionModel: ObservableObject {
         return note
     }
 
-    /// One ACES2065-1 AP0 proxy EXR sequence. Decode loop + PreviewColor grade; no ODT.
+    /// One ACES2065-1 AP0 proxy EXR sequence. Source Y′CbCr → float + PreviewColor grade; no ODT.
     /// After write, count EXRs against duration × metadata fps only.
     /// Mismatch / missing timing is a Chinese failure; the folder is removed.
     /// Not ACEScct. Not a Rec.709 movie. 整段代理，不是全精度成片.
@@ -499,13 +499,15 @@ final class SessionModel: ObservableObject {
     static let frameMismatchChip = "帧数对不上"
     static let missingFpsChip = "读不到帧率，未核对"
     static let missingDurationChip = "读不到时长，未核对"
+    static let missingYCbCrTagsChip = "无法读取片源 Y′CbCr 矩阵/范围，未写出"
 
     /// Short Chinese sidebar / status error. Failed write is not silent.
     static func shortExportChip(for error: Error) -> String {
         if error is LockedWriteCancel { return writeFailedChip }
         let desc = error.localizedDescription
         if desc.hasPrefix("先选择") { return desc }
-        if desc == frameMismatchChip || desc == missingFpsChip || desc == missingDurationChip {
+        if desc == frameMismatchChip || desc == missingFpsChip || desc == missingDurationChip
+            || desc == missingYCbCrTagsChip {
             return desc
         }
         let lower = desc.lowercased()

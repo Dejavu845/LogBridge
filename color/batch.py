@@ -8,9 +8,14 @@ overrides estimate.
 
 「处理已锁定片段」 writes one ACES2065-1 (AP0 linear) **proxy EXR sequence**
 per locked clip (ODT off): ``{stem}_ACES2065-1_proxy/frame_000000.exr``.
-Sequence decode prefers 10-bit Y′CbCr, then 8-bit fallbacks (still a
-proxy, not camera-original) — 整段代理，不是全精度成片. Not ACEScct.
-Not a Rec.709 .mov/.mp4.
+Movie write decode uses source 10-bit / native-depth Y′CbCr → float
+(matrix-only; no Rec.709 transfer before IDT). YUV matrix and
+full/video range follow the buffer / nclc attachments — not a
+hardcoded BT.709 + video-range for every clip. Scale is bit-depth
++ range (video 10-bit is Y 64–940 / C 64–960, not /1023). 8-bit
+Y′CbCr is only the fallback when 10-bit is unavailable. Still a
+proxy, not camera-original — 整段代理，不是全精度成片. Not ACEScct.
+Not a Rec.709 .mov/.mp4. Preview/scrub may stay 8-bit-first.
 「N 条已处理」 is clips that produced a sequence, or locked clips attempted
 with a per-clip error — not a preview refresh. Pending clips in the same
 bin do not block.
@@ -112,6 +117,7 @@ DECODE_FAILED_CHIP = "解码失败"
 FRAME_MISMATCH_CHIP = "帧数对不上"
 MISSING_FPS_CHIP = "读不到帧率，未核对"
 MISSING_DURATION_CHIP = "读不到时长，未核对"
+MISSING_YCBCR_TAGS_CHIP = "无法读取片源 Y′CbCr 矩阵/范围，未写出"
 DISK_SHORT_STATUS = "磁盘空间不足，未写出"
 # Uncompressed float32 RGB scanline payload (3 × 4). Not ZIP/PIZ.
 # Header + offset table are not per-pixel; DISK_MARGIN covers them.
@@ -129,6 +135,207 @@ DISK_SHORT_STATUS_TEMPLATE = (
 SKIPPED_BUCKET = "待选跳过"
 FAILED_BUCKET = "失败原因"
 BATCH_SUMMARY_TEMPLATE = "{wrote} 条已写出代理 / {skipped} 条待选跳过 / {failed} 条失败"
+
+# Y′CbCr → R′G′B′ matrix-only. Coefficients follow the source matrix
+# (BT.601 / BT.709 / BT.2020). Write path does not apply a Rec.709 transfer.
+YCBCR_MATRIX_COEFFS = {
+    "bt709": (1.5748, 0.1873, 0.4681, 1.8556),
+    "bt601": (1.402, 0.344136, 0.714136, 1.772),
+    "bt2020": (1.4746, 0.164553, 0.571353, 1.8814),
+}
+YCBCR_BT709_RV, YCBCR_BT709_GU, YCBCR_BT709_GV, YCBCR_BT709_BU = YCBCR_MATRIX_COEFFS[
+    "bt709"
+]
+# Video-range 8/10-bit legal spans (ITU). Not a literal 1023 for every 10-bit clip.
+YCBCR_OFF_8 = (16.0, 219.0, 128.0, 224.0)
+YCBCR_OFF_10 = (64.0, 876.0, 512.0, 896.0)
+
+
+def ycbcr_range_offsets(bit_depth: int, sample_range: str):
+    """Y/C offsets from bit-depth AND full/video. Never always /1023.
+
+    Video n-bit: Y 16<<(n-8) … 235<<(n-8), C 16<<(n-8) … 240<<(n-8).
+    10-bit video is 64–940 / 64–960, not 0–1023. Full n-bit is 0…2^n-1.
+    N-Log 10-bit video-range codes are wrong if blindly divided by 1023.
+    """
+    if int(bit_depth) < 8:
+        raise ValueError(f"bit_depth must be >= 8, got {bit_depth}")
+    max_code = float((1 << int(bit_depth)) - 1)
+    mid = float(1 << (int(bit_depth) - 1))
+    kind = str(sample_range).lower()
+    if kind == "full":
+        return (0.0, max_code, mid, max_code)
+    if kind != "video":
+        raise ValueError(f"sample_range must be video or full, got {sample_range}")
+    shift = int(bit_depth) - 8
+    y_off = float(16 << shift)
+    y_span = float((235 << shift) - (16 << shift))
+    c_span = float((240 << shift) - (16 << shift))
+    return (y_off, y_span, mid, c_span)
+
+
+def ycbcr_to_rgb_float(
+    y,
+    cb,
+    cr,
+    *,
+    bit_depth: int,
+    sample_range: str,
+    matrix: str,
+):
+    """Source-code Y′CbCr → float R′G′B′. Matrix-only. No 8-bit RGB quantize.
+
+    ``matrix`` / ``sample_range`` follow the source (attachments / nclc).
+    No Rec.709 OETF/EOTF. Superwhite / superblack may leave 0-1.
+    Still 整段代理，不是全精度成片.
+    """
+    key = str(matrix).lower().replace(".", "")
+    if key not in YCBCR_MATRIX_COEFFS:
+        raise ValueError(f"matrix must be bt709 / bt601 / bt2020, got {matrix}")
+    rv, gu, gv, bu = YCBCR_MATRIX_COEFFS[key]
+    y_off, y_span, c_off, c_span = ycbcr_range_offsets(bit_depth, sample_range)
+    yp = (float(y) - y_off) / y_span
+    pbv = (float(cb) - c_off) / c_span
+    prv = (float(cr) - c_off) / c_span
+    return (yp + rv * prv, yp - gu * pbv - gv * prv, yp + bu * pbv)
+
+
+def _normalize_ycbcr_matrix(value) -> str | None:
+    """Map nclc/colr/vui matrix to bt709 / bt601 / bt2020. Unspecified → None."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        raw = value.strip().lower().replace(".", "").replace(" ", "")
+        if raw in YCBCR_MATRIX_COEFFS:
+            return raw
+        if "2020" in raw:
+            return "bt2020"
+        if "601" in raw or "240m" in raw:
+            return "bt601"
+        if "709" in raw:
+            return "bt709"
+        if raw.isdigit():
+            return _matrix_from_code(int(raw))
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _matrix_from_code(int(value))
+    return None
+
+
+def _matrix_from_code(code: int) -> str | None:
+    """ITU/H.273 matrix_coefficients. 0/2 unspecified → None (no 709 default)."""
+    if code == 1:
+        return "bt709"
+    if code in (4, 5, 6, 7):
+        return "bt601"
+    if code in (9, 10):
+        return "bt2020"
+    return None
+
+
+def _nclc_triplet(value) -> tuple[int, int, int] | None:
+    """nclc / nclx / colr as primaries-transfer-matrix. Do not use P/T for IDT."""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)) and len(value) >= 3:
+        try:
+            return (int(value[0]), int(value[1]), int(value[2]))
+        except (TypeError, ValueError):
+            return None
+    if isinstance(value, str):
+        parts = value.replace(",", "-").replace(":", "-").split("-")
+        if len(parts) >= 3:
+            try:
+                return (int(parts[0]), int(parts[1]), int(parts[2]))
+            except ValueError:
+                return None
+    return None
+
+
+def parse_source_ycbcr_matrix(tags) -> str | None:
+    """Matrix from nclc / colr / vui only. Missing or unspecified → None."""
+    if not isinstance(tags, dict):
+        return None
+    for key in (
+        "ycbcr_matrix",
+        "YCbCrMatrix",
+        "vui_matrix",
+        "matrix_coefficients",
+        "nclc_matrix",
+    ):
+        if key in tags:
+            got = _normalize_ycbcr_matrix(tags[key])
+            if got:
+                return got
+            return None
+    for key in ("nclc", "nclx", "colr"):
+        trip = _nclc_triplet(tags.get(key))
+        if trip is not None:
+            return _matrix_from_code(trip[2])
+    return None
+
+
+def parse_source_ycbcr_range(tags) -> str | None:
+    """Full/video from nclc/nclx/vui. Missing → None (not video by default)."""
+    if not isinstance(tags, dict):
+        return None
+    for key in (
+        "full_range",
+        "FullRangeVideo",
+        "video_full_range_flag",
+        "nclx_full_range",
+        "sample_range",
+    ):
+        if key not in tags:
+            continue
+        value = tags[key]
+        if isinstance(value, str):
+            low = value.strip().lower()
+            if low in ("full", "1", "true", "yes"):
+                return "full"
+            if low in ("video", "limited", "tv", "0", "false", "no"):
+                return "video"
+            return None
+        if value is True or value == 1:
+            return "full"
+        if value is False or value == 0:
+            return "video"
+        return None
+    return None
+
+
+def require_source_ycbcr_tags(tags) -> tuple[str, str]:
+    """Write unpack: both matrix and range from tags, or Chinese failure.
+
+    No silent BT.709 + video-range default. Does not read primaries/transfer
+    to change an IDT or to apply a 709 curve.
+    """
+    matrix = parse_source_ycbcr_matrix(tags)
+    sample_range = parse_source_ycbcr_range(tags)
+    if matrix is None or sample_range is None:
+        raise ValueError(MISSING_YCBCR_TAGS_CHIP)
+    return matrix, sample_range
+
+
+def ycbcr_to_preview_u8(y, cb, cr, *, bit_depth: int = 10, sample_range: str = "video", matrix: str = "bt709"):
+    """Preview 8-bit path: matrix, then clamp and quantize to 0-255.
+
+    ``extractRGB`` later does ``u8 / 255``. Write must not use this.
+    """
+    r, g, b = ycbcr_to_rgb_float(
+        y, cb, cr, bit_depth=bit_depth, sample_range=sample_range, matrix=matrix
+    )
+
+    def _u8(x: float) -> int:
+        return max(0, min(255, int(round(min(max(x, 0.0), 1.0) * 255.0))))
+
+    return (_u8(r), _u8(g), _u8(b))
+
+
+def preview_u8_promoted_float(y, cb, cr, *, bit_depth: int = 10):
+    """What the old write path did: preview 8-bit, then /255 to float."""
+    r, g, b = ycbcr_to_preview_u8(y, cb, cr, bit_depth=bit_depth)
+    return (r / 255.0, g / 255.0, b / 255.0)
 
 
 @dataclass(frozen=True)
@@ -197,7 +404,12 @@ def short_export_chip(
         return None
     if error.startswith("先选择"):
         return error
-    if error in (FRAME_MISMATCH_CHIP, MISSING_FPS_CHIP, MISSING_DURATION_CHIP):
+    if error in (
+        FRAME_MISMATCH_CHIP,
+        MISSING_FPS_CHIP,
+        MISSING_DURATION_CHIP,
+        MISSING_YCBCR_TAGS_CHIP,
+    ):
         return error
     low = error.lower()
     if "decode" in low or "grade" in low or "no pixels" in low:
@@ -705,6 +917,7 @@ def process_locked_writes(
     should_cancel: Callable[[], bool] | None = None,
     on_progress: Callable[[str], None] | None = None,
     free_bytes: int | None = None,
+    ycbcr_tags: dict[str, dict] | None = None,
 ) -> BatchWriteReport:
     """Write an ACES2065-1 proxy EXR sequence for locked clips only.
 
@@ -720,7 +933,8 @@ def process_locked_writes(
         {stem}_ACES2065-1_proxy/frame_000001.exr
         ...
 
-    This is still a **proxy** sequence (preview decode). Not a Rec.709 movie.
+    This is still a **proxy** sequence (source Y′CbCr → float, not
+    preview 8-bit promoted). Not a Rec.709 movie.
 
     ``should_cancel`` stops the batch. The in-progress ``_proxy`` folder is
     removed (half sequence is not a finished deliverable). Completed clips
@@ -729,6 +943,11 @@ def process_locked_writes(
     ``free_bytes`` mocks dest volume free space (tiny disk). If free space
     is below the locked-clip estimate + margin, no folder is created and
     no EXR is written.
+
+    ``ycbcr_tags`` (when passed) is the nclc/colr/vui matrix + range for
+    each clip. Missing tags fail that clip with
+    「无法读取片源 Y′CbCr 矩阵/范围，未写出」 and write no folder.
+    No silent BT.709 + video-range default.
     """
     dest = Path(dest)
     plan = plan_locked_batch(clips)
@@ -767,6 +986,12 @@ def process_locked_writes(
         if not clip.idt:
             errors.append(ClipWrite(name=clip.name, error="no IDT"))
             continue
+        if ycbcr_tags is not None:
+            try:
+                require_source_ycbcr_tags(ycbcr_tags.get(clip.name))
+            except ValueError as exc:
+                errors.append(ClipWrite(name=clip.name, error=str(exc)))
+                continue
         try:
             if seq_dir.exists():
                 shutil.rmtree(seq_dir)

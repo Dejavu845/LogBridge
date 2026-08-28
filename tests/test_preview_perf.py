@@ -56,3 +56,23 @@ def test_source_not_tagged_709_extract_device_rgb():
     assert "not Display P3" in engine
     assert "itur_709" in engine
     assert "Never `CGColorSpace.itur_709`" in source or "Never CGColorSpace.itur_709" in source
+
+
+def test_preview_decode_stays_8bit_first_and_scrub_odt_only():
+    """Preview may stay 8-bit. Write-path 10-bit float must not steal scrub caches."""
+    engine = _read(ENGINE)
+    preview = engine.split("func decodeMovieVideoToolbox")[1].split(
+        "func readFirstYpCbCrFrame"
+    )[0]
+    eight_420 = "kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange"
+    eight_422 = "kCVPixelFormatType_422YpCbCr8"
+    ten = "kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange"
+    assert preview.index(eight_420) < preview.index(eight_422)
+    assert preview.index(eight_422) < preview.index(ten)
+    cached = engine.split("func cachedSource")[1].split("func cachedLinear")[0]
+    assert "decodeDownscaled" in cached
+    assert "extractRGB" in cached
+    assert "maxLongEdge: Self.maxLongEdge" in cached
+    assert "gradedCache" in engine
+    assert "Scrub does not re-run IDT" in engine
+    assert "rgbFloatFromLogPixelBuffer" not in cached
