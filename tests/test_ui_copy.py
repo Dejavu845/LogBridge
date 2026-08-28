@@ -452,6 +452,49 @@ def test_preview_status_is_locked_chinese():
     assert "Button(" not in build
 
 
+def test_preview_pane_title_odt_off_is_709():
+    """Preview pane title (ODT off) is 709 预览关, matching #43 preview.status."""
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    preview = _read(PREVIEW)
+    swift = _all_swift()
+
+    assert PREVIEW_STATUS_ODT_OFF == "709 预览关"
+    title = clip.split("var odtPreviewTitle")[1].split("var odtPreviewCaption")[0]
+    assert "case .off:" in title
+    assert f'return "{PREVIEW_STATUS_ODT_OFF}"' in title
+    assert "成片预览关" not in title
+    assert "ACEScct" not in title
+    assert "精准" not in title
+    _chengpian_only_honesty(title)
+
+    caption = clip.split("var odtPreviewCaption")[1].split("func setIDT")[0]
+    assert "成片预览关" not in caption
+    assert "精准" not in caption
+
+    split = content.split("struct SplitPreview")[1].split("struct WriteProgressLine")[0]
+    assert "odtPreviewTitle" in split
+    assert "odtPreviewCaption" in split
+    assert "Rec709PreviewView" in split
+    assert "Button(" not in split
+    assert "成片预览关" not in split
+    assert "精准" not in split
+
+    pane = preview.split("struct Rec709PreviewView")[1].split("struct PreviewNotDeliverableBadge")[0]
+    assert "PreviewPaneTitle(title: title)" in pane
+    chrome = preview.split("private struct PreviewPaneTitle")[1].split("struct SourceUntaggedHost")[0]
+    assert "Text(title)" in chrome
+    assert "成片预览关" not in pane
+    assert "成片预览关" not in chrome
+    assert "精准" not in pane
+    assert "精准" not in chrome
+
+    assert "成片预览关" not in content
+    assert "成片预览关" not in swift
+    assert f'"{PREVIEW_STATUS_ODT_OFF}"' in clip
+    assert f'"{PREVIEW_STATUS_ODT_OFF}"' in _read(ENGINE)
+
+
 def test_inspector_cat_three_sentences_review_lock():
     """As-shot default is 单位阵. Relative CAT only on user move. No 机内白转到 D65."""
     inspector = _read(INSPECTOR)
@@ -1015,7 +1058,8 @@ def test_selected_clip_glanceable_on_preview():
 
     assert "整段代理，不是全精度成片" in content
     assert "预览·非成片" in _all_swift()
-    assert "成片预览关" in clip or "预览·非成片" in clip or "不是成片" in clip
+    assert PREVIEW_STATUS_ODT_OFF in clip
+    assert "成片预览关" not in clip
 
 
 def test_forbidden_marketing_copy_stays_forbidden():
