@@ -126,6 +126,8 @@ final class SessionModel: ObservableObject {
     @Published var pickingNeutral: Bool = false
     @Published var showSettings = false
     @Published var isWritingDeliverables = false
+    /// Same busy flag. Preview progress + inspector / IDT lock read this.
+    var isExporting: Bool { isWritingDeliverables }
     /// Completed `{stem}_ACES2065-1_proxy` folders from the last successful write.
     /// Empty while writing, after cancel, or when nothing was written.
     @Published var lastExportRevealURLs: [URL] = []
