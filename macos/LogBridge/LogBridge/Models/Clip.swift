@@ -78,11 +78,8 @@ struct Clip: Identifiable, Hashable {
     var sidebarStatusChip: String? { processSkipReason ?? exportChip }
 
     /// Preview chrome when selected and not mid-export. Existing phrases only.
-    /// Pending / unlocked → 「先选择 Log 与色域」. Failed / success → exportChip.
-    var previewCaption: String? {
-        if processSkipReason != nil { return "先选择 Log 与色域" }
-        return exportChip
-    }
+    /// Pending / unlocked → that clip's processSkipReason. Failed / success → exportChip.
+    var previewCaption: String? { processSkipReason ?? exportChip }
 
     var displayCurve: String? { idt?.curve ?? detectedCurve }
     var displayGamut: String? { idt?.gamut ?? detectedGamut }

@@ -371,8 +371,14 @@ def test_selected_clip_glanceable_on_preview():
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
 
     cap = clip.split("var previewCaption")[1].split("var displayCurve")[0]
-    assert "processSkipReason" in cap
-    assert '"先选择 Log 与色域"' in cap
+    assert "processSkipReason ?? exportChip" in cap
+    assert 'return "先选择 Log 与色域"' not in cap
+    assert 'return "先选择成对 IDT"' not in cap
+    assert '"先选择 Log 与色域"' not in cap
+    assert '"先选择成对 IDT"' not in cap
+    skip = clip.split("var processSkipReason")[1].split("var verificationBadge")[0]
+    assert "先选择成对 IDT" in skip
+    assert "先选择 Log 与色域" in skip
     assert "exportChip" in cap
     assert "已写出代理" in clip
     assert "重试" not in cap
