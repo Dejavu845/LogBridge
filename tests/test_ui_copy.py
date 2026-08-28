@@ -485,6 +485,92 @@ def test_arrow_keys_select_adjacent_clip():
     assert "isWritingDeliverables" in clip
 
 
+def test_escape_cancels_write_only():
+    """While writing, Escape is the existing 取消. Idle Escape does nothing. No new button."""
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    inspector = _read(INSPECTOR)
+
+    fn = clip.split("func cancelWritingFromEscape")[1].split("static func exportProgressText")[0]
+    assert "isWritingDeliverables" in fn
+    assert "cancelLockedDeliverables" in fn
+    assert "showSettings" in fn
+    assert "showImporter" in fn
+    assert "selectedID" not in fn
+    assert "terminate" not in fn
+    assert "processLockedClips" not in fn
+    assert "processSelected" not in fn
+    assert "exportResolve" not in fn
+    assert "setIDT" not in fn
+    assert "精准" not in fn
+
+    cancel = clip.split("func cancelLockedDeliverables")[1].split("func cancelWritingFromEscape")[0]
+    assert "writeCancel.request()" in cancel
+    assert "Button(" not in cancel
+    assert "精准" not in cancel
+
+    note = clip.split("func cancelledExportNote")[1].split("static let bytesPerEXRPixel")[0]
+    assert "已取消" in note
+    assert "整段代理，不是全精度成片" in note
+
+    reserved = clip.split("func isEscapeReservedByPresentedUI")[1].split("func setExposureEnabled")[0]
+    assert "attachedSheet" in reserved
+    assert "modalWindow" in reserved
+    assert "keyWindow" in reserved
+    assert "精准" not in reserved
+
+    assert "case 53" in content
+    assert "cancelWritingFromEscape" in content
+    assert "isEscapeReservedByPresentedUI" in content
+    assert "cancelLockedDeliverables" in content
+    assert "keyboardShortcut" not in content
+    assert "onExitCommand" not in content
+
+    assert "case 126" in content
+    assert "case 125" in content
+    assert "selectAdjacentClip" in content
+    assert "ClipListArrowMonitor" in content
+    assert "onMoveCommand" in content
+
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert monitor.count("Button(") == 0
+    assert "case 53" in monitor
+    assert "onEscape" in monitor
+    assert "isEscapeReservedByPresentedUI" in monitor
+    assert "帮助" not in monitor
+    assert "overlay" not in monitor.lower() or "No help overlay" in monitor
+    assert "精准" not in monitor
+
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "取消" in bar
+    assert "isWritingDeliverables" in bar
+    assert "cancelLockedDeliverables" in bar
+    assert "keyboardShortcut" not in bar
+    assert "处理已锁定片段" in bar
+
+    preview = content.split("struct SplitPreview")[1].split("struct StatusBar")[0]
+    assert 'Button(' not in preview
+    assert "取消" not in preview
+
+    assert "PairedIDTBar" in content
+    assert "session.setIDT" in inspector
+    assert 'Button("锁 IDT")' not in sidebar
+    assert 'Button("锁定")' not in sidebar
+    assert "isWritingDeliverables" in clip
+    assert "isExporting" in clip
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert "Escape while writing" in readme
+    assert "idle Escape does nothing" in readme
+    assert "Escape while writing" in acceptance
+    assert "idle Escape does nothing" in acceptance or "Idle Escape does nothing" in acceptance
+    assert "已取消" in readme and "整段代理，不是全精度成片" in readme
+    assert "已取消" in acceptance and "整段代理，不是全精度成片" in acceptance
+
+
 def test_import_lands_on_first_pending():
     """Mixed drop selects first pending/unlocked. All-locked keeps first/existing. No new button."""
     clip = _read(CLIP)

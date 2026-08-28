@@ -398,6 +398,17 @@ final class SessionModel: ObservableObject {
         writeCancel.request()
     }
 
+    /// Escape while writing: same cancel as the 取消 control.
+    /// Idle Escape does nothing (does not clear selection, does not quit).
+    /// Sheets / alerts / settings keep Escape.
+    @discardableResult
+    func cancelWritingFromEscape() -> Bool {
+        guard isWritingDeliverables else { return false }
+        guard !showSettings, !showImporter else { return false }
+        cancelLockedDeliverables()
+        return true
+    }
+
     /// 「写出代理 2/5 · frame 120」. Frame total omitted when unknown.
     static func exportProgressText(clipIndex: Int, clipTotal: Int, frame: Int? = nil, frameTotal: Int? = nil) -> String {
         var note = "写出代理 \(clipIndex)/\(clipTotal)"
@@ -753,6 +764,15 @@ final class SessionModel: ObservableObject {
         if responder is NSPopUpButton || responder is NSComboBox {
             return true
         }
+        return false
+    }
+
+    /// Sheets / alerts / other key windows keep Escape. Do not steal dismiss.
+    static func isEscapeReservedByPresentedUI(event: NSEvent, monitorWindow: NSWindow?) -> Bool {
+        if event.window !== monitorWindow { return true }
+        if event.window?.attachedSheet != nil { return true }
+        if NSApp.modalWindow != nil { return true }
+        if let key = NSApp.keyWindow, key !== monitorWindow { return true }
         return false
     }
 

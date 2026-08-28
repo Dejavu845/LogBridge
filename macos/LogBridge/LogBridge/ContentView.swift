@@ -50,9 +50,14 @@ struct ContentView: View {
             session.refreshPreview()
         }
         .background {
-            ClipListArrowMonitor { delta in
-                session.selectAdjacentClip(delta)
-            }
+            ClipListArrowMonitor(
+                handler: { delta in
+                    session.selectAdjacentClip(delta)
+                },
+                onEscape: {
+                    session.cancelWritingFromEscape()
+                }
+            )
         }
         .onMoveCommand { direction in
             switch direction {
@@ -67,19 +72,25 @@ struct ContentView: View {
     }
 }
 
-/// Window-level Up/Down for the sidebar list. No help overlay. No extra button.
-/// Same window only; text / numeric / search first-responders keep the event.
+/// Window-level Up/Down for the sidebar list. Escape while writing is the
+/// existing 取消 (same cancelLockedDeliverables). Idle Escape does nothing.
+/// No help overlay. No extra button.
+/// Same window only; text / numeric / search first-responders keep arrows.
+/// Sheets / alerts / settings keep Escape.
 private struct ClipListArrowMonitor: NSViewRepresentable {
     var handler: (Int) -> Bool
+    var onEscape: () -> Bool
 
     func makeNSView(context: Context) -> MonitorView {
         let view = MonitorView()
         view.handler = handler
+        view.onEscape = onEscape
         return view
     }
 
     func updateNSView(_ nsView: MonitorView, context: Context) {
         nsView.handler = handler
+        nsView.onEscape = onEscape
     }
 
     static func dismantleNSView(_ nsView: MonitorView, coordinator: ()) {
@@ -88,6 +99,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
 
     final class MonitorView: NSView {
         var handler: ((Int) -> Bool)?
+        var onEscape: (() -> Bool)?
         private var monitor: Any?
 
         override func viewDidMoveToWindow() {
@@ -103,17 +115,26 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
             guard monitor == nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self, event.window === self.window else { return event }
-                let delta: Int
                 switch event.keyCode {
-                case 126: delta = -1
-                case 125: delta = 1
-                default: return event
+                case 126:
+                    if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if self.handler?(-1) == true { return nil }
+                    return event
+                case 125:
+                    if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if self.handler?(1) == true { return nil }
+                    return event
+                case 53:
+                    if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
+                        return event
+                    }
+                    if self.onEscape?() == true {
+                        return nil
+                    }
+                    return event
+                default:
+                    return event
                 }
-                if SessionModel.isArrowConsumedByTextInput() { return event }
-                if self.handler?(delta) == true {
-                    return nil
-                }
-                return event
             }
         }
 
