@@ -161,11 +161,11 @@ def test_as_shot_wb_copy_and_no_5600_guess():
     assert "Pick neutral" in inspector
     assert "5600" in inspector  # named so we can say we do not guess it
     assert "6504" in inspector
-    assert "do not guess 5600 or 6504" in inspector.lower()
-    assert "pending" in inspector.lower()
+    assert "不猜 5600" in inspector
     assert "ACES2065-1 (AP0)" in inspector
     assert "after IDT" in inspector
-    assert "implemented (unverified)" in inspector.lower()
+    assert "已实现（未验证）" in inspector
+    assert "CAT(user→D65)·inv(CAT(as→D65))" in inspector
     swift = _all_swift()
     assert "pickNeutral" in swift or "Pick neutral" in swift
     assert "asShotUnknown" in swift or "as-shot unknown" in swift
@@ -180,7 +180,53 @@ def test_as_shot_wb_copy_and_no_5600_guess():
     assert "after IDT" in blob and "ACES2065-1 (AP0)" in blob
     assert "Grey-card" in blob or "grey-card" in blob
     assert "nclc" in blob.lower()
-    assert "pending / identity" in blob.lower() or "pending / identity" in inspector.lower()
+    assert "pending / identity" in blob.lower()
+
+
+def test_user_visible_english_leftovers_are_chinese():
+    """P2 leftovers: user-visible English must not return; Chinese copy is required."""
+    preview = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    content = _read(CONTENT)
+    inspector = _read(INSPECTOR)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
+    clip = _read(CLIP)
+
+    assert '"没有素材"' in preview
+    assert '"正在解码预览…"' in preview
+    assert '"解不出预览帧"' in preview
+    assert '"先选择成对 Log 与色域"' in preview
+    assert '"预览代理，不是成片"' in preview
+    assert '"No clip"' not in preview
+    assert "Decoding preview" not in preview
+    assert "Could not decode a preview frame" not in preview
+    assert "Pick a paired IDT" not in preview
+    assert "Preview proxy" not in preview
+
+    status = content.split("struct StatusBar")[1]
+    assert "已实现（未验证）" in status
+    assert "serial graph" not in status
+    assert "implemented (unverified)" not in status.lower()
+
+    assert 'Text("已实现（未验证）")' in sidebar
+    assert 'Text("implemented (unverified)")' not in sidebar
+
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    assert 'Text("绿品")' in wb
+    assert 'Text("Tint")' not in wb
+    assert "机内色温只填旋钮，默认 CAT 是单位矩阵，不把 5600 当光源。" in wb
+    assert "改色温是相对变换 CAT(user→D65)·inv(CAT(as→D65))，升高开尔文变暖。" in wb
+    assert "灰卡是绝对 CAT；读不到就保持 identity，不猜 5600。" in wb
+    assert "As-shot CCT/tint fills these knobs" not in wb
+    assert "do not guess 5600 or 6504" not in wb.lower()
+    assert "implemented (unverified)" not in wb.lower()
+
+    assert "已实现（未验证）" in settings
+    assert "implemented (unverified)" not in settings.lower()
+
+    export_fn = clip.split("func exportResolve()")[1]
+    assert 'panel.prompt = "导出"' in export_fn
+    assert 'panel.prompt = "Export"' not in export_fn
 
 
 def test_idt_bar_always_visible_no_hidden_picker():

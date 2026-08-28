@@ -45,7 +45,7 @@ struct SettingsView: View {
                 Text("处理")
             }
 
-            Text("implemented (unverified)。不写精准 / 一键还原 / 全自动校准。")
+            Text("已实现（未验证）。不写精准 / 一键还原 / 全自动校准。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

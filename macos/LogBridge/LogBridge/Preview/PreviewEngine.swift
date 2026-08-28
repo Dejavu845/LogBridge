@@ -23,7 +23,7 @@ final class PreviewEngine: ObservableObject {
 
     @Published var sourceImage: CGImage?
     @Published var odtImage: CGImage?
-    @Published var status: String = "No clip"
+    @Published var status: String = "没有素材"
     @Published var isWorking = false
 
     private let queue = DispatchQueue(label: "app.logbridge.preview", qos: .userInitiated)
@@ -77,12 +77,12 @@ final class PreviewEngine: ObservableObject {
         guard let clip else {
             sourceImage = nil
             odtImage = nil
-            status = "No clip"
+            status = "没有素材"
             isWorking = false
             return
         }
         isWorking = true
-        status = "Decoding preview…"
+        status = "正在解码预览…"
         let graphCopy = graph
         queue.async { [weak self] in
             self?.build(clip: clip, graph: graphCopy, generation: gen, odtOnly: false)
@@ -96,7 +96,7 @@ final class PreviewEngine: ObservableObject {
         guard let clip else {
             sourceImage = nil
             odtImage = nil
-            status = "No clip"
+            status = "没有素材"
             isWorking = false
             return
         }
@@ -109,7 +109,7 @@ final class PreviewEngine: ObservableObject {
     private func build(clip: Clip, graph: SerialGraph, generation: UInt64, odtOnly: Bool) {
         let source = cachedSource(clip: clip)
         guard let source else {
-            publish(generation: generation, source: nil, odt: nil, status: "Could not decode a preview frame")
+            publish(generation: generation, source: nil, odt: nil, status: "解不出预览帧")
             return
         }
         guard let idt = clip.idt, !idt.isStub else {
@@ -118,7 +118,7 @@ final class PreviewEngine: ObservableObject {
                 source: source.cgImage,
                 odt: nil,
                 status: clip.needsUserPicker
-                    ? "Pick a paired IDT — process and preview ODT stay blocked"
+                    ? "先选择成对 Log 与色域"
                     : "Stub IDT — no preview process"
             )
             return
@@ -127,7 +127,7 @@ final class PreviewEngine: ObservableObject {
         let graded = cachedGraded(clipID: clip.id, idt: idt, linear: linear, graph: graph)
         var work = graded.rgb
         var odtCG: CGImage?
-        var note = "Preview proxy (≤ \(Int(Self.maxLongEdge)) px). VideoToolbox decode, Metal grade. Not a full render."
+        var note = "预览代理，不是成片"
         if odtOnly {
             note = "ODT only — graded linear cache hit. Scrub does not re-run IDT."
         }

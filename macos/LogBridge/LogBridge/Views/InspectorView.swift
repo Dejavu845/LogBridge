@@ -120,7 +120,7 @@ struct WBInspector: View {
                 }
             }
             if session.graph.asShotUnknown {
-                Text("读不到机内色温。pending / identity — do not guess 5600 or 6504。点灰卡（after IDT, ACES2065-1 (AP0) linear）或手填。implemented (unverified)。")
+                Text("读不到机内色温。保持未填、单位矩阵，不猜 5600 或 6504。点灰卡或手填。已实现（未验证）。")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
@@ -156,7 +156,7 @@ struct WBInspector: View {
                         .frame(width: 88, alignment: .trailing)
                 }
                 HStack {
-                    Text("Tint")
+                    Text("绿品")
                         .frame(width: 40, alignment: .leading)
                     Slider(
                         value: Binding(
@@ -179,7 +179,7 @@ struct WBInspector: View {
                 }
                 .frame(maxWidth: 220)
             }
-            Text("As-shot CCT/tint fills these knobs (UI only). Log IDTs assume already white-balanced — default CAT is identity. Do not treat as-shot 5600/6504 as an illuminant (double WB). Moving CCT/tint away from as-shot is relative CAT(user→D65)·inv(CAT(as→D65)) = CAT(user→as); raising Kelvin warms (in-camera). Not CAT(as→user), not CAT(user→D65) alone. First typed CCT with no as-shot is a label (identity). Grey-card (after IDT, ACES2065-1 (AP0) linear) is an absolute CAT. Missing CCT/tint is pending / identity — do not guess 5600 or 6504. Implemented (unverified). Disable this node in Resolve (or DCTL Bypass WB) = IDT → Exposure → ACEScct, no bake.")
+            Text("机内色温只填旋钮，默认 CAT 是单位矩阵，不把 5600 当光源。改色温是相对变换 CAT(user→D65)·inv(CAT(as→D65))，升高开尔文变暖。灰卡是绝对 CAT；读不到就保持 identity，不猜 5600。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

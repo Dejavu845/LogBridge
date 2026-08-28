@@ -27,6 +27,8 @@ def test_settings_copy_is_chinese():
     assert "精准" not in s or "不写精准" in s
     assert "一键还原" not in s or "不写" in s
     assert "全自动校准" not in s or "不写" in s
+    assert "已实现（未验证）" in s
+    assert "implemented (unverified)" not in s.lower()
 
 
 def test_settings_defaults_locked():
