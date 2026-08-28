@@ -30,6 +30,14 @@ A cancelled in-progress clip is not 已写出; completed clips keep
 已写出代理. Re-export clears or refreshes the chip. Session-level
 「在 Finder 中显示」 stays.
 
+After a locked write, count EXRs in ``{stem}_ACES2065-1_proxy/`` and
+compare to source duration × metadata fps (still / known frame count
+when both timing fields are absent). Off-by-one is accepted (inclusive
+last frame). Missing fps is 「读不到帧率，未核对」; missing duration
+is 「读不到时长，未核对」 — never default 24 or 30. A mismatch is
+「帧数对不上」; the folder is removed so it is not 已写出代理.
+Disk-size estimate may still say 24 fps; this checker does not.
+
 Before any EXR is written, estimate dest disk from **locked clips
 only**: frame count × pixel count × 12 bytes (uncompressed float32
 RGB; EXR header / offset table is covered by a small margin). If
@@ -96,6 +104,9 @@ LAST_EXPORT_DIRECTORY_KEY = "logbridge.lastExportDirectory"
 WRITTEN_CHIP = "已写出代理"
 WRITE_FAILED_CHIP = "写出失败"
 DECODE_FAILED_CHIP = "解码失败"
+FRAME_MISMATCH_CHIP = "帧数对不上"
+MISSING_FPS_CHIP = "读不到帧率，未核对"
+MISSING_DURATION_CHIP = "读不到时长，未核对"
 DISK_SHORT_STATUS = "磁盘空间不足，未写出"
 # Uncompressed float32 RGB scanline payload (3 × 4). Not ZIP/PIZ.
 # Header + offset table are not per-pixel; DISK_MARGIN covers them.
@@ -177,6 +188,8 @@ def short_export_chip(
     if not error:
         return None
     if error.startswith("先选择"):
+        return error
+    if error in (FRAME_MISMATCH_CHIP, MISSING_FPS_CHIP, MISSING_DURATION_CHIP):
         return error
     low = error.lower()
     if "decode" in low or "grade" in low or "no pixels" in low:
@@ -281,6 +294,65 @@ def clip_frame_count(
     if fps is not None:
         return max(1, int(ceil(CONSERVATIVE_SECONDS * fps))), "guess"
     return max(1, int(ceil(CONSERVATIVE_SECONDS * CONSERVATIVE_FPS))), "guess"
+
+
+def expected_source_frames(clip: BatchClip) -> tuple[int | None, str | None]:
+    """Expected EXR count from container metadata. Never invent a frame rate.
+
+    Movies: ``ceil(duration × fps)``. Stills / known count: ``frame_count``
+    only when duration and fps are both absent (ImageIO still = 1).
+    Missing fps → 「读不到帧率，未核对」. Missing duration → 「读不到时长，未核对」.
+    Does not use the dest-disk timing guess.
+    """
+    duration = _positive_float(clip.duration_seconds)
+    fps = _positive_float(clip.fps)
+    known = _positive_int(clip.frame_count)
+    if duration is not None and fps is not None:
+        return max(1, int(ceil(duration * fps))), None
+    if known is not None and duration is None and fps is None:
+        return known, None
+    if fps is None:
+        return None, MISSING_FPS_CHIP
+    return None, MISSING_DURATION_CHIP
+
+
+def count_proxy_exrs(seq_dir) -> int:
+    """How many ``.exr`` files are in the proxy folder. Missing folder → 0."""
+    folder = Path(seq_dir)
+    if not folder.is_dir():
+        return 0
+    return sum(1 for p in folder.iterdir() if p.is_file() and p.suffix.lower() == ".exr")
+
+
+def frames_count_matches(written: int, expected: int) -> bool:
+    """True when counts match. Off-by-one: inclusive last frame on duration×fps.
+
+    AVAsset / container duration × nominal fps (ceil) can land on the last
+    sample boundary, so |written − expected| ≤ 1 is accepted when both ≥ 1.
+    An empty folder is never a match.
+    """
+    if written < 1 or expected < 1:
+        return False
+    return abs(int(written) - int(expected)) <= 1
+
+
+def verify_locked_proxy_sequence(seq_dir, clip: BatchClip) -> tuple[bool, str | None]:
+    """Post-write check. Folder exists, EXRs exist, count matches metadata.
+
+    Success → (True, None) so the caller may mark 已写出代理.
+    Failure → (False, Chinese chip). Caller must drop the folder so it is
+    not advertised as a finished sequence.
+    """
+    folder = Path(seq_dir)
+    if not folder.is_dir():
+        return False, FRAME_MISMATCH_CHIP
+    written = count_proxy_exrs(folder)
+    expected, timing_err = expected_source_frames(clip)
+    if timing_err is not None:
+        return False, timing_err
+    if expected is None or not frames_count_matches(written, expected):
+        return False, FRAME_MISMATCH_CHIP
+    return True, None
 
 
 def clip_pixel_count(
@@ -660,6 +732,14 @@ def process_locked_writes(
                     )
             if cancelled:
                 break
+            ok, verify_err = verify_locked_proxy_sequence(seq_dir, clip)
+            if not ok:
+                if seq_dir.exists():
+                    shutil.rmtree(seq_dir)
+                errors.append(
+                    ClipWrite(name=clip.name, error=verify_err or FRAME_MISMATCH_CHIP)
+                )
+                continue
             written.append(
                 ClipWrite(name=clip.name, path=str(seq_dir), frame_count=len(rgb_frames))
             )

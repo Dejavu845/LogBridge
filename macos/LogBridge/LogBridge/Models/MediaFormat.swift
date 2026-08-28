@@ -62,8 +62,8 @@ enum MediaFormat {
         return classify(ext: ext, codec: codec)
     }
 
-    /// Frame count / duration / fps / pixel size. Used only for dest-disk
-    /// estimate before writing proxy EXR. Does not decode pixels or change color.
+    /// Frame count / duration / fps / pixel size. Dest-disk estimate and
+    /// post-write EXR count check. Does not decode pixels or invent fps.
     static func extent(url: URL) -> MediaExtent {
         let ext = url.pathExtension.lowercased()
         if stillExt.contains(ext) {

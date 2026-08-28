@@ -313,6 +313,8 @@ final class SessionModel: ObservableObject {
     }
 
     /// One ACES2065-1 AP0 proxy EXR sequence. Decode loop + PreviewColor grade; no ODT.
+    /// After write, count EXRs against duration × metadata fps (or still frameCount).
+    /// Mismatch / missing timing is a Chinese failure; the folder is removed.
     /// Not ACEScct. Not a Rec.709 movie. 整段代理，不是全精度成片.
     func exportLockedEXR(
         clip: Clip,
@@ -349,6 +351,7 @@ final class SessionModel: ObservableObject {
                     NSLocalizedDescriptionKey: "decode/grade failed"
                 ])
             }
+            try Self.verifyLockedProxySequence(clip: clip, seqDir: seqDir)
         } catch {
             try? FileManager.default.removeItem(at: seqDir)
             throw error
@@ -465,17 +468,86 @@ final class SessionModel: ObservableObject {
     static let wroteProxyChip = "已写出代理"
     static let decodeFailedChip = "解码失败"
     static let writeFailedChip = "写出失败"
+    static let frameMismatchChip = "帧数对不上"
+    static let missingFpsChip = "读不到帧率，未核对"
+    static let missingDurationChip = "读不到时长，未核对"
 
     /// Short Chinese sidebar / status error. Failed write is not silent.
     static func shortExportChip(for error: Error) -> String {
         if error is LockedWriteCancel { return writeFailedChip }
         let desc = error.localizedDescription
         if desc.hasPrefix("先选择") { return desc }
+        if desc == frameMismatchChip || desc == missingFpsChip || desc == missingDurationChip {
+            return desc
+        }
         let lower = desc.lowercased()
         if lower.contains("decode") || lower.contains("grade") {
             return decodeFailedChip
         }
         return writeFailedChip
+    }
+
+    /// Expected EXR count from container metadata. Never invent a frame rate.
+    /// Movies: ceil(duration × fps). Stills: frameCount when both timing fields are absent.
+    /// Missing fps / duration fail closed. Dest-disk timing guess is not used here.
+    static func expectedSourceFrames(_ ext: MediaExtent) -> (Int?, String?) {
+        let duration: Double? = {
+            guard let d = ext.durationSeconds, d.isFinite, d > 0 else { return nil }
+            return d
+        }()
+        let fps: Double? = {
+            guard let f = ext.fps, f.isFinite, f > 0 else { return nil }
+            return f
+        }()
+        if let duration, let fps {
+            return (max(1, Int((duration * fps).rounded(.up))), nil)
+        }
+        if let n = ext.frameCount, n > 0, duration == nil, fps == nil {
+            return (n, nil)
+        }
+        if fps == nil {
+            return (nil, missingFpsChip)
+        }
+        return (nil, missingDurationChip)
+    }
+
+    /// How many ``.exr`` files are in the proxy folder. Missing folder → 0.
+    static func countProxyEXRs(in seqDir: URL) -> Int {
+        guard let items = try? FileManager.default.contentsOfDirectory(
+            at: seqDir,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        return items.filter { $0.pathExtension.lowercased() == "exr" }.count
+    }
+
+    /// Off-by-one: inclusive last frame on duration × fps. Empty is never a match.
+    static func framesCountMatches(written: Int, expected: Int) -> Bool {
+        if written < 1 || expected < 1 { return false }
+        return abs(written - expected) <= 1
+    }
+
+    /// Post-write check. Throws a Chinese chip. Caller removes the folder.
+    static func verifyLockedProxySequence(clip: Clip, seqDir: URL) throws {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: seqDir.path, isDirectory: &isDir),
+              isDir.boolValue else {
+            throw NSError(domain: "LogBridge", code: 4, userInfo: [
+                NSLocalizedDescriptionKey: frameMismatchChip
+            ])
+        }
+        let written = countProxyEXRs(in: seqDir)
+        let (expected, timingErr) = expectedSourceFrames(MediaFormat.extent(url: clip.url))
+        if let timingErr {
+            throw NSError(domain: "LogBridge", code: 4, userInfo: [
+                NSLocalizedDescriptionKey: timingErr
+            ])
+        }
+        guard let expected, framesCountMatches(written: written, expected: expected) else {
+            throw NSError(domain: "LogBridge", code: 4, userInfo: [
+                NSLocalizedDescriptionKey: frameMismatchChip
+            ])
+        }
     }
 
     /// Re-export clears the chip so a previous 已写出代理 does not linger.
