@@ -420,7 +420,7 @@ def test_arrow_keys_select_adjacent_clip():
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
     inspector = _read(INSPECTOR)
 
-    fn = clip.split("func selectAdjacentClip")[1].split("func isArrowConsumedByTextInput")[0]
+    fn = clip.split("func selectAdjacentClip")[1].split("func removeSelectedClipFromSession")[0]
     assert "isWritingDeliverables" in fn
     assert "isArrowConsumedByTextInput" in fn
     assert "selectedID" in fn
@@ -483,6 +483,154 @@ def test_arrow_keys_select_adjacent_clip():
     assert "!$0.hasLockedPair" in import_fn
     assert "isExporting" in clip
     assert "isWritingDeliverables" in clip
+
+
+def test_delete_removes_clip_from_session_not_disk():
+    """Delete/Backspace drops the selected clip from the session only.
+
+    Source file and any already-written `_proxy` stay on disk. Mid-write
+    ignores Delete. Text fields keep Delete. No new button. No confirm sheet.
+    Preview chrome stays #33. #40 evicts the removed clip's preview cache.
+    """
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    inspector = _read(INSPECTOR)
+    engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
+
+    fn = clip.split("func removeSelectedClipFromSession")[1].split(
+        "func isArrowConsumedByTextInput"
+    )[0]
+    body = "\n".join(
+        line.split("//", 1)[0]
+        for line in fn.splitlines()
+        if not line.lstrip().startswith("//")
+    )
+    assert "isWritingDeliverables" in fn
+    assert "isArrowConsumedByTextInput" in fn
+    assert "showSettings" in fn
+    assert "showImporter" in fn
+    assert "clips.remove(at:" in fn
+    assert "preview.evict(clipID:" in fn
+    assert "clips.indices.contains(idx)" in fn
+    assert "idx - 1" in fn
+    assert "selectedID = nil" in fn
+    assert "applyClipWBToGraph" in fn
+    assert "cancelLockedDeliverables" not in fn
+    assert "cancelWritingFromEscape" not in fn
+    assert "writeCancel" not in fn
+    assert "processLockedClips" not in fn
+    assert "processSelected" not in fn
+    assert "exportResolve" not in fn
+    assert "setIDT" not in fn
+    assert "FileManager" not in body
+    assert "removeItem" not in body
+    assert "trash" not in body.lower()
+    assert "recycle" not in body.lower()
+    assert "unlink" not in body
+    assert "NSWorkspace" not in body
+    assert "confirmationDialog" not in body
+    assert "NSAlert" not in body
+    assert "showImporter" in body
+    assert "精准" not in fn
+    assert "_proxy" in fn
+    assert "source" in fn.lower() or "源" in fn
+
+    steal = clip.split("func isArrowConsumedByTextInput")[1].split("func setExposureEnabled")[0]
+    assert "NSTextView" in steal
+    assert "NSTextField" in steal
+    assert "NSSlider" in steal
+    assert "NSSearchField" in steal
+    assert "精准" not in steal
+
+    cap = clip.split("var previewCaption")[1].split("var displayCurve")[0]
+    assert "processSkipReason ?? exportChip" in cap
+    assert 'return "先选择 Log 与色域"' not in cap
+    assert 'return "先选择成对 IDT"' not in cap
+    assert "exportChip" in cap
+    assert "已写出代理" in clip
+
+    assert "func evict(clipID:" in engine
+    assert "func retainPreviewCaches" in engine
+    refresh = engine.split("func refresh(")[1].split("func refreshODT(")[0]
+    assert "retainPreviewCaches(keeping: clip?.id)" in refresh
+
+    assert "case 51" in content
+    assert "case 117" in content
+    assert "removeSelectedClipFromSession" in content
+    assert "onDeleteCommand" in content
+    assert "onDelete" in content
+    assert "isArrowConsumedByTextInput" in content
+    assert "keyboardShortcut" not in content
+    assert "case 126" in content
+    assert "case 125" in content
+    assert "case 53" in content
+    assert "selectAdjacentClip" in content
+    assert "cancelWritingFromEscape" in content
+
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert monitor.count("Button(") == 0
+    assert "case 51" in monitor
+    assert "case 117" in monitor
+    assert "onDelete" in monitor
+    assert "isArrowConsumedByTextInput" in monitor
+    assert "isEscapeReservedByPresentedUI" in monitor
+    assert "帮助" not in monitor
+    assert "overlay" not in monitor.lower() or "No help overlay" in monitor
+    assert "精准" not in monitor
+    assert "removeItem" not in monitor
+    assert "FileManager" not in monitor
+    assert "trash" not in monitor.lower()
+
+    preview = content.split("struct SplitPreview")[1].split("struct StatusBar")[0]
+    assert "previewCaption" in preview
+    assert "WriteProgressLine" in preview
+    assert preview.index("isExporting") < preview.index("previewCaption")
+    assert "Button(" not in preview
+    assert "删除" not in preview
+    assert "移出" not in preview
+    assert "帮助" not in preview
+
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "处理已锁定片段" in bar
+    assert "取消" in bar
+    assert "isWritingDeliverables" in bar
+    assert "cancelLockedDeliverables" in bar
+    assert 'Button("删除")' not in bar
+    assert 'Button("移出")' not in bar
+
+    assert "PairedIDTBar" in content
+    assert "session.setIDT" in inspector
+    assert 'Button("锁 IDT")' not in sidebar
+    assert 'Button("锁定")' not in sidebar
+    assert 'Button("删除")' not in sidebar
+    assert 'Button("移出")' not in sidebar
+    assert "把混源文件夹拖进来" in sidebar
+    assert "精准" not in sidebar
+    drop = sidebar.split("struct DropZone")[1].split("struct ClipRow")[0]
+    assert "把混源文件夹拖进来" in drop
+    assert "把文件夹拖进来" in drop
+
+    assert "isWritingDeliverables" in clip
+    assert "isExporting" in clip
+    assert "没有素材" in engine
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert "Delete/Backspace removes the selected clip from the session only" in readme
+    assert "does not delete the source file" in readme
+    assert "_proxy" in readme
+    assert "Delete/Backspace removes the selected clip from the session only" in acceptance
+    assert "does not delete, trash, or move the source file" in acceptance
+    assert "already-written `_proxy`" in acceptance
+    assert "select next, else previous" in acceptance
+    assert "把混源文件夹拖进来" in acceptance
+    assert "整段代理，不是全精度成片" in readme
+    assert "整段代理，不是全精度成片" in acceptance
+    assert "精准" not in fn
+    assert "Escape while writing" in readme
+    assert "idle Escape does nothing" in readme
 
 
 def test_escape_cancels_write_only():

@@ -56,6 +56,9 @@ struct ContentView: View {
                 },
                 onEscape: {
                     session.cancelWritingFromEscape()
+                },
+                onDelete: {
+                    session.removeSelectedClipFromSession()
                 }
             )
         }
@@ -69,28 +72,36 @@ struct ContentView: View {
                 break
             }
         }
+        .onDeleteCommand {
+            session.removeSelectedClipFromSession()
+        }
     }
 }
 
 /// Window-level Up/Down for the sidebar list. Escape while writing is the
 /// existing 取消 (same cancelLockedDeliverables). Idle Escape does nothing.
-/// No help overlay. No extra button.
-/// Same window only; text / numeric / search first-responders keep arrows.
-/// Sheets / alerts / settings keep Escape.
+/// Delete / Backspace drops the selected clip from the session only
+/// (source file and already-written `_proxy` stay). Mid-write ignores Delete.
+/// No help overlay. No extra button. No confirm sheet.
+/// Same window only; text / numeric / search first-responders keep arrows
+/// and Delete. Sheets / alerts / settings keep Escape and Delete.
 private struct ClipListArrowMonitor: NSViewRepresentable {
     var handler: (Int) -> Bool
     var onEscape: () -> Bool
+    var onDelete: () -> Bool
 
     func makeNSView(context: Context) -> MonitorView {
         let view = MonitorView()
         view.handler = handler
         view.onEscape = onEscape
+        view.onDelete = onDelete
         return view
     }
 
     func updateNSView(_ nsView: MonitorView, context: Context) {
         nsView.handler = handler
         nsView.onEscape = onEscape
+        nsView.onDelete = onDelete
     }
 
     static func dismantleNSView(_ nsView: MonitorView, coordinator: ()) {
@@ -100,6 +111,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     final class MonitorView: NSView {
         var handler: ((Int) -> Bool)?
         var onEscape: (() -> Bool)?
+        var onDelete: (() -> Bool)?
         private var monitor: Any?
 
         override func viewDidMoveToWindow() {
@@ -129,6 +141,24 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                         return event
                     }
                     if self.onEscape?() == true {
+                        return nil
+                    }
+                    return event
+                case 51:
+                    if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
+                        return event
+                    }
+                    if self.onDelete?() == true {
+                        return nil
+                    }
+                    return event
+                case 117:
+                    if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
+                        return event
+                    }
+                    if self.onDelete?() == true {
                         return nil
                     }
                     return event

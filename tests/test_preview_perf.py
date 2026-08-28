@@ -276,6 +276,18 @@ def test_preview_caches_keep_only_selected_clip():
     assert "pendingPreviewWork" not in export_seq
     assert "writeCAT" in export_seq
 
+    remove = clip.split("func removeSelectedClipFromSession")[1].split(
+        "func isArrowConsumedByTextInput"
+    )[0]
+    assert "preview.evict(clipID:" in remove
+    assert "retainPreviewCaches" not in remove
+    assert "exportGradedAP0" not in remove
+    assert "FileManager" not in "\n".join(
+        line.split("//", 1)[0]
+        for line in remove.splitlines()
+        if not line.lstrip().startswith("//")
+    )
+
     assert "OperationQueue" not in engine
     assert "ThreadPool" not in engine
     assert 'DispatchQueue(label: "app.logbridge.preview"' in engine
