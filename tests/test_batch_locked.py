@@ -468,7 +468,9 @@ def test_export_sequence_prefers_10bit_ycbcr():
     assert "0.4681" in source_matrix
     assert "1.8556" in source_matrix
     clip = _read(CLIP)
-    assert "Source Y′CbCr → float" in clip.split("func exportLockedEXR")[0][-200:]
+    export_doc = clip.split("func exportLockedEXR")[1].split("func cancelLockedDeliverables")[0]
+    assert "Source Y′CbCr" in clip
+    assert "exportGradedAP0Sequence" in export_doc
 
 
 def test_export_ycbcr_is_source_codes_not_preview_8bit():

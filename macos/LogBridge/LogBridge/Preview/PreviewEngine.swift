@@ -335,7 +335,7 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// First frame only. Same 10-bit-first source Y′CbCr → float as the sequence.
-    /// Preview first-frame stays ``decodeMovieVideoToolbox`` (8-bit-first).
+    /// Preview first-frame stays the 8-bit-first CGImage path.
     static func decodeFirstSourceRGB(url: URL, maxLongEdge: CGFloat) -> (rgb: [Float], width: Int, height: Int)? {
         let probe = MediaFormat.probe(url: url)
         if probe.decision == .refuse { return nil }
