@@ -116,6 +116,7 @@ def test_docs_name_the_review_locks():
     assert "Rec.2100 PQ" in blob
     assert "高级" in blob
     assert "条已锁定" in blob
+    assert "待选" in blob and "已锁定" in blob
     assert "先选择成对 IDT" in blob
     assert "整段代理，不是全精度成片" in blob
     assert "已写出代理" in blob
@@ -271,6 +272,29 @@ def test_idt_bar_always_visible_no_hidden_picker():
     assert "ODTInspector" not in advanced
     assert 'Picker("Paired IDT"' not in advanced
     assert "成对 IDT" not in advanced
+    assert "layoutPriority(1)" in center
+    inspector_frame = content.split("InspectorView(session: session)")[1].split("}")[0]
+    assert "maxWidth: 260" in inspector_frame
+    assert "maxWidth: 380" not in inspector_frame
+    sidebar_frame = content.split("ClipSidebarView(session: session)")[1].split("VStack")[0]
+    assert "maxWidth: 280" in sidebar_frame
+    assert "处理已锁定片段" not in inspector.split("struct InspectorView")[1].split("struct WBInspector")[0]
+
+
+def test_sidebar_pending_and_locked_are_glanceable():
+    """待选 / 已锁定 are two visual states. No extra lock button."""
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    row = sidebar.split("struct ClipRow")[1]
+    assert "clip.isPending" in row
+    assert '"待选"' in row
+    assert '"已锁定"' in row
+    assert "weight(.semibold)" in row
+    assert "frame(width: 3)" in row
+    assert 'Button("锁 IDT")' not in sidebar
+    assert 'Button("锁定")' not in sidebar
+    assert 'Button("锁定 IDT")' not in sidebar
+    assert "处理已锁定片段" not in row
+    assert "精准" not in sidebar
 
 
 def test_forbidden_marketing_copy_stays_forbidden():

@@ -22,37 +22,31 @@ struct Rec709PreviewView: View {
     var onPick: ((Double, Double) -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-            ZStack(alignment: .topLeading) {
-                Rec709TaggedHost(image: image)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black)
-                PreviewNotDeliverableBadge()
-            }
-            .overlay {
-                GeometryReader { geo in
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .allowsHitTesting(pickingNeutral)
-                        .gesture(
-                            DragGesture(minimumDistance: 0).onEnded { value in
-                                guard pickingNeutral, let onPick else { return }
-                                let w = max(geo.size.width, 1)
-                                let h = max(geo.size.height, 1)
-                                let nx = min(max(value.location.x / w, 0), 1)
-                                let ny = min(max(value.location.y / h, 0), 1)
-                                onPick(nx, ny)
-                            }
-                        )
-                }
-            }
-            Text(caption)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        ZStack(alignment: .topLeading) {
+            Rec709TaggedHost(image: image)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+            PreviewNotDeliverableBadge()
+            PreviewPaneTitle(title: title)
         }
-        .padding(8)
+        .help(caption)
+        .overlay {
+            GeometryReader { geo in
+                Color.clear
+                    .contentShape(Rectangle())
+                    .allowsHitTesting(pickingNeutral)
+                    .gesture(
+                        DragGesture(minimumDistance: 0).onEnded { value in
+                            guard pickingNeutral, let onPick else { return }
+                            let w = max(geo.size.width, 1)
+                            let h = max(geo.size.height, 1)
+                            let nx = min(max(value.location.x / w, 0), 1)
+                            let ny = min(max(value.location.y / h, 0), 1)
+                            onPick(nx, ny)
+                        }
+                    )
+            }
+        }
     }
 }
 
@@ -60,13 +54,13 @@ struct Rec709PreviewView: View {
 struct PreviewNotDeliverableBadge: View {
     var body: some View {
         Text("预览·非成片")
-            .font(.caption.weight(.bold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .font(.caption2.weight(.bold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
             .background(.black.opacity(0.72))
             .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .padding(8)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .padding(6)
             .accessibilityLabel("预览·非成片. 8-bit thumbnail is not a deliverable")
             .help("8-bit thumbnail is not a deliverable")
     }
@@ -197,20 +191,31 @@ struct SourcePreviewView: View {
     var image: CGImage? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-            ZStack(alignment: .topLeading) {
-                SourceUntaggedHost(image: image)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black)
-                PreviewNotDeliverableBadge()
-            }
-            Text(caption)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        ZStack(alignment: .topLeading) {
+            SourceUntaggedHost(image: image)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+            PreviewNotDeliverableBadge()
+            PreviewPaneTitle(title: title)
         }
-        .padding(8)
+        .help(caption)
+    }
+}
+
+/// Thin title over the image so the pane itself stays the preview.
+private struct PreviewPaneTitle: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.black.opacity(0.55))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .padding(6)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
     }
 }
 

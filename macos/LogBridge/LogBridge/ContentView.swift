@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// One primary path: list → preview + paired IDT → 处理已锁定片段.
+/// Preview dominates the window. Sidebar / inspector / chrome recede.
 /// Right inspector is Exposure + WB only. Paired IDT stays under preview
 /// (never inside 「高级」). Node strip / Resolve export sit behind 「高级」
 /// (hidden by default). UI copy uses "已实现（未验证）"
@@ -14,10 +15,11 @@ struct ContentView: View {
     var body: some View {
         HSplitView {
             ClipSidebarView(session: session)
-                .frame(minWidth: 240, idealWidth: 280, maxWidth: 360)
+                .frame(minWidth: 196, idealWidth: 228, maxWidth: 280)
             VStack(spacing: 0) {
                 SplitPreview(session: session)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .layoutPriority(1)
                 PairedIDTBar(session: session)
                 ProcessLockedBar(session: session)
                 AdvancedPanel(session: session, isExpanded: $showAdvanced)
@@ -25,7 +27,7 @@ struct ContentView: View {
             }
             .frame(minWidth: 520)
             InspectorView(session: session)
-                .frame(minWidth: 260, idealWidth: 300, maxWidth: 380)
+                .frame(minWidth: 196, idealWidth: 220, maxWidth: 260)
         }
         .onDrop(of: [.fileURL], isTargeted: $session.dropTargeted) { providers in
             session.importProviders(providers)
@@ -56,21 +58,21 @@ struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
                 Text(session.lockStatusText)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.caption.weight(.semibold))
                 if let reason = session.selectedClip?.processSkipReason {
                     Text(reason)
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.orange)
                         .lineLimit(1)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 if session.showsProcessLockedButton {
                     if session.isWritingDeliverables {
                         Text(session.lastExportNote)
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -82,19 +84,20 @@ struct ProcessLockedBar: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
                     .help("整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。 Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原.")
                 }
             }
             if session.showsBatchSummary {
                 Text(session.lastExportNote)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.accentColor.opacity(0.05))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color.primary.opacity(0.03))
     }
 }
 
@@ -106,28 +109,29 @@ struct AdvancedPanel: View {
 
     var body: some View {
         DisclosureGroup("高级", isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 NodeStripView(session: session)
                 HStack {
                     Button("导出 ACEScct / EXR") {
                         session.exportResolve()
                     }
+                    .controlSize(.small)
                     .disabled(!session.canProcess)
                     .help("Locked clips only. Pending stay listed. 709 预览. 预览·非成片. Does not require the whole bin.")
                     if let reason = session.processBlockedReason {
                         Text(reason)
-                            .font(.caption)
+                            .font(.caption2)
                             .foregroundStyle(.orange)
                     }
                     Spacer()
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Color.primary.opacity(0.03))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+        .background(Color.primary.opacity(0.02))
     }
 }
 
@@ -151,7 +155,7 @@ struct SplitPreview: View {
                 }
             )
         }
-        .padding(8)
+        .padding(2)
     }
 }
 
@@ -160,7 +164,7 @@ struct StatusBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Text("LogBridge · 已实现（未验证）")
             if session.preview.isWorking || session.isWritingDeliverables {
                 ProgressView()
@@ -191,7 +195,8 @@ struct StatusBar: View {
             Spacer()
         }
         .font(.caption)
-        .padding(8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
         .background(.bar)
     }
 }
