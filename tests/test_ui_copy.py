@@ -364,6 +364,53 @@ def test_write_progress_on_preview_inspector_locks():
     assert "预览·非成片" in _all_swift()
 
 
+def test_lock_lands_on_next_pending():
+    """Lock selected pending IDT selects next pending (wrap). Mid-write stays. No auto-lock."""
+    clip = _read(CLIP)
+    set_fn = clip.split("func setIDT")[1].split("func selectNextPendingAfterLock")[0]
+    assert "wasPending" in set_fn
+    assert "isWritingDeliverables" in set_fn
+    assert "selectNextPendingAfterLock" in set_fn
+    assert "processLockedClips" not in set_fn
+    assert "processSelected" not in set_fn
+    assert "exportResolve" not in set_fn
+    assert "精准" not in set_fn
+
+    advance = clip.split("func selectNextPendingAfterLock")[1].split("func setExposureEnabled")[0]
+    assert "selectedID == lockedID" in advance
+    assert "dropFirst" in advance
+    assert "!$0.hasLockedPair" in advance
+    assert "id != lockedID" in advance
+    assert "selectedID" in advance
+    assert "setIDT" not in advance
+    assert "processLockedClips" not in advance
+    assert "processSelected" not in advance
+    assert "exportResolve" not in advance
+    assert "精准" not in advance
+
+    import_fn = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    assert "built.first(where:" in import_fn
+    assert "!$0.hasLockedPair" in import_fn
+    assert "selectedID" in import_fn
+
+    cap = clip.split("var previewCaption")[1].split("var displayCurve")[0]
+    assert "processSkipReason ?? exportChip" in cap
+    assert 'return "先选择 Log 与色域"' not in cap
+    assert 'return "先选择成对 IDT"' not in cap
+
+    content = _read(CONTENT)
+    inspector = _read(INSPECTOR)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "PairedIDTBar" in content
+    assert "session.setIDT" in inspector
+    assert 'Button("锁 IDT")' not in sidebar
+    assert 'Button("锁定")' not in sidebar
+    assert "isExporting" in clip
+    assert "isWritingDeliverables" in clip
+
+
 def test_import_lands_on_first_pending():
     """Mixed drop selects first pending/unlocked. All-locked keeps first/existing. No new button."""
     clip = _read(CLIP)
