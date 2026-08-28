@@ -313,7 +313,7 @@ final class SessionModel: ObservableObject {
     }
 
     /// One ACES2065-1 AP0 proxy EXR sequence. Decode loop + PreviewColor grade; no ODT.
-    /// After write, count EXRs against duration × metadata fps (or still frameCount).
+    /// After write, count EXRs against duration × metadata fps only.
     /// Mismatch / missing timing is a Chinese failure; the folder is removed.
     /// Not ACEScct. Not a Rec.709 movie. 整段代理，不是全精度成片.
     func exportLockedEXR(
@@ -487,9 +487,8 @@ final class SessionModel: ObservableObject {
         return writeFailedChip
     }
 
-    /// Expected EXR count from container metadata. Never invent a frame rate.
-    /// Movies: ceil(duration × fps). Stills: frameCount when both timing fields are absent.
-    /// Missing fps / duration fail closed. Dest-disk timing guess is not used here.
+    /// Expected EXR count: duration × metadata fps only. Never invent a frame rate.
+    /// Missing fps / duration fail closed.
     static func expectedSourceFrames(_ ext: MediaExtent) -> (Int?, String?) {
         let duration: Double? = {
             guard let d = ext.durationSeconds, d.isFinite, d > 0 else { return nil }
@@ -501,9 +500,6 @@ final class SessionModel: ObservableObject {
         }()
         if let duration, let fps {
             return (max(1, Int((duration * fps).rounded(.up))), nil)
-        }
-        if let n = ext.frameCount, n > 0, duration == nil, fps == nil {
-            return (n, nil)
         }
         if fps == nil {
             return (nil, missingFpsChip)

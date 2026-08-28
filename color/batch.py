@@ -31,12 +31,11 @@ A cancelled in-progress clip is not 已写出; completed clips keep
 「在 Finder 中显示」 stays.
 
 After a locked write, count EXRs in ``{stem}_ACES2065-1_proxy/`` and
-compare to source duration × metadata fps (still / known frame count
-when both timing fields are absent). Off-by-one is accepted (inclusive
-last frame). Missing fps is 「读不到帧率，未核对」; missing duration
-is 「读不到时长，未核对」 — never default 24 or 30. A mismatch is
+compare to source duration × metadata fps only. Off-by-one is accepted
+(inclusive last frame). Missing fps is 「读不到帧率，未核对」; missing
+duration is 「读不到时长，未核对」 — never default 24 or 30, and do
+not reuse the dest-disk 24 fps × 60 s guess. A mismatch is
 「帧数对不上」; the folder is removed so it is not 已写出代理.
-Disk-size estimate may still say 24 fps; this checker does not.
 
 Before any EXR is written, estimate dest disk from **locked clips
 only**: frame count × pixel count × 12 bytes (uncompressed float32
@@ -297,20 +296,14 @@ def clip_frame_count(
 
 
 def expected_source_frames(clip: BatchClip) -> tuple[int | None, str | None]:
-    """Expected EXR count from container metadata. Never invent a frame rate.
+    """Expected EXR count: duration × metadata fps only. Never invent fps.
 
-    Movies: ``ceil(duration × fps)``. Stills / known count: ``frame_count``
-    only when duration and fps are both absent (ImageIO still = 1).
     Missing fps → 「读不到帧率，未核对」. Missing duration → 「读不到时长，未核对」.
-    Does not use the dest-disk timing guess.
     """
     duration = _positive_float(clip.duration_seconds)
     fps = _positive_float(clip.fps)
-    known = _positive_int(clip.frame_count)
     if duration is not None and fps is not None:
         return max(1, int(ceil(duration * fps))), None
-    if known is not None and duration is None and fps is None:
-        return known, None
     if fps is None:
         return None, MISSING_FPS_CHIP
     return None, MISSING_DURATION_CHIP

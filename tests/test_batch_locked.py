@@ -89,7 +89,7 @@ def _all_swift() -> str:
 
 def test_batch_walks_locked_only_skips_unlocked():
     clips = [
-        BatchClip("locked.mov", idt="sony_slog3_sgamut3", frame_count=1),
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0),
         BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
         BatchClip("empty.mov"),
         BatchClip("stub.mov", idt="future", is_stub=True),
@@ -223,7 +223,7 @@ def _slog3_grey(shape=(2, 2, 3)):
 
 def test_unlocked_never_write_locked_writes_and_counter(tmp_path: Path):
     clips = [
-        BatchClip("locked.mov", idt="sony_slog3_sgamut3", frame_count=1),
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0),
         BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
         BatchClip("empty.mov"),
         BatchClip("stub.mov", idt="future", is_stub=True),
@@ -255,7 +255,7 @@ def test_unlocked_never_write_locked_writes_and_counter(tmp_path: Path):
 
 def test_locked_exr_is_aces2065_and_mixed_bin_writes(tmp_path: Path):
     clips = [
-        BatchClip("locked.mov", idt="sony_slog3_sgamut3", frame_count=1),
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0),
         BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
     ]
     report = process_locked_writes(
@@ -273,7 +273,7 @@ def test_locked_exr_is_aces2065_and_mixed_bin_writes(tmp_path: Path):
 
 def test_wb_off_identity_still_writes_exr(tmp_path: Path):
     """Existing WB toggle: off / identity must still write. Never required."""
-    clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3", frame_count=1)]
+    clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0)]
     frames = {"locked.mov": _slog3_grey()}
     off = SerialGraph(wb_enabled=False, wb_cct=None)
     assert off.wb_enabled is False
@@ -465,7 +465,7 @@ def test_unlocked_never_writes_sequence(tmp_path: Path):
 
 def test_locked_writes_more_than_one_frame(tmp_path: Path):
     clips = [
-        BatchClip("locked.mov", idt="sony_slog3_sgamut3", frame_count=2),
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=2.0, fps=1.0),
         BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
     ]
     frame_a = _slog3_grey()
@@ -549,8 +549,8 @@ def test_progress_and_cancel_copy_is_honest_not_chengpian():
 def test_cancel_removes_in_progress_folder_keeps_completed(tmp_path: Path):
     """Safer cancel: drop the current half `_proxy` folder. Completed clips stay."""
     clips = [
-        BatchClip("done.mov", idt="sony_slog3_sgamut3", frame_count=2),
-        BatchClip("long.mov", idt="sony_slog3_sgamut3", frame_count=4),
+        BatchClip("done.mov", idt="sony_slog3_sgamut3", duration_seconds=2.0, fps=1.0),
+        BatchClip("long.mov", idt="sony_slog3_sgamut3", duration_seconds=4.0, fps=1.0),
         BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
     ]
     frame = _slog3_grey()
@@ -607,7 +607,7 @@ def test_last_export_folder_and_finder_reveal(tmp_path: Path):
     dest = tmp_path / "Exports"
     dest.mkdir()
     assert short_export_path(dest) == "Exports"
-    clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3", frame_count=1)]
+    clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0)]
     report = process_locked_writes(clips, dest, frames={"locked.mov": _slog3_grey()})
     assert report.cancelled is False
     assert report.written
@@ -676,7 +676,7 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
     assert "成片" not in (short_export_chip(written=True) or "")
 
     clips = [
-        BatchClip("locked.mov", idt="sony_slog3_sgamut3", frame_count=1),
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0),
         BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
         BatchClip("empty.mov"),
     ]
@@ -702,8 +702,8 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(fail_chips["locked.mov"])
 
     cancel_clips = [
-        BatchClip("done.mov", idt="sony_slog3_sgamut3", frame_count=2),
-        BatchClip("long.mov", idt="sony_slog3_sgamut3", frame_count=4),
+        BatchClip("done.mov", idt="sony_slog3_sgamut3", duration_seconds=2.0, fps=1.0),
+        BatchClip("long.mov", idt="sony_slog3_sgamut3", duration_seconds=4.0, fps=1.0),
         BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
     ]
     frame = _slog3_grey()
@@ -773,7 +773,7 @@ def test_sidebar_chip_row_reveals_clip_sequence_folder(tmp_path: Path):
     dest = tmp_path / "Exports"
     dest.mkdir()
     clips = [
-        BatchClip("locked.mov", idt="sony_slog3_sgamut3", frame_count=1),
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0),
         BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
         BatchClip("empty.mov"),
     ]
@@ -1132,8 +1132,12 @@ def test_verify_missing_fps_fails_and_never_guesses_24_or_30(tmp_path: Path):
     )
     assert "CONSERVATIVE_FPS" not in checker
     assert "CONSERVATIVE_SECONDS" not in checker
+    assert "clip_frame_count" not in checker
+    assert "frame_count" not in inspect.getsource(expected_source_frames)
     assert "24.0" not in checker
     assert "30.0" not in checker
+    assert "24" not in inspect.getsource(expected_source_frames)
+    assert "30" not in inspect.getsource(expected_source_frames)
     assert "conservative" not in checker.lower()
 
     no_fps = BatchClip(
@@ -1147,6 +1151,24 @@ def test_verify_missing_fps_fails_and_never_guesses_24_or_30(tmp_path: Path):
     assert expected != 48
     assert expected != 60
     assert MISSING_FPS_CHIP == "读不到帧率，未核对"
+
+    # Disk-estimate known count / 24×60 bait must not substitute for metadata fps.
+    bait = BatchClip(
+        "locked.mov",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=2.0,
+        frame_count=48,
+    )
+    bait_n, bait_err = expected_source_frames(bait)
+    assert bait_n is None
+    assert bait_err == MISSING_FPS_CHIP
+    assert bait_n != 48
+    known_only = BatchClip(
+        "locked.mov", idt="sony_slog3_sgamut3", frame_count=48
+    )
+    known_n, known_err = expected_source_frames(known_only)
+    assert known_n is None
+    assert known_err == MISSING_FPS_CHIP
 
     no_duration = BatchClip("locked.mov", idt="sony_slog3_sgamut3", fps=25.0)
     expected_d, err_d = expected_source_frames(no_duration)
@@ -1198,8 +1220,12 @@ def test_verify_missing_fps_fails_and_never_guesses_24_or_30(tmp_path: Path):
     )[0]
     assert "conservativeFPS" not in verify_swift
     assert "conservativeSeconds" not in verify_swift
+    assert "estimatedFrameCount" not in verify_swift
+    assert "frameCount" not in verify_swift
     assert "24.0" not in verify_swift
     assert "30.0" not in verify_swift
+    assert " 24" not in verify_swift
+    assert " 30" not in verify_swift
     export_body = clip_src.split("func exportLockedEXR")[1].split(
         "func cancelLockedDeliverables"
     )[0]
