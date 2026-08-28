@@ -341,21 +341,23 @@ def test_export_write_overlaps_next_copynext():
         "func cancelLockedDeliverables"
     )[0]
 
-    assert "exportWriteQueue" in engine
-    assert 'DispatchQueue(label: "app.logbridge.export.write"' in engine
-    assert engine.count("exportWriteQueue") >= 2
+    assert "exportWriteQueue" not in engine
+    assert 'DispatchQueue(label: "app.logbridge.export.write"' not in engine
+    assert engine.count('DispatchQueue(label:') == 1
+    assert 'DispatchQueue(label: "app.logbridge.preview"' in engine
     assert "one write overlap" in export_seq
     assert "joinExportWrite" in export_seq
     assert "writeFrame" in export_seq
     on_frame = export_seq.split("decodeAllSourceFrames")[1]
+    assert "DispatchQueue.global" in on_frame
     assert on_frame.index("gradeAP0") < on_frame.index("joinExportWrite")
     assert on_frame.index("joinExportWrite") < on_frame.index(
-        "exportWriteQueue.async"
+        "DispatchQueue.global"
     )
-    assert on_frame.index("exportWriteQueue.async") < on_frame.index("count += 1")
+    assert on_frame.index("DispatchQueue.global") < on_frame.index("count += 1")
     work = on_frame.split("DispatchWorkItem")[1].split("pendingWrite")[0]
     assert "writeFrame(index, pixels, w, h)" in work
-    assert "exportWriteQueue.async" in on_frame.split("DispatchWorkItem")[1]
+    assert "DispatchQueue.global" in on_frame.split("DispatchWorkItem")[1]
     assert export_seq.count("joinExportWrite()") >= 2
     assert "try writeFrame(count, rgb, width, height)" not in export_seq
 

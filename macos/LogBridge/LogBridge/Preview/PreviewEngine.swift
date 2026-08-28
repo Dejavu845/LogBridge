@@ -350,10 +350,6 @@ final class PreviewEngine: ObservableObject {
     /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
     static let exportMaxLongEdge: CGFloat = 16384
 
-    /// One in-flight EXR write. Overlaps disk of N with sequential
-    /// ``copyNextSampleBuffer`` + unpack + grade of N+1. Not a pool.
-    private static let exportWriteQueue = DispatchQueue(label: "app.logbridge.export.write")
-
     /// Clip-constant CAT for a locked write. Nil = WB off / identity (same as gradeAP0).
     /// Built once per sequence — do not rebuild the CAT per write frame.
     private static func writeCAT(graph: SerialGraph) -> simd_double3x3? {
@@ -424,9 +420,9 @@ final class PreviewEngine: ObservableObject {
 
     /// Whole-clip proxy sequence. Writes as frames are decoded (no full-timeline buffer).
     /// Sequential ``copyNextSampleBuffer`` — do not seek randomly.
-    /// After ``gradeAP0`` of frame N, EXR ``writeFrame`` of N starts on
-    /// ``exportWriteQueue`` so the next ``copyNextSampleBuffer`` + unpack +
-    /// grade can proceed (one write overlap). Join write N after grade of
+    /// After ``gradeAP0`` of frame N, one ``writeFrame`` task of N starts on
+    /// the existing global queue so the next ``copyNextSampleBuffer`` + unpack
+    /// + grade can proceed (one write overlap). Join write N after grade of
     /// N+1 and before write N+1. Frame indices stay sequential.
     /// One ``gradeAP0`` per write frame on the decode buffer (in-place).
     /// Clip-constant CAT via ``writeCAT``. Does not reuse preview
@@ -457,7 +453,7 @@ final class PreviewEngine: ObservableObject {
             do {
                 try Self.decodeAllSourceFrames(url: clip.url, maxLongEdge: Self.exportMaxLongEdge) { rgb, width, height in
                     Self.gradeAP0(rgb: &rgb, idt: idt, graph: graph, cat: cat)
-                    // Join write N-1 after grade of N; then start write N.
+                    // Join write N-1 after grade of N; then one write task for N.
                     try joinExportWrite()
                     let index = count
                     let pixels = rgb
@@ -471,7 +467,7 @@ final class PreviewEngine: ObservableObject {
                         }
                     }
                     pendingWrite = work
-                    Self.exportWriteQueue.async(execute: work)
+                    DispatchQueue.global(qos: .userInitiated).async(execute: work)
                     count += 1
                 }
                 try joinExportWrite()

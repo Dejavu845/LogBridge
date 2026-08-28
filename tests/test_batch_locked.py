@@ -684,12 +684,13 @@ def test_write_loop_one_pass_no_preview_8bit_no_odt(tmp_path: Path, monkeypatch)
     assert "writeCAT" in export_seq
     assert "gradeAP0" in export_seq
     assert "joinExportWrite" in export_seq
-    assert "exportWriteQueue.async" in export_seq
+    assert "DispatchQueue.global" in export_seq
+    assert "exportWriteQueue" not in export_seq
     assert "one write overlap" in export_seq
     on_frame = export_seq.split("decodeAllSourceFrames")[1]
     assert on_frame.index("gradeAP0") < on_frame.index("joinExportWrite")
     assert on_frame.index("joinExportWrite") < on_frame.index(
-        "exportWriteQueue.async"
+        "DispatchQueue.global"
     )
     assert "writeFrame(index, pixels, w, h)" in on_frame.split("DispatchWorkItem")[1]
     assert "try writeFrame(count, rgb, width, height)" not in export_seq
