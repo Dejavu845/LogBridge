@@ -144,7 +144,16 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                         return nil
                     }
                     return event
-                case 51, 117:
+                case 51:
+                    if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
+                        return event
+                    }
+                    if self.onDelete?() == true {
+                        return nil
+                    }
+                    return event
+                case 117:
                     if SessionModel.isArrowConsumedByTextInput() { return event }
                     if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
                         return event
