@@ -69,6 +69,9 @@ from color.batch import (
     sidebar_status_chip,
     clip_sequence_reveal_path,
     skip_reason,
+    ycbcr_to_preview_u8,
+    ycbcr_to_rgb_float,
+    preview_u8_promoted_float,
 )
 from color.curves import linear_to_slog3
 from color.exr_write import read_rgb_exr
@@ -340,12 +343,16 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     assert "decodeMovieAllFrames" in engine
     assert "while let sample = output.copyNextSampleBuffer()" in engine
     _assert_export_sequence_tries_10bit_first(engine)
+    _assert_export_decode_is_source_ycbcr_float(engine)
     grade = engine.split("func gradeAP0")[1].split("func exportGradedAP0(")[0]
     assert "applyODT" not in grade
     assert "if graph.wbEnabled" in grade
     export_seq = engine.split("func exportGradedAP0Sequence")[1].split("func decodeAllSourceFrames")[0]
     assert "applyODT" not in export_seq
     assert "gradeAP0" in export_seq
+    assert "extractRGB" not in export_seq
+    assert "decodeDownscaled" not in export_seq
+    assert "decodeAllSourceFrames" in engine.split("func exportGradedAP0Sequence")[1]
     export_body = clip.split("func exportLockedEXR")[1].split("func processSelected()")[0]
     assert "writeACES2065EXR" in export_body
     assert "sequenceFrameURL" in export_body
@@ -389,6 +396,45 @@ def _assert_export_sequence_tries_10bit_first(engine: str) -> None:
     assert HONEST_PROXY_NOTE in engine
 
 
+def _assert_export_decode_is_source_ycbcr_float(engine: str) -> None:
+    """Write path is source Y′CbCr → float, not preview 8-bit promoted."""
+    export_first = engine.split("func exportGradedAP0(")[1].split(
+        "func exportGradedAP0Sequence"
+    )[0]
+    export_seq = engine.split("func exportGradedAP0Sequence")[1].split(
+        "func decodeAllSourceFrames"
+    )[0]
+    movie = engine.split("func decodeMovieAllFrames")[1].split(
+        "func linearAP0Frame"
+    )[0]
+    ten_src = engine.split("func rgbFloatFromLogPixelBuffer")[1].split(
+        "kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange"
+    )[1].split("} else {")[0]
+    preview_cg = engine.split("func cgImageFromLogPixelBuffer")[1].split(
+        "func writeMatrixRGB"
+    )[0]
+    preview_extract = engine.split("static func extractRGB")[1].split(
+        "static func makeCGImage"
+    )[0]
+    assert "decodeFirstSourceRGB" in export_first
+    assert "decodeDownscaled" not in export_first
+    assert "extractRGB" not in export_first
+    assert "extractRGB" not in export_seq
+    assert "rgbFloatFromLogPixelBuffer" in movie
+    assert "cgImageFromLogPixelBuffer(" not in movie
+    assert "extractRGB" not in movie
+    assert "applyYCbCrMatrixToFloat" in movie
+    assert "writeMatrixRGB(" not in movie
+    assert "applyYCbCrMatrixToFloat" in ten_src
+    assert "/ 255" not in ten_src
+    assert "writeMatrixRGB(" not in ten_src
+    assert "bitsPerComponent: 8" in preview_cg
+    assert "writeMatrixRGB" in preview_cg
+    assert "/ 255" in preview_extract
+    assert HONEST_PROXY_NOTE in engine
+    _assert_chengpian_not_a_deliverable_claim(engine.split("func exportGradedAP0Sequence")[0][-400:])
+
+
 def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
     """成片 may only appear as 预览·非成片 / 不是全精度成片 / 不是整段成片 / 不是成片."""
     cleaned = (
@@ -405,6 +451,7 @@ def test_export_sequence_prefers_10bit_ycbcr():
     engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
     assert HONEST_PROXY_NOTE in engine
     _assert_export_sequence_tries_10bit_first(engine)
+    _assert_export_decode_is_source_ycbcr_float(engine)
     assert "writeMatrixRGB" in engine
     ten_block = engine.split("kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange")[-1]
     assert "writeMatrixRGB" in ten_block.split("func writeMatrixRGB")[0]
@@ -413,6 +460,45 @@ def test_export_sequence_prefers_10bit_ycbcr():
     assert "0.1873" in matrix
     assert "0.4681" in matrix
     assert "1.8556" in matrix
+    source_matrix = engine.split("func applyYCbCrMatrixToFloat")[1].split(
+        "func linearAP0Frame"
+    )[0]
+    assert "1.5748" in source_matrix
+    assert "0.1873" in source_matrix
+    assert "0.4681" in source_matrix
+    assert "1.8556" in source_matrix
+    clip = _read(CLIP)
+    assert "Source Y′CbCr → float" in clip.split("func exportLockedEXR")[0][-200:]
+
+
+def test_export_ycbcr_is_source_codes_not_preview_8bit():
+    """10-bit source codes must not be preview-8-bit then /255."""
+    # Neutral chroma, 10-bit Y=372 (not an 8-bit grid point after matrix).
+    source = ycbcr_to_rgb_float(372, 512, 512, bit_depth=10)
+    promoted = preview_u8_promoted_float(372, 512, 512, bit_depth=10)
+    preview_u8 = ycbcr_to_preview_u8(372, 512, 512, bit_depth=10)
+    assert abs(source[0] - promoted[0]) > 1e-4
+    assert source[0] == source[1] == source[2]
+    assert preview_u8 == (90, 90, 90)
+    assert promoted == (90 / 255.0, 90 / 255.0, 90 / 255.0)
+    yp = (372.0 - 64.0) / 876.0
+    np.testing.assert_allclose(source, (yp, yp, yp), atol=1e-12)
+
+    engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    _assert_export_decode_is_source_ycbcr_float(engine)
+    assert "ycbcr_to_rgb_float" in _read(ROOT / "color/batch.py")
+    assert HONEST_PROXY_NOTE in engine
+    status = processed_status_text(1, 0)
+    assert HONEST_PROXY_NOTE in status
+    assert "整段代理，不是全精度成片" in status
+    _assert_chengpian_not_a_deliverable_claim(status)
+    assert "精准" not in status
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert "preview 8-bit path promoted" in readme
+    assert "preview 8-bit path promoted" in acceptance
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)
 
 
 def test_honest_proxy_copy_and_filename():

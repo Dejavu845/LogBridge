@@ -337,7 +337,7 @@ final class SessionModel: ObservableObject {
         return note
     }
 
-    /// One ACES2065-1 AP0 proxy EXR sequence. Decode loop + PreviewColor grade; no ODT.
+    /// One ACES2065-1 AP0 proxy EXR sequence. Source Y′CbCr → float + PreviewColor grade; no ODT.
     /// After write, count EXRs against duration × metadata fps only.
     /// Mismatch / missing timing is a Chinese failure; the folder is removed.
     /// Not ACEScct. Not a Rec.709 movie. 整段代理，不是全精度成片.

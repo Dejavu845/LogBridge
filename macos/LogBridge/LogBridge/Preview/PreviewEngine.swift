@@ -230,9 +230,12 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// Graded ACES2065-1 (AP0) linear proxy frames. Reuses PreviewColor.
-    /// ODT is not applied. Not ACEScct. Sequence decode prefers 10-bit
-    /// Y′CbCr, then the preview 8-bit formats (still matrix-only, still a
-    /// proxy) — 整段代理，不是全精度成片.
+    /// ODT is not applied. Not ACEScct.
+    /// Movie write path reads source 10-bit / native-depth Y′CbCr and
+    /// matrix-converts to float RGB. It does not use the preview 8-bit
+    /// path and then promote those 8-bit pixels (`extractRGB` / 255).
+    /// Still a proxy — 整段代理，不是全精度成片. Bit-depth going up
+    /// is still 整段代理，不是全精度成片.
     /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
     static let exportMaxLongEdge: CGFloat = 16384
 
@@ -264,15 +267,16 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// First-frame graded ACES2065-1 (AP0) linear proxy. Reuses PreviewColor.
+    /// Movies: same source Y′CbCr → float as the sequence (not preview 8-bit).
     func exportGradedAP0(clip: Clip, graph: SerialGraph) -> (rgb: [Float], width: Int, height: Int)? {
         queue.sync {
             guard let idt = clip.idt, !idt.isStub, !clip.needsUserPicker else { return nil }
-            guard let cg = Self.decodeDownscaled(url: clip.url, maxLongEdge: Self.exportMaxLongEdge) else {
+            guard let decoded = Self.decodeFirstSourceRGB(url: clip.url, maxLongEdge: Self.exportMaxLongEdge) else {
                 return nil
             }
-            var rgb = PreviewColor.extractRGB(cg)
+            var rgb = decoded.rgb
             Self.gradeAP0(rgb: &rgb, idt: idt, graph: graph)
-            return (rgb, cg.width, cg.height)
+            return (rgb, decoded.width, decoded.height)
         }
     }
 
@@ -290,10 +294,10 @@ final class PreviewEngine: ObservableObject {
                 ])
             }
             var count = 0
-            try Self.decodeAllSourceFrames(url: clip.url, maxLongEdge: Self.exportMaxLongEdge) { cg in
-                var rgb = PreviewColor.extractRGB(cg)
-                Self.gradeAP0(rgb: &rgb, idt: idt, graph: graph)
-                try writeFrame(count, rgb, cg.width, cg.height)
+            try Self.decodeAllSourceFrames(url: clip.url, maxLongEdge: Self.exportMaxLongEdge) { rgb, width, height in
+                var work = rgb
+                Self.gradeAP0(rgb: &work, idt: idt, graph: graph)
+                try writeFrame(count, work, width, height)
                 count += 1
             }
             if count < 1 {
@@ -305,11 +309,12 @@ final class PreviewEngine: ObservableObject {
         }
     }
 
-    /// Movies: every sample. Stills: one ImageIO frame. Same matrix-only Y′CbCr as preview.
+    /// Movies: every sample as source Y′CbCr → float. Stills: one ImageIO frame.
+    /// Not the preview 8-bit Y′CbCr path. Same matrix-only convert (no transfer).
     static func decodeAllSourceFrames(
         url: URL,
         maxLongEdge: CGFloat,
-        onFrame: (CGImage) throws -> Void
+        onFrame: ([Float], Int, Int) throws -> Void
     ) throws {
         let probe = MediaFormat.probe(url: url)
         if probe.decision == .refuse {
@@ -323,20 +328,42 @@ final class PreviewEngine: ObservableObject {
                     NSLocalizedDescriptionKey: "decode/grade failed"
                 ])
             }
-            try onFrame(img)
+            try onFrame(PreviewColor.extractRGB(img), img.width, img.height)
             return
         }
         try decodeMovieAllFrames(url: url, maxLongEdge: maxLongEdge, onFrame: onFrame)
     }
 
-    /// VideoToolbox / AVAssetReader: all frames as Y′CbCr (or BGRA bytes).
-    /// Export sequence only: 10-bit 420 first, then 8-bit 420, then 8-bit 422.
-    /// Preview/scrub keeps the 8-bit-first list. Bit-depth only — no transfer.
-    /// Loop ``copyNextSampleBuffer``. Never copyCGImage. Never set AVVideoColorPropertiesKey.
+    /// First frame only. Same 10-bit-first source Y′CbCr → float as the sequence.
+    /// Preview first-frame stays ``decodeMovieVideoToolbox`` (8-bit-first).
+    static func decodeFirstSourceRGB(url: URL, maxLongEdge: CGFloat) -> (rgb: [Float], width: Int, height: Int)? {
+        let probe = MediaFormat.probe(url: url)
+        if probe.decision == .refuse { return nil }
+        if probe.kind == .still {
+            guard let img = decodeStillImageIO(url: url, maxLongEdge: maxLongEdge) else { return nil }
+            return (PreviewColor.extractRGB(img), img.width, img.height)
+        }
+        let formats: [OSType] = [
+            kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+            kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelFormatType_422YpCbCr8
+        ]
+        for fmt in formats {
+            if let decoded = readFirstYpCbCrRGB(url: url, pixelFormat: fmt, maxLongEdge: maxLongEdge) {
+                return decoded
+            }
+        }
+        return nil
+    }
+
+    /// VideoToolbox / AVAssetReader: all frames as source Y′CbCr → float RGB.
+    /// Export sequence only: 10-bit 420 first, then native 8-bit 420, then 8-bit 422.
+    /// Preview/scrub keeps the 8-bit-first list and the 8-bit CGImage writer.
+    /// Bit-depth only — no transfer. Never copyCGImage. Never set AVVideoColorPropertiesKey.
     static func decodeMovieAllFrames(
         url: URL,
         maxLongEdge: CGFloat,
-        onFrame: (CGImage) throws -> Void
+        onFrame: ([Float], Int, Int) throws -> Void
     ) throws {
         let formats: [OSType] = [
             kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
@@ -359,11 +386,12 @@ final class PreviewEngine: ObservableObject {
 
     /// AVAssetReader loop. Returns 0 when this pixel format produced no frames
     /// (caller tries the next format). Mid-sequence convert failure throws.
+    /// Writes float RGB from source Y′CbCr — not the preview 8-bit CGImage writer.
     private static func readAllYpCbCrFrames(
         url: URL,
         pixelFormat: OSType,
         maxLongEdge: CGFloat,
-        onFrame: (CGImage) throws -> Void
+        onFrame: ([Float], Int, Int) throws -> Void
     ) throws -> Int {
         let asset = AVURLAsset(url: url)
         guard let track = asset.tracks(withMediaType: .video).first,
@@ -380,16 +408,167 @@ final class PreviewEngine: ObservableObject {
         var count = 0
         while let sample = output.copyNextSampleBuffer() {
             guard let pb = CMSampleBufferGetImageBuffer(sample),
-                  let img = cgImageFromLogPixelBuffer(pb, maxLongEdge: maxLongEdge) else {
+                  let decoded = rgbFloatFromLogPixelBuffer(pb, maxLongEdge: maxLongEdge) else {
                 if count == 0 { return 0 }
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
                     NSLocalizedDescriptionKey: "decode/grade failed"
                 ])
             }
-            try onFrame(img)
+            try onFrame(decoded.rgb, decoded.width, decoded.height)
             count += 1
         }
         return count
+    }
+
+    /// First sample, source Y′CbCr → float. Preview first-frame stays 8-bit CGImage.
+    private static func readFirstYpCbCrRGB(
+        url: URL,
+        pixelFormat: OSType,
+        maxLongEdge: CGFloat
+    ) -> (rgb: [Float], width: Int, height: Int)? {
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let settings: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: pixelFormat
+        ]
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { return nil }
+        reader.add(output)
+        guard reader.startReading(),
+              let sample = output.copyNextSampleBuffer(),
+              let pb = CMSampleBufferGetImageBuffer(sample) else { return nil }
+        return rgbFloatFromLogPixelBuffer(pb, maxLongEdge: maxLongEdge)
+    }
+
+    /// Matrix-only Y′CbCr → float R′G′B′ at the buffer's native sample depth.
+    /// 10-bit video-range codes stay 10-bit (UInt16 0-1023). No 8-bit RGB
+    /// quantize and no /255 promote. Same BT.709 matrix as preview. No transfer.
+    static func rgbFloatFromLogPixelBuffer(
+        _ pb: CVPixelBuffer,
+        maxLongEdge: CGFloat
+    ) -> (rgb: [Float], width: Int, height: Int)? {
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        let srcW = CVPixelBufferGetWidth(pb)
+        let srcH = CVPixelBufferGetHeight(pb)
+        guard srcW > 0, srcH > 0 else { return nil }
+        let scale = min(1.0, Double(maxLongEdge) / Double(max(srcW, srcH)))
+        let w = max(1, Int((Double(srcW) * scale).rounded()))
+        let h = max(1, Int((Double(srcH) * scale).rounded()))
+        var rgb = [Float](repeating: 0, count: w * h * 3)
+        let fmt = CVPixelBufferGetPixelFormatType(pb)
+        if fmt == kCVPixelFormatType_32BGRA || fmt == kCVPixelFormatType_32ARGB {
+            guard let base = CVPixelBufferGetBaseAddress(pb) else { return nil }
+            let stride = CVPixelBufferGetBytesPerRow(pb)
+            let src = base.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<h {
+                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
+                for x in 0..<w {
+                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
+                    let si = sy * stride + sx * 4
+                    let di = (y * w + x) * 3
+                    if fmt == kCVPixelFormatType_32BGRA {
+                        rgb[di] = Float(src[si + 2]) / 255
+                        rgb[di + 1] = Float(src[si + 1]) / 255
+                        rgb[di + 2] = Float(src[si + 0]) / 255
+                    } else {
+                        rgb[di] = Float(src[si + 1]) / 255
+                        rgb[di + 1] = Float(src[si + 2]) / 255
+                        rgb[di + 2] = Float(src[si + 3]) / 255
+                    }
+                }
+            }
+        } else if fmt == kCVPixelFormatType_422YpCbCr8 {
+            guard let base = CVPixelBufferGetBaseAddress(pb) else { return nil }
+            let stride = CVPixelBufferGetBytesPerRow(pb)
+            let src = base.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<h {
+                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
+                for x in 0..<w {
+                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
+                    let si = sy * stride + (sx & ~1) * 2
+                    let Y = Double(src[sy * stride + sx * 2 + 1])
+                    let Cb = Double(src[si + 0])
+                    let Cr = Double(src[si + 2])
+                    applyYCbCrMatrixToFloat(
+                        &rgb, di: (y * w + x) * 3,
+                        Y: Y, Cb: Cb, Cr: Cr,
+                        yOff: 16, ySpan: 219, cOff: 128, cSpan: 224
+                    )
+                }
+            }
+        } else if fmt == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange {
+            guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
+                  let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else { return nil }
+            let yStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+            let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
+            let yPtr = yPlane.assumingMemoryBound(to: UInt16.self)
+            let uvPtr = uvPlane.assumingMemoryBound(to: UInt16.self)
+            let yRow = yStride / 2
+            let uvRow = uvStride / 2
+            for y in 0..<h {
+                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
+                for x in 0..<w {
+                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
+                    let Y = Double(yPtr[sy * yRow + sx])
+                    let uv = (sy / 2) * uvRow + (sx / 2) * 2
+                    let Cb = Double(uvPtr[uv])
+                    let Cr = Double(uvPtr[uv + 1])
+                    // 10-bit video range in 16-bit samples. Matrix only — no 709 transfer.
+                    applyYCbCrMatrixToFloat(
+                        &rgb, di: (y * w + x) * 3,
+                        Y: Y, Cb: Cb, Cr: Cr,
+                        yOff: 64, ySpan: 876, cOff: 512, cSpan: 896
+                    )
+                }
+            }
+        } else {
+            guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
+                  let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else { return nil }
+            let yStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
+            let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
+            let yPtr = yPlane.assumingMemoryBound(to: UInt8.self)
+            let uvPtr = uvPlane.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<h {
+                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
+                for x in 0..<w {
+                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
+                    let Y = Double(yPtr[sy * yStride + sx])
+                    let uv = (sy / 2) * uvStride + (sx / 2) * 2
+                    let Cb = Double(uvPtr[uv])
+                    let Cr = Double(uvPtr[uv + 1])
+                    applyYCbCrMatrixToFloat(
+                        &rgb, di: (y * w + x) * 3,
+                        Y: Y, Cb: Cb, Cr: Cr,
+                        yOff: 16, ySpan: 219, cOff: 128, cSpan: 224
+                    )
+                }
+            }
+        }
+        return (rgb, w, h)
+    }
+
+    /// Matrix-only Y′CbCr → float R′G′B′. No OETF/EOTF. No 8-bit clamp.
+    /// Write path only — preview 8-bit stays ``writeMatrixRGB``.
+    private static func applyYCbCrMatrixToFloat(
+        _ rgb: inout [Float],
+        di: Int,
+        Y: Double,
+        Cb: Double,
+        Cr: Double,
+        yOff: Double,
+        ySpan: Double,
+        cOff: Double,
+        cSpan: Double
+    ) {
+        let yp = (Y - yOff) / ySpan
+        let pbv = (Cb - cOff) / cSpan
+        let prv = (Cr - cOff) / cSpan
+        rgb[di] = Float(yp + 1.5748 * prv)
+        rgb[di + 1] = Float(yp - 0.1873 * pbv - 0.4681 * prv)
+        rgb[di + 2] = Float(yp + 1.8556 * pbv)
     }
 
     /// Full cached post-IDT AP0 linear buffer. Never Rec.709 / ACEScct / log.

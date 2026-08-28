@@ -8,9 +8,11 @@ overrides estimate.
 
 「处理已锁定片段」 writes one ACES2065-1 (AP0 linear) **proxy EXR sequence**
 per locked clip (ODT off): ``{stem}_ACES2065-1_proxy/frame_000000.exr``.
-Sequence decode prefers 10-bit Y′CbCr, then 8-bit fallbacks (still a
-proxy, not camera-original) — 整段代理，不是全精度成片. Not ACEScct.
-Not a Rec.709 .mov/.mp4.
+Movie write decode uses source 10-bit / native-depth Y′CbCr → float
+(same matrix; not the preview 8-bit path promoted with /255). 8-bit
+Y′CbCr is only the fallback when 10-bit is unavailable. Still a
+proxy, not camera-original — 整段代理，不是全精度成片. Not ACEScct.
+Not a Rec.709 .mov/.mp4. Preview/scrub may stay 8-bit-first.
 「N 条已处理」 is clips that produced a sequence, or locked clips attempted
 with a per-clip error — not a preview refresh. Pending clips in the same
 bin do not block.
@@ -129,6 +131,58 @@ DISK_SHORT_STATUS_TEMPLATE = (
 SKIPPED_BUCKET = "待选跳过"
 FAILED_BUCKET = "失败原因"
 BATCH_SUMMARY_TEMPLATE = "{wrote} 条已写出代理 / {skipped} 条待选跳过 / {failed} 条失败"
+
+# BT.709 video-range Y′CbCr → R′G′B′. Same numbers as PreviewEngine.
+# Write path keeps native-depth codes as float. Preview may quantize to 8-bit.
+YCBCR_BT709_RV = 1.5748
+YCBCR_BT709_GU = 0.1873
+YCBCR_BT709_GV = 0.4681
+YCBCR_BT709_BU = 1.8556
+YCBCR_OFF_8 = (16.0, 219.0, 128.0, 224.0)
+YCBCR_OFF_10 = (64.0, 876.0, 512.0, 896.0)
+
+
+def ycbcr_to_rgb_float(y, cb, cr, *, bit_depth: int = 10):
+    """Source-code Y′CbCr → float R′G′B′. No 8-bit RGB quantize.
+
+    ``bit_depth`` 10 uses video-range 64/876 and 512/896 (10-bit in
+    16-bit samples). ``bit_depth`` 8 uses 16/219 and 128/224.
+    Same matrix as Swift ``applyYCbCrMatrixToFloat``. Superwhite /
+    superblack may leave 0-1. Still 整段代理，不是全精度成片.
+    """
+    if bit_depth == 8:
+        y_off, y_span, c_off, c_span = YCBCR_OFF_8
+    elif bit_depth == 10:
+        y_off, y_span, c_off, c_span = YCBCR_OFF_10
+    else:
+        raise ValueError(f"bit_depth must be 8 or 10, got {bit_depth}")
+    yp = (float(y) - y_off) / y_span
+    pbv = (float(cb) - c_off) / c_span
+    prv = (float(cr) - c_off) / c_span
+    return (
+        yp + YCBCR_BT709_RV * prv,
+        yp - YCBCR_BT709_GU * pbv - YCBCR_BT709_GV * prv,
+        yp + YCBCR_BT709_BU * pbv,
+    )
+
+
+def ycbcr_to_preview_u8(y, cb, cr, *, bit_depth: int = 10):
+    """Preview 8-bit path: matrix, then clamp and quantize to 0-255.
+
+    ``extractRGB`` later does ``u8 / 255``. Write must not use this.
+    """
+    r, g, b = ycbcr_to_rgb_float(y, cb, cr, bit_depth=bit_depth)
+
+    def _u8(x: float) -> int:
+        return max(0, min(255, int(round(min(max(x, 0.0), 1.0) * 255.0))))
+
+    return (_u8(r), _u8(g), _u8(b))
+
+
+def preview_u8_promoted_float(y, cb, cr, *, bit_depth: int = 10):
+    """What the old write path did: preview 8-bit, then /255 to float."""
+    r, g, b = ycbcr_to_preview_u8(y, cb, cr, bit_depth=bit_depth)
+    return (r / 255.0, g / 255.0, b / 255.0)
 
 
 @dataclass(frozen=True)
@@ -720,7 +774,8 @@ def process_locked_writes(
         {stem}_ACES2065-1_proxy/frame_000001.exr
         ...
 
-    This is still a **proxy** sequence (preview decode). Not a Rec.709 movie.
+    This is still a **proxy** sequence (source Y′CbCr → float, not
+    preview 8-bit promoted). Not a Rec.709 movie.
 
     ``should_cancel`` stops the batch. The in-progress ``_proxy`` folder is
     removed (half sequence is not a finished deliverable). Completed clips
