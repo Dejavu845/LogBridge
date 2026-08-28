@@ -715,6 +715,44 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// Up/Down in the main window: move selected clip in the sidebar list.
+    /// Mid-write (#32 / #37) does not change selection. Does not lock IDT. Does not write.
+    /// Stops at the ends (no wrap). Inspector numeric / search / text fields keep their arrows.
+    @discardableResult
+    func selectAdjacentClip(_ delta: Int) -> Bool {
+        guard !isWritingDeliverables else { return false }
+        guard !showSettings, !showImporter else { return false }
+        guard !Self.isArrowConsumedByTextInput() else { return false }
+        guard !clips.isEmpty, delta != 0 else { return false }
+        let step = delta > 0 ? 1 : -1
+        if let id = selectedID, let idx = clips.firstIndex(where: { $0.id == id }) {
+            let next = idx + step
+            guard clips.indices.contains(next) else { return false }
+            selectedID = clips[next].id
+            applyClipWBToGraph(clips[next])
+            return true
+        }
+        let idx = step > 0 ? 0 : clips.count - 1
+        selectedID = clips[idx].id
+        applyClipWBToGraph(clips[idx])
+        return true
+    }
+
+    /// Arrow keys stay with the focused text / search / numeric control.
+    static func isArrowConsumedByTextInput() -> Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+        if responder is NSTextView || responder is NSTextField || responder is NSText {
+            return true
+        }
+        if responder is NSSlider || responder is NSStepper || responder is NSSearchField {
+            return true
+        }
+        if responder is NSPopUpButton || responder is NSComboBox {
+            return true
+        }
+        return false
+    }
+
     func setExposureEnabled(_ enabled: Bool) {
         graph.setEnabled(.exposure, enabled)
         preview.invalidateWBODT()

@@ -39,20 +39,28 @@ struct ClipSidebarView: View {
                     .padding(.bottom, 4)
             }
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(session.clips) { clip in
-                        ClipRow(
-                            clip: clip,
-                            selected: session.selectedID == clip.id,
-                            onRevealWritten: { session.revealClipExportInFinder(clip) }
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            session.selectedID = clip.id
-                            session.refreshPreview()
-                            session.revealClipExportInFinder(clip)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(session.clips) { clip in
+                            ClipRow(
+                                clip: clip,
+                                selected: session.selectedID == clip.id,
+                                onRevealWritten: { session.revealClipExportInFinder(clip) }
+                            )
+                            .id(clip.id)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                session.selectedID = clip.id
+                                session.refreshPreview()
+                                session.revealClipExportInFinder(clip)
+                            }
                         }
+                    }
+                }
+                .onChange(of: session.selectedID) { _, id in
+                    if let id {
+                        proxy.scrollTo(id, anchor: .center)
                     }
                 }
             }

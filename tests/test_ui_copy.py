@@ -376,7 +376,7 @@ def test_lock_lands_on_next_pending():
     assert "exportResolve" not in set_fn
     assert "精准" not in set_fn
 
-    advance = clip.split("func selectNextPendingAfterLock")[1].split("func setExposureEnabled")[0]
+    advance = clip.split("func selectNextPendingAfterLock")[1].split("func selectAdjacentClip")[0]
     assert "selectedID == lockedID" in advance
     assert "dropFirst" in advance
     assert "!$0.hasLockedPair" in advance
@@ -393,6 +393,8 @@ def test_lock_lands_on_next_pending():
     assert "!$0.hasLockedPair" in import_fn
     assert "selectedID" in import_fn
 
+    assert "func selectAdjacentClip" in clip
+
     cap = clip.split("var previewCaption")[1].split("var displayCurve")[0]
     assert "processSkipReason ?? exportChip" in cap
     assert 'return "先选择 Log 与色域"' not in cap
@@ -407,6 +409,78 @@ def test_lock_lands_on_next_pending():
     assert "session.setIDT" in inspector
     assert 'Button("锁 IDT")' not in sidebar
     assert 'Button("锁定")' not in sidebar
+    assert "isExporting" in clip
+    assert "isWritingDeliverables" in clip
+
+
+def test_arrow_keys_select_adjacent_clip():
+    """Up/Down moves sidebar selection. Mid-write stays. No new button. Preview chrome #33."""
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    inspector = _read(INSPECTOR)
+
+    fn = clip.split("func selectAdjacentClip")[1].split("func isArrowConsumedByTextInput")[0]
+    assert "isWritingDeliverables" in fn
+    assert "isArrowConsumedByTextInput" in fn
+    assert "selectedID" in fn
+    assert "clips.indices.contains" in fn
+    assert "setIDT" not in fn
+    assert "processLockedClips" not in fn
+    assert "processSelected" not in fn
+    assert "exportResolve" not in fn
+    assert "精准" not in fn
+
+    steal = clip.split("func isArrowConsumedByTextInput")[1].split("func setExposureEnabled")[0]
+    assert "NSTextView" in steal
+    assert "NSTextField" in steal
+    assert "NSSlider" in steal
+    assert "NSSearchField" in steal
+    assert "精准" not in steal
+
+    cap = clip.split("var previewCaption")[1].split("var displayCurve")[0]
+    assert "processSkipReason ?? exportChip" in cap
+    assert 'return "先选择 Log 与色域"' not in cap
+    assert 'return "先选择成对 IDT"' not in cap
+    assert "exportChip" in cap
+    assert "已写出代理" in clip
+
+    assert "ClipListArrowMonitor" in content
+    assert "onMoveCommand" in content
+    assert "selectAdjacentClip" in content
+    assert "keyCode" in content
+    assert "case 126" in content
+    assert "case 125" in content
+    assert "case 38" not in content
+    assert "case 40" not in content
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert monitor.count("Button(") == 0
+    assert "帮助" not in monitor
+    assert "overlay" not in monitor.lower() or "No help overlay" in monitor
+    assert "精准" not in monitor
+
+    preview = content.split("struct SplitPreview")[1].split("struct StatusBar")[0]
+    assert "previewCaption" in preview
+    assert "WriteProgressLine" in preview
+    assert preview.index("isExporting") < preview.index("previewCaption")
+    assert "Button(" not in preview
+    assert "帮助" not in preview
+
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "PairedIDTBar" in content
+    assert "session.setIDT" in inspector
+    assert 'Button("锁 IDT")' not in sidebar
+    assert 'Button("锁定")' not in sidebar
+    assert "ScrollViewReader" in sidebar
+    assert "精准" not in sidebar
+
+    set_fn = clip.split("func setIDT")[1].split("func selectNextPendingAfterLock")[0]
+    assert "selectNextPendingAfterLock" in set_fn
+    assert "isWritingDeliverables" in set_fn
+    import_fn = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    assert "built.first(where:" in import_fn
+    assert "!$0.hasLockedPair" in import_fn
     assert "isExporting" in clip
     assert "isWritingDeliverables" in clip
 
