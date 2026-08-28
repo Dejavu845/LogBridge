@@ -45,7 +45,7 @@ python3 scripts/generate_ocio_assets.py
 2. Open `macos/LogBridge/LogBridge.xcodeproj` in Xcode 15+ (macOS 14 deployment target).
 3. Select the **LogBridge** scheme, destination **My Mac**, and Run.
 
-Layout: empty-state drop zone (folder of mixed clips) → clip list (LazyVStack) | split preview + paired IDT + **处理已锁定片段** | Exposure / WB inspector. Node strip + **导出 ACEScct / EXR** are behind **高级**.
+Layout: empty-state drop zone (folder of mixed clips) → clip list (LazyVStack; **待选** / **已锁定** are two visual states — type, weight, chip, left accent; no extra lock button) | split preview (dominates) + paired IDT + **处理已锁定片段** | thinner Exposure / WB inspector. Node strip + **导出 ACEScct / EXR** are behind **高级**.
 
 Split preview: the **source** pane is camera/log (untagged working-space dump) and is **not** tagged Rec.709. Only the processed/ODT pane tags `CGColorSpace.itur_709`, and only when the ODT node is on. Rec.709 pixels are never blit into an untagged Display P3 surface.
 

@@ -138,8 +138,9 @@ Decode policy only. No color-number changes. Do **not** write 全格式已支持
 
 ## UI (Chinese, one path)
 
-- Center: source / preview + paired IDT picker pinned under the preview (not buried in **高级**). One paired list, not two dropdowns. Unlocked IDT skips process.
-- Right inspector: Exposure + WB three states only (机内 as-shot / 白平衡（估计） / 灰卡). Estimate chip lights only after confirm.
+- Center: source / preview + paired IDT picker pinned under the preview (not buried in **高级**). Preview panes fill the center; inspector / chrome recede. One paired list, not two dropdowns. Unlocked IDT skips process.
+- Sidebar rows: **待选** vs **已锁定** are two visual states (type, weight, chip, left accent). No extra lock button. Existing paired-IDT picker stays the lock flow.
+- Right inspector: thinner Exposure + WB three states only (机内 as-shot / 白平衡（估计） / 灰卡). Estimate chip lights only after confirm.
 - Node strip (输入 → 曝光 → 白平衡 → 输出) and Resolve export sit behind **高级** (hidden by default). Serial graph is not removed.
 - Badge overlay is only **预览·非成片**. HDR titles may still say they are not matched to 709.
 - One primary process button. Estimate WB is two steps (估计 then 确认). A single tap does not write CAT.
