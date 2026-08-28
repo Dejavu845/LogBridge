@@ -321,3 +321,88 @@ def test_preview_decode_stays_8bit_first_and_scrub_odt_only():
     assert "rgbFloatFromLogPixelBuffer" not in cached
     assert "预览·非成片" in engine
     assert "整段代理，不是全精度成片" in engine
+
+
+def test_export_write_overlaps_next_copynext():
+    """Locked write: EXR of N overlaps sequential copyNext of N+1. One write only."""
+    engine = _read(ENGINE)
+    clip = _read(CLIP)
+    export_seq = engine.split("func exportGradedAP0Sequence")[1].split(
+        "func decodeAllSourceFrames"
+    )[0]
+    movie = engine.split("func decodeMovieAllFrames")[1].split(
+        "func linearAP0Frame"
+    )[0]
+    grade = engine.split("func gradeAP0")[1].split("func exportGradedAP0(")[0]
+    read_all = engine.split("func readAllYpCbCrFrames")[1].split(
+        "func readFirstYpCbCrRGB"
+    )[0]
+    export_body = clip.split("func exportLockedEXR")[1].split(
+        "func cancelLockedDeliverables"
+    )[0]
+
+    assert "exportWriteQueue" not in engine
+    assert 'DispatchQueue(label: "app.logbridge.export.write"' not in engine
+    assert engine.count('DispatchQueue(label:') == 1
+    assert 'DispatchQueue(label: "app.logbridge.preview"' in engine
+    assert "one write overlap" in export_seq
+    assert "joinExportWrite" in export_seq
+    assert "writeFrame" in export_seq
+    on_frame = export_seq.split("decodeAllSourceFrames")[1]
+    assert "DispatchQueue.global" in on_frame
+    assert on_frame.index("gradeAP0") < on_frame.index("joinExportWrite")
+    assert on_frame.index("joinExportWrite") < on_frame.index(
+        "DispatchQueue.global"
+    )
+    assert on_frame.index("DispatchQueue.global") < on_frame.index("count += 1")
+    work = on_frame.split("DispatchWorkItem")[1].split("pendingWrite")[0]
+    assert "writeFrame(index, pixels, w, h)" in work
+    assert "DispatchQueue.global" in on_frame.split("DispatchWorkItem")[1]
+    assert export_seq.count("joinExportWrite()") >= 2
+    assert "try writeFrame(count, rgb, width, height)" not in export_seq
+
+    assert "while let sample = output.copyNextSampleBuffer()" in read_all
+    assert "requestedTime" not in movie
+    assert "AVAssetImageGenerator" not in movie
+    assert "seek(" not in movie
+    assert "copyNextSampleBuffer" in movie
+
+    assert "static let exportMaxLongEdge: CGFloat = 16384" in engine
+    assert "maxLongEdge: Self.exportMaxLongEdge" in export_seq
+    assert "maxLongEdge: Self.maxLongEdge" not in export_seq
+    assert "decodeDownscaled" not in export_seq
+    assert "extractRGB" not in export_seq
+    assert "/ 255" not in export_seq
+    assert "gradedCache" not in export_seq
+
+    assert "writeCAT" in export_seq
+    assert "applyODT" not in export_seq
+    assert "applyODT" not in grade
+    assert "applyPreparedCAT" in grade
+    assert "requireSourceYCbCrUnpack" in movie
+    assert "rec709OETF" not in movie
+    assert "writeMatrixRGB(" not in movie
+    assert "applyYCbCrMatrixToFloat" in movie
+
+    odt_hit = engine.split("func refreshODT(")[1].split("private func build(")[0]
+    assert "publishODTOnly" in odt_hit
+    assert "gradedCacheHit" in odt_hit
+    assert "refreshODT" not in export_seq
+    assert "retainPreviewCaches" not in export_seq
+    assert "evict(" not in export_seq
+    assert "func retainPreviewCaches" in engine
+    assert "func evict(clipID:" in engine
+
+    assert "writeACES2065EXR" in export_body
+    assert "sequenceFrameURL" in export_body
+    assert "removeItem" in export_body
+    assert "LockedWriteCancel" in export_body
+    assert "applyODT" not in export_body
+
+    assert "OperationQueue" not in engine
+    assert "ThreadPool" not in engine
+    assert "not a thread pool" in engine
+    assert "整段代理，不是全精度成片" in engine
+    assert "预览·非成片" in engine
+    assert "精准" not in export_seq
+    assert "精准" not in export_body
