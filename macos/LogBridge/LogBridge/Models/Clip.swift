@@ -876,10 +876,15 @@ final class SessionModel: ObservableObject {
                 guard let self else { return }
                 for clip in built {
                     self.clips.append(clip)
-                    if self.selectedID == nil {
-                        self.selectedID = clip.id
-                        self.applyClipWBToGraph(clip)
-                    }
+                }
+                // After drop/import: first pending/unlocked so 待选 is obvious.
+                // All-locked keeps first / existing selection. Does not lock IDT.
+                if let pending = built.first(where: { !$0.hasLockedPair }) {
+                    self.selectedID = pending.id
+                    self.applyClipWBToGraph(pending)
+                } else if self.selectedID == nil, let first = built.first {
+                    self.selectedID = first.id
+                    self.applyClipWBToGraph(first)
                 }
                 if !skipped.isEmpty {
                     self.lastImportNote = skipped.joined(separator: "\n")

@@ -364,6 +364,31 @@ def test_write_progress_on_preview_inspector_locks():
     assert "预览·非成片" in _all_swift()
 
 
+def test_import_lands_on_first_pending():
+    """Mixed drop selects first pending/unlocked. All-locked keeps first/existing. No new button."""
+    clip = _read(CLIP)
+    import_fn = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    assert "built.first(where:" in import_fn
+    assert "!$0.hasLockedPair" in import_fn
+    assert "selectedID" in import_fn
+    assert "selectedID == nil" in import_fn
+    assert "setIDT" not in import_fn
+    assert "processLockedClips" not in import_fn
+    assert "processSelected" not in import_fn
+    assert "exportResolve" not in import_fn
+    assert "精准" not in import_fn
+    cap = clip.split("var previewCaption")[1].split("var displayCurve")[0]
+    assert "processSkipReason ?? exportChip" in cap
+    assert 'return "先选择 Log 与色域"' not in cap
+    assert 'return "先选择成对 IDT"' not in cap
+    content = _read(CONTENT)
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "PairedIDTBar" in content
+    assert "isExporting" in clip
+    assert "isWritingDeliverables" in clip
+
+
 def test_selected_clip_glanceable_on_preview():
     """Selected clip 待选 / 失败 / 已写出代理 on preview chrome. No new buttons."""
     content = _read(CONTENT)
