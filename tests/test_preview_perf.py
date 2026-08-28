@@ -1,4 +1,4 @@
-"""Preview perf locks: VT decode, Metal same matrices, scrub ODT-only."""
+"""Preview perf locks: VT decode, Metal same matrices, scrub ODT-only, stale drop."""
 
 from pathlib import Path
 
@@ -104,6 +104,103 @@ def test_source_not_tagged_709_extract_device_rgb():
     assert "not Display P3" in engine
     assert "itur_709" in engine
     assert "Never `CGColorSpace.itur_709`" in source or "Never CGColorSpace.itur_709" in source
+
+
+def test_stale_preview_decode_dropped_on_selection_change():
+    """Arrow / click can outrun first-frame decode. Drop stale preview, not export."""
+    engine = _read(ENGINE)
+    clip = _read(CLIP)
+
+    assert "beginPreviewRequest" in engine
+    assert "isCurrentPreview" in engine
+    assert "requestedClipID" in engine
+    assert "pendingPreviewWork" in engine
+    assert "DispatchWorkItem" in engine
+    assert "enqueuePreview" in engine
+    assert "pendingPreviewWork?.cancel()" in engine
+    assert "OperationQueue" not in engine
+    assert "ThreadPool" not in engine
+    assert 'DispatchQueue(label: "app.logbridge.preview"' in engine
+    assert "not a thread pool" in engine
+
+    begin = engine.split("func beginPreviewRequest")[1].split("func isCurrentPreview")[0]
+    assert "generation += 1" in begin
+    assert "requestedClipID = clipID" in begin
+    assert "pendingPreviewWork?.cancel()" in begin
+    assert "exportGradedAP0" in begin
+    assert "queue.sync" in begin
+    assert "精准" not in begin
+
+    current = engine.split("func isCurrentPreview")[1].split("func enqueuePreview")[0]
+    assert "generation != gen" in current
+    assert "requestedClipID != clipID" in current
+    assert "精准" not in current
+
+    refresh = engine.split("func refresh(")[1].split("func refreshODT(")[0]
+    assert "beginPreviewRequest(clipID: clip?.id)" in refresh
+    assert "enqueuePreview" in refresh
+    assert "self?.build(" in refresh
+    assert "OperationQueue" not in refresh
+    assert "精准" not in refresh
+
+    refresh_odt = engine.split("func refreshODT(")[1].split("private func applyODTFromGradedOrRebuild")[0]
+    assert "beginPreviewRequest(clipID: clip?.id)" in refresh_odt
+    assert "enqueuePreview" in refresh_odt
+    assert "applyODTFromGradedOrRebuild" in refresh_odt
+    assert "精准" not in refresh_odt
+
+    build = engine.split("private func build(")[1].split("private static func gradeKey")[0]
+    assert build.count("isCurrentPreview") >= 2
+    assert "cachedSource(clip: clip, generation: generation)" in build
+    assert "clipID: clip.id" in build
+    assert "精准" not in build
+
+    cached = engine.split("func cachedSource")[1].split("func cachedLinear")[0]
+    assert "isCurrentPreview" in cached
+    assert "decodeDownscaled" in cached
+    assert cached.index("isCurrentPreview") < cached.index("decodeDownscaled")
+
+    publish = engine.split("private func publish(")[1].split("/// Graded ACES2065-1")[0]
+    assert "isCurrentPreview(generation: generation, clipID: clipID)" in publish
+    assert "self.sourceImage = source" in publish
+    assert "self.odtImage = odt" in publish
+
+    publish_odt = engine.split("private func publishODTOnly")[1].split("private func build(")[0]
+    assert "isCurrentPreview(generation: generation, clipID: clipID)" in publish_odt
+    assert "self.odtImage = odt" in publish_odt
+    assert "self.sourceImage" not in publish_odt
+
+    export_first = engine.split("func exportGradedAP0(")[1].split(
+        "func exportGradedAP0Sequence"
+    )[0]
+    assert "queue.sync" in export_first
+    assert "beginPreviewRequest" not in export_first
+    assert "pendingPreviewWork" not in export_first
+    assert "isCurrentPreview" not in export_first
+
+    export_seq = engine.split("func exportGradedAP0Sequence")[1].split(
+        "func decodeAllSourceFrames"
+    )[0]
+    assert "queue.sync" in export_seq
+    assert "beginPreviewRequest" not in export_seq
+    assert "pendingPreviewWork" not in export_seq
+    assert "isCurrentPreview" not in export_seq
+    assert "writeCAT" in export_seq
+
+    odt_hit = engine.split("func refreshODT(")[1].split("private func build(")[0]
+    assert "gradedCacheHit" in odt_hit
+    assert "publishODTOnly" in odt_hit
+    assert "decodeDownscaled" not in odt_hit
+    assert "decodeMovieVideoToolbox" not in odt_hit
+    assert "rgbFloatFromLogPixelBuffer" not in odt_hit
+
+    session_refresh = clip.split("func refreshPreview()")[1].split("func refreshODTOnly()")[0]
+    assert "preview.refresh(clip: selectedClip" in session_refresh
+    assert "stale" in session_refresh.lower() or "selected" in session_refresh.lower()
+
+    assert "预览·非成片" in engine
+    assert "整段代理，不是全精度成片" in engine
+    assert "精准" not in session_refresh
 
 
 def test_preview_decode_stays_8bit_first_and_scrub_odt_only():
