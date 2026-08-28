@@ -210,12 +210,17 @@ def test_preview_caches_keep_only_selected_clip():
 
     assert "func retainPreviewCaches" in engine
     assert "func evict(clipID:" in engine
-    retain = engine.split("func retainPreviewCaches")[1].split("func beginPreviewRequest")[0]
+    retain_blob = engine.split("/// Preview dictionaries only.")[1].split(
+        "func beginPreviewRequest"
+    )[0]
+    assert "func evict(clipID:" in retain_blob
+    assert "func retainPreviewCaches" in retain_blob
+    retain = retain_blob.split("func retainPreviewCaches")[1]
     assert "evict(clipID:" in retain
     assert "sourceCache" in retain
     assert "linearCache" in retain
     assert "gradedCache" in retain
-    assert "exportGradedAP0" not in retain
+    assert "not evicted here" in retain_blob
     assert "decodeAllSourceFrames" not in retain
     assert "精准" not in retain
 
