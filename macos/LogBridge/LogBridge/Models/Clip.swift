@@ -752,6 +752,38 @@ final class SessionModel: ObservableObject {
         return true
     }
 
+    /// Delete / Backspace: drop the selected clip from the SESSION only.
+    /// Does not delete, trash, or move the source file. Does not delete an
+    /// already-written `_proxy` folder — leave it on disk; just drop the row.
+    /// After remove, select next, else previous. Preview chrome follows #33
+    /// (`processSkipReason` / `exportChip` on the new selected clip).
+    /// #40: evict the removed clip's preview cache.
+    /// Mid-write (#32 / #41): ignore — do not change selection, do not cancel
+    /// (Escape cancels). Text / numeric / search fields keep Delete.
+    /// No confirm sheet. No extra button.
+    @discardableResult
+    func removeSelectedClipFromSession() -> Bool {
+        guard !isWritingDeliverables else { return false }
+        guard !showSettings, !showImporter else { return false }
+        guard !Self.isArrowConsumedByTextInput() else { return false }
+        guard let id = selectedID, let idx = clips.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+        // Session list only. Source file and any already-written `_proxy` stay.
+        clips.remove(at: idx)
+        preview.evict(clipID: id)
+        if clips.indices.contains(idx) {
+            selectedID = clips[idx].id
+            applyClipWBToGraph(clips[idx])
+        } else if idx > 0, clips.indices.contains(idx - 1) {
+            selectedID = clips[idx - 1].id
+            applyClipWBToGraph(clips[idx - 1])
+        } else {
+            selectedID = nil
+        }
+        return true
+    }
+
     /// Arrow keys stay with the focused text / search / numeric control.
     static func isArrowConsumedByTextInput() -> Bool {
         guard let responder = NSApp.keyWindow?.firstResponder else { return false }
