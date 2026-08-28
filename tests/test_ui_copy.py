@@ -2,12 +2,25 @@
 
 from pathlib import Path
 
+from color.batch import (
+    PREVIEW_STATUS_DECODE_FAIL,
+    PREVIEW_STATUS_DECODING,
+    PREVIEW_STATUS_EMPTY,
+    PREVIEW_STATUS_NOT_DELIVERABLE,
+    PREVIEW_STATUS_ODT_CACHE_HIT,
+    PREVIEW_STATUS_ODT_OFF,
+    PREVIEW_STATUS_PROXY,
+    REASON_PICK_LOG_GAMUT,
+    REASON_PICK_PAIRED_IDT,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
 SWIFT_ROOT = ROOT / "macos"
 INSPECTOR = SWIFT_ROOT / "LogBridge/LogBridge/Views/InspectorView.swift"
 CONTENT = SWIFT_ROOT / "LogBridge/LogBridge/ContentView.swift"
 PREVIEW = SWIFT_ROOT / "LogBridge/LogBridge/Color/Rec709PreviewView.swift"
 CLIP = SWIFT_ROOT / "LogBridge/LogBridge/Models/Clip.swift"
+ENGINE = SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift"
 
 
 def _read(p: Path) -> str:
@@ -195,16 +208,20 @@ def test_user_visible_english_leftovers_are_chinese():
     settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
     clip = _read(CLIP)
 
-    assert '"没有素材"' in preview
-    assert '"正在解码预览…"' in preview
-    assert '"解不出预览帧"' in preview
-    assert '"先选择成对 Log 与色域"' in preview
-    assert '"预览代理，不是成片"' in preview
+    assert f'"{PREVIEW_STATUS_EMPTY}"' in preview
+    assert f'"{PREVIEW_STATUS_DECODING}"' in preview
+    assert f'"{PREVIEW_STATUS_DECODE_FAIL}"' in preview
+    assert f'"{REASON_PICK_PAIRED_IDT}"' in preview
+    assert f'"{PREVIEW_STATUS_PROXY}"' in preview
+    assert '"先选择成对 Log 与色域"' not in preview
     assert '"No clip"' not in preview
     assert "Decoding preview" not in preview
     assert "Could not decode a preview frame" not in preview
     assert "Pick a paired IDT" not in preview
     assert "Preview proxy" not in preview
+    assert "Stub IDT" not in preview
+    assert "ODT only —" not in preview
+    assert "graded linear cache hit" not in preview
 
     status = content.split("struct StatusBar")[1]
     assert "已实现（未验证）" in status
@@ -230,6 +247,109 @@ def test_user_visible_english_leftovers_are_chinese():
     export_fn = clip.split("func exportResolve()")[1]
     assert 'panel.prompt = "导出"' in export_fn
     assert 'panel.prompt = "Export"' not in export_fn
+
+
+def _preview_status_literals(src: str) -> list[str]:
+    """Quoted strings assigned to preview.status / the note that feeds it."""
+    import re
+
+    lits: list[str] = []
+    for line in src.splitlines():
+        code = line.split("//", 1)[0]
+        if "status" not in code and "note =" not in code:
+            continue
+        lits.extend(re.findall(r'"([^"]*)"', code))
+    return lits
+
+
+def test_preview_status_is_locked_chinese():
+    """preview.status (and Swift/Python strings that feed it) stay locked Chinese."""
+    engine = _read(ENGINE)
+    content = _read(CONTENT)
+    clip = _read(CLIP)
+
+    assert PREVIEW_STATUS_ODT_CACHE_HIT == "只重跑 ODT"
+    assert PREVIEW_STATUS_PROXY == "预览代理，不是成片"
+    assert PREVIEW_STATUS_NOT_DELIVERABLE == "预览·非成片"
+    assert PREVIEW_STATUS_ODT_OFF == "709 预览关"
+    assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
+    assert REASON_PICK_LOG_GAMUT == "先选择 Log 与色域"
+    assert "成片" not in PREVIEW_STATUS_ODT_OFF
+    assert "成片" not in PREVIEW_STATUS_ODT_CACHE_HIT
+    assert "精准" not in PREVIEW_STATUS_ODT_OFF
+
+    odt = engine.split("func renderODTFromGraded")[1].split("func publishODTOnly")[0]
+    assert f'"{PREVIEW_STATUS_ODT_CACHE_HIT}"' in odt
+    assert "cacheHit" in odt
+    assert f'"{PREVIEW_STATUS_PROXY}"' in odt
+    assert f'"{PREVIEW_STATUS_NOT_DELIVERABLE}"' in odt
+    assert f'"{PREVIEW_STATUS_ODT_OFF}"' in odt
+    assert "acesOTNote" not in odt
+    assert "ODT only —" not in odt
+    assert "graded linear cache hit" not in odt
+    assert "homemade HDR curve" not in odt
+    assert "ODT off —" not in odt
+    assert "ACEScct deliverable" not in odt
+    assert "Rec.709 pane is not tagged" not in odt
+    assert "成片预览关" not in odt
+    assert "精准" not in odt
+
+    build = engine.split("private func build(")[1].split("private static func gradeKey")[0]
+    assert "processSkipReason" in build
+    assert f'?? "{REASON_PICK_PAIRED_IDT}"' in build
+    assert "Stub IDT" not in build
+    assert "no preview process" not in build
+    assert '"先选择成对 Log 与色域"' not in build
+    assert f'"{REASON_PICK_LOG_GAMUT}"' not in build
+    assert "精准" not in build
+
+    refresh = engine.split("func refresh(")[1].split("func refreshODT(")[0]
+    assert f'"{PREVIEW_STATUS_EMPTY}"' in refresh
+    assert f'"{PREVIEW_STATUS_DECODING}"' in refresh
+    refresh_odt = engine.split("func refreshODT(")[1].split(
+        "private func applyODTFromGradedOrRebuild"
+    )[0]
+    assert f'"{PREVIEW_STATUS_EMPTY}"' in refresh_odt
+
+    status_bar = content.split("struct StatusBar")[1]
+    assert "preview.status" in status_bar
+    assert "session.preview.status" in status_bar
+
+    skip = clip.split("var processSkipReason")[1].split("var verificationBadge")[0]
+    assert REASON_PICK_PAIRED_IDT in skip
+    assert REASON_PICK_LOG_GAMUT in skip
+
+    banned = (
+        "ODT only",
+        "cache hit",
+        "Stub IDT",
+        "no preview process",
+        "homemade HDR",
+        "does not apply",
+        "ODT off —",
+        "deliverable",
+        "pane is not tagged",
+        "No clip",
+        "Decoding preview",
+        "Could not decode",
+        "Pick a paired",
+        "Preview proxy",
+        "先选择成对 Log 与色域",
+        "成片预览关",
+    )
+    for lit in _preview_status_literals(engine):
+        for token in banned:
+            assert token not in lit, (token, lit)
+        assert "精准" not in lit
+        cleaned = (
+            lit.replace("预览·非成片", "")
+            .replace("不是全精度成片", "")
+            .replace("不是成片", "")
+        )
+        assert "成片" not in cleaned, lit
+
+    assert "Button(" not in odt
+    assert "Button(" not in build
 
 
 def test_inspector_cat_three_sentences_review_lock():

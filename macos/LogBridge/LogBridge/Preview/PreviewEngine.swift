@@ -199,7 +199,8 @@ final class PreviewEngine: ObservableObject {
         var odtCG: CGImage?
         var note = "预览代理，不是成片"
         if cacheHit {
-            note = "ODT only — graded linear cache hit. Scrub does not re-run IDT."
+            // Scrub does not re-run IDT. Visible status is 只重跑 ODT.
+            note = "只重跑 ODT"
         }
         if graph.odt == .rec709 {
             PreviewColor.applyODT(rgb: &work)
@@ -211,9 +212,9 @@ final class PreviewEngine: ObservableObject {
             )
         } else if graph.odt.isHDR {
             // No homemade HLG/PQ. Preview does not invent a Rec.2100 transfer.
-            note = "\(graph.odt.acesOTNote) 预览·非成片 — preview does not apply a homemade HDR curve."
+            note = "预览·非成片"
         } else {
-            note = "ODT off — ACEScct deliverable. Rec.709 pane is not tagged."
+            note = "709 预览关"
         }
         return (odtCG, note)
     }
@@ -243,9 +244,7 @@ final class PreviewEngine: ObservableObject {
                 clipID: clip.id,
                 source: source.cgImage,
                 odt: nil,
-                status: clip.needsUserPicker
-                    ? "先选择成对 Log 与色域"
-                    : "Stub IDT — no preview process"
+                status: clip.processSkipReason ?? "先选择成对 IDT"
             )
             return
         }

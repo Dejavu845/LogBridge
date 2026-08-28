@@ -80,6 +80,14 @@ from .graph import SerialGraph
 
 REASON_PICK_LOG_GAMUT = "先选择 Log 与色域"
 REASON_PICK_PAIRED_IDT = "先选择成对 IDT"
+# preview.status (Swift PreviewEngine). Existing phrases only. No 精准.
+PREVIEW_STATUS_EMPTY = "没有素材"
+PREVIEW_STATUS_DECODING = "正在解码预览…"
+PREVIEW_STATUS_DECODE_FAIL = "解不出预览帧"
+PREVIEW_STATUS_ODT_CACHE_HIT = "只重跑 ODT"
+PREVIEW_STATUS_PROXY = "预览代理，不是成片"
+PREVIEW_STATUS_NOT_DELIVERABLE = "预览·非成片"
+PREVIEW_STATUS_ODT_OFF = "709 预览关"
 PROCESS_BUTTON = "处理已锁定片段"
 ADVANCED_DISCLOSURE = "高级"
 LOCK_STATUS_TEMPLATE = "{locked} 条已锁定 / {pending} 条待选"
