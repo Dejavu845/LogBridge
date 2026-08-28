@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from color.as_shot import WB_SOURCE_GREY
 from color.curves import linear_to_logc4, linear_to_slog3
 from color.graph import EXPORT_SLOTS, SerialGraph, graph_from_export_args
 from color.pipeline import apply_idt, process_to_rec709
@@ -96,6 +97,35 @@ def test_odt_off_leaves_aces2065_linear():
         idt_id="sony_slog3_sgamut3", wb_enabled=False, odt_enabled=True
     ).apply(log)
     assert not np.allclose(out, rec, atol=1e-2)
+
+
+def test_apply_ap0_skips_preview_odt():
+    """Write / linear-cache grade is AP0. Preview ``apply`` still runs ODT."""
+    log = _slog3_grey()
+    preview = SerialGraph(
+        idt_id="sony_slog3_sgamut3", wb_enabled=False, odt_enabled=True
+    )
+    write = preview.apply_ap0(log)
+    shown = preview.apply(log)
+    aces = apply_idt(log, "sony_slog3_sgamut3")
+    np.testing.assert_allclose(write, aces, atol=1e-12)
+    np.testing.assert_allclose(write, 0.18, atol=5e-4)
+    assert not np.allclose(write, shown, atol=1e-2)
+    setup = preview.ap0_write_setup()
+    assert setup[0] == 1.0
+    assert setup[1] is None
+    np.testing.assert_allclose(preview.apply_ap0(log, setup=setup), write, atol=1e-12)
+    wb = SerialGraph(
+        idt_id="sony_slog3_sgamut3",
+        wb_enabled=True,
+        wb_cct=3200.0,
+        wb_source=WB_SOURCE_GREY,
+        odt_enabled=True,
+    )
+    prepared = wb.apply_ap0(log, setup=wb.ap0_write_setup())
+    np.testing.assert_allclose(prepared, wb.apply_ap0(log), atol=1e-12)
+    with pytest.raises(ValueError, match="IDT"):
+        SerialGraph(idt_id=None).apply_ap0(np.zeros(3))
 
 
 def test_odt_defaults_off():

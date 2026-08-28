@@ -242,11 +242,38 @@ final class PreviewEngine: ObservableObject {
     /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
     static let exportMaxLongEdge: CGFloat = 16384
 
+    /// Clip-constant CAT for a locked write. Nil = WB off / identity (same as gradeAP0).
+    /// Built once per sequence — do not rebuild the CAT per write frame.
+    private static func writeCAT(graph: SerialGraph) -> simd_double3x3? {
+        guard graph.wbEnabled, let cct = graph.effectiveWBCCT else { return nil }
+        if let src = graph.effectiveSrcCCT {
+            return WhiteBalanceNode.relativeCatMatrix(
+                srcCCT: src,
+                dstCCT: cct,
+                srcTint: graph.asShotTint,
+                dstTint: graph.wbTint,
+                method: graph.wbMethod
+            )
+        }
+        return WhiteBalanceNode.catMatrix(cct: cct, tint: graph.wbTint, method: graph.wbMethod)
+    }
+
     /// Same IDT / exposure / WB as the first-frame helper. No ODT.
-    private static func gradeAP0(rgb: inout [Float], idt: IDT, graph: SerialGraph) {
+    /// Optional ``cat`` is the clip-constant matrix from ``writeCAT`` so a
+    /// long sequence does not rebuild Bradford/CAT02 per frame.
+    private static func gradeAP0(
+        rgb: inout [Float],
+        idt: IDT,
+        graph: SerialGraph,
+        cat: simd_double3x3? = nil
+    ) {
         PreviewColor.applyIDT(rgb: &rgb, idt: idt)
         if graph.exposureEnabled {
             PreviewColor.applyExposure(rgb: &rgb, stops: graph.exposureStops)
+        }
+        if let cat {
+            PreviewColor.applyPreparedCAT(rgb: &rgb, cat: cat)
+            return
         }
         if graph.wbEnabled, let cct = graph.effectiveWBCCT {
             if let src = graph.effectiveSrcCCT {
@@ -284,6 +311,11 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// Whole-clip proxy sequence. Writes as frames are decoded (no full-timeline buffer).
+    /// Sequential ``copyNextSampleBuffer`` — do not seek randomly.
+    /// One ``gradeAP0`` per write frame on the decode buffer (in-place).
+    /// Clip-constant CAT via ``writeCAT``. Does not reuse preview
+    /// graded linear cache (8-bit / 1920, not write-res / 10-bit).
+    /// Does not promote preview 8-bit. Does not apply ODT.
     /// Returns the number of frames handed to ``writeFrame``. Linux cannot run this.
     func exportGradedAP0Sequence(
         clip: Clip,
@@ -296,11 +328,11 @@ final class PreviewEngine: ObservableObject {
                     NSLocalizedDescriptionKey: clip.processSkipReason ?? "先选择成对 IDT"
                 ])
             }
+            let cat = Self.writeCAT(graph: graph)
             var count = 0
             try Self.decodeAllSourceFrames(url: clip.url, maxLongEdge: Self.exportMaxLongEdge) { rgb, width, height in
-                var work = rgb
-                Self.gradeAP0(rgb: &work, idt: idt, graph: graph)
-                try writeFrame(count, work, width, height)
+                Self.gradeAP0(rgb: &rgb, idt: idt, graph: graph, cat: cat)
+                try writeFrame(count, rgb, width, height)
                 count += 1
             }
             if count < 1 {
@@ -314,10 +346,12 @@ final class PreviewEngine: ObservableObject {
 
     /// Movies: every sample as source Y′CbCr → float. Stills: one ImageIO frame.
     /// Not the preview 8-bit Y′CbCr path. Same matrix-only convert (no transfer).
+    /// ``onFrame`` mutates the decode buffer in place so the write loop
+    /// does not copy float RGB before IDT/WB.
     static func decodeAllSourceFrames(
         url: URL,
         maxLongEdge: CGFloat,
-        onFrame: ([Float], Int, Int) throws -> Void
+        onFrame: (inout [Float], Int, Int) throws -> Void
     ) throws {
         let probe = MediaFormat.probe(url: url)
         if probe.decision == .refuse {
@@ -331,7 +365,8 @@ final class PreviewEngine: ObservableObject {
                     NSLocalizedDescriptionKey: "decode/grade failed"
                 ])
             }
-            try onFrame(PreviewColor.extractRGB(img), img.width, img.height)
+            var rgb = PreviewColor.extractRGB(img)
+            try onFrame(&rgb, img.width, img.height)
             return
         }
         try decodeMovieAllFrames(url: url, maxLongEdge: maxLongEdge, onFrame: onFrame)
@@ -368,7 +403,7 @@ final class PreviewEngine: ObservableObject {
     static func decodeMovieAllFrames(
         url: URL,
         maxLongEdge: CGFloat,
-        onFrame: ([Float], Int, Int) throws -> Void
+        onFrame: (inout [Float], Int, Int) throws -> Void
     ) throws {
         let formats: [OSType] = [
             kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
@@ -398,7 +433,7 @@ final class PreviewEngine: ObservableObject {
         url: URL,
         pixelFormat: OSType,
         maxLongEdge: CGFloat,
-        onFrame: ([Float], Int, Int) throws -> Void
+        onFrame: (inout [Float], Int, Int) throws -> Void
     ) throws -> Int {
         let asset = AVURLAsset(url: url)
         guard let track = asset.tracks(withMediaType: .video).first,
@@ -420,7 +455,7 @@ final class PreviewEngine: ObservableObject {
                     NSLocalizedDescriptionKey: "decode/grade failed"
                 ])
             }
-            let decoded: (rgb: [Float], width: Int, height: Int)
+            var decoded: (rgb: [Float], width: Int, height: Int)
             do {
                 decoded = try rgbFloatFromLogPixelBuffer(
                     pb,
@@ -430,7 +465,7 @@ final class PreviewEngine: ObservableObject {
             } catch {
                 throw error
             }
-            try onFrame(decoded.rgb, decoded.width, decoded.height)
+            try onFrame(&decoded.rgb, decoded.width, decoded.height)
             count += 1
         }
         return count
@@ -1127,6 +1162,11 @@ enum PreviewColor {
         let cat = WhiteBalanceNode.relativeCatMatrix(
             srcCCT: srcCCT, dstCCT: dstCCT, srcTint: srcTint, dstTint: dstTint, method: method
         )
+        applyCAT(rgb: &rgb, cat: cat)
+    }
+
+    /// Write-loop CAT. Same ``applyCAT`` as ``applyWB`` — matrix already built.
+    static func applyPreparedCAT(rgb: inout [Float], cat: simd_double3x3) {
         applyCAT(rgb: &rgb, cat: cat)
     }
 
