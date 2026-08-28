@@ -297,6 +297,73 @@ def test_sidebar_pending_and_locked_are_glanceable():
     assert "精准" not in sidebar
 
 
+def test_write_progress_on_preview_inspector_locks():
+    """While writing: one progress line on preview; inspector/IDT locked; one cancel."""
+    content = _read(CONTENT)
+    inspector = _read(INSPECTOR)
+    clip = _read(CLIP)
+
+    assert "var isExporting" in clip
+    assert "isWritingDeliverables" in clip
+    assert "isExporting: Bool { isWritingDeliverables }" in clip
+
+    preview = content.split("struct SplitPreview")[1].split("struct StatusBar")[0]
+    assert "WriteProgressLine" in preview
+    assert "isExporting" in preview
+    assert "lastExportNote" in preview
+    assert "ProgressView" not in preview
+    assert 'Button(' not in preview
+    assert "取消" not in preview
+    assert "处理已锁定片段" not in preview
+    assert "精准" not in preview
+    line = content.split("struct WriteProgressLine")[1].split("struct StatusBar")[0]
+    assert line.count("Button(") == 0
+    assert "ProgressView" not in line
+    assert "Text(text)" in line
+
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "取消" in bar
+    assert "isWritingDeliverables" in bar
+    assert "cancelLockedDeliverables" in bar
+    assert bar.count("lastExportNote") == 1
+    assert "showsBatchSummary" in bar
+    assert "WriteProgressLine" not in bar
+
+    status = content.split("struct StatusBar")[1]
+    assert 'Button("处理已锁定片段")' not in status
+    assert "取消" not in status
+    assert "WriteProgressLine" not in status
+    assert "isWritingDeliverables" not in status
+    assert "isExporting" in status
+    assert "preview.isWorking" in status
+    working = status.split("if session.preview.isWorking")[1].split("{")[0]
+    assert "isWritingDeliverables" not in working
+    assert "isExporting" not in working
+
+    insp = inspector.split("struct InspectorView")[1].split("struct WBInspector")[0]
+    assert "ExposureInspector" in insp
+    assert "WBInspector" in insp
+    assert "isExporting" in insp
+    assert ".disabled(" in insp
+    assert 'Button("处理已锁定片段")' not in insp
+    assert "精准" not in insp
+
+    idt = inspector.split("struct PairedIDTBar")[1].split("struct InspectorView")[0]
+    assert "成对 IDT" in idt
+    assert 'Picker("Paired IDT"' in idt
+    assert ".disabled(" in idt
+    assert "isExporting" in idt
+    assert "if session.isExporting" not in idt
+    assert "处理已锁定片段" not in idt
+
+    center = content.split("VStack(spacing: 0)")[1].split(".frame(minWidth: 520)")[0]
+    assert "PairedIDTBar" in center
+    assert center.index("SplitPreview") < center.index("PairedIDTBar")
+    assert "整段代理，不是全精度成片" in content
+    assert "预览·非成片" in _all_swift()
+
+
 def test_forbidden_marketing_copy_stays_forbidden():
     swift = _all_swift()
     docs = (ROOT / "README.md").read_text(encoding="utf-8") + (ROOT / "ACCEPTANCE.md").read_text(

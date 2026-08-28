@@ -53,6 +53,7 @@ struct ContentView: View {
 }
 
 /// Center column action. Shown only when locked-clip count > 0.
+/// Write progress lives on SplitPreview (WriteProgressLine), not here.
 /// Not a second process button — StatusBar has no process control.
 struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
@@ -70,12 +71,6 @@ struct ProcessLockedBar: View {
                 }
                 Spacer(minLength: 8)
                 if session.showsProcessLockedButton {
-                    if session.isWritingDeliverables {
-                        Text(session.lastExportNote)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
                     Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
                         if session.isWritingDeliverables {
                             session.cancelLockedDeliverables()
@@ -139,23 +134,45 @@ struct SplitPreview: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        HSplitView {
-            SourcePreviewView(
-                title: "源（相机 Log）",
-                caption: "未套 Rec.709。相机编码值。",
-                image: session.preview.sourceImage
-            )
-            Rec709PreviewView(
-                title: session.odtPreviewTitle,
-                caption: session.odtPreviewCaption,
-                image: session.preview.odtImage,
-                pickingNeutral: session.pickingNeutral,
-                onPick: { nx, ny in
-                    session.handlePreviewPick(nx: nx, ny: ny)
-                }
-            )
+        VStack(spacing: 0) {
+            HSplitView {
+                SourcePreviewView(
+                    title: "源（相机 Log）",
+                    caption: "未套 Rec.709。相机编码值。",
+                    image: session.preview.sourceImage
+                )
+                Rec709PreviewView(
+                    title: session.odtPreviewTitle,
+                    caption: session.odtPreviewCaption,
+                    image: session.preview.odtImage,
+                    pickingNeutral: session.pickingNeutral && !session.isExporting,
+                    onPick: { nx, ny in
+                        session.handlePreviewPick(nx: nx, ny: ny)
+                    }
+                )
+            }
+            .padding(2)
+            if session.isExporting {
+                WriteProgressLine(text: session.lastExportNote)
+            }
         }
-        .padding(2)
+    }
+}
+
+/// One Chinese progress line on the preview while writing. Not a second widget.
+/// Wording stays 「写出代理 i/N · frame k」. No cancel / process button here.
+struct WriteProgressLine: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.accentColor.opacity(0.08))
     }
 }
 
@@ -166,14 +183,14 @@ struct StatusBar: View {
     var body: some View {
         HStack(spacing: 10) {
             Text("LogBridge · 已实现（未验证）")
-            if session.preview.isWorking || session.isWritingDeliverables {
+            if session.preview.isWorking {
                 ProgressView()
                     .controlSize(.small)
             }
             Text(session.preview.status)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            if !session.lastExportNote.isEmpty {
+            if !session.isExporting, !session.lastExportNote.isEmpty {
                 if session.canRevealLastExport {
                     Button(session.lastExportNote) {
                         session.revealLastExportInFinder()

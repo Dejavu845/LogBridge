@@ -1,6 +1,7 @@
 import SwiftUI
 
 /// Paired IDT picker pinned under the preview. Always visible.
+/// Visible during write; picker is not swappable mid-write.
 /// Do not bury this in 「高级」. Unlocked IDT blocks / skips process.
 struct PairedIDTBar: View {
     @ObservedObject var session: SessionModel
@@ -33,6 +34,7 @@ struct PairedIDTBar: View {
                 .labelsHidden()
                 .controlSize(.small)
                 .frame(maxWidth: 420)
+                .disabled(session.isExporting)
                 // S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine. C-Log2 / C-Log3 + Cinema Gamut vs BT.2020. Venice pair only if detected.
                 .help("S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine. C-Log2 / C-Log3 + Cinema Gamut vs BT.2020. Venice pair only if detected.")
                 HStack(spacing: 6) {
@@ -85,6 +87,8 @@ struct InspectorView: View {
                 Divider()
                 WBInspector(session: session)
             }
+            .disabled(session.isExporting)
+            .opacity(session.isExporting ? 0.45 : 1)
             .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
