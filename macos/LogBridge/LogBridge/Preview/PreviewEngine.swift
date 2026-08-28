@@ -84,6 +84,7 @@ final class PreviewEngine: ObservableObject {
     private func beginPreviewRequest(clipID: UUID?) -> UInt64 {
         pendingPreviewWork?.cancel()
         pendingPreviewWork = nil
+        // Write stays queue.sync (exportGradedAP0 / sequence). Not this cancel.
         genLock.lock()
         generation += 1
         requestedClipID = clipID
