@@ -182,6 +182,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
 /// Center column action. Shown only when locked-clip count > 0.
 /// Write progress lives on SplitPreview (WriteProgressLine), not here.
 /// Not a second process button — StatusBar has no process control.
+/// Never 一键还原. Hover/help is Chinese locked phrases.
 struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
@@ -207,7 +208,7 @@ struct ProcessLockedBar: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .help("整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。 Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原.")
+                    .help("整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。")
                 }
             }
             if session.showsBatchSummary {
@@ -239,7 +240,7 @@ struct AdvancedPanel: View {
                     }
                     .controlSize(.small)
                     .disabled(!session.canProcess)
-                    .help("Locked clips only. Pending stay listed. 709 预览. 预览·非成片. Does not require the whole bin.")
+                    .help("只处理已锁定片段。待选跳过。709 预览。预览·非成片。不必全部锁定。")
                     if let reason = session.processBlockedReason {
                         Text(reason)
                             .font(.caption2)
@@ -251,6 +252,7 @@ struct AdvancedPanel: View {
                 .padding(.bottom, 6)
             }
         }
+        .help("节点与导出 ACEScct / EXR。默认收起。预览·非成片。")
         .padding(.horizontal, 10)
         .padding(.vertical, 3)
         .background(Color.primary.opacity(0.02))

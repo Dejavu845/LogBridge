@@ -105,8 +105,12 @@ FOLDER_PICKER_MESSAGE = (
 )
 PROCESS_BUTTON_HELP = (
     "整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
-    " Unlocked stay listed (先选择 Log 与色域 / 先选择成对 IDT). Never 一键还原."
+    "待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
 )
+ADVANCED_EXPORT_HELP = (
+    "只处理已锁定片段。待选跳过。709 预览。预览·非成片。不必全部锁定。"
+)
+ADVANCED_DISCLOSURE_HELP = "节点与导出 ACEScct / EXR。默认收起。预览·非成片。"
 CANCEL_BUTTON = "取消"
 CANCELLED_NOTE = "已取消"
 PROGRESS_PREFIX = "写出代理"

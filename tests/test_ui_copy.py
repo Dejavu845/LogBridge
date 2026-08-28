@@ -3,6 +3,9 @@
 from pathlib import Path
 
 from color.batch import (
+    ADVANCED_DISCLOSURE_HELP,
+    ADVANCED_EXPORT_HELP,
+    HONEST_PROXY_NOTE,
     PREVIEW_STATUS_DECODE_FAIL,
     PREVIEW_STATUS_DECODING,
     PREVIEW_STATUS_EMPTY,
@@ -10,8 +13,11 @@ from color.batch import (
     PREVIEW_STATUS_ODT_CACHE_HIT,
     PREVIEW_STATUS_ODT_OFF,
     PREVIEW_STATUS_PROXY,
+    PROCESS_BUTTON,
+    PROCESS_BUTTON_HELP,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
+    SKIPPED_BUCKET,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -247,6 +253,100 @@ def test_user_visible_english_leftovers_are_chinese():
     export_fn = clip.split("func exportResolve()")[1]
     assert 'panel.prompt = "导出"' in export_fn
     assert 'panel.prompt = "Export"' not in export_fn
+
+
+def _help_literals(src: str) -> list[str]:
+    """Quoted strings passed to SwiftUI `.help(...)` (hover / tooltip)."""
+    import re
+
+    lits: list[str] = []
+    for line in src.splitlines():
+        code = line.split("//", 1)[0]
+        if ".help(" not in code:
+            continue
+        lits.extend(re.findall(r'\.help\("([^"]*)"\)', code))
+    return lits
+
+
+def _chengpian_only_honesty(text: str) -> None:
+    stripped = (
+        text.replace("不是全精度成片", "")
+        .replace("预览·非成片", "")
+        .replace("不是成片", "")
+    )
+    assert "成片" not in stripped
+    assert "精准" not in text
+
+
+def test_process_bar_and_advanced_help_are_chinese():
+    """Process bar + 高级 hover/help stay locked Chinese. No new button/path."""
+    content = _read(CONTENT)
+    inspector = _read(INSPECTOR)
+    strip = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/NodeStripView.swift")
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    advanced = content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
+
+    assert PROCESS_BUTTON == "处理已锁定片段"
+    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
+    assert SKIPPED_BUCKET == "待选跳过"
+    assert REASON_PICK_LOG_GAMUT == "先选择 Log 与色域"
+    assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
+    assert PROCESS_BUTTON_HELP == (
+        "整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
+        "待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
+    )
+    assert ADVANCED_EXPORT_HELP == (
+        "只处理已锁定片段。待选跳过。709 预览。预览·非成片。不必全部锁定。"
+    )
+    assert ADVANCED_DISCLOSURE_HELP == "节点与导出 ACEScct / EXR。默认收起。预览·非成片。"
+
+    assert f'.help("{PROCESS_BUTTON_HELP}")' in bar
+    assert f'.help("{ADVANCED_EXPORT_HELP}")' in advanced
+    assert f'.help("{ADVANCED_DISCLOSURE_HELP}")' in advanced
+    assert 'DisclosureGroup("高级"' in advanced
+    assert PROCESS_BUTTON in bar
+    assert HONEST_PROXY_NOTE in bar
+    assert SKIPPED_BUCKET in bar
+    assert REASON_PICK_LOG_GAMUT in bar
+    assert REASON_PICK_PAIRED_IDT in bar
+    assert PROCESS_BUTTON in ADVANCED_EXPORT_HELP
+    assert SKIPPED_BUCKET in ADVANCED_EXPORT_HELP
+    assert "709 预览" in ADVANCED_EXPORT_HELP
+    assert "预览·非成片" in ADVANCED_EXPORT_HELP
+    assert "预览·非成片" in ADVANCED_DISCLOSURE_HELP
+
+    english_leftovers = (
+        "Unlocked stay listed",
+        "Locked clips only",
+        "Pending stay listed",
+        "Does not require the whole bin",
+    )
+    for chunk in (bar, advanced, inspector, strip):
+        for en in english_leftovers:
+            assert en not in chunk
+    for help_text in _help_literals(bar) + _help_literals(advanced):
+        for en in english_leftovers:
+            assert en not in help_text
+        assert "Unlocked" not in help_text
+        assert "Locked clips" not in help_text
+        assert "Pending stay" not in help_text
+        assert "whole bin" not in help_text
+        _chengpian_only_honesty(help_text)
+
+    assert _help_literals(bar) == [PROCESS_BUTTON_HELP]
+    assert ADVANCED_EXPORT_HELP in _help_literals(advanced)
+    assert ADVANCED_DISCLOSURE_HELP in _help_literals(advanced)
+    assert _help_literals(strip) == []
+
+    assert bar.count("Button(") == 1
+    assert advanced.count("Button(") == 1
+    assert 'Button("导出 ACEScct / EXR")' in advanced
+    assert 'Button("处理已锁定片段")' not in advanced
+    assert "processLockedClips" not in advanced
+    assert strip.count("Button(") == 0
+    assert "精准" not in PROCESS_BUTTON_HELP
+    assert "精准" not in ADVANCED_EXPORT_HELP
+    assert "精准" not in ADVANCED_DISCLOSURE_HELP
 
 
 def _preview_status_literals(src: str) -> list[str]:
