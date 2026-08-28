@@ -471,6 +471,7 @@ def test_preview_pane_title_odt_off_is_709():
     caption = clip.split("var odtPreviewCaption")[1].split("func setIDT")[0]
     assert "成片预览关" not in caption
     assert "精准" not in caption
+    _chengpian_only_honesty(caption)
 
     split = content.split("struct SplitPreview")[1].split("struct WriteProgressLine")[0]
     assert "odtPreviewTitle" in split
@@ -493,6 +494,100 @@ def test_preview_pane_title_odt_off_is_709():
     assert "成片预览关" not in swift
     assert f'"{PREVIEW_STATUS_ODT_OFF}"' in clip
     assert f'"{PREVIEW_STATUS_ODT_OFF}"' in _read(ENGINE)
+
+
+def _odt_preview_caption_literals(src: str) -> list[str]:
+    """Quoted strings returned by odtPreviewCaption (and locals that feed it)."""
+    import re
+
+    lits: list[str] = []
+    for line in src.splitlines():
+        code = line.split("//", 1)[0]
+        if "return" not in code and "badge" not in code and "=" not in code:
+            continue
+        lits.extend(re.findall(r'"([^"]*)"', code))
+    return lits
+
+
+def test_odt_preview_caption_is_locked_chinese():
+    """odtPreviewCaption (and strings that feed it) reuse 预览·非成片 / 709 预览关."""
+    import re
+
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    preview = _read(PREVIEW)
+    engine = _read(ENGINE)
+
+    assert PREVIEW_STATUS_NOT_DELIVERABLE == "预览·非成片"
+    assert PREVIEW_STATUS_ODT_OFF == "709 预览关"
+    assert "成片" not in PREVIEW_STATUS_ODT_OFF
+    assert "精准" not in PREVIEW_STATUS_ODT_OFF
+    assert "精准" not in PREVIEW_STATUS_NOT_DELIVERABLE
+
+    title = clip.split("var odtPreviewTitle")[1].split("var odtPreviewCaption")[0]
+    assert f'return "{PREVIEW_STATUS_ODT_OFF}"' in title
+    assert "成片预览关" not in title
+
+    caption = clip.split("var odtPreviewCaption")[1].split("func setIDT")[0]
+    assert "case .off:" in caption
+    assert f'return "{PREVIEW_STATUS_ODT_OFF}"' in caption
+    assert f'return "{PREVIEW_STATUS_NOT_DELIVERABLE}"' in caption
+    assert "acesOTNote" not in caption
+    assert "badge" not in caption
+    assert "成片预览关" not in caption
+    assert "精准" not in caption
+    _chengpian_only_honesty(caption)
+
+    allowed = {PREVIEW_STATUS_ODT_OFF, PREVIEW_STATUS_NOT_DELIVERABLE}
+    leftover_english = (
+        "Node 4 off",
+        "ACEScct deliverable",
+        "This pane is not tagged",
+        "Not a finished picture",
+        "Tagged CGColorSpace",
+        "Preview only",
+        "finished grade",
+        "Golden grey-card",
+        "accuracy claim",
+        "homemade HLG",
+        "does not invent",
+        "8-bit thumbnail is not a deliverable",
+        "deliverable",
+        "finished picture",
+        "itur_709",
+    )
+    for lit in _odt_preview_caption_literals(caption):
+        assert lit in allowed, lit
+        for token in leftover_english:
+            assert token not in lit, (token, lit)
+        assert "成片预览关" not in lit
+        assert "精准" not in lit
+        assert not re.search(r"[A-Za-z]", lit), lit
+        _chengpian_only_honesty(lit)
+
+    for token in leftover_english:
+        assert token not in caption, token
+
+    split = content.split("struct SplitPreview")[1].split("struct WriteProgressLine")[0]
+    assert "odtPreviewCaption" in split
+    assert "odtPreviewTitle" in split
+    assert "Rec709PreviewView" in split
+    assert "Button(" not in split
+    assert "成片预览关" not in split
+    assert "精准" not in split
+
+    pane = preview.split("struct Rec709PreviewView")[1].split("struct PreviewNotDeliverableBadge")[0]
+    assert ".help(caption)" in pane
+    assert "Button(" not in pane
+    assert "成片预览关" not in pane
+    assert "精准" not in pane
+
+    odt = engine.split("func renderODTFromGraded")[1].split("func publishODTOnly")[0]
+    assert f'"{PREVIEW_STATUS_ODT_CACHE_HIT}"' in odt
+    assert f'"{PREVIEW_STATUS_PROXY}"' in odt
+    assert f'"{PREVIEW_STATUS_NOT_DELIVERABLE}"' in odt
+    assert f'"{PREVIEW_STATUS_ODT_OFF}"' in odt
+    assert "acesOTNote" not in odt
 
 
 def test_inspector_cat_three_sentences_review_lock():
