@@ -499,13 +499,15 @@ final class SessionModel: ObservableObject {
     static let frameMismatchChip = "帧数对不上"
     static let missingFpsChip = "读不到帧率，未核对"
     static let missingDurationChip = "读不到时长，未核对"
+    static let missingYCbCrTagsChip = "无法读取片源 Y′CbCr 矩阵/范围，未写出"
 
     /// Short Chinese sidebar / status error. Failed write is not silent.
     static func shortExportChip(for error: Error) -> String {
         if error is LockedWriteCancel { return writeFailedChip }
         let desc = error.localizedDescription
         if desc.hasPrefix("先选择") { return desc }
-        if desc == frameMismatchChip || desc == missingFpsChip || desc == missingDurationChip {
+        if desc == frameMismatchChip || desc == missingFpsChip || desc == missingDurationChip
+            || desc == missingYCbCrTagsChip {
             return desc
         }
         let lower = desc.lowercased()

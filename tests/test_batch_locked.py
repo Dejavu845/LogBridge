@@ -4,6 +4,7 @@ import inspect
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from color.as_shot import WB_SOURCE_AS_SHOT, WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from color.batch import (
@@ -72,6 +73,11 @@ from color.batch import (
     ycbcr_to_preview_u8,
     ycbcr_to_rgb_float,
     preview_u8_promoted_float,
+    MISSING_YCBCR_TAGS_CHIP,
+    parse_source_ycbcr_matrix,
+    parse_source_ycbcr_range,
+    require_source_ycbcr_tags,
+    ycbcr_range_offsets,
 )
 from color.curves import linear_to_slog3
 from color.exr_write import read_rgb_exr
@@ -424,10 +430,18 @@ def _assert_export_decode_is_source_ycbcr_float(engine: str) -> None:
     assert "cgImageFromLogPixelBuffer(" not in movie
     assert "extractRGB" not in movie
     assert "applyYCbCrMatrixToFloat" in movie
+    assert "requireSourceYCbCrUnpack" in movie
+    assert "missingYCbCrTagsChip" in movie
+    assert MISSING_YCBCR_TAGS_CHIP in movie
+    assert "rec709OETF" not in movie
+    assert "applyODT" not in movie
     assert "writeMatrixRGB(" not in movie
     assert "applyYCbCrMatrixToFloat" in ten_src
     assert "/ 255" not in ten_src
     assert "writeMatrixRGB(" not in ten_src
+    assert "/ 1023" not in engine.split("func ycbcrRangeOffsets")[1].split(
+        "func readSourceYCbCrMatrix"
+    )[0]
     assert "bitsPerComponent: 8" in preview_cg
     assert "writeMatrixRGB" in preview_cg
     assert "/ 255" in preview_extract
@@ -460,13 +474,16 @@ def test_export_sequence_prefers_10bit_ycbcr():
     assert "0.1873" in matrix
     assert "0.4681" in matrix
     assert "1.8556" in matrix
-    source_matrix = engine.split("func applyYCbCrMatrixToFloat")[1].split(
-        "func linearAP0Frame"
+    source_matrix = engine.split("func ycbcrMatrixCoeffs")[1].split(
+        "func ycbcrRangeOffsets"
     )[0]
     assert "1.5748" in source_matrix
     assert "0.1873" in source_matrix
     assert "0.4681" in source_matrix
     assert "1.8556" in source_matrix
+    assert "1.4746" in source_matrix
+    assert "1.402" in source_matrix
+    assert "return nil" in source_matrix
     clip = _read(CLIP)
     export_doc = clip.split("func exportLockedEXR")[1].split("func cancelLockedDeliverables")[0]
     assert "Source Y′CbCr" in clip
@@ -476,7 +493,9 @@ def test_export_sequence_prefers_10bit_ycbcr():
 def test_export_ycbcr_is_source_codes_not_preview_8bit():
     """10-bit source codes must not be preview-8-bit then /255."""
     # Neutral chroma, 10-bit Y=372 (not an 8-bit grid point after matrix).
-    source = ycbcr_to_rgb_float(372, 512, 512, bit_depth=10)
+    source = ycbcr_to_rgb_float(
+        372, 512, 512, bit_depth=10, sample_range="video", matrix="bt709"
+    )
     promoted = preview_u8_promoted_float(372, 512, 512, bit_depth=10)
     preview_u8 = ycbcr_to_preview_u8(372, 512, 512, bit_depth=10)
     assert abs(source[0] - promoted[0]) > 1e-4
@@ -501,6 +520,99 @@ def test_export_ycbcr_is_source_codes_not_preview_8bit():
     assert "preview 8-bit path promoted" in acceptance
     _assert_chengpian_not_a_deliverable_claim(readme)
     _assert_chengpian_not_a_deliverable_claim(acceptance)
+
+
+def test_missing_ycbcr_tags_fails_closed_no_709_default(tmp_path: Path):
+    """Missing nclc/colr/vui → Chinese failure. No silent 709-video default."""
+    assert MISSING_YCBCR_TAGS_CHIP == "无法读取片源 Y′CbCr 矩阵/范围，未写出"
+    assert ycbcr_range_offsets(10, "video") == (64.0, 876.0, 512.0, 896.0)
+    assert ycbcr_range_offsets(10, "full") == (0.0, 1023.0, 512.0, 1023.0)
+    nlog_video = ycbcr_to_rgb_float(
+        372, 512, 512, bit_depth=10, sample_range="video", matrix="bt709"
+    )
+    assert abs(nlog_video[0] - 372.0 / 1023.0) > 1e-3
+    m709 = ycbcr_to_rgb_float(
+        400, 400, 600, bit_depth=10, sample_range="video", matrix="bt709"
+    )
+    m2020 = ycbcr_to_rgb_float(
+        400, 400, 600, bit_depth=10, sample_range="video", matrix="bt2020"
+    )
+    assert m709 != m2020
+
+    with pytest.raises(ValueError, match=MISSING_YCBCR_TAGS_CHIP):
+        require_source_ycbcr_tags(None)
+    with pytest.raises(ValueError, match=MISSING_YCBCR_TAGS_CHIP):
+        require_source_ycbcr_tags({})
+    with pytest.raises(ValueError, match=MISSING_YCBCR_TAGS_CHIP):
+        require_source_ycbcr_tags({"nclc": "1-1-1"})
+    with pytest.raises(ValueError, match=MISSING_YCBCR_TAGS_CHIP):
+        require_source_ycbcr_tags({"full_range": False})
+    with pytest.raises(ValueError, match=MISSING_YCBCR_TAGS_CHIP):
+        require_source_ycbcr_tags({"nclc": "2-2-2", "full_range": False})
+    assert parse_source_ycbcr_matrix({}) is None
+    assert parse_source_ycbcr_range({}) is None
+    assert parse_source_ycbcr_matrix({"nclc": "1-1-1"}) == "bt709"
+    assert parse_source_ycbcr_range({"nclc": "1-1-1"}) is None
+
+    tagged = require_source_ycbcr_tags({"nclc": "1-1-1", "full_range": False})
+    assert tagged == ("bt709", "video")
+    tagged2020 = require_source_ycbcr_tags(
+        {"YCbCrMatrix": "ITU_R_2020", "FullRangeVideo": True}
+    )
+    assert tagged2020 == ("bt2020", "full")
+    # Transfer 16 / primaries 9 must not become an IDT or a 709 curve.
+    pq_nclc = require_source_ycbcr_tags({"nclc": "9-16-9", "full_range": False})
+    assert pq_nclc == ("bt2020", "video")
+
+    clips = [
+        BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0)
+    ]
+    dest = tmp_path / "notags"
+    report = process_locked_writes(
+        clips, dest, frames={"locked.mov": _slog3_grey()}, ycbcr_tags={}
+    )
+    assert report.written == ()
+    assert report.errors[0].error == MISSING_YCBCR_TAGS_CHIP
+    assert not (dest / deliverable_dir_name("locked.mov")).exists()
+    assert list(dest.glob("**/*.exr")) == []
+    assert sidebar_export_chips(clips, report)["locked.mov"] == MISSING_YCBCR_TAGS_CHIP
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+    assert "精准" not in report.processed_status_text
+
+    ok = process_locked_writes(
+        clips,
+        tmp_path / "tags",
+        frames={"locked.mov": _slog3_grey()},
+        ycbcr_tags={"locked.mov": {"nclc": "9-16-9", "full_range": False}},
+    )
+    assert ok.written
+    assert (tmp_path / "tags" / deliverable_dir_name("locked.mov")).is_dir()
+    rgb = read_rgb_exr(Path(ok.written[0].path) / sequence_frame_name(0))
+    np.testing.assert_allclose(rgb[0, 0], 0.18, atol=5e-3)
+
+    engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    clip = _read(CLIP)
+    detector = _read(SWIFT_ROOT / "LogBridge/LogBridge/Detection/ClipDetector.swift")
+    require = engine.split("func requireSourceYCbCrUnpack")[1].split(
+        "func ycbcrMatrixCoeffs"
+    )[0]
+    assert "missingYCbCrTagsChip" in require
+    assert MISSING_YCBCR_TAGS_CHIP in engine
+    assert "kCVImageBufferYCbCrMatrixKey" in engine
+    assert "kCMFormatDescriptionExtension_YCbCrMatrix" in engine
+    assert "kCVImageBufferFullRangeVideo" in engine
+    assert "rec709OETF" not in require
+    assert "applyODT" not in require
+    assert "applyIDT" not in require
+    movie = engine.split("func decodeMovieAllFrames")[1].split("func linearAP0Frame")[0]
+    assert "requireSourceYCbCrUnpack" in movie
+    assert "rec709OETF" not in movie
+    assert MISSING_YCBCR_TAGS_CHIP in clip
+    assert "missingYCbCrTagsChip" in clip.split("static func shortExportChip")[1]
+    assert "Do not map nclc color primaries / transfer / matrix to an IDT" in detector
+    _assert_chengpian_not_a_deliverable_claim(MISSING_YCBCR_TAGS_CHIP)
+    _assert_chengpian_not_a_deliverable_claim(require)
 
 
 def test_honest_proxy_copy_and_filename():
@@ -1347,6 +1459,7 @@ def test_verify_missing_fps_fails_and_never_guesses_24_or_30(tmp_path: Path):
     )[0]
     assert "frameMismatchChip" in chip_fn
     assert "missingFpsChip" in chip_fn
+    assert "missingYCbCrTagsChip" in chip_fn
     media = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/MediaFormat.swift")
     assert "post-write" in media or "EXR count" in media
     assert "func extent(url:" in media

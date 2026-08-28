@@ -232,10 +232,13 @@ final class PreviewEngine: ObservableObject {
     /// Graded ACES2065-1 (AP0) linear proxy frames. Reuses PreviewColor.
     /// ODT is not applied. Not ACEScct.
     /// Movie write path reads source 10-bit / native-depth Y′CbCr and
-    /// matrix-converts to float RGB. It does not use the preview 8-bit
-    /// path and then promote those 8-bit pixels (`extractRGB` / 255).
-    /// Still a proxy — 整段代理，不是全精度成片. Bit-depth going up
-    /// is still 整段代理，不是全精度成片.
+    /// matrix-converts to float RGB. Matrix and full/video range follow
+    /// the pixel-buffer / format-description / nclc attachments — not a
+    /// hardcoded BT.709 + video-range for every clip. No Rec.709 transfer
+    /// before IDT. Video-range 10-bit is not /1023. It does not use the
+    /// preview 8-bit path and then promote those 8-bit pixels
+    /// (`extractRGB` / 255). Still a proxy — 整段代理，不是全精度成片.
+    /// Bit-depth going up is still 整段代理，不是全精度成片.
     /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
     static let exportMaxLongEdge: CGFloat = 16384
 
@@ -345,7 +348,9 @@ final class PreviewEngine: ObservableObject {
         }
         let formats: [OSType] = [
             kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+            kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
             kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
             kCVPixelFormatType_422YpCbCr8
         ]
         for fmt in formats {
@@ -357,9 +362,9 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// VideoToolbox / AVAssetReader: all frames as source Y′CbCr → float RGB.
-    /// Export sequence only: 10-bit 420 first, then native 8-bit 420, then 8-bit 422.
+    /// Export: 10-bit 420 (video then full) first, then native 8-bit 420, then 8-bit 422.
     /// Preview/scrub keeps the 8-bit-first list and the 8-bit CGImage writer.
-    /// Bit-depth only — no transfer. Never copyCGImage. Never set AVVideoColorPropertiesKey.
+    /// Matrix-only — no transfer. Never copyCGImage. Never set AVVideoColorPropertiesKey.
     static func decodeMovieAllFrames(
         url: URL,
         maxLongEdge: CGFloat,
@@ -367,7 +372,9 @@ final class PreviewEngine: ObservableObject {
     ) throws {
         let formats: [OSType] = [
             kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+            kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
             kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
             kCVPixelFormatType_422YpCbCr8
         ]
         for fmt in formats {
@@ -407,12 +414,21 @@ final class PreviewEngine: ObservableObject {
         guard reader.startReading() else { return 0 }
         var count = 0
         while let sample = output.copyNextSampleBuffer() {
-            guard let pb = CMSampleBufferGetImageBuffer(sample),
-                  let decoded = rgbFloatFromLogPixelBuffer(pb, maxLongEdge: maxLongEdge) else {
+            guard let pb = CMSampleBufferGetImageBuffer(sample) else {
                 if count == 0 { return 0 }
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
                     NSLocalizedDescriptionKey: "decode/grade failed"
                 ])
+            }
+            let decoded: (rgb: [Float], width: Int, height: Int)
+            do {
+                decoded = try rgbFloatFromLogPixelBuffer(
+                    pb,
+                    format: CMSampleBufferGetFormatDescription(sample),
+                    maxLongEdge: maxLongEdge
+                )
+            } catch {
+                throw error
             }
             try onFrame(decoded.rgb, decoded.width, decoded.height)
             count += 1
@@ -439,49 +455,252 @@ final class PreviewEngine: ObservableObject {
         guard reader.startReading(),
               let sample = output.copyNextSampleBuffer(),
               let pb = CMSampleBufferGetImageBuffer(sample) else { return nil }
-        return rgbFloatFromLogPixelBuffer(pb, maxLongEdge: maxLongEdge)
+        return try? rgbFloatFromLogPixelBuffer(
+            pb,
+            format: CMSampleBufferGetFormatDescription(sample),
+            maxLongEdge: maxLongEdge
+        )
+    }
+
+    static let missingYCbCrTagsChip = "无法读取片源 Y′CbCr 矩阵/范围，未写出"
+
+    private struct SourceYCbCrUnpack {
+        let yOff: Double
+        let ySpan: Double
+        let cOff: Double
+        let cSpan: Double
+        let rv: Double
+        let gu: Double
+        let gv: Double
+        let bu: Double
+    }
+
+    /// nclc / colr / vui matrix + full/video. Missing → fail. No 709-video default.
+    /// Does not read primaries or transfer to change an IDT or apply a 709 curve.
+    static func requireSourceYCbCrUnpack(
+        pixelBuffer pb: CVPixelBuffer,
+        format: CMFormatDescription?,
+        bitDepth: Int
+    ) throws -> SourceYCbCrUnpack {
+        let matrix = readSourceYCbCrMatrix(pixelBuffer: pb, format: format)
+        let isFull = readSourceYCbCrFullRange(pixelBuffer: pb, format: format)
+        guard let matrix, let isFull else {
+            throw NSError(domain: "LogBridge", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: missingYCbCrTagsChip
+            ])
+        }
+        guard let coeffs = ycbcrMatrixCoeffs(matrix) else {
+            throw NSError(domain: "LogBridge", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: missingYCbCrTagsChip
+            ])
+        }
+        let offs = ycbcrRangeOffsets(bitDepth: bitDepth, fullRange: isFull)
+        return SourceYCbCrUnpack(
+            yOff: offs.yOff, ySpan: offs.ySpan, cOff: offs.cOff, cSpan: offs.cSpan,
+            rv: coeffs.rv, gu: coeffs.gu, gv: coeffs.gv, bu: coeffs.bu
+        )
+    }
+
+    /// BT.601 / BT.709 / BT.2020 Kr/Kb expand. Matrix-only — no transfer.
+    static func ycbcrMatrixCoeffs(_ name: String) -> (rv: Double, gu: Double, gv: Double, bu: Double)? {
+        switch name {
+        case "bt601":
+            return (1.402, 0.344136, 0.714136, 1.772)
+        case "bt2020":
+            return (1.4746, 0.164553, 0.571353, 1.8814)
+        case "bt709":
+            return (1.5748, 0.1873, 0.4681, 1.8556)
+        default:
+            return nil
+        }
+    }
+
+    /// Video n-bit is 16<<(n-8)…235<<(n-8), not a literal /1023 for every 10-bit clip.
+    /// 10-bit video is 64/876. Full n-bit is 0…2^n-1.
+    static func ycbcrRangeOffsets(bitDepth: Int, fullRange: Bool) -> (yOff: Double, ySpan: Double, cOff: Double, cSpan: Double) {
+        let depth = max(bitDepth, 8)
+        let maxCode = Double((1 << depth) - 1)
+        let mid = Double(1 << (depth - 1))
+        if fullRange {
+            return (0, maxCode, mid, maxCode)
+        }
+        let shift = depth - 8
+        let yOff = Double(16 << shift)
+        let ySpan = Double((235 << shift) - (16 << shift))
+        let cSpan = Double((240 << shift) - (16 << shift))
+        return (yOff, ySpan, mid, cSpan)
+    }
+
+    private static func readSourceYCbCrMatrix(pixelBuffer pb: CVPixelBuffer, format: CMFormatDescription?) -> String? {
+        if let raw = cvAttachment(pb, kCVImageBufferYCbCrMatrixKey) {
+            return normalizeYCbCrMatrix(raw)
+        }
+        if let format,
+           let raw = CMFormatDescriptionGetExtension(format, kCMFormatDescriptionExtension_YCbCrMatrix) {
+            return normalizeYCbCrMatrix(raw)
+        }
+        if let trip = nclcTriplet(pixelBuffer: pb, format: format) {
+            return matrixFromCode(trip.2)
+        }
+        return nil
+    }
+
+    private static func readSourceYCbCrFullRange(pixelBuffer pb: CVPixelBuffer, format: CMFormatDescription?) -> Bool? {
+        if let flag = boolAttachment(pb, kCVImageBufferFullRangeVideo) {
+            return flag
+        }
+        if let format,
+           let raw = CMFormatDescriptionGetExtension(format, kCMFormatDescriptionExtension_FullRangeVideo) {
+            return boolFromTag(raw)
+        }
+        if let flag = nclxFullRangeFlag(pixelBuffer: pb, format: format) {
+            return flag
+        }
+        return nil
+    }
+
+    private static func cvAttachment(_ pb: CVPixelBuffer, _ key: CFString) -> Any? {
+        var mode = CVAttachmentMode.shouldNotPropagate
+        return CVBufferGetAttachment(pb, key, &mode)
+    }
+
+    private static func boolAttachment(_ pb: CVPixelBuffer, _ key: CFString) -> Bool? {
+        boolFromTag(cvAttachment(pb, key))
+    }
+
+    private static func boolFromTag(_ raw: Any?) -> Bool? {
+        guard let raw else { return nil }
+        if let b = raw as? Bool { return b }
+        if CFGetTypeID(raw as CFTypeRef) == CFBooleanGetTypeID() {
+            return CFBooleanGetValue((raw as! CFBoolean))
+        }
+        if let n = raw as? NSNumber { return n.boolValue }
+        if let s = raw as? String {
+            let low = s.lowercased()
+            if ["1", "true", "yes", "full"].contains(low) { return true }
+            if ["0", "false", "no", "video", "limited"].contains(low) { return false }
+        }
+        return nil
+    }
+
+    private static func normalizeYCbCrMatrix(_ raw: Any) -> String? {
+        if let n = raw as? NSNumber { return matrixFromCode(n.intValue) }
+        let s = String(describing: raw).lowercased()
+        if s.contains("2020") { return "bt2020" }
+        if s.contains("601") || s.contains("240m") { return "bt601" }
+        if s.contains("709") { return "bt709" }
+        return nil
+    }
+
+    private static func matrixFromCode(_ code: Int) -> String? {
+        // ITU / H.273. 0 and 2 are unspecified — fail, do not default 709.
+        if code == 1 { return "bt709" }
+        if code == 4 || code == 5 || code == 6 || code == 7 { return "bt601" }
+        if code == 9 || code == 10 { return "bt2020" }
+        return nil
+    }
+
+    /// nclc / nclx / colr triplet (primaries, transfer, matrix). Matrix only.
+    private static func nclcTriplet(pixelBuffer pb: CVPixelBuffer, format: CMFormatDescription?) -> (Int, Int, Int)? {
+        let keys = ["nclc", "nclx", "colr", "vui"]
+        for key in keys {
+            if let parsed = parseNCLC(cvAttachment(pb, key as CFString)) { return parsed }
+        }
+        if let format, let exts = CMFormatDescriptionGetExtensions(format) as? [String: Any] {
+            for key in keys {
+                if let parsed = parseNCLC(exts[key]) { return parsed }
+            }
+        }
+        return nil
+    }
+
+    private static func nclxFullRangeFlag(pixelBuffer pb: CVPixelBuffer, format: CMFormatDescription?) -> Bool? {
+        if let flag = parseNCLXRange(cvAttachment(pb, "nclx" as CFString)) { return flag }
+        if let format, let exts = CMFormatDescriptionGetExtensions(format) as? [String: Any] {
+            if let flag = parseNCLXRange(exts["nclx"]) { return flag }
+            if let flag = parseNCLXRange(exts["colr"]) { return flag }
+            if let flag = parseNCLXRange(exts["vui"]) { return flag }
+        }
+        return nil
+    }
+
+    private static func parseNCLC(_ raw: Any?) -> (Int, Int, Int)? {
+        guard let raw else { return nil }
+        if let s = raw as? String {
+            let parts = s.replacingOccurrences(of: ",", with: "-").replacingOccurrences(of: ":", with: "-").split(separator: "-")
+            if parts.count >= 3, let p = Int(parts[0]), let t = Int(parts[1]), let m = Int(parts[2]) {
+                return (p, t, m)
+            }
+        }
+        if let arr = raw as? [Any], arr.count >= 3,
+           let p = intFromTag(arr[0]), let t = intFromTag(arr[1]), let m = intFromTag(arr[2]) {
+            return (p, t, m)
+        }
+        if let data = raw as? Data, data.count >= 6 {
+            let p = Int(data[0]) << 8 | Int(data[1])
+            let t = Int(data[2]) << 8 | Int(data[3])
+            let m = Int(data[4]) << 8 | Int(data[5])
+            return (p, t, m)
+        }
+        return nil
+    }
+
+    private static func parseNCLXRange(_ raw: Any?) -> Bool? {
+        if let data = raw as? Data, data.count >= 7 {
+            return (data[6] & 0x80) != 0
+        }
+        if let dict = raw as? [String: Any] {
+            if let flag = boolFromTag(dict["full_range"] ?? dict["video_full_range_flag"]) { return flag }
+        }
+        return nil
+    }
+
+    private static func intFromTag(_ raw: Any?) -> Int? {
+        if let n = raw as? Int { return n }
+        if let n = raw as? NSNumber { return n.intValue }
+        if let s = raw as? String { return Int(s) }
+        return nil
     }
 
     /// Matrix-only Y′CbCr → float R′G′B′ at the buffer's native sample depth.
-    /// 10-bit video-range codes stay 10-bit (UInt16 0-1023). No 8-bit RGB
-    /// quantize and no /255 promote. Same BT.709 matrix as preview. No transfer.
+    /// Matrix + full/video come from nclc / colr / vui. Missing tags throw
+    /// 「无法读取片源 Y′CbCr 矩阵/范围，未写出」. No 709-video default.
+    /// Video-range 10-bit uses 64/876, not /1023. No Rec.709 transfer.
     static func rgbFloatFromLogPixelBuffer(
         _ pb: CVPixelBuffer,
+        format: CMFormatDescription? = nil,
         maxLongEdge: CGFloat
-    ) -> (rgb: [Float], width: Int, height: Int)? {
+    ) throws -> (rgb: [Float], width: Int, height: Int) {
         CVPixelBufferLockBaseAddress(pb, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
         let srcW = CVPixelBufferGetWidth(pb)
         let srcH = CVPixelBufferGetHeight(pb)
-        guard srcW > 0, srcH > 0 else { return nil }
+        guard srcW > 0, srcH > 0 else {
+            throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "decode/grade failed"
+            ])
+        }
         let scale = min(1.0, Double(maxLongEdge) / Double(max(srcW, srcH)))
         let w = max(1, Int((Double(srcW) * scale).rounded()))
         let h = max(1, Int((Double(srcH) * scale).rounded()))
         var rgb = [Float](repeating: 0, count: w * h * 3)
         let fmt = CVPixelBufferGetPixelFormatType(pb)
         if fmt == kCVPixelFormatType_32BGRA || fmt == kCVPixelFormatType_32ARGB {
-            guard let base = CVPixelBufferGetBaseAddress(pb) else { return nil }
-            let stride = CVPixelBufferGetBytesPerRow(pb)
-            let src = base.assumingMemoryBound(to: UInt8.self)
-            for y in 0..<h {
-                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
-                for x in 0..<w {
-                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
-                    let si = sy * stride + sx * 4
-                    let di = (y * w + x) * 3
-                    if fmt == kCVPixelFormatType_32BGRA {
-                        rgb[di] = Float(src[si + 2]) / 255
-                        rgb[di + 1] = Float(src[si + 1]) / 255
-                        rgb[di + 2] = Float(src[si + 0]) / 255
-                    } else {
-                        rgb[di] = Float(src[si + 1]) / 255
-                        rgb[di + 1] = Float(src[si + 2]) / 255
-                        rgb[di + 2] = Float(src[si + 3]) / 255
-                    }
-                }
+            throw NSError(domain: "LogBridge", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: missingYCbCrTagsChip
+            ])
+        }
+        let bitDepth: Int = (
+            fmt == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            || fmt == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+        ) ? 10 : 8
+        let unpack = try requireSourceYCbCrUnpack(pixelBuffer: pb, format: format, bitDepth: bitDepth)
+        if fmt == kCVPixelFormatType_422YpCbCr8 {
+            guard let base = CVPixelBufferGetBaseAddress(pb) else {
+                throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "decode/grade failed"
+                ])
             }
-        } else if fmt == kCVPixelFormatType_422YpCbCr8 {
-            guard let base = CVPixelBufferGetBaseAddress(pb) else { return nil }
             let stride = CVPixelBufferGetBytesPerRow(pb)
             let src = base.assumingMemoryBound(to: UInt8.self)
             for y in 0..<h {
@@ -494,14 +713,18 @@ final class PreviewEngine: ObservableObject {
                     let Cr = Double(src[si + 2])
                     applyYCbCrMatrixToFloat(
                         &rgb, di: (y * w + x) * 3,
-                        Y: Y, Cb: Cb, Cr: Cr,
-                        yOff: 16, ySpan: 219, cOff: 128, cSpan: 224
+                        Y: Y, Cb: Cb, Cr: Cr, unpack: unpack
                     )
                 }
             }
-        } else if fmt == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange {
+        } else if fmt == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+                    || fmt == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange {
             guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
-                  let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else { return nil }
+                  let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else {
+                throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "decode/grade failed"
+                ])
+            }
             let yStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
             let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
             let yPtr = yPlane.assumingMemoryBound(to: UInt16.self)
@@ -516,17 +739,20 @@ final class PreviewEngine: ObservableObject {
                     let uv = (sy / 2) * uvRow + (sx / 2) * 2
                     let Cb = Double(uvPtr[uv])
                     let Cr = Double(uvPtr[uv + 1])
-                    // 10-bit video range in 16-bit samples. Matrix only — no 709 transfer.
+                    // 10-bit samples. Range/matrix from tags. Matrix only — no 709 transfer.
                     applyYCbCrMatrixToFloat(
                         &rgb, di: (y * w + x) * 3,
-                        Y: Y, Cb: Cb, Cr: Cr,
-                        yOff: 64, ySpan: 876, cOff: 512, cSpan: 896
+                        Y: Y, Cb: Cb, Cr: Cr, unpack: unpack
                     )
                 }
             }
         } else {
             guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
-                  let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else { return nil }
+                  let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else {
+                throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "decode/grade failed"
+                ])
+            }
             let yStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
             let uvStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
             let yPtr = yPlane.assumingMemoryBound(to: UInt8.self)
@@ -541,8 +767,7 @@ final class PreviewEngine: ObservableObject {
                     let Cr = Double(uvPtr[uv + 1])
                     applyYCbCrMatrixToFloat(
                         &rgb, di: (y * w + x) * 3,
-                        Y: Y, Cb: Cb, Cr: Cr,
-                        yOff: 16, ySpan: 219, cOff: 128, cSpan: 224
+                        Y: Y, Cb: Cb, Cr: Cr, unpack: unpack
                     )
                 }
             }
@@ -558,17 +783,14 @@ final class PreviewEngine: ObservableObject {
         Y: Double,
         Cb: Double,
         Cr: Double,
-        yOff: Double,
-        ySpan: Double,
-        cOff: Double,
-        cSpan: Double
+        unpack: SourceYCbCrUnpack
     ) {
-        let yp = (Y - yOff) / ySpan
-        let pbv = (Cb - cOff) / cSpan
-        let prv = (Cr - cOff) / cSpan
-        rgb[di] = Float(yp + 1.5748 * prv)
-        rgb[di + 1] = Float(yp - 0.1873 * pbv - 0.4681 * prv)
-        rgb[di + 2] = Float(yp + 1.8556 * pbv)
+        let yp = (Y - unpack.yOff) / unpack.ySpan
+        let pbv = (Cb - unpack.cOff) / unpack.cSpan
+        let prv = (Cr - unpack.cOff) / unpack.cSpan
+        rgb[di] = Float(yp + unpack.rv * prv)
+        rgb[di + 1] = Float(yp - unpack.gu * pbv - unpack.gv * prv)
+        rgb[di + 2] = Float(yp + unpack.bu * pbv)
     }
 
     /// Full cached post-IDT AP0 linear buffer. Never Rec.709 / ACEScct / log.
