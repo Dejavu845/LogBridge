@@ -271,9 +271,12 @@ def test_preview_status_is_locked_chinese():
     assert PREVIEW_STATUS_ODT_CACHE_HIT == "只重跑 ODT"
     assert PREVIEW_STATUS_PROXY == "预览代理，不是成片"
     assert PREVIEW_STATUS_NOT_DELIVERABLE == "预览·非成片"
-    assert PREVIEW_STATUS_ODT_OFF == "成片预览关 · ACEScct"
+    assert PREVIEW_STATUS_ODT_OFF == "709 预览关"
     assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
     assert REASON_PICK_LOG_GAMUT == "先选择 Log 与色域"
+    assert "成片" not in PREVIEW_STATUS_ODT_OFF
+    assert "成片" not in PREVIEW_STATUS_ODT_CACHE_HIT
+    assert "精准" not in PREVIEW_STATUS_ODT_OFF
 
     odt = engine.split("func renderODTFromGraded")[1].split("func publishODTOnly")[0]
     assert f'"{PREVIEW_STATUS_ODT_CACHE_HIT}"' in odt
@@ -288,6 +291,7 @@ def test_preview_status_is_locked_chinese():
     assert "ODT off —" not in odt
     assert "ACEScct deliverable" not in odt
     assert "Rec.709 pane is not tagged" not in odt
+    assert "成片预览关" not in odt
     assert "精准" not in odt
 
     build = engine.split("private func build(")[1].split("private static func gradeKey")[0]
@@ -331,11 +335,18 @@ def test_preview_status_is_locked_chinese():
         "Pick a paired",
         "Preview proxy",
         "先选择成对 Log 与色域",
+        "成片预览关",
     )
     for lit in _preview_status_literals(engine):
         for token in banned:
             assert token not in lit, (token, lit)
         assert "精准" not in lit
+        cleaned = (
+            lit.replace("预览·非成片", "")
+            .replace("不是全精度成片", "")
+            .replace("不是成片", "")
+        )
+        assert "成片" not in cleaned, lit
 
     assert "Button(" not in odt
     assert "Button(" not in build

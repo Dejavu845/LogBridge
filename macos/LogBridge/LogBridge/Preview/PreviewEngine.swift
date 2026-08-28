@@ -214,7 +214,7 @@ final class PreviewEngine: ObservableObject {
             // No homemade HLG/PQ. Preview does not invent a Rec.2100 transfer.
             note = "预览·非成片"
         } else {
-            note = "成片预览关 · ACEScct"
+            note = "709 预览关"
         }
         return (odtCG, note)
     }
