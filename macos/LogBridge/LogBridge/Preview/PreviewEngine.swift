@@ -446,6 +446,7 @@ final class PreviewEngine: ObservableObject {
             }
             let cat = Self.writeCAT(graph: graph)
             var count = 0
+            // one write overlap: disk of N with sequential copyNext of N+1
             var pendingWrite: DispatchWorkItem?
             var writeError: Error?
             func joinExportWrite() throws {
