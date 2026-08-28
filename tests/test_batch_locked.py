@@ -22,6 +22,7 @@ from color.batch import (
     DISK_SHORT_STATUS,
     DISK_SHORT_STATUS_TEMPLATE,
     FOLDER_PICKER_MESSAGE,
+    FAILED_BUCKET,
     FRAME_MISMATCH_CHIP,
     HONEST_PROXY_NOTE,
     LAST_EXPORT_DIRECTORY_KEY,
@@ -29,7 +30,9 @@ from color.batch import (
     MISSING_FPS_CHIP,
     PROCESS_BUTTON,
     PROCESS_BUTTON_HELP,
+    BATCH_SUMMARY_TEMPLATE,
     PROCESSED_STATUS_TEMPLATE,
+    SKIPPED_BUCKET,
     PROGRESS_PREFIX,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
@@ -46,8 +49,8 @@ from color.batch import (
     confirm_auto_wb,
     deliverable_dir_name,
     deliverable_name,
+    batch_summary_text,
     dest_has_space,
-    disk_short_status_text,
     estimate_chip_lit,
     estimate_locked_proxy_bytes,
     folder_picker_message_with_estimate,
@@ -178,6 +181,10 @@ def test_swift_mirrors_locked_batch_and_one_button():
     assert bar.count("Button(") == 1
     assert "取消" in bar
     assert "isWritingDeliverables" in bar
+    assert "showsBatchSummary" in bar
+    assert "showsBatchSummary" in clip
+    assert SKIPPED_BUCKET in clip
+    assert FAILED_BUCKET in clip
     assert 'Button("处理已锁定片段")' not in content.split("struct StatusBar")[1]
     assert 'Button("导出 ACEScct / EXR")' in content.split("struct AdvancedPanel")[1]
     assert ADVANCED_DISCLOSURE in content
@@ -240,9 +247,10 @@ def test_unlocked_never_write_locked_writes_and_counter(tmp_path: Path):
     assert called == [sequence_frame_name(0)]
     assert report.processed_count == 1
     assert report.skipped_count == 3
-    assert "1 条已处理" in report.processed_status_text
-    assert "3 条已跳过" in report.processed_status_text
-    assert processed_status_text(1, 3, tmp_path) == report.processed_status_text
+    assert "1 条已写出代理" in report.processed_status_text
+    assert "3 条待选跳过" in report.processed_status_text
+    assert "0 条失败" in report.processed_status_text
+    assert batch_summary_text(1, 3, 0, dest=tmp_path) == report.processed_status_text
     assert short_export_path(tmp_path) in report.processed_status_text
     assert (tmp_path / deliverable_name("locked.mov")).is_file()
     assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
@@ -262,7 +270,7 @@ def test_locked_exr_is_aces2065_and_mixed_bin_writes(tmp_path: Path):
         clips, tmp_path, frames={"locked.mov": _slog3_grey(), "pending.mov": _slog3_grey()}
     )
     assert report.processed_count == 1
-    assert "1 条已处理" in report.processed_status_text
+    assert "1 条已写出代理" in report.processed_status_text
     path = tmp_path / deliverable_name("locked.mov")
     assert path.is_file()
     rgb = read_rgb_exr(path)
@@ -296,7 +304,10 @@ def test_write_error_counts_as_processed_no_file(tmp_path: Path):
     assert report.processed_count == 1
     assert report.written == ()
     assert report.errors[0].name == "locked.mov"
-    assert "1 条已处理" in report.processed_status_text
+    assert "0 条已写出代理" in report.processed_status_text
+    assert "1 条失败" in report.processed_status_text
+    assert FAILED_BUCKET in report.processed_status_text
+    assert DECODE_FAILED_CHIP in report.processed_status_text
     assert list(tmp_path.glob("*.exr")) == []
     assert list(tmp_path.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
 
@@ -308,10 +319,10 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
     body = clip.split("func processLockedClips()")[1].split("func processSelected()")[0]
     assert "writeLockedDeliverables" in body
-    assert "条已处理" in body or "条已处理" in clip.split("func writeLockedDeliverables")[1]
+    assert "条已写出代理" in body or "条已写出代理" in clip.split("func writeLockedDeliverables")[1]
     write_body = clip.split("func writeLockedDeliverables")[1].split("func exportLockedEXR")[0]
-    assert "written.count + errors.count" in write_body
-    assert "let processed = written.count + errors.count" in write_body
+    assert "batchSummaryText" in write_body
+    assert "let wrote = written.count" in write_body
     assert "processed = locked.count" not in write_body
     assert HONEST_PROXY_NOTE in write_body
     assert HONEST_PROXY_NOTE in body
@@ -955,8 +966,13 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     assert "整段代理，不是全精度成片" in report.processed_status_text
     assert "条已处理" not in report.processed_status_text
     assert "精准" not in report.processed_status_text
+    assert "0 条已写出代理" in report.processed_status_text
+    assert "2 条待选跳过" in report.processed_status_text
+    assert "1 条失败" in report.processed_status_text
+    assert FAILED_BUCKET in report.processed_status_text
+    assert str(int(CONSERVATIVE_FPS)) not in report.processed_status_text
     _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
-    assert disk_short_status_text(report.disk_estimate) == report.processed_status_text
+    assert batch_summary_text(0, 2, 1, [DISK_SHORT_STATUS]) == report.processed_status_text
 
     # Missing pixels are a per-clip error, not a 4K×60s dest abort.
     empty = process_locked_writes(
@@ -989,7 +1005,8 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     assert "estimateLockedProxyBytes" in write_body
     assert "destFreeBytesOverride" in write_body
     assert "destVolumeFreeBytes" in write_body
-    assert "diskShortExportNote" in write_body
+    assert "batchSummaryText" in write_body
+    assert "diskShortStatus" in write_body
     assert "neededWithMargin" in write_body
     assert "return" in write_body.split("neededWithMargin")[1].split("let graphCopy")[0]
     assert "exportLockedEXR" not in write_body.split("neededWithMargin")[1].split(
@@ -1283,3 +1300,150 @@ def test_verify_unlocked_still_skipped(tmp_path: Path):
     assert WRITTEN_CHIP not in chips.values()
     assert list(tmp_path.glob("**/*.exr")) == []
     assert list(tmp_path.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
+
+
+def test_post_batch_summary_three_buckets(tmp_path: Path):
+    """After 处理已锁定片段: 已写出代理 / 待选跳过 / 失败原因. No 成片/精准/24/30."""
+    assert SKIPPED_BUCKET == "待选跳过"
+    assert FAILED_BUCKET == "失败原因"
+    assert WRITTEN_CHIP == "已写出代理"
+    assert BATCH_SUMMARY_TEMPLATE == "{wrote} 条已写出代理 / {skipped} 条待选跳过 / {failed} 条失败"
+    summary_src = inspect.getsource(batch_summary_text)
+    assert "CONSERVATIVE_FPS" not in summary_src
+    assert "CONSERVATIVE_SECONDS" not in summary_src
+    assert "24.0" not in summary_src
+    assert "30.0" not in summary_src
+    assert " 24" not in summary_src
+    assert " 30" not in summary_src
+    assert "clip_frame_count" not in summary_src
+    assert "estimatedFrameCount" not in summary_src
+    _assert_chengpian_not_a_deliverable_claim(BATCH_SUMMARY_TEMPLATE)
+    _assert_chengpian_not_a_deliverable_claim(SKIPPED_BUCKET)
+    _assert_chengpian_not_a_deliverable_claim(FAILED_BUCKET)
+    assert "精准" not in BATCH_SUMMARY_TEMPLATE
+    assert "精准" not in SKIPPED_BUCKET
+    assert "精准" not in FAILED_BUCKET
+    assert "成片" not in WRITTEN_CHIP
+    assert "成片" not in SKIPPED_BUCKET
+    assert "成片" not in FAILED_BUCKET
+
+    wrote = BatchClip(
+        "locked.mov",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=2.0,
+        fps=24.0,
+    )
+    pending = BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True)
+    no_fps = BatchClip(
+        "still.mov",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=2.0,
+    )
+    grey = _slog3_grey()
+    dest = tmp_path / "mixed"
+    report = process_locked_writes(
+        [wrote, pending, no_fps],
+        dest,
+        frames={
+            "locked.mov": [grey] * 48,
+            "pending.mov": [grey] * 48,
+            "still.mov": [grey],
+        },
+        write_fn=_spy_exr,
+    )
+    note = report.processed_status_text
+    assert "1 条已写出代理" in note
+    assert "1 条待选跳过" in note
+    assert "1 条失败" in note
+    assert WRITTEN_CHIP in note
+    assert SKIPPED_BUCKET in note
+    assert FAILED_BUCKET in note
+    assert MISSING_FPS_CHIP in note
+    assert "still.mov：读不到帧率，未核对" in note
+    chips = sidebar_export_chips([wrote, pending, no_fps], report)
+    assert chips["locked.mov"] == WRITTEN_CHIP
+    assert chips["pending.mov"] == REASON_PICK_PAIRED_IDT
+    assert chips["still.mov"] == MISSING_FPS_CHIP
+    assert clip_sequence_reveal_path("locked.mov", dest, chips["locked.mov"]) == (
+        dest / deliverable_dir_name("locked.mov")
+    )
+    assert clip_sequence_reveal_path("still.mov", dest, chips["still.mov"]) is None
+    assert clip_sequence_reveal_path("pending.mov", dest, chips["pending.mov"]) is None
+    assert HONEST_PROXY_NOTE in note
+    _assert_chengpian_not_a_deliverable_claim(note)
+    assert "精准" not in note
+    assert "一键还原" not in note
+    # Stills / missing fps: do not guess 24/30 or 1-frame.
+    assert "24 fps" not in note
+    assert "30 fps" not in note
+    assert "每秒 24" not in note
+    assert "每秒 30" not in note
+    assert "24" not in note
+    assert "30" not in note
+    assert "48" not in note
+    assert "1-frame" not in note
+    assert "1 帧" not in note
+
+    empty = BatchClip("empty.mov")
+    empty_note = batch_summary_text(0, 1, 0)
+    assert "0 条已写出代理" in empty_note
+    assert "1 条待选跳过" in empty_note
+    assert "0 条失败" in empty_note
+    assert FAILED_BUCKET not in empty_note
+    assert "24" not in empty_note
+    assert "30" not in empty_note
+
+    cancel_note = batch_summary_text(1, 1, 1, [CANCELLED_NOTE])
+    assert CANCELLED_NOTE in cancel_note
+    assert FAILED_BUCKET in cancel_note
+    assert "1 条已写出代理" in cancel_note
+    disk_note = batch_summary_text(0, 1, 1, [DISK_SHORT_STATUS])
+    assert DISK_SHORT_STATUS in disk_note
+    assert FAILED_BUCKET in disk_note
+    assert "每秒 24" not in disk_note
+    assert str(int(CONSERVATIVE_SECONDS)) not in disk_note
+
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    summary_swift = clip.split("static func batchSummaryText")[1].split(
+        "func exportLockedEXR"
+    )[0]
+    assert WRITTEN_CHIP in summary_swift
+    assert SKIPPED_BUCKET in summary_swift
+    assert "failedBucket" in summary_swift
+    assert SKIPPED_BUCKET in clip
+    assert FAILED_BUCKET in clip
+    assert HONEST_PROXY_NOTE in summary_swift
+    assert "conservativeFPS" not in summary_swift
+    assert "conservativeSeconds" not in summary_swift
+    assert "24.0" not in summary_swift
+    assert "30.0" not in summary_swift
+    assert " 24" not in summary_swift
+    assert " 30" not in summary_swift
+    assert "estimatedFrameCount" not in summary_swift
+    _assert_chengpian_not_a_deliverable_claim(summary_swift)
+    assert "精准" not in summary_swift
+    write_body = clip.split("func writeLockedDeliverables")[1].split(
+        "func exportLockedEXR"
+    )[0]
+    assert "batchSummaryText" in write_body
+    assert "diskShortStatus" in write_body.split("neededWithMargin")[1]
+    assert "cancelledNote" in write_body
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "处理已锁定片段" in bar
+    assert "showsBatchSummary" in bar
+    assert "lastExportNote" in bar
+    assert 'Button("处理已锁定片段")' not in content.split("struct StatusBar")[1]
+    assert "struct SummaryPage" not in content
+    assert "revealClipExportInFinder" in _read(SIDEBAR)
+    assert WRITTEN_CHIP in _read(SIDEBAR)
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert SKIPPED_BUCKET in readme and SKIPPED_BUCKET in acceptance
+    assert FAILED_BUCKET in readme and FAILED_BUCKET in acceptance
+    assert "N 条已写出代理 / M 条待选跳过 / K 条失败" in readme
+    assert "N 条已写出代理 / M 条待选跳过 / K 条失败" in acceptance
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)
+    _assert_chengpian_not_a_deliverable_claim(content)

@@ -37,6 +37,12 @@ duration is 「读不到时长，未核对」 — never default 24 or 30, and do
 not reuse the dest-disk 24 fps × 60 s guess. A mismatch is
 「帧数对不上」; the folder is removed so it is not 已写出代理.
 
+When 「处理已锁定片段」 finishes (ok / cancel / disk abort / frame
+check), ``lastExportNote`` is one Chinese three-bucket summary:
+「N 条已写出代理 / M 条待选跳过 / K 条失败」 plus 失败原因
+(existing chips only). Not a second process button. Not a summary page.
+Do not reuse the dest-disk 24 fps × 60 s guess in this summary.
+
 Before any EXR is written, estimate dest disk from **locked clips
 only**: frame count × pixel count × 12 bytes (uncompressed float32
 RGB; EXR header / offset table is covered by a small margin). If
@@ -120,6 +126,9 @@ DISK_ESTIMATE_ASSUMPTION = "float32 RGB 未压缩"
 DISK_SHORT_STATUS_TEMPLATE = (
     "磁盘空间不足，未写出。整段代理，不是全精度成片。"
 )
+SKIPPED_BUCKET = "待选跳过"
+FAILED_BUCKET = "失败原因"
+BATCH_SUMMARY_TEMPLATE = "{wrote} 条已写出代理 / {skipped} 条待选跳过 / {failed} 条失败"
 
 
 @dataclass(frozen=True)
@@ -556,6 +565,30 @@ def processed_status_text(processed: int, skipped: int, dest=None) -> str:
     return note
 
 
+def batch_summary_text(
+    wrote: int,
+    skipped: int,
+    failed: int,
+    failure_reasons: Sequence[str] | None = None,
+    dest=None,
+) -> str:
+    """Post-batch three buckets. Existing Chinese chips only.
+
+    「N 条已写出代理 / M 条待选跳过 / K 条失败」 plus 失败原因.
+    Does not invent fps and does not reuse the dest-disk frame guess.
+    """
+    note = BATCH_SUMMARY_TEMPLATE.format(
+        wrote=int(wrote), skipped=int(skipped), failed=int(failed)
+    )
+    reasons = [str(item) for item in (failure_reasons or ()) if item]
+    if reasons:
+        note += f"。{FAILED_BUCKET} " + " ".join(reasons)
+    note += f"。{HONEST_PROXY_NOTE}。预览·非成片。已实现（未验证）。"
+    if dest is not None and int(wrote) > 0:
+        note += f" {short_export_path(dest)}"
+    return note
+
+
 def short_export_path(path) -> str:
     """Short dest shown in status. Parent name, not a deliverable claim."""
     return Path(path).name
@@ -598,6 +631,7 @@ class BatchWriteReport:
     dest: str | None = None
     disk_short: bool = False
     disk_estimate: ProxyDiskEstimate | None = None
+    locked_count: int = 0
 
     @property
     def processed_count(self) -> int:
@@ -605,8 +639,35 @@ class BatchWriteReport:
         return len(self.written) + len(self.errors)
 
     @property
+    def wrote_count(self) -> int:
+        """N in 「N 条已写出代理」: write + frame-count verify passed."""
+        return len(self.written)
+
+    @property
     def skipped_count(self) -> int:
         return len(self.skipped)
+
+    @property
+    def failed_count(self) -> int:
+        """K in 「K 条失败」: locked clips that did not become 已写出代理."""
+        if self.disk_short:
+            return max(int(self.locked_count), 0)
+        if self.locked_count:
+            return max(0, int(self.locked_count) - len(self.written))
+        return len(self.errors)
+
+    @property
+    def failure_reason_lines(self) -> tuple[str, ...]:
+        """Existing Chinese chips only. No 24×60 dest-disk guess."""
+        if self.disk_short:
+            return (DISK_SHORT_STATUS,)
+        lines = []
+        for item in self.errors:
+            chip = short_export_chip(item.error) or WRITE_FAILED_CHIP
+            lines.append(f"{item.name}：{chip}")
+        if self.cancelled:
+            lines.append(CANCELLED_NOTE)
+        return tuple(lines)
 
     @property
     def last_reveal_paths(self) -> tuple[str, ...]:
@@ -617,12 +678,18 @@ class BatchWriteReport:
 
     @property
     def processed_status_text(self) -> str:
-        if self.disk_short:
-            return disk_short_status_text(self.disk_estimate)
-        if self.cancelled:
-            return cancelled_status_text(self.processed_count, self.skipped_count)
-        dest = self.dest if self.written else None
-        return processed_status_text(self.processed_count, self.skipped_count, dest)
+        dest = (
+            self.dest
+            if self.written and not self.cancelled and not self.disk_short
+            else None
+        )
+        return batch_summary_text(
+            self.wrote_count,
+            self.skipped_count,
+            self.failed_count,
+            self.failure_reason_lines,
+            dest,
+        )
 
     @property
     def written_paths(self) -> tuple[str, ...]:
@@ -678,6 +745,7 @@ def process_locked_writes(
             dest=str(dest),
             disk_short=True,
             disk_estimate=estimate,
+            locked_count=len(plan.locked),
         )
     dest.mkdir(parents=True, exist_ok=True)
     graph = graph if graph is not None else SerialGraph()
@@ -746,4 +814,5 @@ def process_locked_writes(
         errors=tuple(errors),
         cancelled=cancelled,
         dest=str(dest),
+        locked_count=len(plan.locked),
     )

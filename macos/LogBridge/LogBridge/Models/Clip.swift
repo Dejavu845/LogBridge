@@ -198,8 +198,8 @@ final class SessionModel: ObservableObject {
     }
 
     /// Batch: write one ACES2065-1 AP0 proxy EXR sequence per locked clip.
-    /// Unlocked stay listed with a Chinese reason. 「N 条已处理」 is sequences
-    /// written or attempted with a per-clip error — not a preview refresh.
+    /// Unlocked stay listed with a Chinese reason. After the batch,
+    /// lastExportNote is 「N 条已写出代理 / M 条待选跳过 / K 条失败」.
     /// Never guess an IDT. Never 一键还原. One process entry point.
     /// Mixed bins are allowed. 整段代理，不是全精度成片.
     func processLockedClips() {
@@ -237,7 +237,12 @@ final class SessionModel: ObservableObject {
         if let free = destFreeBytesOverride ?? Self.destVolumeFreeBytes(dest),
            free < estimate.neededWithMargin {
             lastExportRevealURLs = []
-            lastExportNote = Self.diskShortExportNote(estimate: estimate)
+            lastExportNote = Self.batchSummaryText(
+                wrote: 0,
+                skipped: skippedCount,
+                failed: locked.count,
+                reasons: [Self.diskShortStatus]
+            )
             return
         }
         let graphCopy = graph
@@ -288,28 +293,48 @@ final class SessionModel: ObservableObject {
                     self.setExportChip(clipID: clip.id, chip)
                 }
             }
-            let processed = written.count + errors.count
-            var note: String
-            var reveal: [URL] = []
+            let wrote = written.count
+            let failed = locked.count - wrote
+            var reasons = errors
             if cancelled {
-                // Deleted half-folder is not a success. Do not reveal it.
-                note = Self.cancelledExportNote(processed: processed, skipped: skippedCount)
-            } else {
-                note = "处理已锁定片段 — \(processed) 条已处理 / \(skippedCount) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
-                if !written.isEmpty {
-                    note += " " + Self.shortExportPath(dest)
-                    reveal = written
-                }
+                reasons.append(Self.cancelledNote)
             }
-            if !errors.isEmpty {
-                note += " " + errors.joined(separator: " ")
-            }
+            // Deleted half-folder is not a success. Do not reveal it.
+            let reveal: [URL] = (cancelled || written.isEmpty) ? [] : written
+            let destForNote: URL? = (cancelled || written.isEmpty) ? nil : dest
+            let note = Self.batchSummaryText(
+                wrote: wrote,
+                skipped: skippedCount,
+                failed: failed,
+                reasons: reasons,
+                dest: destForNote
+            )
             DispatchQueue.main.async {
                 self.lastExportNote = note
                 self.lastExportRevealURLs = reveal
                 self.isWritingDeliverables = false
             }
         }
+    }
+
+    /// 「N 条已写出代理 / M 条待选跳过 / K 条失败」 plus 失败原因.
+    /// Existing Chinese chips only. Does not invent fps. No dest-disk frame guess.
+    static func batchSummaryText(
+        wrote: Int,
+        skipped: Int,
+        failed: Int,
+        reasons: [String] = [],
+        dest: URL? = nil
+    ) -> String {
+        var note = "\(wrote) 条已写出代理 / \(skipped) 条待选跳过 / \(failed) 条失败"
+        if !reasons.isEmpty {
+            note += "。\(failedBucket) " + reasons.joined(separator: " ")
+        }
+        note += "。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+        if let dest, wrote > 0 {
+            note += " " + shortExportPath(dest)
+        }
+        return note
     }
 
     /// One ACES2065-1 AP0 proxy EXR sequence. Decode loop + PreviewColor grade; no ODT.
@@ -390,6 +415,9 @@ final class SessionModel: ObservableObject {
     static let conservativeHeight = 2160
     static let diskShortStatus = "磁盘空间不足，未写出"
     static let diskEstimateAssumption = "float32 RGB 未压缩"
+    static let cancelledNote = "已取消"
+    static let skippedBucket = "待选跳过"
+    static let failedBucket = "失败原因"
 
     static func formatProxyBytes(_ n: Int64) -> String {
         let v = max(Int64(0), n)
@@ -569,6 +597,11 @@ final class SessionModel: ObservableObject {
     static let revealInFinderLabel = "在 Finder 中显示"
 
     var canRevealLastExport: Bool { !lastExportRevealURLs.isEmpty }
+
+    /// Finished batch note near the process bar. Not a second process button.
+    var showsBatchSummary: Bool {
+        !isWritingDeliverables && lastExportNote.contains("条已写出代理")
+    }
 
     /// Opens completed `{stem}_ACES2065-1_proxy` folders. Skips missing paths.
     func revealLastExportInFinder() {
