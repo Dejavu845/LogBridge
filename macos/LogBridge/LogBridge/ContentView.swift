@@ -49,6 +49,82 @@ struct ContentView: View {
             }
             session.refreshPreview()
         }
+        .background {
+            ClipListArrowMonitor { delta in
+                session.selectAdjacentClip(delta)
+            }
+        }
+        .onMoveCommand { direction in
+            switch direction {
+            case .up:
+                session.selectAdjacentClip(-1)
+            case .down:
+                session.selectAdjacentClip(1)
+            default:
+                break
+            }
+        }
+    }
+}
+
+/// Window-level Up/Down for the sidebar list. No help overlay. No extra button.
+/// Same window only; text / numeric / search first-responders keep the event.
+private struct ClipListArrowMonitor: NSViewRepresentable {
+    var handler: (Int) -> Bool
+
+    func makeNSView(context: Context) -> MonitorView {
+        let view = MonitorView()
+        view.handler = handler
+        return view
+    }
+
+    func updateNSView(_ nsView: MonitorView, context: Context) {
+        nsView.handler = handler
+    }
+
+    static func dismantleNSView(_ nsView: MonitorView, coordinator: ()) {
+        nsView.removeMonitor()
+    }
+
+    final class MonitorView: NSView {
+        var handler: ((Int) -> Bool)?
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window == nil {
+                removeMonitor()
+            } else {
+                installMonitor()
+            }
+        }
+
+        func installMonitor() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, event.window === self.window else { return event }
+                let delta: Int
+                switch event.keyCode {
+                case 126: delta = -1
+                case 125: delta = 1
+                default: return event
+                }
+                if SessionModel.isArrowConsumedByTextInput() { return event }
+                if self.handler?(delta) == true {
+                    return nil
+                }
+                return event
+            }
+        }
+
+        func removeMonitor() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        deinit { removeMonitor() }
     }
 }
 
