@@ -370,8 +370,7 @@ def test_preview_unpack_shares_source_ycbcr_helper():
     assert "1.5748" not in write_matrix
     assert "unpack.rv" in write_matrix
     assert "unpack.gu" in write_matrix
-    assert "nclc" in require.lower()
-    assert "colr" in require.lower() or "nclc / colr / vui" in engine
+    assert "nclc / colr / vui" in engine
     assert "missingYCbCrTagsChip" in require
 
     assert "maxLongEdge: Self.maxLongEdge" in cached

@@ -1071,6 +1071,7 @@ final class PreviewEngine: ObservableObject {
         format: CMFormatDescription? = nil,
         maxLongEdge: CGFloat
     ) throws -> CGImage? {
+        // 「无法读取片源 Y′CbCr 矩阵/范围，未写出」 when nclc / colr / vui cannot be read.
         CVPixelBufferLockBaseAddress(pb, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
         let srcW = CVPixelBufferGetWidth(pb)
