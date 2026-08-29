@@ -523,7 +523,7 @@ def _assert_st2065_1_chromaticities_on_disk(path: Path) -> None:
 def _assert_swift_exr_writer_chromaticities(exporter: str) -> None:
     """Swift write path: same 8 numbers. Fail if D65 or AP1 chromas are used."""
     assert ACES2065_1_CHROMATICITIES == ST2065_1_CHROMATICITIES
-    const = exporter.split("static let aces2065_1Chromaticities")[1].split("]")[0]
+    const = exporter.split("aces2065_1Chromaticities: [Float] = [")[1].split("]")[0]
     writer = exporter.split("static func writeACES2065EXR")[1]
     assert "aces2065_1Chromaticities" in writer
     assert 'putAttr("chromaticities", "chromaticities"' in writer
