@@ -666,7 +666,7 @@ final class PreviewEngine: ObservableObject {
 
     /// nclc / colr / vui matrix + full/video. Missing → fail. No 709-video default.
     /// Does not read primaries or transfer to change an IDT or apply a 709 curve.
-    static func requireSourceYCbCrUnpack(
+    private static func requireSourceYCbCrUnpack(
         pixelBuffer pb: CVPixelBuffer,
         format: CMFormatDescription?,
         bitDepth: Int
