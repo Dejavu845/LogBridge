@@ -3,6 +3,9 @@
 Writes / reads uncompressed single-part scanline EXR so Linux tests can
 assert files on disk without OpenEXR/ImageIO. Pixel values are stored as
 given — this module does not apply an IDT, CAT, exposure, or ODT.
+
+The header writes OpenEXR ``chromaticities`` for SMPTE ST 2065-1 / ACES
+AP0 primaries and ACES white. It does not write ``acesImageContainerFlag``.
 """
 
 from __future__ import annotations
@@ -15,6 +18,19 @@ import numpy as np
 EXR_MAGIC = 20000630
 EXR_VERSION_SCANLINE = 2  # single-part scanline; not tiled / multipart
 PIXEL_FLOAT = 2
+
+# SMPTE ST 2065-1 / ACES AP0 primaries + ACES white (not D65, not AP1).
+# OpenEXR chromaticities: red.xy, green.xy, blue.xy, white.xy
+ACES2065_1_CHROMATICITIES = (
+    0.73470,
+    0.26530,
+    0.00000,
+    1.00000,
+    0.00010,
+    -0.07700,
+    0.32168,
+    0.33767,
+)
 
 
 def _attr(name: str, typ: str, payload: bytes) -> bytes:
@@ -56,6 +72,12 @@ def write_rgb_exr_sequence(directory, frames, name_prefix: str = "frame") -> lis
     return written
 
 
+def _chromaticities_payload(
+    values: tuple[float, ...] = ACES2065_1_CHROMATICITIES,
+) -> bytes:
+    return struct.pack("<8f", *values)
+
+
 def write_rgb_exr(path, rgb) -> Path:
     """Write uncompressed RGB float32 scanline EXR. Container only."""
     dest = Path(path)
@@ -70,6 +92,11 @@ def write_rgb_exr(path, rgb) -> Path:
     header = b"".join(
         [
             _attr("channels", "chlist", channels),
+            _attr(
+                "chromaticities",
+                "chromaticities",
+                _chromaticities_payload(),
+            ),
             _attr("compression", "compression", struct.pack("<B", 0)),
             _attr("dataWindow", "box2i", box),
             _attr("displayWindow", "box2i", box),
@@ -110,9 +137,7 @@ def write_rgb_exr(path, rgb) -> Path:
     return dest
 
 
-def read_rgb_exr(path) -> np.ndarray:
-    """Read an uncompressed RGB float32 EXR written by ``write_rgb_exr``."""
-    data = Path(path).read_bytes()
+def _parse_exr_header(data: bytes) -> tuple[dict[str, tuple[str, bytes]], int]:
     magic, version = struct.unpack_from("<II", data, 0)
     if magic != EXR_MAGIC:
         raise ValueError(f"Not an OpenEXR file (magic={magic})")
@@ -134,6 +159,30 @@ def read_rgb_exr(path) -> np.ndarray:
         pos += 4
         attrs[name] = (typ, data[pos : pos + size])
         pos += size
+    return attrs, pos
+
+
+def read_exr_attributes(path) -> dict[str, tuple[str, bytes]]:
+    """OpenEXR header attributes as ``name -> (type, payload)``."""
+    return _parse_exr_header(Path(path).read_bytes())[0]
+
+
+def read_exr_chromaticities(path) -> tuple[float, ...]:
+    """Read OpenEXR ``chromaticities`` (8 little-endian floats)."""
+    attrs = read_exr_attributes(path)
+    entry = attrs.get("chromaticities")
+    if not entry:
+        raise ValueError("EXR missing chromaticities")
+    typ, payload = entry
+    if typ != "chromaticities" or len(payload) != 32:
+        raise ValueError(f"Bad chromaticities attribute ({typ!r}, {len(payload)} bytes)")
+    return struct.unpack("<8f", payload)
+
+
+def read_rgb_exr(path) -> np.ndarray:
+    """Read an uncompressed RGB float32 EXR written by ``write_rgb_exr``."""
+    data = Path(path).read_bytes()
+    attrs, pos = _parse_exr_header(data)
 
     box = attrs.get("dataWindow", (None, None))[1]
     if not box or len(box) < 16:
