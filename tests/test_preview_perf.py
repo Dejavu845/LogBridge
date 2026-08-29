@@ -327,7 +327,8 @@ def test_preview_unpack_shares_source_ycbcr_helper():
     """Movie preview first-frame uses #31 nclc/colr/vui matrix+range. Display stays 8-bit/1920."""
     engine = _read(ENGINE)
     assert "static let maxLongEdge: CGFloat = 1920" in engine
-    assert "static let exportMaxLongEdge: CGFloat = 16384" in engine
+    assert "exportMaxLongEdge" not in engine
+    assert "16384" not in engine
 
     preview = engine.split("func decodeMovieVideoToolbox")[1].split(
         "func decodeStillImageIO"
@@ -385,9 +386,10 @@ def test_preview_unpack_shares_source_ycbcr_helper():
     assert "rgbFloatFromLogPixelBuffer" in movie
     assert "writeMatrixRGB(" not in movie
     assert "cgImageFromLogPixelBuffer(" not in movie
-    assert "maxLongEdge: Self.exportMaxLongEdge" in export_first or "exportMaxLongEdge" in export_first
-    assert "maxLongEdge: Self.maxLongEdge" not in export_first
-    assert "maxLongEdge: Self.maxLongEdge" not in export_seq
+    assert "maxLongEdge" not in export_first
+    assert "exportMaxLongEdge" not in export_first
+    assert "maxLongEdge" not in export_seq
+    assert "exportMaxLongEdge" not in export_seq
     assert "decodeDownscaled" not in export_first
     assert "decodeDownscaled" not in export_seq
     assert "extractRGB" not in export_seq
@@ -426,6 +428,13 @@ def test_preview_stills_imageio_no_ycbcr_unpack():
     assert "nclc" not in still.lower()
     assert "colr" not in still.lower()
     assert "CGImageSourceCreateThumbnailAtIndex" in still
+    full = engine.split("func decodeStillFullImageIO")[1].split(
+        "/// Preview stills thumbnail"
+    )[0]
+    assert "CGImageSourceCreateImageAtIndex" in full
+    assert "Thumbnail" not in full
+    assert "maxLongEdge" not in full
+    assert "1920" not in full
 
     all_src = engine.split("func decodeAllSourceFrames")[1].split(
         "func decodeFirstSourceRGB"
@@ -433,7 +442,9 @@ def test_preview_stills_imageio_no_ycbcr_unpack():
     still_all = all_src.split("if probe.kind == .still")[1].split(
         "try decodeMovieAllFrames"
     )[0]
-    assert "decodeStillImageIO" in still_all
+    assert "decodeStillFullImageIO" in still_all
+    assert "decodeStillImageIO(" not in still_all
+    assert "maxLongEdge" not in still_all
     assert "extractRGB" in still_all
     assert "requireSourceYCbCrUnpack" not in still_all
     assert "rgbFloatFromLogPixelBuffer" not in still_all
@@ -442,7 +453,9 @@ def test_preview_stills_imageio_no_ycbcr_unpack():
         "func decodeMovieAllFrames"
     )[0]
     still_first = first.split("if probe.kind == .still")[1].split("let formats")[0]
-    assert "decodeStillImageIO" in still_first
+    assert "decodeStillFullImageIO" in still_first
+    assert "decodeStillImageIO(" not in still_first
+    assert "maxLongEdge" not in still_first
     assert "requireSourceYCbCrUnpack" not in still_first
     assert "rgbFloatFromLogPixelBuffer" not in still_first
 
@@ -498,9 +511,9 @@ def test_export_write_overlaps_next_copynext():
     assert "seek(" not in movie
     assert "copyNextSampleBuffer" in movie
 
-    assert "static let exportMaxLongEdge: CGFloat = 16384" in engine
-    assert "maxLongEdge: Self.exportMaxLongEdge" in export_seq
-    assert "maxLongEdge: Self.maxLongEdge" not in export_seq
+    assert "exportMaxLongEdge" not in engine
+    assert "16384" not in engine
+    assert "maxLongEdge" not in export_seq
     assert "decodeDownscaled" not in export_seq
     assert "extractRGB" not in export_seq
     assert "/ 255" not in export_seq
@@ -537,3 +550,102 @@ def test_export_write_overlaps_next_copynext():
     assert "预览·非成片" in engine
     assert "精准" not in export_seq
     assert "精准" not in export_body
+
+
+def test_export_write_is_source_pixels_not_preview_1920_8bit():
+    """Write decode is source pixels / native Y′CbCr. Preview stays 8-bit / 1920."""
+    engine = _read(ENGINE)
+    clip = _read(CLIP)
+    hdr = _read(ROOT / "macos/LogBridge/LogBridge/Color/HDRPreview.swift")
+    preview_709 = _read(SOURCE)
+    graph = _read(ROOT / "macos/LogBridge/LogBridge/Models/NodeGraph.swift")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    batch = (ROOT / "color/batch.py").read_text(encoding="utf-8")
+
+    assert "static let maxLongEdge: CGFloat = 1920" in engine
+    assert "exportMaxLongEdge" not in engine
+    assert "16384" not in engine
+
+    export_first = engine.split("func exportGradedAP0(")[1].split(
+        "func exportGradedAP0Sequence"
+    )[0]
+    export_seq = engine.split("func exportGradedAP0Sequence")[1].split(
+        "func decodeAllSourceFrames"
+    )[0]
+    all_src = engine.split("func decodeAllSourceFrames")[1].split(
+        "func decodeFirstSourceRGB"
+    )[0]
+    first = engine.split("func decodeFirstSourceRGB")[1].split(
+        "func decodeMovieAllFrames"
+    )[0]
+    movie = engine.split("func decodeMovieAllFrames")[1].split(
+        "func linearAP0Frame"
+    )[0]
+    write_float = engine.split("func rgbFloatFromLogPixelBuffer")[1].split(
+        "func applyYCbCrMatrixToFloat"
+    )[0]
+    preview_cg = engine.split("func cgImageFromLogPixelBuffer")[1].split(
+        "func writeMatrixRGB"
+    )[0]
+    preview_movie = engine.split("func decodeMovieVideoToolbox")[1].split(
+        "func decodeStillImageIO"
+    )[0]
+    cached = engine.split("func cachedSource")[1].split("func cachedLinear")[0]
+    odt = engine.split("func renderODTFromGraded")[1].split("func publishODTOnly")[0]
+
+    assert "maxLongEdge" not in export_first
+    assert "maxLongEdge" not in export_seq
+    assert "maxLongEdge" not in all_src
+    assert "maxLongEdge" not in first
+    assert "maxLongEdge" not in write_float
+    assert "decodeDownscaled" not in export_first
+    assert "decodeDownscaled" not in export_seq
+    assert "decodeStillFullImageIO" in all_src
+    assert "decodeStillFullImageIO" in first
+    assert "decodeStillImageIO(" not in all_src.split("if probe.kind == .still")[1]
+    assert "CGImageSourceCreateThumbnailAtIndex" not in all_src
+    assert "kCGImageSourceThumbnailMaxPixelSize" not in all_src
+    assert "requireSourceYCbCrUnpack" in movie
+    assert "applyYCbCrMatrixToFloat" in movie
+    assert "writeMatrixRGB(" not in movie
+    assert "cgImageFromLogPixelBuffer(" not in movie
+    assert "/ 255" not in export_seq
+    assert "gradedCache" not in export_seq
+    assert "bitsPerComponent: 8" not in write_float
+    assert "u8(" not in write_float
+
+    assert "maxLongEdge: Self.maxLongEdge" in cached
+    assert "decodeDownscaled" in cached
+    assert "rgbFloatFromLogPixelBuffer" not in cached
+    assert "bitsPerComponent: 8" in preview_cg
+    assert "writeMatrixRGB" in preview_cg
+    assert "maxLongEdge" in preview_cg
+    assert 'static let maxLongEdge: CGFloat = 1920' in engine
+    eight_420 = "kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange"
+    ten = "kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange"
+    assert preview_movie.index(eight_420) < preview_movie.index(ten)
+    assert movie.index(ten) < movie.index(eight_420)
+
+    assert "PreviewColor.applyODT" in odt
+    assert "HDRPreviewColor.encodeFromGradedAP0" in odt
+    assert "itur_2100_HLG" in hdr
+    assert "itur_2100_PQ" in hdr
+    assert "ColorSync" in hdr
+    assert "CGColorSpace.itur_709" in preview_709
+    assert "var acesOTNote: String" in graph
+
+    assert "_ACES2065-1_proxy" in clip
+    assert "整段代理，不是全精度成片" in engine
+    assert "整段代理，不是全精度成片" in clip
+    assert "整段代理，不是全精度成片" in batch
+    assert "source pixel dimensions" in readme
+    assert "source pixel dimensions" in acceptance
+    assert "source pixel dimensions" in batch
+    assert "no 1920 long-edge cap" in readme
+    assert "no 1920 long-edge cap" in acceptance
+    assert "未验证" in readme or "unverified" in readme.lower()
+    assert "成片" not in export_seq.replace("不是全精度成片", "")
+    assert "完善" not in export_seq
+    assert "精准" not in export_seq
+    assert "acesImageContainerFlag" not in engine

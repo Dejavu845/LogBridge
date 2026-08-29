@@ -391,7 +391,8 @@ final class PreviewEngine: ObservableObject {
     /// (`extractRGB` / 255). Still a proxy — 整段代理，不是全精度成片.
     /// Bit-depth going up is still 整段代理，不是全精度成片.
     /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
-    static let exportMaxLongEdge: CGFloat = 16384
+    /// Write uses source pixel dimensions (no preview long-edge cap).
+    /// Preview display stays ``maxLongEdge`` 1920 / 8-bit.
 
     /// Clip-constant CAT for a locked write. Nil = WB off / identity (same as gradeAP0).
     /// Built once per sequence — do not rebuild the CAT per write frame.
@@ -452,7 +453,7 @@ final class PreviewEngine: ObservableObject {
     func exportGradedAP0(clip: Clip, graph: SerialGraph) -> (rgb: [Float], width: Int, height: Int)? {
         queue.sync {
             guard let idt = clip.idt, !idt.isStub, !clip.needsUserPicker else { return nil }
-            guard let decoded = Self.decodeFirstSourceRGB(url: clip.url, maxLongEdge: Self.exportMaxLongEdge) else {
+            guard let decoded = Self.decodeFirstSourceRGB(url: clip.url) else {
                 return nil
             }
             var rgb = decoded.rgb
@@ -469,7 +470,7 @@ final class PreviewEngine: ObservableObject {
     /// N+1 and before write N+1. Frame indices stay sequential.
     /// One ``gradeAP0`` per write frame on the decode buffer (in-place).
     /// Clip-constant CAT via ``writeCAT``. Does not reuse preview
-    /// graded linear cache (8-bit / 1920, not write-res / 10-bit).
+    /// graded linear cache (8-bit / 1920, not write source-res / 10-bit).
     /// Does not promote preview 8-bit. Does not apply ODT.
     /// Returns the number of frames handed to ``writeFrame``. Linux cannot run this.
     func exportGradedAP0Sequence(
@@ -494,7 +495,7 @@ final class PreviewEngine: ObservableObject {
                 if let writeError { throw writeError }
             }
             do {
-                try Self.decodeAllSourceFrames(url: clip.url, maxLongEdge: Self.exportMaxLongEdge) { rgb, width, height in
+                try Self.decodeAllSourceFrames(url: clip.url) { rgb, width, height in
                     Self.gradeAP0(rgb: &rgb, idt: idt, graph: graph, cat: cat)
                     // Join write N-1 after grade of N; then one write task for N.
                     try joinExportWrite()
@@ -528,13 +529,12 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// Movies: every sample as source Y′CbCr → float (#31 unpack).
-    /// Stills: one ImageIO frame (TIFF / DPX / EXR already RGB — no Y′CbCr unpack).
-    /// Not the preview 8-bit Y′CbCr path. Same matrix-only convert (no transfer).
+    /// Stills: one full-resolution ImageIO frame (TIFF / DPX / EXR already RGB — no Y′CbCr unpack).
+    /// Not the preview 8-bit / 1920 path. Same matrix-only convert (no transfer).
     /// ``onFrame`` mutates the decode buffer in place so the write loop
     /// does not copy float RGB before IDT/WB.
     static func decodeAllSourceFrames(
         url: URL,
-        maxLongEdge: CGFloat,
         onFrame: (inout [Float], Int, Int) throws -> Void
     ) throws {
         let probe = MediaFormat.probe(url: url)
@@ -544,7 +544,7 @@ final class PreviewEngine: ObservableObject {
             ])
         }
         if probe.kind == .still {
-            guard let img = decodeStillImageIO(url: url, maxLongEdge: maxLongEdge) else {
+            guard let img = decodeStillFullImageIO(url: url) else {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
                     NSLocalizedDescriptionKey: "decode/grade failed"
                 ])
@@ -553,16 +553,16 @@ final class PreviewEngine: ObservableObject {
             try onFrame(&rgb, img.width, img.height)
             return
         }
-        try decodeMovieAllFrames(url: url, maxLongEdge: maxLongEdge, onFrame: onFrame)
+        try decodeMovieAllFrames(url: url, onFrame: onFrame)
     }
 
     /// First frame only. Movies: same 10-bit-first source Y′CbCr → float as the sequence.
-    /// Stills: ImageIO (already RGB). Preview first-frame stays the 8-bit-first CGImage path.
-    static func decodeFirstSourceRGB(url: URL, maxLongEdge: CGFloat) -> (rgb: [Float], width: Int, height: Int)? {
+    /// Stills: full-resolution ImageIO (already RGB). Preview first-frame stays the 8-bit-first CGImage path.
+    static func decodeFirstSourceRGB(url: URL) -> (rgb: [Float], width: Int, height: Int)? {
         let probe = MediaFormat.probe(url: url)
         if probe.decision == .refuse { return nil }
         if probe.kind == .still {
-            guard let img = decodeStillImageIO(url: url, maxLongEdge: maxLongEdge) else { return nil }
+            guard let img = decodeStillFullImageIO(url: url) else { return nil }
             return (PreviewColor.extractRGB(img), img.width, img.height)
         }
         let formats: [OSType] = [
@@ -573,7 +573,7 @@ final class PreviewEngine: ObservableObject {
             kCVPixelFormatType_422YpCbCr8
         ]
         for fmt in formats {
-            if let decoded = readFirstYpCbCrRGB(url: url, pixelFormat: fmt, maxLongEdge: maxLongEdge) {
+            if let decoded = readFirstYpCbCrRGB(url: url, pixelFormat: fmt) {
                 return decoded
             }
         }
@@ -583,11 +583,10 @@ final class PreviewEngine: ObservableObject {
     /// VideoToolbox / AVAssetReader: all frames as source Y′CbCr → float RGB.
     /// Export: 10-bit 420 (video then full) first, then native 8-bit 420, then 8-bit 422.
     /// Preview/scrub keeps the 8-bit-first list and the 8-bit CGImage writer,
-    /// sharing ``requireSourceYCbCrUnpack``. Write stays native-depth / 16384.
+    /// sharing ``requireSourceYCbCrUnpack``. Write stays source pixels / native-depth.
     /// Matrix-only — no transfer. Never copyCGImage. Never set AVVideoColorPropertiesKey.
     static func decodeMovieAllFrames(
         url: URL,
-        maxLongEdge: CGFloat,
         onFrame: (inout [Float], Int, Int) throws -> Void
     ) throws {
         let formats: [OSType] = [
@@ -601,7 +600,6 @@ final class PreviewEngine: ObservableObject {
             let count = try readAllYpCbCrFrames(
                 url: url,
                 pixelFormat: fmt,
-                maxLongEdge: maxLongEdge,
                 onFrame: onFrame
             )
             if count > 0 { return }
@@ -617,7 +615,6 @@ final class PreviewEngine: ObservableObject {
     private static func readAllYpCbCrFrames(
         url: URL,
         pixelFormat: OSType,
-        maxLongEdge: CGFloat,
         onFrame: (inout [Float], Int, Int) throws -> Void
     ) throws -> Int {
         let asset = AVURLAsset(url: url)
@@ -644,8 +641,7 @@ final class PreviewEngine: ObservableObject {
             do {
                 decoded = try rgbFloatFromLogPixelBuffer(
                     pb,
-                    format: CMSampleBufferGetFormatDescription(sample),
-                    maxLongEdge: maxLongEdge
+                    format: CMSampleBufferGetFormatDescription(sample)
                 )
             } catch {
                 throw error
@@ -659,8 +655,7 @@ final class PreviewEngine: ObservableObject {
     /// First sample, source Y′CbCr → float. Preview first-frame stays 8-bit CGImage.
     private static func readFirstYpCbCrRGB(
         url: URL,
-        pixelFormat: OSType,
-        maxLongEdge: CGFloat
+        pixelFormat: OSType
     ) -> (rgb: [Float], width: Int, height: Int)? {
         let asset = AVURLAsset(url: url)
         guard let track = asset.tracks(withMediaType: .video).first,
@@ -677,8 +672,7 @@ final class PreviewEngine: ObservableObject {
               let pb = CMSampleBufferGetImageBuffer(sample) else { return nil }
         return try? rgbFloatFromLogPixelBuffer(
             pb,
-            format: CMSampleBufferGetFormatDescription(sample),
-            maxLongEdge: maxLongEdge
+            format: CMSampleBufferGetFormatDescription(sample)
         )
     }
 
@@ -891,26 +885,23 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// Matrix-only Y′CbCr → float R′G′B′ at the buffer's native sample depth.
+    /// Source pixel dimensions — no preview long-edge cap.
     /// Matrix + full/video come from nclc / colr / vui. Missing tags throw
     /// 「无法读取片源 Y′CbCr 矩阵/范围，未写出」. No 709-video default.
     /// Video-range 10-bit uses 64/876, not /1023. No Rec.709 transfer.
     static func rgbFloatFromLogPixelBuffer(
         _ pb: CVPixelBuffer,
-        format: CMFormatDescription? = nil,
-        maxLongEdge: CGFloat
+        format: CMFormatDescription? = nil
     ) throws -> (rgb: [Float], width: Int, height: Int) {
         CVPixelBufferLockBaseAddress(pb, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
-        let srcW = CVPixelBufferGetWidth(pb)
-        let srcH = CVPixelBufferGetHeight(pb)
-        guard srcW > 0, srcH > 0 else {
+        let w = CVPixelBufferGetWidth(pb)
+        let h = CVPixelBufferGetHeight(pb)
+        guard w > 0, h > 0 else {
             throw NSError(domain: "LogBridge", code: 2, userInfo: [
                 NSLocalizedDescriptionKey: "decode/grade failed"
             ])
         }
-        let scale = min(1.0, Double(maxLongEdge) / Double(max(srcW, srcH)))
-        let w = max(1, Int((Double(srcW) * scale).rounded()))
-        let h = max(1, Int((Double(srcH) * scale).rounded()))
         var rgb = [Float](repeating: 0, count: w * h * 3)
         let fmt = CVPixelBufferGetPixelFormatType(pb)
         if fmt == kCVPixelFormatType_32BGRA || fmt == kCVPixelFormatType_32ARGB {
@@ -932,11 +923,9 @@ final class PreviewEngine: ObservableObject {
             let stride = CVPixelBufferGetBytesPerRow(pb)
             let src = base.assumingMemoryBound(to: UInt8.self)
             for y in 0..<h {
-                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
                 for x in 0..<w {
-                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
-                    let si = sy * stride + (sx & ~1) * 2
-                    let Y = Double(src[sy * stride + sx * 2 + 1])
+                    let si = y * stride + (x & ~1) * 2
+                    let Y = Double(src[y * stride + x * 2 + 1])
                     let Cb = Double(src[si + 0])
                     let Cr = Double(src[si + 2])
                     applyYCbCrMatrixToFloat(
@@ -960,11 +949,9 @@ final class PreviewEngine: ObservableObject {
             let yRow = yStride / 2
             let uvRow = uvStride / 2
             for y in 0..<h {
-                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
                 for x in 0..<w {
-                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
-                    let Y = Double(yPtr[sy * yRow + sx])
-                    let uv = (sy / 2) * uvRow + (sx / 2) * 2
+                    let Y = Double(yPtr[y * yRow + x])
+                    let uv = (y / 2) * uvRow + (x / 2) * 2
                     let Cb = Double(uvPtr[uv])
                     let Cr = Double(uvPtr[uv + 1])
                     // 10-bit samples. Range/matrix from tags. Matrix only — no 709 transfer.
@@ -986,11 +973,9 @@ final class PreviewEngine: ObservableObject {
             let yPtr = yPlane.assumingMemoryBound(to: UInt8.self)
             let uvPtr = uvPlane.assumingMemoryBound(to: UInt8.self)
             for y in 0..<h {
-                let sy = min(srcH - 1, Int((Double(y) / Double(h) * Double(srcH)).rounded(.down)))
                 for x in 0..<w {
-                    let sx = min(srcW - 1, Int((Double(x) / Double(w) * Double(srcW)).rounded(.down)))
-                    let Y = Double(yPtr[sy * yStride + sx])
-                    let uv = (sy / 2) * uvStride + (sx / 2) * 2
+                    let Y = Double(yPtr[y * yStride + x])
+                    let uv = (y / 2) * uvStride + (x / 2) * 2
                     let Cb = Double(uvPtr[uv])
                     let Cr = Double(uvPtr[uv + 1])
                     applyYCbCrMatrixToFloat(
@@ -1227,7 +1212,23 @@ final class PreviewEngine: ObservableObject {
         rgb[di + 3] = 255
     }
 
-    /// TIFF / DPX / EXR. Already RGB. No nclc / colr / vui. No Y′CbCr unpack.
+    /// Write stills: source pixel dimensions. Not the preview long-edge thumbnail.
+    /// TIFF / DPX / EXR already RGB. No Y′CbCr unpack.
+    static func decodeStillFullImageIO(url: URL) -> CGImage? {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        guard CGImageSourceGetCount(src) > 0 else { return nil }
+        let uti = (CGImageSourceGetType(src) as String?) ?? ""
+        if uti.contains("mpeg") || uti.contains("quicktime") || uti.contains("video") {
+            return nil
+        }
+        let opts: [CFString: Any] = [
+            kCGImageSourceShouldCache: false
+        ]
+        return CGImageSourceCreateImageAtIndex(src, 0, opts as CFDictionary)
+    }
+
+    /// Preview stills thumbnail (long-edge ``maxLongEdge``, 1920). Already RGB.
+    /// No nclc / colr / vui. No Y′CbCr unpack.
     /// Device RGB extract later — never itur_709 / displayP3 dest.
     static func decodeStillImageIO(url: URL, maxLongEdge: CGFloat) -> CGImage? {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }

@@ -22,7 +22,9 @@ proxy, not camera-original — 整段代理，不是全精度成片. Not ACEScct
 Not a Rec.709 .mov/.mp4. Movie preview first-frame unpack shares the same
 nclc/colr/vui matrix+range helper, then quantizes to 8-bit / 1920.
 Stills (TIFF / DPX / EXR) stay ImageIO — already RGB, no Y′CbCr unpack.
-Write does not use that 8-bit buffer. Preview/scrub may stay 8-bit-first.
+Write uses source pixel dimensions and source-native bit depth (no 1920
+long-edge cap). Write does not use that 8-bit preview buffer.
+Preview/scrub may stay 8-bit-first.
 「N 条已处理」 is clips that produced a sequence, or locked clips attempted
 with a per-clip error — not a preview refresh. Pending clips in the same
 bin do not block.

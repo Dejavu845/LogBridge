@@ -475,6 +475,10 @@ def _assert_export_decode_is_source_ycbcr_float(engine: str) -> None:
     assert "decodeDownscaled" not in export_first
     assert "extractRGB" not in export_first
     assert "extractRGB" not in export_seq
+    assert "maxLongEdge" not in export_first
+    assert "maxLongEdge" not in export_seq
+    assert "exportMaxLongEdge" not in engine
+    assert "16384" not in engine
     assert "rgbFloatFromLogPixelBuffer" in movie
     assert "cgImageFromLogPixelBuffer(" not in movie
     assert "extractRGB" not in movie
