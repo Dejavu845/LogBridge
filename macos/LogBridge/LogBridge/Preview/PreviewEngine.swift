@@ -444,7 +444,7 @@ final class PreviewEngine: ObservableObject {
     func exportGradedAP0Sequence(
         clip: Clip,
         graph: SerialGraph,
-        writeFrame: (Int, [Float], Int, Int) throws -> Void
+        writeFrame: @escaping (Int, [Float], Int, Int) throws -> Void
     ) throws -> Int {
         try queue.sync {
             guard let idt = clip.idt, !idt.isStub, !clip.needsUserPicker else {
@@ -666,7 +666,7 @@ final class PreviewEngine: ObservableObject {
 
     /// nclc / colr / vui matrix + full/video. Missing → fail. No 709-video default.
     /// Does not read primaries or transfer to change an IDT or apply a 709 curve.
-    static func requireSourceYCbCrUnpack(
+    private static func requireSourceYCbCrUnpack(
         pixelBuffer pb: CVPixelBuffer,
         format: CMFormatDescription?,
         bitDepth: Int
@@ -725,7 +725,9 @@ final class PreviewEngine: ObservableObject {
             return normalizeYCbCrMatrix(raw)
         }
         if let format,
-           let raw = CMFormatDescriptionGetExtension(format, kCMFormatDescriptionExtension_YCbCrMatrix) {
+           let raw = CMFormatDescriptionGetExtension(
+            format, extensionKey: kCMFormatDescriptionExtension_YCbCrMatrix
+           ) {
             return normalizeYCbCrMatrix(raw)
         }
         if let trip = nclcTriplet(pixelBuffer: pb, format: format) {
@@ -734,12 +736,18 @@ final class PreviewEngine: ObservableObject {
         return nil
     }
 
+    /// Same CFString as CoreVideo kCVImageBufferFullRangeVideo (not in this runner overlay).
+    private static let kCVImageBufferFullRangeVideo: CFString =
+        kCMFormatDescriptionExtension_FullRangeVideo
+
     private static func readSourceYCbCrFullRange(pixelBuffer pb: CVPixelBuffer, format: CMFormatDescription?) -> Bool? {
         if let flag = boolAttachment(pb, kCVImageBufferFullRangeVideo) {
             return flag
         }
         if let format,
-           let raw = CMFormatDescriptionGetExtension(format, kCMFormatDescriptionExtension_FullRangeVideo) {
+           let raw = CMFormatDescriptionGetExtension(
+            format, extensionKey: kCMFormatDescriptionExtension_FullRangeVideo
+           ) {
             return boolFromTag(raw)
         }
         if let flag = nclxFullRangeFlag(pixelBuffer: pb, format: format) {

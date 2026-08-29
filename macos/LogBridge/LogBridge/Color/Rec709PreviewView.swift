@@ -4,6 +4,12 @@ import CoreGraphics
 import MetalKit
 import QuartzCore
 
+/// Runner Swift overlay: CALayer has no `colorspace` (CAMetalLayer does).
+/// KVC writes the same CALayer key. 709 tag / untagged source unchanged.
+private func setAppKitLayerColorSpace(_ layer: CALayer?, _ space: CGColorSpace?) {
+    layer?.setValue(space, forKey: "colorspace")
+}
+
 // MARK: - Rec.709 ODT pane
 //
 // Only this pane tags CGColorSpace.itur_709. Rec.709 encoded pixels must
@@ -87,10 +93,10 @@ final class Rec709ImageHost: NSView {
         wantsLayer = true
         let rec709 = CGColorSpace(name: CGColorSpace.itur_709)
         layer = CALayer()
-        layer?.colorspace = rec709
+        setAppKitLayerColorSpace(layer, rec709)
         layer?.backgroundColor = CGColor(gray: 0.09, alpha: 1)
         imageLayer.contentsGravity = .resizeAspect
-        imageLayer.colorspace = rec709
+        setAppKitLayerColorSpace(imageLayer, rec709)
         layer?.addSublayer(imageLayer)
     }
 
@@ -239,10 +245,10 @@ final class SourceImageHost: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer = CALayer()
-        layer?.colorspace = nil
+        setAppKitLayerColorSpace(layer, nil)
         layer?.backgroundColor = CGColor(gray: 0.06, alpha: 1)
         imageLayer.contentsGravity = .resizeAspect
-        imageLayer.colorspace = nil
+        setAppKitLayerColorSpace(imageLayer, nil)
         layer?.addSublayer(imageLayer)
     }
 
