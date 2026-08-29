@@ -5,7 +5,8 @@ on:
   pull_request:
 
 # Linux pytest 保留。macos-15 只编现有 LogBridge scheme，并跑同一套 pytest。
-# 现有 CALayer.colorspace 要 macOS 15 SDK（Xcode 16）；macos-14 默认是 Xcode 15.4，编不过。
+# 现有 CALayer.colorspace 在 Xcode 26 / macOS 26 SDK 才进公开头；本机默认 Xcode 16.4 编不过。
+# 下面会 xcode-select 到已装的 Xcode 26。不改预览代码。
 # Metal GPU、Finder 显示、真机写出 / 真机导出 在 Actions 上测不了，仍靠人在 Mac 上点。
 # 没有真机 CI，也不覆盖 Metal / Finder / 真写出。
 
@@ -28,6 +29,29 @@ jobs:
     # Metal GPU、Finder 显示、真机写出 / 真机导出 仍靠人在 Mac 上点。没有真机 CI。
     steps:
       - uses: actions/checkout@v4
+      - name: Select Xcode 26
+        # CALayer.colorspace 要 Xcode 26。不改预览。Metal / Finder / 真写出仍靠人工。
+        run: |
+          XCODE26=""
+          for app in \
+            /Applications/Xcode_26.3.app \
+            /Applications/Xcode_26.2.app \
+            /Applications/Xcode_26.1.1.app \
+            /Applications/Xcode_26.0.1.app \
+            /Applications/Xcode_26.app
+          do
+            if [ -d "$app" ]; then
+              XCODE26="$app"
+              break
+            fi
+          done
+          if [ -z "$XCODE26" ]; then
+            echo "需要 Xcode 26（CALayer.colorspace）。这台 runner 没有。"
+            ls /Applications/Xcode*.app || true
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE26/Contents/Developer"
+          xcodebuild -version
       - name: Compile LogBridge scheme
         working-directory: macos/LogBridge
         run: |
