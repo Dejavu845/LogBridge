@@ -47,7 +47,7 @@ python3 scripts/generate_ocio_assets.py
 
 Layout: empty-state drop zone (folder of mixed clips) → clip list (LazyVStack; **待选** / **已锁定** are two visual states — type, weight, chip, left accent; no extra lock button; Up/Down in the main window moves the selected clip, ignored while writing; Delete/Backspace removes the selected clip from the session only — does not delete the source file or an already-written `_proxy` folder; ignored while writing; text / numeric fields keep Delete; no extra button, no confirm sheet; Escape while writing is the same 取消, idle Escape does nothing; no extra button) | split preview (dominates) + paired IDT + **处理已锁定片段** | thinner Exposure / WB inspector. Node strip + **导出 ACEScct / EXR** are behind **高级**.
 
-Split preview: the **source** pane is camera/log (untagged working-space dump) and is **not** tagged Rec.709. Only the processed/ODT pane tags `CGColorSpace.itur_709`, and only when the ODT node is on. Rec.709 pixels are never blit into an untagged Display P3 surface.
+Split preview: the **source** pane is camera/log (untagged working-space dump) and is **not** tagged Rec.709. Rec.709 ODT tags `CGColorSpace.itur_709` only on the 709 path (8-bit u8 / Metal OETF unchanged). HLG/PQ preview is ColorSync `itur_2100_HLG` / `itur_2100_PQ` (AP0 linear → existing Rec.2020 matrix → system BT.2100 transfer, rgba16Float, `wantsExtendedDynamicRangeContent`). Not an ACES Output Transform. Not OCIO. If ColorSync / the EDR layer cannot be built: empty right pane and **HDR 预览建不出** — do not fall back to 709. If the display has no EDR: still show HDR-tagged pixels and **屏幕无 EDR，预览被压到 SDR**. 预览·非成片. 未验证.
 
 ## Run tests (Linux or macOS)
 

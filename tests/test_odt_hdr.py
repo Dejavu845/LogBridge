@@ -228,3 +228,42 @@ def test_docs_hdr_ot_unverified_not_supported():
     # Must not claim HDR is supported or a one-click accurate path.
     assert "HLG/PQ supported" not in blob.lower()
     assert "一键精准" in blob
+    assert "ColorSync" in blob
+    assert "itur_2100" in blob
+    assert "HDR 预览建不出" in blob
+    assert "屏幕无 EDR，预览被压到 SDR" in blob
+
+
+def test_macos_hdr_preview_is_colorsync_not_aces_ot():
+    """App preview is ColorSync itur_2100. Not homemade. Not 709 fallback."""
+    hdr = (ROOT / "macos/LogBridge/LogBridge/Color/HDRPreview.swift").read_text(
+        encoding="utf-8"
+    )
+    engine = (ROOT / "macos/LogBridge/LogBridge/Preview/PreviewEngine.swift").read_text(
+        encoding="utf-8"
+    )
+    assert "itur_2100_HLG" in hdr
+    assert "itur_2100_PQ" in hdr
+    assert "ColorSync" in hdr
+    assert "Not an ACES Output Transform" in hdr
+    assert "No OCIO" in hdr
+    assert "encodeFromGradedAP0" in engine
+    assert "PreviewColor.applyODT" in engine
+    hdr_branch = (
+        engine.split("func renderODTFromGraded")[1]
+        .split("func publishODTOnly")[0]
+        .split("} else if graph.odt.isHDR")[1]
+        .split('note = "709 预览关"')[0]
+    )
+    assert "applyODT" not in hdr_branch
+    assert "u8(" not in hdr_branch
+    assert "rec709OETF" not in hdr_branch
+    assert "HDR 预览建不出" in hdr_branch
+    for token in (
+        "def hlg_oetf",
+        "0.17883277",
+        "78.84375",
+        "homemade_hlg",
+        "ACES-OUTPUT",
+    ):
+        assert token not in hdr, token

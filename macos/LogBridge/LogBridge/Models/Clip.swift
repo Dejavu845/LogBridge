@@ -164,6 +164,12 @@ final class SessionModel: ObservableObject {
         preview.refreshODT(clip: selectedClip, graph: graph)
     }
 
+    /// HDR layer could not enable EDR. Empty right pane. Never fall back to 709.
+    func failClosedHDRPreviewLayer() {
+        guard graph.odt.isHDR else { return }
+        preview.failClosedHDRPreview()
+    }
+
     var pendingPickerCount: Int {
         clips.filter { $0.needsUserPicker || $0.idt == nil }.count
     }

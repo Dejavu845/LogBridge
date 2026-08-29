@@ -48,7 +48,7 @@ Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable colo
 - **Missing CCT/tint → knobs empty / pending / identity.** Do not guess 5600 or 6504.
 - **Grey-card pick** samples **after IDT in ACES2065-1 (AP0) linear**, sets CCT/tint, and **that is a real CAT** (override; identity only if sampled D65). Implemented (unverified).
 - Rec.709 ODT is preview only, off by default. Off = ACEScct deliverable. UI must not imply grading on the 709 pane as a finished picture (预览·非成片).
-- Rec.2100 HLG / PQ: HDR OT via ACES/BT.2100 BuiltinTransform (unverified). No homemade HLG/PQ curve. Not supported.
+- Rec.2100 HLG / PQ: macOS preview is ColorSync `itur_2100_HLG` / `itur_2100_PQ` (AP0 linear → existing Rec.2020 matrix → system BT.2100). Not an ACES Output Transform. Not OCIO. No homemade HLG/PQ curve. Fail closed: **HDR 预览建不出** (empty right pane, never 709). No-EDR display: **屏幕无 EDR，预览被压到 SDR**. 预览·非成片. Implemented (unverified). Not supported.
 - Not a general node editor. No sat / unlisted grade nodes.
 
 ## Resolve export — WB toggle
@@ -65,9 +65,12 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 ## HDR OT via ACES/BT.2100 (M2-start)
 
 - Rec.2100 HLG and Rec.2100 PQ are declared ODT paths using OCIO **ACES Output Transform / BT.2100** naming (`ACES-OUTPUT … HLG_1.1` / `… ST2084_1.1` + `DISPLAY … REC.2100-*`, or ACES 2.0 Rec.2100 styles if the registry has them; config-aces aliases `Output - Rec.2100-HLG - 1000 nit` / `Output - Rec.2100-Rec.2020-ST2084 - 1000 nit`).
-- Prefer OCIO Builtin / ACES OT. Do not invent a homemade HLG/PQ curve.
+- Prefer OCIO Builtin / ACES OT for Resolve / Python apply. Do not invent a homemade HLG/PQ curve.
+- **macOS preview pixels** are ColorSync `CGColorSpace.itur_2100_HLG` / `itur_2100_PQ` (graded AP0 linear → existing BT.2020→AP0 inverse → system BT.2100). Not an ACES Output Transform. Not OCIO. rgba16Float. Layer `wantsExtendedDynamicRangeContent = true`.
+- Fail closed: if the color space cannot be created, ColorSync cannot convert, or the layer cannot enable EDR — empty right-hand HDR pane and status **HDR 预览建不出**. Do not show 709 pixels. Do not guess.
+- If the display has no EDR: still produce HDR-encoded pixels; status **屏幕无 EDR，预览被压到 SDR**.
 - Status: **implemented (unverified)** until golden samples. Not “supported”. Not 一键精准.
-- Applying HDR without OCIO must not fall back to a DIY transfer.
+- Applying HDR without OCIO must not fall back to a DIY transfer or to Rec.709.
 
 ## Other gates
 
