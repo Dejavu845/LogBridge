@@ -27,9 +27,9 @@ Internal working encoding: **ACEScct** (AP1 log). Scene-linear interchange / `ro
 
 ## OpenColorIO
 
-Mac OpenColorIO uses **BuiltinTransform** styles named in `ocio/config.ocio` (`ARRI_LOGC4_to_ACES2065-1`, `SONY_SLOG3-SGAMUT3_to_ACES2065-1`, `SONY_SLOG3-SGAMUT3.CINE_to_ACES2065-1`, `PANASONIC_VLOG-VGAMUT_to_ACES2065-1`, `RED_LOG3G10-RWG_to_ACES2065-1`, `CANON_CLOG2-CGAMUT_to_ACES2065-1`, `CANON_CLOG3-CGAMUT_to_ACES2065-1`, `APPLE_LOG_to_ACES2065-1`). Venice Builtins are detect-only, never a silent S-Log3 default.
+Mac OpenColorIO uses **BuiltinTransform** styles named in `ocio/config.ocio` (`ARRI_LOGC4_to_ACES2065-1`, `ARRI_ALEXA-LOGC-EI800-AWG_to_ACES2065-1`, `SONY_SLOG3-SGAMUT3_to_ACES2065-1`, `SONY_SLOG3-SGAMUT3.CINE_to_ACES2065-1`, `PANASONIC_VLOG-VGAMUT_to_ACES2065-1`, `RED_LOG3G10-RWG_to_ACES2065-1`, `CANON_CLOG2-CGAMUT_to_ACES2065-1`, `CANON_CLOG3-CGAMUT_to_ACES2065-1`, `APPLE_LOG_to_ACES2065-1`). Venice Builtins are detect-only, never a silent S-Log3 default. There is no `APPLE_LOG2` Builtin — Apple Log 2 is `CURVE - APPLE_LOG_to_LINEAR` + Apple Wide Gamut.
 
-Linux tests use `color/` white-paper **reference encode/decode for 18% codes only**. They do not require PyOpenColorIO. F-Log2, N-Log, C-Log2+BT.2020, C-Log3+BT.2020, and D-Log have no full IDT Builtin — those papers stay handwritten (C-Log2+BT.2020 is handwritten C-Log2 curve + BT.2020→AP0 if no Builtin). C-Log2+Cinema Gamut / C-Log3+Cinema Gamut / Apple Log use BuiltinTransform when present.
+Linux tests use `color/` white-paper **reference encode/decode for 18% codes only**. They do not require PyOpenColorIO. F-Log2, N-Log, C-Log2+BT.2020, C-Log3+BT.2020, D-Log, and Apple Log 2 have no full IDT Builtin — those papers / ACES CSC stay handwritten (C-Log2+BT.2020 is handwritten C-Log2 curve + BT.2020→AP0 if no Builtin). C-Log2+Cinema Gamut / C-Log3+Cinema Gamut / Apple Log 1 / LogC3 EI800+AWG3 use BuiltinTransform when present.
 
 Rec.2100 HLG / PQ colorspaces in `ocio/config.ocio` name ACES Output Transform BuiltinTransform styles (`ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-VIDEO-1000nits-15nits-HLG_1.1` + `DISPLAY - CIE-XYZ-D65_to_REC.2100-HLG`, and the ST2084 / Rec.2100-PQ pair) plus config-aces aliases (`Output - Rec.2100-HLG - 1000 nit`, `Output - Rec.2100-Rec.2020-ST2084 - 1000 nit`). Applying HDR requires OCIO. No homemade HLG/PQ LUT. HDR OT via ACES/BT.2100 is **implemented (unverified)**.
 
@@ -81,11 +81,13 @@ CI: `.github/workflows/test.yml` 在 Ubuntu 上跑 pytest；另有 `macos-15` jo
 | Canon C-Log3 / Cinema Gamut | C-Log3 | Cinema Gamut / D65 | ~0.34339 | implemented (unverified) |
 | Canon C-Log3 / BT.2020 | C-Log3 | BT.2020 / D65 | ~0.34339 | implemented (unverified) |
 | Apple Log / BT.2020 | Apple Log 1 | BT.2020 / D65 | ~0.48827 | implemented (unverified) |
+| Apple Log 2 / Apple Wide Gamut | Apple Log (same curve) | Apple Wide Gamut / D65 | ~0.48827 | implemented (unverified) |
+| ARRI LogC3 EI800 / AWG3 | LogC3 EI800 | AWG3 / D65 | 0.391 | implemented (unverified) |
 | DJI D-Log / D-Gamut | D-Log (2017) | D-Gamut / D65 | ~0.39876 | implemented (unverified) |
 
 Canon C-Log2 and C-Log3 are each **two locked pairs**. Metadata or the user picks **Cinema Gamut** vs **BT.2020**. LogBridge never defaults C-Log2 or C-Log3 to Cinema Gamut.
 
-**Explicitly unsupported:** DJI D-Log M, Apple Log 2, ARRI LogC3.
+**Explicitly unsupported:** DJI D-Log M. LogC3 is the EI800 + AWG3 pair only (not a generic LogC3; no EI>1600). Apple Log 2 is Apple Wide Gamut, not BT.2020.
 
 Sony S-Log3 is **two locked pairs**. Metadata or the user picks a **paired IDT** (S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine) — not two dropdowns. LogBridge never defaults S-Log3 to S-Gamut3.Cine. Clips without a locked pair stay **pending**. **处理已锁定片段** / **Apply graph** write an ACES2065-1 AP0 proxy EXR sequence for locked clips only and skip the rest (reason: **先选择 Log 与色域** / **先选择成对 IDT**). **整段代理，不是全精度成片.** Pending clips in the same bin do **not** block locked writes. The primary button is never 一键还原. Venice pairs appear only if a Venice body is detected.
 
@@ -152,7 +154,7 @@ No golden samples have been measured. Do not claim accuracy. See `ACCEPTANCE.md`
 - Full node editor / grading (serial four-slot graph only: IDT → Exposure → WB → ODT)
 - Treating the DIY Rec.709 OETF as a standard deliverable (it is preview only)
 - Homemade HLG/PQ curves (HDR OT is ACES/BT.2100 Builtin only)
-- Apple Log 2, DJI D-Log M, ARRI LogC3 (explicitly unsupported)
+- DJI D-Log M (explicitly unsupported). Other EI/AWG LogC3 pairs. Apple Log 2 attached to BT.2020.
 - ARRI MXF (ARRIRAW), R3D, BRAW, AVI, MKV, CinemaDNG (containers refused)
 - Claiming 全格式已支持
 - Inventing a C-Log2 mirrored toe (use OCIO `CURVE - CANON_CLOG2_to_LINEAR` / `CANON_CLOG2-CGAMUT_to_ACES2065-1` / ACES CTL)

@@ -10,7 +10,8 @@ NEVER default S-Log3 to S-Gamut3.Cine — if only S-Log3 is known, gamut is
 unresolved and the user picker is required.
 NEVER default C-Log2 or C-Log3 to Cinema Gamut — if only the curve is known,
 gamut is unresolved and the user picker is required.
-D-Log M, Apple Log 2, and ARRI LogC3 are explicitly unsupported.
+D-Log M stays unsupported. Apple Log 2 locks to Apple Wide Gamut (not
+BT.2020). LogC3 locks to the EI800 + AWG3 pair only — never a bare LogC3.
 """
 
 from __future__ import annotations
@@ -55,8 +56,14 @@ _FILENAME_HINTS = (
     ("log3g10", "red_log3g10_rwg"),
     ("redwidegamut", "red_log3g10_rwg"),
     ("rwg", "red_log3g10_rwg"),
+    ("apple log 2", "apple_log2_awg"),
+    ("applelog2", "apple_log2_awg"),
+    ("apple-log-2", "apple_log2_awg"),
     ("apple log", "apple_log_bt2020"),
     ("applelog", "apple_log_bt2020"),
+    ("logc3", "arri_logc3_ei800_awg3"),
+    ("logc 3", "arri_logc3_ei800_awg3"),
+    ("awg3", "arri_logc3_ei800_awg3"),
     ("d-gamut", "dji_dlog_dgamut"),
     ("dgamut", "dji_dlog_dgamut"),
     ("d-log", "dji_dlog_dgamut"),
@@ -91,7 +98,9 @@ IDT_PAIR_LABELS = {
     "canon_clog3_cgamut": "C-Log3 + Cinema Gamut",
     "canon_clog3_bt2020": "C-Log3 + BT.2020",
     "apple_log_bt2020": "Apple Log + BT.2020",
+    "apple_log2_awg": "Apple Log 2 + Apple Wide Gamut",
     "dji_dlog_dgamut": "D-Log + D-Gamut",
+    "arri_logc3_ei800_awg3": "LogC3 EI800 + AWG3",
 }
 
 SLOG3_PAIRS = ("sony_slog3_sgamut3", "sony_slog3_sgamut3cine")
@@ -312,13 +321,10 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
 
     apple = str(cleaned.get("apple_log", cleaned.get("apple_gamma", ""))).lower()
     if "apple log 2" in apple or "applelog2" in apple:
-        return Detection(
-            None,
-            None,
-            None,
+        return _pair(
+            "apple_log2_awg",
             "metadata",
-            True,
-            "Apple Log 2 is unsupported (out of scope). Apple Log 1 + BT.2020 is implemented (unverified).",
+            "Apple Log 2 + Apple Wide Gamut (not BT.2020)",
         )
     if "apple log" in apple or "applelog" in apple:
         return _pair("apple_log_bt2020", "metadata", "Apple Log metadata")
@@ -338,20 +344,17 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
 
     arri_logc3 = str(cleaned.get("arri_mxf_color_space", cleaned.get("arri_color_space", ""))).lower()
     if "logc3" in arri_logc3 and "logc4" not in arri_logc3:
-        return Detection(
-            None,
-            None,
-            None,
+        return _pair(
+            "arri_logc3_ei800_awg3",
             "metadata",
-            True,
-            "ARRI LogC3 is unsupported. Use LogC4 + AWG4.",
+            "ARRI LogC3 EI800 + AWG3 (only implemented LogC3 pair)",
         )
 
     return None
 
 
 def _unsupported_filename(name: str) -> Detection | None:
-    """D-Log M / Apple Log 2 / LogC3 stay unresolved — never a silent IDT."""
+    """D-Log M stays unresolved — never a silent IDT. No public decode/xy."""
     if "d-log m" in name or "dlog m" in name or "dlogm" in name or "d-logm" in name:
         return Detection(
             None,
@@ -360,25 +363,6 @@ def _unsupported_filename(name: str) -> Detection | None:
             "filename",
             True,
             "D-Log M is unsupported. D-Log + D-Gamut (2017) is implemented (unverified).",
-        )
-    if "apple log 2" in name or "applelog2" in name or "apple-log-2" in name:
-        return Detection(
-            None,
-            None,
-            None,
-            "filename",
-            True,
-            "Apple Log 2 is unsupported (out of scope). Apple Log 1 + BT.2020 is implemented (unverified).",
-        )
-    # LogC3 is not LogC4.
-    if "logc3" in name and "logc4" not in name:
-        return Detection(
-            None,
-            None,
-            None,
-            "filename",
-            True,
-            "ARRI LogC3 is unsupported. Use LogC4 + AWG4.",
         )
     return None
 

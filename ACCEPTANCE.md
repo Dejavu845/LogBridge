@@ -19,6 +19,8 @@ Shoot or obtain a grey card (18% reflectance) in each encoding, exposed to the m
 | Canon C-Log2 | ~0.39825 | pending golden |
 | Canon C-Log3 | ~0.34339 | pending golden |
 | Apple Log 1 | ~0.48827 | pending golden |
+| Apple Log 2 | ~0.48827 (same curve; Apple Wide Gamut) | pending golden |
+| ARRI LogC3 EI800 | 0.391 | pending golden |
 | DJI D-Log | ~0.39876 | pending golden |
 
 Sony: one grey card in **S-Gamut3** and one in **S-Gamut3.Cine**. Do not treat Cine as the default.
@@ -80,7 +82,7 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 - C-Log2 negative toe is OCIO / ACES CTL (not an invented mirrored toe).
 - C-Log2 without gamut requires the paired picker (never silent Cinema Gamut).
 - C-Log3 without gamut requires the paired picker (never silent Cinema Gamut).
-- D-Log M, Apple Log 2, and ARRI LogC3 stay unsupported.
+- D-Log M stays unsupported. Apple Log 2 is Apple Wide Gamut (not BT.2020). LogC3 is EI800+AWG3 only.
 - `ocio/config.ocio` names BuiltinTransform styles; Linux 18% tests use reference curves only.
 
 ## Pending IDT / process lock
@@ -129,7 +131,7 @@ Decode policy only. No color-number changes. Do **not** write 全格式已支持
 - **MXF:** try only if the system recognizes ProRes / AVC / HEVC. **ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入.** Unrecognized MXF is skipped.
 - **Refused (same R3D line):** R3D / BRAW / CRM / X-OCN / N-RAW / ProRes RAW / CinemaDNG / .ari / .arx — **R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR**. Unknown fourcc (e.g. r210) is refused with a separate line, not the R3D copy.
 - Empty camera-private metadata → paired IDT picker (**先选择 Log 与色域**). Do not guess an IDT or 5600 K.
-- D-Log M / Apple Log 2 / ARRI LogC3 stay unsupported (IDT scope, not a container claim).
+- D-Log M stays unsupported (IDT scope, not a container claim). Apple Log 2 / LogC3 EI800+AWG3 are implemented (unverified).
 
 ## Chinese settings
 

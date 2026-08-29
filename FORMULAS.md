@@ -83,7 +83,26 @@ Prefer OCIO `APPLE_LOG_to_ACES2065-1` / `CURVE - APPLE_LOG_to_LINEAR`.
 - `0≤P<Pt`: `sqrt(P/c)+R0`
 - `P<0`: `R0`
 - BT.2020 / D65. 18% grey → ~0.48827
-- Apple Log 2 is out of scope.
+- Apple Log 2 is a separate pair: same curve + Apple Wide Gamut (not BT.2020).
+
+## ARRI LogC3 EI800 + AWG3 (ACES CSC / ARRI 2017-03)
+
+Prefer OCIO `ARRI_ALEXA-LOGC-EI800-AWG_to_ACES2065-1`. EI800 + ALEXA Wide Gamut 3 only. Not a generic LogC3. EI>1600 has no closed form (Hermite). Do not add other EI/AWG pairs.
+
+- Curve: ACES `Lib.Arri.LogC3` / `CSC.Arri.LogCv3-EI800_to_ACES.ctl` at EI=800
+- AWG3 xy: R 0.68400/0.31300, G 0.22100/0.84800, B 0.08610/−0.10200, D65 (ACES `ARRI_ALEXA_WG_PRI`)
+- AWG3→AP0 uses CAT02 (same CSC / OCIO Builtin)
+- 18% grey encodes to 0.391
+- Status: implemented (unverified)
+
+## Apple Log 2 + Apple Wide Gamut (ACES CSC)
+
+No `APPLE_LOG2` OCIO Builtin. Reuse the Apple Log 1 curve (`CURVE - APPLE_LOG_to_LINEAR`).
+
+- Gamut: Apple Wide Gamut from `CSC.Apple.AppleLog2_to_ACES.ctl`: R 0.725/0.301, G 0.221/0.814, B 0.068/−0.076, D65
+- AWG→AP0 is the CTL default Bradford matrix (same as other handwritten IDTs)
+- Do not attach Apple Log 2 to BT.2020
+- Status: implemented (unverified)
 
 ## DJI D-Log + D-Gamut (2017-10-10 white paper)
 

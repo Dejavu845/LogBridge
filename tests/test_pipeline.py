@@ -5,6 +5,7 @@ import pytest
 
 from color.curves import (
     linear_to_apple_log,
+    linear_to_logc3_ei800,
     linear_to_clog2,
     linear_to_clog3,
     linear_to_dlog,
@@ -50,6 +51,10 @@ def test_idt_pairs_are_locked():
     assert IDT_PAIRS["canon_clog3_bt2020"] == ("clog3", "BT2020")
     assert IDT_PAIRS["canon_clog3_bt2020"][1] != "CinemaGamut"
     assert IDT_PAIRS["apple_log_bt2020"] == ("apple_log", "BT2020")
+    assert IDT_PAIRS["apple_log2_awg"] == ("apple_log", "AppleWideGamut")
+    assert IDT_PAIRS["apple_log2_awg"][1] != "BT2020"
+    assert IDT_PAIRS["arri_logc3_ei800_awg3"] == ("logc3_ei800", "AWG3")
+    assert "dji_dlog_m" not in IDT_PAIRS
     assert IDT_PAIRS["dji_dlog_dgamut"] == ("dlog", "DGamut")
 
 
@@ -144,6 +149,33 @@ def test_apple_log_idt_18_percent():
     log = np.full(3, float(linear_to_apple_log(0.18)))
     lin = apply_idt(log, "apple_log_bt2020")
     np.testing.assert_allclose(lin, 0.18, rtol=1e-6)
+
+
+def test_apple_log2_awg_not_bt2020():
+    from color.gamuts import IDT_PAIRS, camera_to_aces2065_matrix
+
+    log = np.full(3, float(linear_to_apple_log(0.18)))
+    awg = apply_idt(log, "apple_log2_awg")
+    np.testing.assert_allclose(awg, 0.18, rtol=1e-6)
+    assert IDT_PAIRS["apple_log2_awg"][1] == "AppleWideGamut"
+    assert IDT_PAIRS["apple_log2_awg"][1] != "BT2020"
+    m_awg = camera_to_aces2065_matrix("AppleWideGamut")
+    m_2020 = camera_to_aces2065_matrix("BT2020")
+    assert not np.allclose(m_awg, m_2020, rtol=1e-4, atol=1e-4)
+    chroma = np.array([0.30, 0.50, 0.70])
+    assert not np.allclose(
+        apply_idt(chroma, "apple_log2_awg"),
+        apply_idt(chroma, "apple_log_bt2020"),
+        rtol=1e-4,
+        atol=1e-4,
+    )
+
+
+def test_logc3_ei800_idt_18_percent():
+    log = np.full(3, float(linear_to_logc3_ei800(0.18)))
+    lin = apply_idt(log, "arri_logc3_ei800_awg3")
+    np.testing.assert_allclose(lin, 0.18, rtol=1e-5)
+    assert float(linear_to_logc3_ei800(0.18)) == pytest.approx(0.391, abs=5e-4)
 
 
 def test_dlog_idt_18_percent():

@@ -6,6 +6,9 @@ Only F-Log2, N-Log, C-Log2 (BT.2020 pair), C-Log3 (BT.2020 pair), D-Log,
 and the Rec.709 OETF LUT are generated from color/. Do not emit homemade
 LogC4 / S-Log3 / V-Log / Log3G10 / Apple Log LUTs or DWG matrices.
 C-Log2+Cinema Gamut keeps the full Builtin (no homemade Cinema Gamut LUT).
+LogC3 EI800+AWG3 uses Builtin ARRI_ALEXA-LOGC-EI800-AWG_to_ACES2065-1.
+Apple Log 2 uses CURVE - APPLE_LOG_to_LINEAR + Apple Wide Gamut matrix.
+There is no APPLE_LOG2 Builtin.
 """
 
 from __future__ import annotations
@@ -81,6 +84,10 @@ def generate_luts() -> None:
 def generate_matrices() -> None:
     write_spimtx(MTX_DIR / "BT2020_to_AP0.spimtx", camera_to_aces2065_matrix("BT2020"))
     write_spimtx(MTX_DIR / "DGamut_to_AP0.spimtx", camera_to_aces2065_matrix("DGamut"))
+    write_spimtx(
+        MTX_DIR / "AppleWideGamut_to_AP0.spimtx",
+        camera_to_aces2065_matrix("AppleWideGamut"),
+    )
 
 
 def builtin_cs(name: str, style: str, description: str) -> str:
@@ -102,6 +109,7 @@ def builtin_cs(name: str, style: str, description: str) -> str:
 def write_config() -> None:
     m_2020 = ocio_matrix_16(camera_to_aces2065_matrix("BT2020"))
     m_dgamut = ocio_matrix_16(camera_to_aces2065_matrix("DGamut"))
+    m_apple_wg = ocio_matrix_16(camera_to_aces2065_matrix("AppleWideGamut"))
     text = f"""ocio_profile_version: 2.2
 
 # LogBridge M1 + M2-start OCIO config.
@@ -111,7 +119,9 @@ def write_config() -> None:
 #
 # IDTs with a standard Builtin use BuiltinTransform (Mac OCIO).
 # F-Log2, N-Log, C-Log2+BT.2020, C-Log3+BT.2020, D-Log have no full IDT Builtin.
-# C-Log2+Cinema Gamut / C-Log3+Cinema Gamut / Apple Log use BuiltinTransform.
+# C-Log2+Cinema Gamut / C-Log3+Cinema Gamut / Apple Log 1 / LogC3 EI800+AWG3
+# use BuiltinTransform. Apple Log 2: CURVE - APPLE_LOG_to_LINEAR + AWG matrix.
+# No APPLE_LOG2 Builtin.
 # Rec.2100 HLG / PQ use ACES Output Transform / BT.2100 BuiltinTransform
 # (no homemade HLG/PQ curve). Rec.709 stays preview-only DIY OETF.
 # Python color/ calls Builtins when PyOpenColorIO is importable; otherwise
@@ -266,6 +276,11 @@ colorspaces:
     "ARRI LogC4 + AWG4. EI-independent. Do not keep handwritten a/b/c + homemade AWG4 matrix.",
 )}
 {builtin_cs(
+    "ARRI LogC3 EI800 AWG3",
+    "ARRI_ALEXA-LOGC-EI800-AWG_to_ACES2065-1",
+    "ARRI LogC3 EI800 + ALEXA Wide Gamut 3 only. Not a generic LogC3. EI>1600 has no closed form. 18% grey encodes to 0.391. ACES CSC / ARRI 2017-03.",
+)}
+{builtin_cs(
     "Sony S-Log3 S-Gamut3",
     "SONY_SLOG3-SGAMUT3_to_ACES2065-1",
     "Sony S-Log3 + S-Gamut3. Do NOT default S-Log3 to S-Gamut3.Cine. User/metadata picks the gamut.",
@@ -371,8 +386,29 @@ colorspaces:
 {builtin_cs(
     "Apple Log BT.2020",
     "APPLE_LOG_to_ACES2065-1",
-    "Apple Log 1 + BT.2020 / D65. Apple Log 2 is out of scope.",
+    "Apple Log 1 + BT.2020 / D65. Apple Log 2 is a separate AWG pair.",
 )}
+  - !<ColorSpace>
+    name: Apple Log 2 Apple Wide Gamut
+    family: Input/LogBridge
+    equalitygroup: ""
+    bitdepth: 32f
+    description: |
+      Apple Log 2 + Apple Wide Gamut (ACES CSC.Apple.AppleLog2_to_ACES.ctl).
+      Curve is the same as Apple Log 1. No APPLE_LOG2 Builtin — do not claim one.
+      Prefer CURVE - APPLE_LOG_to_LINEAR + AWG→AP0. Not BT.2020.
+      Status: implemented (unverified). Not marked supported.
+    isdata: false
+    allocation: uniform
+    to_scene_reference: !<GroupTransform>
+      children:
+        - !<BuiltinTransform> {{style: CURVE - APPLE_LOG_to_LINEAR}}
+        - !<MatrixTransform> {{matrix: [{m_apple_wg}]}}
+    from_scene_reference: !<GroupTransform>
+      children:
+        - !<MatrixTransform> {{matrix: [{m_apple_wg}], inverse: true}}
+        - !<BuiltinTransform> {{style: CURVE - APPLE_LOG_to_LINEAR, direction: inverse}}
+
   - !<ColorSpace>
     name: Canon C-Log3 BT.2020
     family: Input/LogBridge
@@ -414,25 +450,11 @@ colorspaces:
 
   # --- Explicitly unsupported (not implemented) ---
   - !<ColorSpace>
-    name: Apple Log 2 (unsupported)
-    family: Input/Stub
-    bitdepth: 32f
-    isdata: false
-    description: UNSUPPORTED. Apple Log 2 is out of scope. Apple Log 1 + BT.2020 is implemented (unverified).
-
-  - !<ColorSpace>
     name: DJI D-Log M (unsupported)
     family: Input/Stub
     bitdepth: 32f
     isdata: false
     description: UNSUPPORTED. D-Log M is not the 2017 D-Log + D-Gamut IDT.
-
-  - !<ColorSpace>
-    name: ARRI LogC3 (unsupported)
-    family: Input/Stub
-    bitdepth: 32f
-    isdata: false
-    description: UNSUPPORTED. ARRI LogC3 is out of scope. Use LogC4 + AWG4.
 """
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
     CONFIG.write_text(text, encoding="utf-8")

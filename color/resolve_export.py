@@ -107,9 +107,17 @@ RESOLVE_CST = {
         "input_color_space": "Rec.2020",
         "input_gamma": "Apple Log",
     },
+    "apple_log2_awg": {
+        "input_color_space": "Apple Wide Gamut",
+        "input_gamma": "Apple Log",
+    },
     "dji_dlog_dgamut": {
         "input_color_space": "DJI D-Gamut",
         "input_gamma": "DJI D-Log",
+    },
+    "arri_logc3_ei800_awg3": {
+        "input_color_space": "ARRI Wide Gamut 3",
+        "input_gamma": "ARRI LogC3 EI800",
     },
 }
 

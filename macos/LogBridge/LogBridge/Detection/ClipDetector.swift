@@ -183,16 +183,13 @@ enum ClipDetector {
             )
         }
         if name.contains("apple log 2") || name.contains("applelog2") || name.contains("apple-log-2") {
-            return DetectionResult(
-                idt: nil, curve: nil, gamut: nil, source: .filename, needsUserPicker: true,
-                note: "Apple Log 2 is unsupported (out of scope). Apple Log 1 + BT.2020 is implemented (unverified)."
-            )
+            return locked(.appleLog2AWG, source: .filename, note: "filename Apple Log 2 + Apple Wide Gamut")
         }
         if name.contains("logc3") && !name.contains("logc4") {
-            return DetectionResult(
-                idt: nil, curve: nil, gamut: nil, source: .filename, needsUserPicker: true,
-                note: "ARRI LogC3 is unsupported. Use LogC4 + AWG4."
-            )
+            return locked(.arriLogC3EI800AWG3, source: .filename, note: "filename LogC3 EI800 + AWG3")
+        }
+        if name.contains("awg3") && !name.contains("awg4") {
+            return locked(.arriLogC3EI800AWG3, source: .filename, note: "filename AWG3 (LogC3 EI800 + AWG3)")
         }
         if name.contains("c-log2") || name.contains("clog2") {
             if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {

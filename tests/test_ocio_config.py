@@ -37,6 +37,8 @@ def test_six_idts_declared():
         "Canon C-Log3 Cinema Gamut",
         "Canon C-Log3 BT.2020",
         "Apple Log BT.2020",
+        "Apple Log 2 Apple Wide Gamut",
+        "ARRI LogC3 EI800 AWG3",
         "DJI D-Log D-Gamut",
     ):
         assert name in text
@@ -55,6 +57,7 @@ def test_builtin_styles_named():
         "CANON_CLOG2-CGAMUT_to_ACES2065-1",
         "CANON_CLOG3-CGAMUT_to_ACES2065-1",
         "APPLE_LOG_to_ACES2065-1",
+        "ARRI_ALEXA-LOGC-EI800-AWG_to_ACES2065-1",
         "ACEScct_to_ACES2065-1",
         "ACEScg_to_ACES2065-1",
     ):
@@ -87,9 +90,19 @@ def test_canon_uses_ocio_builtin_not_invented_toe():
 
 def test_unsupported_idts_named():
     text = CONFIG.read_text(encoding="utf-8")
-    assert "Apple Log 2 (unsupported)" in text
     assert "DJI D-Log M (unsupported)" in text
-    assert "ARRI LogC3 (unsupported)" in text
+    assert "Apple Log 2 (unsupported)" not in text
+    assert "ARRI LogC3 (unsupported)" not in text
+    assert "style: APPLE_LOG2" not in text
+    assert "Apple Wide Gamut" in text
+    assert "EI800" in text
+    logc3 = text.split("name: ARRI LogC3 EI800 AWG3")[1].split("name:")[0]
+    assert "EI800" in logc3
+    apple2 = text.split("name: Apple Log 2 Apple Wide Gamut")[1].split("name:")[0]
+    assert "Apple Wide Gamut" in apple2
+    assert "style: APPLE_LOG2" not in apple2
+    assert "Apple Log 2 BT.2020" not in text
+    assert "not BT.2020" in apple2.lower() or "Not BT.2020" in apple2
 
 
 def test_handwritten_luts_only_for_no_builtin():

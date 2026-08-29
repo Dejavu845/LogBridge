@@ -215,6 +215,18 @@ enum ResolveExporter {
                 SIMD3(0.066597281331, 1.009546581651, -0.076143862983),
                 SIMD3(-0.017243534539, -0.072986432766, 1.090229967305)
             ])
+        case .arriLogC3EI800AWG3:
+            return simd_double3x3(rows: [
+                SIMD3(0.680205505106, 0.236136601606, 0.083657893287),
+                SIMD3(0.085414979742, 1.017470878607, -0.102885858349),
+                SIMD3(0.002056521669, -0.062562500385, 1.060505978715)
+            ])
+        case .appleLog2AWG:
+            return simd_double3x3(rows: [
+                SIMD3(0.694961049318, 0.241405268785, 0.063633681897),
+                SIMD3(0.047362746415, 1.004295925054, -0.051658671469),
+                SIMD3(-0.021989789360, -0.028989104971, 1.050978894331)
+            ])
         default:
             return nil
         }
@@ -327,7 +339,7 @@ enum ResolveExporter {
                 ire = (pow(10.0, (x - 0.12240537) / a) - 1.0) / b
             }
             return ire * 0.9
-        case .appleLogBT2020:
+        case .appleLogBT2020, .appleLog2AWG:
             let r0 = -0.05641088
             let c = 47.28711236
             let beta = 0.00964052
@@ -341,6 +353,20 @@ enum ResolveExporter {
                 return sqrt(x / c) + r0
             }
             return r0
+        case .arriLogC3EI800AWG3:
+            let black = 16.0 / 4095.0
+            let cut = 1.0 / 9.0
+            let slope = 1.0 / (cut * log(10.0))
+            let offset = log10(cut) - slope * cut
+            let encGain = 0.24718963831867058
+            let encOffset = 0.38553699869244257
+            let nz = 0.052272275025168784
+            let gray = 0.005
+            let out = (x - encOffset) / encGain
+            let nsLin = (out - offset) / slope
+            let nsRaw = nsLin > cut ? pow(10.0, out) : nsLin
+            let ns = (nsRaw - nz) * gray + black
+            return (ns - black) * (0.18 / (0.01 * 400.0 / 800.0))
         case .djiDLogDGamut:
             if x > 0.14 {
                 return (pow(10.0, 3.89616 * x - 2.27752) - 0.0108) / 0.9892
@@ -616,6 +642,8 @@ enum ResolveExporter {
         case .canonCLog3CGamut: return ("Canon Cinema Gamut", "Canon C-Log3")
         case .canonCLog3BT2020: return ("Rec.2020", "Canon C-Log3")
         case .appleLogBT2020: return ("Rec.2020", "Apple Log")
+        case .appleLog2AWG: return ("Apple Wide Gamut", "Apple Log")
+        case .arriLogC3EI800AWG3: return ("ARRI Wide Gamut 3", "ARRI LogC3 EI800")
         case .djiDLogDGamut: return ("DJI D-Gamut", "DJI D-Log")
         default: return (idt.ocioName, idt.curve)
         }

@@ -295,18 +295,31 @@ def test_filename_dlog_m_unsupported():
     assert d.idt_id is None
     assert d.needs_user_picker
     assert "D-Log M" in d.note
+    from color.gamuts import IDT_PAIRS
+    from color.stubs import STUB_IDTS
+
+    assert "dji_dlog_m" not in IDT_PAIRS
+    assert any(s["id"] == "dji_dlog_m" for s in STUB_IDTS)
 
 
-def test_filename_apple_log2_unsupported():
+def test_filename_apple_log2_locks_awg_not_bt2020():
     d = detect_from_filename("IMG_AppleLog2.mov")
-    assert d.idt_id is None
-    assert "Apple Log 2" in d.note
+    assert d.idt_id == "apple_log2_awg"
+    assert d.gamut == "AppleWideGamut"
+    assert d.gamut != "BT2020"
+    assert "Apple Wide Gamut" in picker_labels([d.idt_id])[0][1]
+    assert "BT.2020" not in picker_labels([d.idt_id])[0][1]
 
 
-def test_filename_logc3_unsupported():
+def test_filename_logc3_locks_ei800_awg3_not_bare_logc3():
     d = detect_from_filename("A001_LogC3_take.mxf")
-    assert d.idt_id is None
-    assert "LogC3" in d.note
+    assert d.idt_id == "arri_logc3_ei800_awg3"
+    assert d.curve == "logc3_ei800"
+    assert d.gamut == "AWG3"
+    label = picker_labels([d.idt_id])[0][1]
+    assert "EI800" in label
+    assert "AWG3" in label
+    assert label != "LogC3"
 
 
 def test_picker_clog2_is_two_paired_idts():
@@ -326,3 +339,25 @@ def test_picker_clog3_is_two_paired_idts():
     labels = [lab for _, lab in picker_labels(pairs)]
     assert labels == ["C-Log3 + Cinema Gamut", "C-Log3 + BT.2020"]
     assert set(pairs) == {"canon_clog3_cgamut", "canon_clog3_bt2020"}
+
+
+def test_swift_ui_names_logc3_ei800_awg3_and_apple_log2_awg():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    idt = (root / "macos/LogBridge/LogBridge/Models/IDT.swift").read_text(encoding="utf-8")
+    detector = (
+        root / "macos/LogBridge/LogBridge/Detection/ClipDetector.swift"
+    ).read_text(encoding="utf-8")
+    assert 'case arriLogC3EI800AWG3 = "arri_logc3_ei800_awg3"' in idt
+    assert 'return "LogC3 EI800"' in idt
+    assert 'return "AWG3"' in idt
+    assert 'return "Apple Wide Gamut"' in idt
+    assert 'case appleLog2AWG = "apple_log2_awg"' in idt
+    assert "appleLog2Stub" not in idt
+    assert "arriLogC3Stub" not in idt
+    assert "filename LogC3 EI800 + AWG3" in detector
+    assert "filename Apple Log 2 + Apple Wide Gamut" in detector
+    assert "ARRI LogC3 is unsupported" not in detector
+    assert "Apple Log 2 is unsupported" not in detector
+    assert "D-Log M is unsupported" in detector

@@ -33,6 +33,8 @@ from .curves import (
     linear_to_apple_log,
     dlog_to_linear,
     linear_to_dlog,
+    logc3_ei800_to_linear,
+    linear_to_logc3_ei800,
 )
 from .gamuts import GAMUTS, primaries_xy, rgb_to_xyz_matrix
 from .odt import (
@@ -82,6 +84,8 @@ __all__ = [
     "linear_to_apple_log",
     "dlog_to_linear",
     "linear_to_dlog",
+    "logc3_ei800_to_linear",
+    "linear_to_logc3_ei800",
     "GAMUTS",
     "primaries_xy",
     "rgb_to_xyz_matrix",
