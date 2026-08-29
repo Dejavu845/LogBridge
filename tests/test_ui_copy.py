@@ -12,6 +12,8 @@ from color.batch import (
     PREVIEW_STATUS_NOT_DELIVERABLE,
     PREVIEW_STATUS_ODT_CACHE_HIT,
     PREVIEW_STATUS_ODT_OFF,
+    PREVIEW_STATUS_HDR_BUILD_FAIL,
+    PREVIEW_STATUS_HDR_NO_EDR,
     PREVIEW_STATUS_PROXY,
     PROCESS_BUTTON,
     PROCESS_BUTTON_HELP,
@@ -372,6 +374,8 @@ def test_preview_status_is_locked_chinese():
     assert PREVIEW_STATUS_PROXY == "预览代理，不是成片"
     assert PREVIEW_STATUS_NOT_DELIVERABLE == "预览·非成片"
     assert PREVIEW_STATUS_ODT_OFF == "709 预览关"
+    assert PREVIEW_STATUS_HDR_BUILD_FAIL == "HDR 预览建不出"
+    assert PREVIEW_STATUS_HDR_NO_EDR == "屏幕无 EDR，预览被压到 SDR"
     assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
     assert REASON_PICK_LOG_GAMUT == "先选择 Log 与色域"
     assert "成片" not in PREVIEW_STATUS_ODT_OFF
@@ -384,6 +388,9 @@ def test_preview_status_is_locked_chinese():
     assert f'"{PREVIEW_STATUS_PROXY}"' in odt
     assert f'"{PREVIEW_STATUS_NOT_DELIVERABLE}"' in odt
     assert f'"{PREVIEW_STATUS_ODT_OFF}"' in odt
+    assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in odt
+    assert "HDRPreviewColor.encodeFromGradedAP0" in odt
+    assert "applyODT" in odt  # 709 branch only
     assert "acesOTNote" not in odt
     assert "ODT only —" not in odt
     assert "graded linear cache hit" not in odt
@@ -587,7 +594,111 @@ def test_odt_preview_caption_is_locked_chinese():
     assert f'"{PREVIEW_STATUS_PROXY}"' in odt
     assert f'"{PREVIEW_STATUS_NOT_DELIVERABLE}"' in odt
     assert f'"{PREVIEW_STATUS_ODT_OFF}"' in odt
+    assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in odt
     assert "acesOTNote" not in odt
+
+
+def test_hdr_preview_colorsync_fail_closed_no_709_fallback():
+    """HLG/PQ: ColorSync itur_2100. 709 applyODT / u8 / OETF untouched. Fail closed."""
+    engine = _read(ENGINE)
+    content = _read(CONTENT)
+    preview_709 = _read(PREVIEW)
+    hdr = _read(SWIFT_ROOT / "LogBridge/LogBridge/Color/HDRPreview.swift")
+    clip = _read(CLIP)
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+
+    assert PREVIEW_STATUS_HDR_BUILD_FAIL == "HDR 预览建不出"
+    assert PREVIEW_STATUS_HDR_NO_EDR == "屏幕无 EDR，预览被压到 SDR"
+    assert PREVIEW_STATUS_NOT_DELIVERABLE == "预览·非成片"
+    assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in engine
+    assert f'"{PREVIEW_STATUS_HDR_NO_EDR}"' in engine
+    assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in hdr
+    assert f'"{PREVIEW_STATUS_HDR_NO_EDR}"' in hdr
+
+    odt = engine.split("func renderODTFromGraded")[1].split("func publishODTOnly")[0]
+    hdr_branch = odt.split("} else if graph.odt.isHDR")[1].split('note = "709 预览关"')[0]
+    assert "HDRPreviewColor.encodeFromGradedAP0" in hdr_branch
+    assert "graded.rgb" in hdr_branch
+    assert "PreviewColor.applyODT" not in hdr_branch
+    assert "makeCGImage" not in hdr_branch
+    assert "u8(" not in hdr_branch
+    assert "rec709OETF" not in hdr_branch
+    assert "itur_709" not in hdr_branch
+    assert "applyODT" not in hdr_branch
+    assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in hdr_branch
+    rec709_branch = odt.split("graph.odt == .rec709")[1].split("} else if graph.odt.isHDR")[0]
+    assert "PreviewColor.applyODT" in rec709_branch
+    assert "itur_709" in rec709_branch
+    assert "makeCGImage" in rec709_branch
+
+    apply = engine.split("static func applyODT(rgb: inout [Float])")[1].split(
+        "private static let ap0ToXYZ"
+    )[0]
+    assert "ap0ToRec709" in apply
+    assert "rec709OETF: true" in apply
+    assert "PreviewMetal.applyMatrix" in apply
+    metal = engine.split("enum PreviewMetal")[1]
+    assert "0.018053968510807" in metal
+    assert "1.09929682680944" in metal
+    assert "rec709OETF" in metal
+
+    assert "itur_2100_HLG" in hdr
+    assert "itur_2100_PQ" in hdr
+    assert "ColorSync" in hdr
+    assert "extendedLinearITUR_2020" in hdr
+    assert "wantsExtendedDynamicRangeContent" in hdr
+    assert "RGBA16Float" in hdr
+    assert 'setValue(true, forKey: "wantsExtendedDynamicRangeContent")' in hdr
+    assert 'setValue("RGBA16Float", forKey: "contentsFormat")' in hdr
+    assert "bt2020ToAP0.inverse" in hdr
+    assert "0.679085634707" in hdr
+    assert "0.679085634707" in engine
+    assert "PreviewColor.applyODT" not in hdr
+    assert "func applyODT" not in hdr
+    assert "rec709OETF" not in hdr
+    assert "func u8" not in hdr
+    assert "CGColorSpace.itur_709" not in hdr
+    assert "import OpenColorIO" not in hdr
+    assert "ACES-OUTPUT" not in hdr
+    assert "No OCIO" in hdr
+    assert "0.17883277" not in hdr
+    assert "78.84375" not in hdr
+    assert "完善" not in hdr
+    assert "精准" not in hdr or "Not 一键精准" in hdr
+    _chengpian_only_honesty(hdr)
+
+    assert "itur_2100" not in preview_709
+    assert "CGColorSpace.itur_709" in preview_709
+    assert "bitsPerComponent: 8" in engine
+    assert "func u8(_ x: Float)" in engine
+
+    split = content.split("struct SplitPreview")[1].split("struct WriteProgressLine")[0]
+    assert "HDRPreviewView" in split
+    assert "Rec709PreviewView" in split
+    assert "graph.odt.isHDR" in split
+    assert "failClosedHDRPreviewLayer" in split
+    assert "Button(" not in split
+
+    assert "func failClosedHDRPreviewLayer" in clip
+    assert "graph.odt.isHDR" in clip.split("func failClosedHDRPreviewLayer")[1].split("var pendingPickerCount")[0]
+    assert "encodeFromGradedAP0" not in exporter
+    assert "itur_2100" not in exporter
+    assert "applyODT" not in exporter
+
+    resolved = engine.split("func resolvedPreviewStatus")[1].split("private func build(")[0]
+    assert f'"{PREVIEW_STATUS_HDR_NO_EDR}"' in resolved
+    assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in resolved
+    assert "displayHasEDR" in resolved
+    assert "applyODT" not in resolved
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    blob = readme + "\n" + acceptance
+    assert "HDR 预览建不出" in blob
+    assert "屏幕无 EDR，预览被压到 SDR" in blob
+    assert "ColorSync" in blob
+    assert "itur_2100" in blob
+    assert "预览·非成片" in blob
 
 
 def test_inspector_cat_three_sentences_review_lock():

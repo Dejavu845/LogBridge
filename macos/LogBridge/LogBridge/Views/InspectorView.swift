@@ -239,7 +239,7 @@ struct ODTInspector: View {
                     .foregroundStyle(.secondary)
             }
             if session.graph.odt.isHDR {
-                Text("HDR OT via ACES/BT.2100 BuiltinTransform. 预览·非成片，未与 709 匹配. No homemade HLG/PQ curve. Implemented (unverified). Not supported. Not 一键精准.")
+                Text("ColorSync itur_2100. 预览·非成片，未与 709 匹配. 已实现（未验证）. Not an ACES Output Transform. No homemade HLG/PQ. Not supported. Not 一键精准.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

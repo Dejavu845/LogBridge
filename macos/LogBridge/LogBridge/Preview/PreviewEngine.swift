@@ -211,22 +211,53 @@ final class PreviewEngine: ObservableObject {
                 colorSpace: CGColorSpace(name: CGColorSpace.itur_709)
             )
         } else if graph.odt.isHDR {
-            // No homemade HLG/PQ. Preview does not invent a Rec.2100 transfer.
-            note = "预览·非成片"
+            // ColorSync itur_2100. Not the 709 8-bit path. Fail closed.
+            if let hdr = HDRPreviewColor.encodeFromGradedAP0(
+                rgb: graded.rgb,
+                width: graded.width,
+                height: graded.height,
+                odt: graph.odt
+            ) {
+                odtCG = hdr
+                note = "预览·非成片"
+            } else {
+                odtCG = nil
+                note = "HDR 预览建不出"
+            }
         } else {
             note = "709 预览关"
         }
         return (odtCG, note)
     }
 
-    /// Scrub / ODT hit: replace the 709 pane only. Source thumbnail stays.
+    /// Scrub / ODT hit: replace the 709 / HDR pane only. Source thumbnail stays.
     private func publishODTOnly(generation: UInt64, clipID: UUID, odt: CGImage?, status: String) {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCurrentPreview(generation: generation, clipID: clipID) else { return }
             self.odtImage = odt
-            self.status = status
+            self.status = Self.resolvedPreviewStatus(odt: odt, status: status)
             self.isWorking = false
         }
+    }
+
+    /// Layer could not enable EDR. Empty HDR pane. Never show 709 pixels.
+    func failClosedHDRPreview() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.odtImage = nil
+            self.status = "HDR 预览建不出"
+            self.isWorking = false
+        }
+    }
+
+    /// HDR success + no display EDR → exact 「屏幕无 EDR，预览被压到 SDR」.
+    /// 709 notes are unchanged. Fail string stays 「HDR 预览建不出」.
+    private static func resolvedPreviewStatus(odt: CGImage?, status: String) -> String {
+        if status == "HDR 预览建不出" { return status }
+        if status == "预览·非成片", odt != nil, !HDRPreviewColor.displayHasEDR() {
+            return "屏幕无 EDR，预览被压到 SDR"
+        }
+        return status
     }
 
     private func build(clip: Clip, graph: SerialGraph, generation: UInt64) {
@@ -344,7 +375,7 @@ final class PreviewEngine: ObservableObject {
             guard let self, self.isCurrentPreview(generation: generation, clipID: clipID) else { return }
             self.sourceImage = source
             self.odtImage = odt
-            self.status = status
+            self.status = Self.resolvedPreviewStatus(odt: odt, status: status)
             self.isWorking = false
         }
     }

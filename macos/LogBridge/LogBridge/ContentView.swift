@@ -270,15 +270,31 @@ struct SplitPreview: View {
                     caption: "未套 Rec.709。相机编码值。",
                     image: session.preview.sourceImage
                 )
-                Rec709PreviewView(
-                    title: session.odtPreviewTitle,
-                    caption: session.odtPreviewCaption,
-                    image: session.preview.odtImage,
-                    pickingNeutral: session.pickingNeutral && !session.isExporting,
-                    onPick: { nx, ny in
-                        session.handlePreviewPick(nx: nx, ny: ny)
-                    }
-                )
+                if session.graph.odt.isHDR {
+                    HDRPreviewView(
+                        title: session.odtPreviewTitle,
+                        caption: session.odtPreviewCaption,
+                        image: session.preview.odtImage,
+                        odt: session.graph.odt,
+                        pickingNeutral: session.pickingNeutral && !session.isExporting,
+                        onPick: { nx, ny in
+                            session.handlePreviewPick(nx: nx, ny: ny)
+                        },
+                        onLayerFail: {
+                            session.failClosedHDRPreviewLayer()
+                        }
+                    )
+                } else {
+                    Rec709PreviewView(
+                        title: session.odtPreviewTitle,
+                        caption: session.odtPreviewCaption,
+                        image: session.preview.odtImage,
+                        pickingNeutral: session.pickingNeutral && !session.isExporting,
+                        onPick: { nx, ny in
+                            session.handlePreviewPick(nx: nx, ny: ny)
+                        }
+                    )
+                }
             }
             .padding(2)
             if session.isExporting {
