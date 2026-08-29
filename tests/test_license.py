@@ -26,7 +26,9 @@ def test_license_is_mit_contributors_not_personal():
     text = LICENSE.read_text(encoding="utf-8")
     assert "MIT License" in text
     assert COPYRIGHT in text
-    copyright_lines = [ln.strip() for ln in text.splitlines() if "copyright" in ln.lower()]
+    copyright_lines = [
+        ln.strip() for ln in text.splitlines() if ln.strip().startswith("Copyright (c)")
+    ]
     assert copyright_lines == [COPYRIGHT]
     for token in BANNED_IN_LICENSE:
         assert token not in text
