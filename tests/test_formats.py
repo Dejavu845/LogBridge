@@ -45,7 +45,9 @@ def test_stills_preview_and_write_skip_ycbcr_unpack():
     assert 'stillExt: Set<String> = ["tif", "tiff", "dpx", "exr"]' in media
     assert "静帧" in media
     assert "ImageIO" in media
-    down = engine.split("func decodeDownscaled")[1].split("func decodeMovieVideoToolbox")[0]
+    down = engine.split("func decodeDownscaled")[1].split(
+        "return try decodeMovieVideoToolbox"
+    )[0]
     assert "decodeStillImageIO" in down
     assert "requireSourceYCbCrUnpack" not in down
     still = engine.split("func decodeStillImageIO")[1].split("enum PreviewColor")[0]

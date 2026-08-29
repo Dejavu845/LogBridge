@@ -410,12 +410,11 @@ def test_preview_stills_imageio_no_ycbcr_unpack():
     assert 'stillExt: Set<String> = ["tif", "tiff", "dpx", "exr"]' in media_txt
 
     down = engine.split("func decodeDownscaled")[1].split(
-        "func decodeMovieVideoToolbox"
+        "return try decodeMovieVideoToolbox"
     )[0]
     assert "probe.kind == .still" in down
     assert "decodeStillImageIO" in down
     assert down.index("probe.kind == .still") < down.index("decodeStillImageIO")
-    assert down.index("decodeStillImageIO") < down.index("decodeMovieVideoToolbox")
     assert "requireSourceYCbCrUnpack" not in down
     assert "rgbFloatFromLogPixelBuffer" not in down
     assert "cgImageFromLogPixelBuffer" not in down
