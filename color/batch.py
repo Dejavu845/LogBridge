@@ -19,8 +19,9 @@ hardcoded BT.709 + video-range for every clip. Scale is bit-depth
 + range (video 10-bit is Y 64–940 / C 64–960, not /1023). 8-bit
 Y′CbCr is only the fallback when 10-bit is unavailable. Still a
 proxy, not camera-original — 整段代理，不是全精度成片. Not ACEScct.
-Not a Rec.709 .mov/.mp4. Preview first-frame unpack shares the same
+Not a Rec.709 .mov/.mp4. Movie preview first-frame unpack shares the same
 nclc/colr/vui matrix+range helper, then quantizes to 8-bit / 1920.
+Stills (TIFF / DPX / EXR) stay ImageIO — already RGB, no Y′CbCr unpack.
 Write does not use that 8-bit buffer. Preview/scrub may stay 8-bit-first.
 「N 条已处理」 is clips that produced a sequence, or locked clips attempted
 with a per-clip error — not a preview refresh. Pending clips in the same

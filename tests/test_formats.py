@@ -38,6 +38,22 @@ def test_stills_tiff_dpx_exr_accept():
         assert "ImageIO" in d.note
 
 
+def test_stills_preview_and_write_skip_ycbcr_unpack():
+    """TIFF / DPX / EXR are already RGB. ImageIO only. #31 unpack is movies."""
+    engine = _read(ENGINE)
+    media = _read(MEDIA)
+    assert 'stillExt: Set<String> = ["tif", "tiff", "dpx", "exr"]' in media
+    assert "静帧" in media
+    assert "ImageIO" in media
+    down = engine.split("func decodeDownscaled")[1].split("func decodeMovieVideoToolbox")[0]
+    assert "decodeStillImageIO" in down
+    assert "requireSourceYCbCrUnpack" not in down
+    still = engine.split("func decodeStillImageIO")[1].split("enum PreviewColor")[0]
+    assert "Already RGB" in still or "already RGB" in engine
+    assert "requireSourceYCbCrUnpack" not in still
+    assert "CGImageSourceCreateThumbnailAtIndex" in still
+
+
 def test_arri_mxf_refused():
     d = classify("A001C001.mxf", "ARRIRAW")
     assert d.action == REFUSE

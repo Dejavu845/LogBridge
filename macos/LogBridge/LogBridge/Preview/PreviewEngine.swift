@@ -496,7 +496,8 @@ final class PreviewEngine: ObservableObject {
         }
     }
 
-    /// Movies: every sample as source Y′CbCr → float. Stills: one ImageIO frame.
+    /// Movies: every sample as source Y′CbCr → float (#31 unpack).
+    /// Stills: one ImageIO frame (TIFF / DPX / EXR already RGB — no Y′CbCr unpack).
     /// Not the preview 8-bit Y′CbCr path. Same matrix-only convert (no transfer).
     /// ``onFrame`` mutates the decode buffer in place so the write loop
     /// does not copy float RGB before IDT/WB.
@@ -524,8 +525,8 @@ final class PreviewEngine: ObservableObject {
         try decodeMovieAllFrames(url: url, maxLongEdge: maxLongEdge, onFrame: onFrame)
     }
 
-    /// First frame only. Same 10-bit-first source Y′CbCr → float as the sequence.
-    /// Preview first-frame stays the 8-bit-first CGImage path.
+    /// First frame only. Movies: same 10-bit-first source Y′CbCr → float as the sequence.
+    /// Stills: ImageIO (already RGB). Preview first-frame stays the 8-bit-first CGImage path.
     static func decodeFirstSourceRGB(url: URL, maxLongEdge: CGFloat) -> (rgb: [Float], width: Int, height: Int)? {
         let probe = MediaFormat.probe(url: url)
         if probe.decision == .refuse { return nil }
@@ -1005,9 +1006,10 @@ final class PreviewEngine: ObservableObject {
         return SIMD3(r, g, b)
     }
 
-    /// Movies: AVAssetReader Y′CbCr. Stills: ImageIO. Policy in MediaFormat.
+    /// Movies: AVAssetReader Y′CbCr + ``requireSourceYCbCrUnpack`` (#31).
+    /// Stills: ImageIO only (TIFF / DPX / EXR are already RGB).
+    /// Do not run Y′CbCr unpack on stills. Policy in MediaFormat.
     /// VT decode only — do not let VT emit Rec.709. No Core Image Display P3.
-    /// Movie Y′CbCr uses the same nclc / colr / vui matrix+range helper as write.
     static func decodeDownscaled(url: URL, maxLongEdge: CGFloat) throws -> CGImage? {
         let probe = MediaFormat.probe(url: url)
         if probe.decision == .refuse {
@@ -1186,7 +1188,8 @@ final class PreviewEngine: ObservableObject {
         rgb[di + 3] = 255
     }
 
-    /// Stills only. Device RGB extract later — never itur_709 / displayP3 dest.
+    /// TIFF / DPX / EXR. Already RGB. No nclc / colr / vui. No Y′CbCr unpack.
+    /// Device RGB extract later — never itur_709 / displayP3 dest.
     static func decodeStillImageIO(url: URL, maxLongEdge: CGFloat) -> CGImage? {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         guard CGImageSourceGetCount(src) > 0 else { return nil }

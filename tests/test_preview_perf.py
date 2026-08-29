@@ -324,7 +324,7 @@ def test_preview_decode_stays_8bit_first_and_scrub_odt_only():
 
 
 def test_preview_unpack_shares_source_ycbcr_helper():
-    """Preview first-frame uses #31 nclc/colr/vui matrix+range. Display stays 8-bit/1920."""
+    """Movie preview first-frame uses #31 nclc/colr/vui matrix+range. Display stays 8-bit/1920."""
     engine = _read(ENGINE)
     assert "static let maxLongEdge: CGFloat = 1920" in engine
     assert "static let exportMaxLongEdge: CGFloat = 16384" in engine
@@ -398,6 +398,59 @@ def test_preview_unpack_shares_source_ycbcr_helper():
     assert "decodeMovieVideoToolbox" not in odt_hit
     assert "rgbFloatFromLogPixelBuffer" not in odt_hit
     assert "publishODTOnly" in odt_hit
+    assert "预览·非成片" in engine
+    assert "整段代理，不是全精度成片" in engine
+
+
+def test_preview_stills_imageio_no_ycbcr_unpack():
+    """TIFF / DPX / EXR stay ImageIO. Already RGB. Only movies share #31 unpack."""
+    engine = _read(ENGINE)
+    media = ROOT / "macos/LogBridge/LogBridge/Models/MediaFormat.swift"
+    media_txt = _read(media)
+    assert 'stillExt: Set<String> = ["tif", "tiff", "dpx", "exr"]' in media_txt
+
+    down = engine.split("func decodeDownscaled")[1].split(
+        "func decodeMovieVideoToolbox"
+    )[0]
+    assert "probe.kind == .still" in down
+    assert "decodeStillImageIO" in down
+    assert down.index("probe.kind == .still") < down.index("decodeStillImageIO")
+    assert down.index("decodeStillImageIO") < down.index("decodeMovieVideoToolbox")
+    assert "requireSourceYCbCrUnpack" not in down
+    assert "rgbFloatFromLogPixelBuffer" not in down
+    assert "cgImageFromLogPixelBuffer" not in down
+
+    still = engine.split("func decodeStillImageIO")[1].split("enum PreviewColor")[0]
+    assert "requireSourceYCbCrUnpack" not in still
+    assert "rgbFloatFromLogPixelBuffer" not in still
+    assert "writeMatrixRGB" not in still
+    assert "nclc" not in still.lower()
+    assert "colr" not in still.lower()
+    assert "CGImageSourceCreateThumbnailAtIndex" in still
+
+    all_src = engine.split("func decodeAllSourceFrames")[1].split(
+        "func decodeFirstSourceRGB"
+    )[0]
+    still_all = all_src.split("if probe.kind == .still")[1].split(
+        "try decodeMovieAllFrames"
+    )[0]
+    assert "decodeStillImageIO" in still_all
+    assert "extractRGB" in still_all
+    assert "requireSourceYCbCrUnpack" not in still_all
+    assert "rgbFloatFromLogPixelBuffer" not in still_all
+
+    first = engine.split("func decodeFirstSourceRGB")[1].split(
+        "func decodeMovieAllFrames"
+    )[0]
+    still_first = first.split("if probe.kind == .still")[1].split("let formats")[0]
+    assert "decodeStillImageIO" in still_first
+    assert "requireSourceYCbCrUnpack" not in still_first
+    assert "rgbFloatFromLogPixelBuffer" not in still_first
+
+    movie_preview = engine.split("func decodeMovieVideoToolbox")[1].split(
+        "func decodeStillImageIO"
+    )[0]
+    assert "requireSourceYCbCrUnpack" in movie_preview
     assert "预览·非成片" in engine
     assert "整段代理，不是全精度成片" in engine
 
