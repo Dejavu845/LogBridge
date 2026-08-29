@@ -725,7 +725,9 @@ final class PreviewEngine: ObservableObject {
             return normalizeYCbCrMatrix(raw)
         }
         if let format,
-           let raw = CMFormatDescriptionGetExtension(format, kCMFormatDescriptionExtension_YCbCrMatrix) {
+           let raw = CMFormatDescriptionGetExtension(
+            format, extensionKey: kCMFormatDescriptionExtension_YCbCrMatrix
+           ) {
             return normalizeYCbCrMatrix(raw)
         }
         if let trip = nclcTriplet(pixelBuffer: pb, format: format) {
@@ -734,12 +736,18 @@ final class PreviewEngine: ObservableObject {
         return nil
     }
 
+    /// Same CFString as CoreVideo kCVImageBufferFullRangeVideo (not in this runner overlay).
+    private static let kCVImageBufferFullRangeVideo: CFString =
+        kCMFormatDescriptionExtension_FullRangeVideo
+
     private static func readSourceYCbCrFullRange(pixelBuffer pb: CVPixelBuffer, format: CMFormatDescription?) -> Bool? {
         if let flag = boolAttachment(pb, kCVImageBufferFullRangeVideo) {
             return flag
         }
         if let format,
-           let raw = CMFormatDescriptionGetExtension(format, kCMFormatDescriptionExtension_FullRangeVideo) {
+           let raw = CMFormatDescriptionGetExtension(
+            format, extensionKey: kCMFormatDescriptionExtension_FullRangeVideo
+           ) {
             return boolFromTag(raw)
         }
         if let flag = nclxFullRangeFlag(pixelBuffer: pb, format: format) {
