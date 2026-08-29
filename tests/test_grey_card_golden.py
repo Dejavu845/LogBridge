@@ -130,8 +130,7 @@ def measure_grey_card_slot(slot: GreyCardSlot, directory: Path | None = None) ->
 
 def test_method_is_documented_in_chinese():
     readme = (FIXTURE_DIR / "README.md").read_text(encoding="utf-8")
-    module = Path(__file__).read_text(encoding="utf-8")
-    for blob in (readme, module):
+    for blob in (readme, __doc__):
         assert "18% 灰卡" in blob
         assert "曝光对齐各厂家中灰码" in blob
         assert "机内 LUT 关" in blob
