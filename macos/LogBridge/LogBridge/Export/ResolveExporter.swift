@@ -778,8 +778,18 @@ enum ResolveExporter {
         sequenceFrameURL(in: deliverableSequenceDirectory(for: clip, in: directory), index: 0)
     }
 
+    /// SMPTE ST 2065-1 / ACES AP0 primaries + ACES white (not D65, not AP1).
+    /// OpenEXR `chromaticities`: Rx Ry Gx Gy Bx By Wx Wy. Header only.
+    static let aces2065_1Chromaticities: [Float] = [
+        0.73470, 0.26530,
+        0.00000, 1.00000,
+        0.00010, -0.07700,
+        0.32168, 0.33767,
+    ]
+
     /// Uncompressed scanline RGB float32 EXR. Container only — no color math.
-    /// Matches ``color.exr_write.write_rgb_exr``.
+    /// Matches ``color.exr_write.write_rgb_exr``. Writes ST 2065-1 chromaticities.
+    /// Does not write ``acesImageContainerFlag``.
     static func writeACES2065EXR(rgb: [Float], width: Int, height: Int, to url: URL) throws {
         guard width > 0, height > 0, rgb.count >= width * height * 3 else {
             throw NSError(domain: "LogBridge", code: 3, userInfo: [
@@ -829,6 +839,12 @@ enum ResolveExporter {
         channels.append(chlistChannel("R"))
         channels.append(0)
         putAttr("channels", "chlist", channels)
+        var chroma = Data()
+        for v in aces2065_1Chromaticities {
+            var bits = v.bitPattern.littleEndian
+            chroma.append(Data(bytes: &bits, count: 4))
+        }
+        putAttr("chromaticities", "chromaticities", chroma)
         putAttr("compression", "compression", Data([0]))
         var box = Data()
         for v: Int32 in [0, 0, Int32(width - 1), Int32(height - 1)] {

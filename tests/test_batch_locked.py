@@ -1,6 +1,7 @@
 """Locked-IDT batch: walk locked clips only. Unlocked stay listed."""
 
 import inspect
+import struct
 from pathlib import Path
 
 import numpy as np
@@ -82,8 +83,28 @@ from color.batch import (
     ycbcr_range_offsets,
 )
 from color.curves import linear_to_slog3
-from color.exr_write import read_rgb_exr
+from color.exr_write import (
+    ACES2065_1_CHROMATICITIES,
+    read_exr_attributes,
+    read_exr_chromaticities,
+    read_rgb_exr,
+    write_rgb_exr,
+)
 from color.graph import SerialGraph
+
+# SMPTE ST 2065-1 / ACES AP0 + ACES white. Tests fail if D65 or AP1 is written.
+ST2065_1_CHROMATICITIES = (
+    0.73470,
+    0.26530,
+    0.00000,
+    1.00000,
+    0.00010,
+    -0.07700,
+    0.32168,
+    0.33767,
+)
+D65_XY = (0.3127, 0.329)
+AP1_PRIMARIES_XY = (0.713, 0.293, 0.165, 0.830, 0.128, 0.044)
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFT_ROOT = ROOT / "macos"
@@ -287,7 +308,29 @@ def test_locked_exr_is_aces2065_and_mixed_bin_writes(tmp_path: Path):
     rgb = read_rgb_exr(path)
     assert rgb.shape == (2, 2, 3)
     np.testing.assert_allclose(rgb[0, 0], 0.18, atol=5e-3)
+    _assert_st2065_1_chromaticities_on_disk(path)
     assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
+
+
+def test_exr_writers_lock_st2065_1_ap0_chromaticities(tmp_path: Path):
+    """Both write paths emit ST 2065-1 AP0 + ACES white. Not D65, not AP1."""
+    assert ACES2065_1_CHROMATICITIES == ST2065_1_CHROMATICITIES
+    rgb = np.array([[[0.18, 0.09, 0.04]]], dtype=np.float32)
+    direct = tmp_path / "direct.exr"
+    write_rgb_exr(direct, rgb)
+    _assert_st2065_1_chromaticities_on_disk(direct)
+    np.testing.assert_allclose(read_rgb_exr(direct)[0, 0], rgb[0, 0])
+
+    clips = [BatchClip("clip.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0)]
+    report = process_locked_writes(
+        clips, tmp_path / "batch", frames={"clip.mov": _slog3_grey()}
+    )
+    seq = Path(report.written[0].path)
+    assert seq.name.endswith("_ACES2065-1_proxy")
+    _assert_st2065_1_chromaticities_on_disk(seq / sequence_frame_name(0))
+
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    _assert_swift_exr_writer_chromaticities(exporter)
 
 
 def test_wb_off_identity_still_writes_exr(tmp_path: Path):
@@ -342,6 +385,7 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     assert "exportLockedEXR" in clip
     assert "writeACES2065EXR" in clip
     assert "exportGradedAP0Sequence" in clip
+    _assert_swift_exr_writer_chromaticities(exporter)
     assert "_ACES2065-1_proxy" in exporter
     assert "frame_%06d.exr" in exporter
     assert "_proxy_frame0.exr" not in exporter
@@ -457,6 +501,58 @@ def _assert_export_decode_is_source_ycbcr_float(engine: str) -> None:
     assert "/ 255" in preview_extract
     assert HONEST_PROXY_NOTE in engine
     _assert_chengpian_not_a_deliverable_claim(engine.split("func exportGradedAP0Sequence")[0][-400:])
+
+
+def _f32(*values: float) -> tuple[float, ...]:
+    return struct.unpack(f"<{len(values)}f", struct.pack(f"<{len(values)}f", *values))
+
+
+def _assert_st2065_1_chromaticities_on_disk(path: Path) -> None:
+    """Python write path: header chromaticities are ST 2065-1 AP0 + ACES white."""
+    expected = _f32(*ST2065_1_CHROMATICITIES)
+    chroma = read_exr_chromaticities(path)
+    assert chroma == expected
+    assert chroma[6:8] != _f32(*D65_XY)
+    assert chroma[:6] != _f32(*AP1_PRIMARIES_XY)
+    attrs = read_exr_attributes(path)
+    assert "chromaticities" in attrs
+    assert attrs["chromaticities"][0] == "chromaticities"
+    assert "acesImageContainerFlag" not in attrs
+
+
+def _assert_swift_exr_writer_chromaticities(exporter: str) -> None:
+    """Swift write path: same 8 numbers. Fail if D65 or AP1 chromas are used."""
+    assert ACES2065_1_CHROMATICITIES == ST2065_1_CHROMATICITIES
+    const = exporter.split("static let aces2065_1Chromaticities")[1].split("]")[0]
+    writer = exporter.split("static func writeACES2065EXR")[1]
+    assert "aces2065_1Chromaticities" in writer
+    assert 'putAttr("chromaticities", "chromaticities"' in writer
+    assert "acesImageContainerFlag" not in writer
+    assert "acesImageContainerFlag" not in exporter
+    for number in (
+        "0.73470",
+        "0.26530",
+        "0.00000",
+        "1.00000",
+        "0.00010",
+        "-0.07700",
+        "0.32168",
+        "0.33767",
+    ):
+        assert number in const
+    for forbidden in (
+        "0.3127",
+        "0.3290",
+        "0.329",
+        "0.713",
+        "0.293",
+        "0.165",
+        "0.830",
+        "0.128",
+        "0.044",
+    ):
+        assert forbidden not in const
+        assert forbidden not in writer.split("putAttr(\"compression\"")[0]
 
 
 def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
