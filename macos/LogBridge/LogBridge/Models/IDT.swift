@@ -17,17 +17,17 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
     case canonCLog3CGamut = "canon_clog3_cgamut"
     case canonCLog3BT2020 = "canon_clog3_bt2020"
     case appleLogBT2020 = "apple_log_bt2020"
+    case appleLog2AWG = "apple_log2_awg"
     case djiDLogDGamut = "dji_dlog_dgamut"
+    case arriLogC3EI800AWG3 = "arri_logc3_ei800_awg3"
     // Explicitly unsupported — not implemented.
-    case appleLog2Stub = "apple_log2"
     case djiDLogMStub = "dji_dlog_m"
-    case arriLogC3Stub = "arri_logc3"
 
     var id: String { rawValue }
 
     var isStub: Bool {
         switch self {
-        case .appleLog2Stub, .djiDLogMStub, .arriLogC3Stub:
+        case .djiDLogMStub:
             return true
         default:
             return false
@@ -45,10 +45,10 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         case .canonCLog2CGamut, .canonCLog2BT2020: return "C-Log2"
         case .canonCLog3CGamut, .canonCLog3BT2020: return "C-Log3"
         case .appleLogBT2020: return "Apple Log"
+        case .appleLog2AWG: return "Apple Log 2"
         case .djiDLogDGamut: return "D-Log"
-        case .appleLog2Stub: return "Apple Log 2"
+        case .arriLogC3EI800AWG3: return "LogC3 EI800"
         case .djiDLogMStub: return "D-Log M"
-        case .arriLogC3Stub: return "LogC3"
         }
     }
 
@@ -62,8 +62,10 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         case .redLog3G10RWG: return "REDWideGamutRGB"
         case .canonCLog2CGamut, .canonCLog3CGamut: return "Cinema Gamut"
         case .canonCLog2BT2020, .canonCLog3BT2020, .appleLogBT2020: return "BT.2020"
+        case .appleLog2AWG: return "Apple Wide Gamut"
         case .djiDLogDGamut: return "D-Gamut"
-        case .appleLog2Stub, .djiDLogMStub, .arriLogC3Stub: return "(unsupported)"
+        case .arriLogC3EI800AWG3: return "AWG3"
+        case .djiDLogMStub: return "(unsupported)"
         }
     }
 
@@ -112,10 +114,10 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         case .canonCLog3CGamut: return "Canon C-Log3 Cinema Gamut"
         case .canonCLog3BT2020: return "Canon C-Log3 BT.2020"
         case .appleLogBT2020: return "Apple Log BT.2020"
+        case .appleLog2AWG: return "Apple Log 2 Apple Wide Gamut"
         case .djiDLogDGamut: return "DJI D-Log D-Gamut"
-        case .appleLog2Stub: return "Apple Log 2 (unsupported)"
+        case .arriLogC3EI800AWG3: return "ARRI LogC3 EI800 AWG3"
         case .djiDLogMStub: return "DJI D-Log M (unsupported)"
-        case .arriLogC3Stub: return "ARRI LogC3 (unsupported)"
         }
     }
 

@@ -19,7 +19,9 @@ References (public white papers):
 - Nikon N-Log Specification Document 1.0.0 (2018-09-01)
 - RED OPS White Paper on REDWideGamutRGB and Log3G10 (915-0187 Rev-C)
 - Canon Log Gamma Curves white paper (revised C-Log2 / C-Log3) / ACES CTL
-- Apple Log Profile White Paper (September 2023) — Log 1 only
+- Apple Log Profile White Paper (September 2023) — Log 1 curve (Log 2 reuses this)
+- ACES ``Lib.Arri.LogC3`` / ``CSC.Arri.LogCv3-EI800_to_ACES.ctl`` (EI800 only)
+- ACES ``CSC.Apple.AppleLog2_to_ACES.ctl`` (same Apple Log curve + Apple Wide Gamut)
 - DJI White Paper on D-Log and D-Gamut (2017-10-10)
 """
 
@@ -306,8 +308,72 @@ def linear_to_clog3(lin):
 
 
 # ---------------------------------------------------------------------------
-# Apple Log (Log 1 only). Apple Log Profile White Paper, Sept 2023.
-# BT.2020 / D65. Apple Log 2 is out of scope.
+# ARRI LogC3 EI800 only. ACES Lib.Arri.LogC3 / CSC.Arri.LogCv3-EI800_to_ACES.ctl
+# OCIO Builtin: ARRI_ALEXA-LOGC-EI800-AWG_to_ACES2065-1 (ACES CSC / ARRI 2017-03).
+# Not a generic LogC3. EI>1600 has no closed-form inverse (Hermite). Do not add.
+# 18% grey encodes to 0.391.
+# ---------------------------------------------------------------------------
+_LOGC3_NOMINAL_EI = 400.0
+_LOGC3_EI800 = 800.0
+_LOGC3_BLACK = 16.0 / 4095.0
+_LOGC3_MID_GRAY = 0.01
+_LOGC3_ENC_GAIN = 500.0 / 1023.0 * 0.525
+_LOGC3_ENC_OFFSET = 400.0 / 1023.0
+_LOGC3_CUT = 1.0 / 9.0
+_LOGC3_SLOPE = 1.0 / (_LOGC3_CUT * np.log(10.0))
+_LOGC3_OFFSET = np.log10(_LOGC3_CUT) - _LOGC3_SLOPE * _LOGC3_CUT
+
+
+def _logc3_ei800_params():
+    """ACES Lib.Arri.LogC3 constants at EI=800 only (xm < 1, no Hermite)."""
+    gain = _LOGC3_EI800 / _LOGC3_NOMINAL_EI
+    gray = _LOGC3_MID_GRAY / gain
+    enc_gain = (np.log2(gain) * (0.89 - 1.0) / 3.0 + 1.0) * _LOGC3_ENC_GAIN
+    enc_offset = _LOGC3_ENC_OFFSET
+    nz = 0.0
+    for _ in range(3):
+        nz = ((95.0 / 1023.0 - enc_offset) / enc_gain - _LOGC3_OFFSET) / _LOGC3_SLOPE
+        enc_offset = _LOGC3_ENC_OFFSET - np.log10(1.0 + nz) * enc_gain
+    return enc_gain, enc_offset, nz, gray
+
+
+_LOGC3_EI800_ENC_GAIN, _LOGC3_EI800_ENC_OFFSET, _LOGC3_EI800_NZ, _LOGC3_EI800_GRAY = (
+    _logc3_ei800_params()
+)
+# Documented lock: 18% grey encodes to 0.391 (ACES EI800).
+LOGC3_EI800_18_PERCENT = 0.391
+
+
+def logc3_ei800_to_linear(x):
+    """Decode ARRI LogC3 EI800 (normalized 0-1) to relative scene exposure.
+
+    ACES ``normalizedLogC3ToRelativeExposure(t, 800)``. EI800 only.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    out = (x - _LOGC3_EI800_ENC_OFFSET) / _LOGC3_EI800_ENC_GAIN
+    ns_lin = (out - _LOGC3_OFFSET) / _LOGC3_SLOPE
+    ns = np.where(ns_lin > _LOGC3_CUT, np.power(10.0, out), ns_lin)
+    ns = (ns - _LOGC3_EI800_NZ) * _LOGC3_EI800_GRAY + _LOGC3_BLACK
+    return (ns - _LOGC3_BLACK) * (
+        0.18 / (_LOGC3_MID_GRAY * _LOGC3_NOMINAL_EI / _LOGC3_EI800)
+    )
+
+
+def linear_to_logc3_ei800(lin):
+    """Encode relative scene exposure to ARRI LogC3 EI800 (ACES, EI<1600)."""
+    lin = np.asarray(lin, dtype=np.float64)
+    ns = lin * (_LOGC3_MID_GRAY * _LOGC3_NOMINAL_EI / _LOGC3_EI800) / 0.18 + _LOGC3_BLACK
+    ns = (ns - _LOGC3_BLACK) / _LOGC3_EI800_GRAY + _LOGC3_EI800_NZ
+    log_hi = np.log10(np.maximum(ns, 1e-30))
+    log_lo = _LOGC3_SLOPE * ns + _LOGC3_OFFSET
+    out = np.where(ns > _LOGC3_CUT, log_hi, log_lo)
+    return out * _LOGC3_EI800_ENC_GAIN + _LOGC3_EI800_ENC_OFFSET
+
+
+# ---------------------------------------------------------------------------
+# Apple Log (Log 1 curve). Apple Log Profile White Paper, Sept 2023.
+# Apple Log 1 + BT.2020. Apple Log 2 reuses this curve + Apple Wide Gamut
+# (ACES CSC.Apple.AppleLog2_to_ACES.ctl). No APPLE_LOG2 Builtin.
 # Prefer OCIO APPLE_LOG_to_ACES2065-1 / CURVE - APPLE_LOG_to_LINEAR.
 # ---------------------------------------------------------------------------
 _APPLE_R0 = -0.05641088
@@ -376,9 +442,11 @@ CURVE_CLOG2 = "clog2"
 CURVE_CLOG3 = "clog3"
 CURVE_APPLE_LOG = "apple_log"
 CURVE_DLOG = "dlog"
+CURVE_LOGC3_EI800 = "logc3_ei800"
 
 IDT_NAMES = (
     "ARRI LogC4 / AWG4",
+    "ARRI LogC3 EI800 / AWG3",
     "Sony S-Log3 / S-Gamut3",
     "Sony S-Log3 / S-Gamut3.Cine",
     "Panasonic V-Log / V-Gamut",
@@ -392,6 +460,7 @@ IDT_NAMES = (
     "Canon C-Log3 / Cinema Gamut",
     "Canon C-Log3 / BT.2020",
     "Apple Log / BT.2020",
+    "Apple Log 2 / Apple Wide Gamut",
     "DJI D-Log / D-Gamut",
 )
 
@@ -406,6 +475,7 @@ _DECODE = {
     CURVE_CLOG3: clog3_to_linear,
     CURVE_APPLE_LOG: apple_log_to_linear,
     CURVE_DLOG: dlog_to_linear,
+    CURVE_LOGC3_EI800: logc3_ei800_to_linear,
 }
 
 _ENCODE = {
@@ -419,6 +489,7 @@ _ENCODE = {
     CURVE_CLOG3: linear_to_clog3,
     CURVE_APPLE_LOG: linear_to_apple_log,
     CURVE_DLOG: linear_to_dlog,
+    CURVE_LOGC3_EI800: linear_to_logc3_ei800,
 }
 
 

@@ -23,6 +23,11 @@ PRIMARIES = {
     "AWG4": np.array(
         [[0.7347, 0.2653], [0.1424, 0.8576], [0.0991, -0.0308]], dtype=np.float64
     ),
+    # ALEXA Wide Gamut 3 — ACES Lib.Arri.LogC3 / CSC.Arri.LogCv3-EI800_to_ACES.ctl
+    # / OCIO ARRI_ALEXA-LOGC-EI800-AWG_to_ACES2065-1. EI800 pair only.
+    "AWG3": np.array(
+        [[0.68400, 0.31300], [0.22100, 0.84800], [0.08610, -0.10200]], dtype=np.float64
+    ),
     # Sony: S-Gamut3 primaries are the same as conventional S-Gamut
     # (Technical Summary). Do not default S-Log3 to S-Gamut3.Cine.
     "SGamut3": np.array(
@@ -49,6 +54,10 @@ PRIMARIES = {
     "DGamut": np.array(
         [[0.71, 0.31], [0.21, 0.88], [0.09, -0.08]], dtype=np.float64
     ),
+    # Apple Wide Gamut — ACES CSC.Apple.AppleLog2_to_ACES.ctl (not BT.2020).
+    "AppleWideGamut": np.array(
+        [[0.725, 0.301], [0.221, 0.814], [0.068, -0.076]], dtype=np.float64
+    ),
     "Rec709": np.array(
         [[0.640, 0.330], [0.300, 0.600], [0.150, 0.060]], dtype=np.float64
     ),
@@ -65,6 +74,7 @@ PRIMARIES = {
 
 WHITE_POINTS = {
     "AWG4": D65_XY,
+    "AWG3": D65_XY,
     "SGamut3": D65_XY,
     "SGamut3Cine": D65_XY,
     "VGamut": D65_XY,
@@ -72,6 +82,7 @@ WHITE_POINTS = {
     "REDWideGamutRGB": D65_XY,
     "CinemaGamut": D65_XY,
     "DGamut": D65_XY,
+    "AppleWideGamut": D65_XY,
     "Rec709": D65_XY,
     "DWG": D65_XY,
     "AP1": ACES_WHITE_XY,
@@ -96,7 +107,9 @@ IDT_PAIRS = {
     "canon_clog3_cgamut": ("clog3", "CinemaGamut"),
     "canon_clog3_bt2020": ("clog3", "BT2020"),
     "apple_log_bt2020": ("apple_log", "BT2020"),
+    "apple_log2_awg": ("apple_log", "AppleWideGamut"),
     "dji_dlog_dgamut": ("dlog", "DGamut"),
+    "arri_logc3_ei800_awg3": ("logc3_ei800", "AWG3"),
 }
 
 VENICE_IDTS = frozenset(
@@ -167,13 +180,19 @@ def rgb_to_rgb_matrix(src: str, dst: str, cat: np.ndarray | None = None) -> np.n
 def camera_to_aces2065_matrix(gamut: str) -> np.ndarray:
     """Scene-linear camera RGB (D65) -> ACES2065-1 (AP0).
 
-    Bradford CAT D65 -> ACES white, then RP 177 from published primaries.
+    Bradford CAT D65 -> ACES white, then RP 177 from published primaries,
+    except AWG3 which uses CAT02 (ACES ``Lib.Arri.LogC3`` /
+    ``CSC.Arri.LogCv3-EI800_to_ACES.ctl`` / OCIO
+    ``ARRI_ALEXA-LOGC-EI800-AWG_to_ACES2065-1``).
     Used only as the Linux/no-OCIO reference path. Prefer the OCIO Builtin
     when it exists; do not invent a second homemade camera matrix.
     """
-    from .wb import bradford_cat_matrix
+    from .wb import bradford_cat_matrix, chromatic_adaptation_matrix
 
-    cat = bradford_cat_matrix(D65_XY, ACES_WHITE_XY)
+    if gamut == "AWG3":
+        cat = chromatic_adaptation_matrix(D65_XY, ACES_WHITE_XY, method="cat02")
+    else:
+        cat = bradford_cat_matrix(D65_XY, ACES_WHITE_XY)
     return rgb_to_rgb_matrix(gamut, "AP0", cat=cat)
 
 

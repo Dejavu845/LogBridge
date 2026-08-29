@@ -9,8 +9,10 @@ implementations that match the documented 18% codes. Those references match
 the builtins on 18% grey to well under 0.5%; they are not a second, more
 accurate IDT.
 
-F-Log2, N-Log, C-Log2+BT.2020, C-Log3+BT.2020, and D-Log have no full IDT Builtin — keep the papers.
-C-Log2+Cinema Gamut / C-Log3+Cinema Gamut / Apple Log use Builtins when present.
+F-Log2, N-Log, C-Log2+BT.2020, C-Log3+BT.2020, D-Log, and Apple Log 2
+have no full IDT Builtin — keep the papers / ACES CSC matrix.
+C-Log2+Cinema Gamut / C-Log3+Cinema Gamut / Apple Log 1 / LogC3 EI800+AWG3
+use Builtins when present. There is no APPLE_LOG2 Builtin.
 C-Log2+BT.2020 is handwritten C-Log2 curve + BT.2020→AP0 if no Builtin.
 Venice Builtins are used only when a Venice camera is detected, never as a
 silent S-Log3 default.
@@ -34,6 +36,8 @@ IDT_BUILTINS: dict[str, str] = {
     "canon_clog2_cgamut": "CANON_CLOG2-CGAMUT_to_ACES2065-1",
     "canon_clog3_cgamut": "CANON_CLOG3-CGAMUT_to_ACES2065-1",
     "apple_log_bt2020": "APPLE_LOG_to_ACES2065-1",
+    # ACES CSC / ARRI 2017-03. EI800 + AWG3 only. Not a generic LogC3.
+    "arri_logc3_ei800_awg3": "ARRI_ALEXA-LOGC-EI800-AWG_to_ACES2065-1",
 }
 
 # No standard Builtin (checked against BuiltinTransformRegistry).
@@ -47,6 +51,8 @@ HANDWRITTEN_IDTS = frozenset(
         "canon_clog3_bt2020",
         # 2017 white paper. D-Log M is unsupported.
         "dji_dlog_dgamut",
+        # Same Apple Log 1 curve + Apple Wide Gamut. No APPLE_LOG2 Builtin.
+        "apple_log2_awg",
     }
 )
 
@@ -60,6 +66,8 @@ CANON_CLOG3_CURVE = "CURVE - CANON_CLOG3_to_LINEAR"
 CANON_CLOG3_IDT = "CANON_CLOG3-CGAMUT_to_ACES2065-1"
 APPLE_LOG_CURVE = "CURVE - APPLE_LOG_to_LINEAR"
 APPLE_LOG_IDT = "APPLE_LOG_to_ACES2065-1"
+# No APPLE_LOG2 Builtin. Apple Log 2 is the Log 1 curve + Apple Wide Gamut.
+ARRI_LOGC3_EI800_IDT = "ARRI_ALEXA-LOGC-EI800-AWG_to_ACES2065-1"
 
 # ACES Output Transform / BT.2100 (Rec.2100 HLG + PQ). Prefer these
 # BuiltinTransform styles over any handwritten HLG/PQ curve.
@@ -167,6 +175,25 @@ def apply_builtin(style: str, rgb, *, inverse: bool = False) -> np.ndarray:
 def apply_builtin_idt(log_rgb, style: str) -> np.ndarray:
     """Camera log RGB (0-1, or already in the Builtin's domain) -> ACES2065-1."""
     return apply_builtin(style, log_rgb, inverse=False)
+
+
+def apply_apple_log2_awg(log_rgb) -> np.ndarray:
+    """Apple Log 2 + Apple Wide Gamut → ACES2065-1.
+
+    No ``APPLE_LOG2`` Builtin. Reuse ``CURVE - APPLE_LOG_to_LINEAR`` (same
+    curve as Apple Log 1) plus AWG→AP0 from ACES
+    ``CSC.Apple.AppleLog2_to_ACES.ctl`` (Bradford default).
+    """
+    from .curves import apple_log_to_linear
+    from .gamuts import camera_to_aces2065_matrix
+
+    rgb = np.asarray(log_rgb, dtype=np.float64)
+    if ocio_available() and APPLE_LOG_CURVE in registry_styles():
+        lin = apply_builtin(APPLE_LOG_CURVE, rgb)
+    else:
+        lin = apple_log_to_linear(rgb)
+    m = camera_to_aces2065_matrix("AppleWideGamut")
+    return np.asarray(lin, dtype=np.float64) @ m.T
 
 
 def apply_clog2_bt2020(log_rgb) -> np.ndarray:

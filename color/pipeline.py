@@ -29,7 +29,13 @@ from .gamuts import (
     camera_to_aces2065_matrix,
     rgb_to_rgb_matrix,
 )
-from .ocio_builtins import apply_builtin_idt, apply_clog2_bt2020, builtin_style_for, ocio_available
+from .ocio_builtins import (
+    apply_apple_log2_awg,
+    apply_builtin_idt,
+    apply_clog2_bt2020,
+    builtin_style_for,
+    ocio_available,
+)
 from .odt import HDR_ODTS, ODT_OFF, ODT_REC709, apply_hdr_odt
 from .rec709 import rec709_oetf
 from .wb import apply_white_balance
@@ -64,6 +70,9 @@ def apply_idt(log_rgb, idt_id: str) -> np.ndarray:
     # C-Log2 + BT.2020: no full IDT Builtin. Curve Builtin + BT.2020→AP0, or paper.
     if idt_id == "canon_clog2_bt2020":
         return apply_clog2_bt2020(rgb)
+    # Apple Log 2: no APPLE_LOG2 Builtin. Same curve as Log 1 + Apple Wide Gamut.
+    if idt_id == "apple_log2_awg":
+        return apply_apple_log2_awg(rgb)
     return apply_idt_reference(rgb, idt_id)
 
 

@@ -4,11 +4,7 @@ import numpy as np
 import pytest
 
 from color import curves
-from color.stubs import (
-    apple_log2_to_linear,
-    dlog_m_to_linear,
-    logc3_to_linear,
-)
+from color.stubs import dlog_m_to_linear
 
 
 def _roundtrip(encode, decode, lin, rtol=1e-10, atol=1e-12):
@@ -180,8 +176,11 @@ class TestDispatch:
         assert any("C-Log2" in n and "BT.2020" in n for n in names)
         assert any("C-Log3" in n and "Cinema Gamut" in n for n in names)
         assert any("C-Log3" in n and "BT.2020" in n for n in names)
-        assert any("Apple Log" in n for n in names)
+        assert any("Apple Log" in n and "BT.2020" in n for n in names)
+        assert any("Apple Log 2" in n and "Apple Wide Gamut" in n for n in names)
+        assert any("LogC3 EI800" in n and "AWG3" in n for n in names)
         assert any("D-Log" in n and "D-Gamut" in n for n in names)
+        assert not any("D-Log M" in n for n in names)
 
     def test_unknown_curve_raises(self):
         with pytest.raises(KeyError):
@@ -273,8 +272,31 @@ class TestDLog:
         _roundtrip(curves.linear_to_dlog, curves.dlog_to_linear, lin, rtol=1e-6)
 
 
+class TestLogC3EI800:
+    def test_18_percent_grey_encodes_to_0_391(self):
+        enc = curves.linear_to_logc3_ei800(0.18)
+        assert enc == pytest.approx(0.391, abs=5e-4)
+        assert curves.LOGC3_EI800_18_PERCENT == 0.391
+        assert curves.logc3_ei800_to_linear(0.391) == pytest.approx(0.18, rel=2e-3)
+
+    def test_roundtrip(self):
+        lin = np.array([0.0, 0.001, 0.18, 1.0, 10.0])
+        _roundtrip(curves.linear_to_logc3_ei800, curves.logc3_ei800_to_linear, lin, rtol=1e-9)
+
+    def test_not_a_generic_logc3_without_ei(self):
+        assert "logc3_ei800" in curves._DECODE
+        assert "logc3" not in curves._DECODE
+
+
+class TestAppleLog2UsesSameCurve:
+    def test_apple_log2_reuses_apple_log1_curve(self):
+        # Apple Log 2 is the same transfer as Apple Log 1 (ACES CSC).
+        assert curves.decode_log("apple_log", 0.391) == pytest.approx(
+            float(curves.apple_log_to_linear(0.391))
+        )
+
+
 class TestStubs:
-    def test_unsupported_remain_stubs(self):
-        for fn in (apple_log2_to_linear, dlog_m_to_linear, logc3_to_linear):
-            with pytest.raises(NotImplementedError):
-                fn(0.18)
+    def test_dlog_m_remains_refused(self):
+        with pytest.raises(NotImplementedError):
+            dlog_m_to_linear(0.18)
