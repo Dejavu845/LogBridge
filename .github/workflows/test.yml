@@ -4,7 +4,8 @@ on:
   push:
   pull_request:
 
-# Linux pytest 保留。macos-14 只编现有 LogBridge scheme，并跑同一套 pytest。
+# Linux pytest 保留。macos-15 只编现有 LogBridge scheme，并跑同一套 pytest。
+# 现有 CALayer.colorspace 要 macOS 15 SDK（Xcode 16）；macos-14 默认是 Xcode 15.4，编不过。
 # Metal GPU、Finder 显示、真机写出 / 真机导出 在 Actions 上测不了，仍靠人在 Mac 上点。
 # 没有真机 CI，也不覆盖 Metal / Finder / 真写出。
 
@@ -22,7 +23,7 @@ jobs:
         run: python -m pytest -q
 
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     # 编 macos/LogBridge 现有 scheme；pytest 依赖与上面 Linux job 相同（numpy pytest）。
     # Metal GPU、Finder 显示、真机写出 / 真机导出 仍靠人在 Mac 上点。没有真机 CI。
     steps:
