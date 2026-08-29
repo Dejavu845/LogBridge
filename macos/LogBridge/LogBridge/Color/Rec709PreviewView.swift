@@ -4,6 +4,15 @@ import CoreGraphics
 import MetalKit
 import QuartzCore
 
+/// Runner SDK (Xcode 26.3 / MacOSX26.2) Swift overlay has no `CALayer.colorspace`.
+/// KVC writes the same CALayer key. 709 tag / untagged source unchanged.
+private extension CALayer {
+    var colorspace: CGColorSpace? {
+        get { value(forKey: "colorspace") as? CGColorSpace }
+        set { setValue(newValue, forKey: "colorspace") }
+    }
+}
+
 // MARK: - Rec.709 ODT pane
 //
 // Only this pane tags CGColorSpace.itur_709. Rec.709 encoded pixels must

@@ -63,7 +63,7 @@ python3 -m pip install numpy pytest
 PYTHONPATH=. python3 -m pytest -q
 ```
 
-CI: `.github/workflows/test.yml` 在 Ubuntu 上跑 pytest；另有 `macos-15` job（xcode-select Xcode 26，现有 `CALayer.colorspace` 要这套 SDK）编现有 LogBridge scheme 并跑同一套 pytest。Metal GPU、Finder 显示、真机写出 / 真机导出 在 Actions 上测不了，仍靠人在 Mac 上点。没有真机 CI。
+CI: `.github/workflows/test.yml` 在 Ubuntu 上跑 pytest；另有 `macos-15` job 编现有 LogBridge scheme 并跑同一套 pytest。Metal GPU、Finder 显示、真机写出 / 真机导出 在 Actions 上测不了，仍靠人在 Mac 上点。没有真机 CI。
 
 ## Input IDTs (M1)
 
