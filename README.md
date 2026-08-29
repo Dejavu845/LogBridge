@@ -171,3 +171,8 @@ ocio/           config.ocio (BuiltinTransform) + handwritten F-Log2 / N-Log LUTs
 macos/LogBridge Xcode / SwiftUI (preview + IDT + process; node strip in 高级)
 scripts/        LUT/config generator
 ```
+
+## 许可证 / License
+
+本项目以 MIT License 发布。详见根目录 `LICENSE`。
+
