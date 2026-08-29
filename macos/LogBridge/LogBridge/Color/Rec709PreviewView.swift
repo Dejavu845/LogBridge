@@ -4,13 +4,10 @@ import CoreGraphics
 import MetalKit
 import QuartzCore
 
-/// Runner SDK (Xcode 26.3 / MacOSX26.2) Swift overlay has no `CALayer.colorspace`.
+/// Runner Swift overlay: CALayer has no `colorspace` (CAMetalLayer does).
 /// KVC writes the same CALayer key. 709 tag / untagged source unchanged.
-private extension CALayer {
-    var colorspace: CGColorSpace? {
-        get { value(forKey: "colorspace") as? CGColorSpace }
-        set { setValue(newValue, forKey: "colorspace") }
-    }
+private func setAppKitLayerColorSpace(_ layer: CALayer?, _ space: CGColorSpace?) {
+    layer?.setValue(space, forKey: "colorspace")
 }
 
 // MARK: - Rec.709 ODT pane
@@ -96,10 +93,10 @@ final class Rec709ImageHost: NSView {
         wantsLayer = true
         let rec709 = CGColorSpace(name: CGColorSpace.itur_709)
         layer = CALayer()
-        layer?.colorspace = rec709
+        setAppKitLayerColorSpace(layer, rec709)
         layer?.backgroundColor = CGColor(gray: 0.09, alpha: 1)
         imageLayer.contentsGravity = .resizeAspect
-        imageLayer.colorspace = rec709
+        setAppKitLayerColorSpace(imageLayer, rec709)
         layer?.addSublayer(imageLayer)
     }
 
@@ -248,10 +245,10 @@ final class SourceImageHost: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer = CALayer()
-        layer?.colorspace = nil
+        setAppKitLayerColorSpace(layer, nil)
         layer?.backgroundColor = CGColor(gray: 0.06, alpha: 1)
         imageLayer.contentsGravity = .resizeAspect
-        imageLayer.colorspace = nil
+        setAppKitLayerColorSpace(imageLayer, nil)
         layer?.addSublayer(imageLayer)
     }
 
