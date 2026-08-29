@@ -19,7 +19,9 @@ hardcoded BT.709 + video-range for every clip. Scale is bit-depth
 + range (video 10-bit is Y 64–940 / C 64–960, not /1023). 8-bit
 Y′CbCr is only the fallback when 10-bit is unavailable. Still a
 proxy, not camera-original — 整段代理，不是全精度成片. Not ACEScct.
-Not a Rec.709 .mov/.mp4. Preview/scrub may stay 8-bit-first.
+Not a Rec.709 .mov/.mp4. Preview first-frame unpack shares the same
+nclc/colr/vui matrix+range helper, then quantizes to 8-bit / 1920.
+Write does not use that 8-bit buffer. Preview/scrub may stay 8-bit-first.
 「N 条已处理」 is clips that produced a sequence, or locked clips attempted
 with a per-clip error — not a preview refresh. Pending clips in the same
 bin do not block.
@@ -336,7 +338,9 @@ def require_source_ycbcr_tags(tags) -> tuple[str, str]:
 def ycbcr_to_preview_u8(y, cb, cr, *, bit_depth: int = 10, sample_range: str = "video", matrix: str = "bt709"):
     """Preview 8-bit path: matrix, then clamp and quantize to 0-255.
 
-    ``extractRGB`` later does ``u8 / 255``. Write must not use this.
+    Swift preview reads matrix+range from nclc/colr/vui (same helper as
+    write). No silent 709-video default. ``extractRGB`` later does
+    ``u8 / 255``. Write must not use this.
     """
     r, g, b = ycbcr_to_rgb_float(
         y, cb, cr, bit_depth=bit_depth, sample_range=sample_range, matrix=matrix

@@ -323,6 +323,86 @@ def test_preview_decode_stays_8bit_first_and_scrub_odt_only():
     assert "整段代理，不是全精度成片" in engine
 
 
+def test_preview_unpack_shares_source_ycbcr_helper():
+    """Preview first-frame uses #31 nclc/colr/vui matrix+range. Display stays 8-bit/1920."""
+    engine = _read(ENGINE)
+    assert "static let maxLongEdge: CGFloat = 1920" in engine
+    assert "static let exportMaxLongEdge: CGFloat = 16384" in engine
+
+    preview = engine.split("func decodeMovieVideoToolbox")[1].split(
+        "func decodeStillImageIO"
+    )[0]
+    preview_cg = engine.split("func cgImageFromLogPixelBuffer")[1].split(
+        "func writeMatrixRGB"
+    )[0]
+    write_matrix = engine.split("func writeMatrixRGB")[1].split(
+        "func decodeStillImageIO"
+    )[0]
+    require = engine.split("func requireSourceYCbCrUnpack")[1].split(
+        "func ycbcrMatrixCoeffs"
+    )[0]
+    movie = engine.split("func decodeMovieAllFrames")[1].split(
+        "func linearAP0Frame"
+    )[0]
+    export_first = engine.split("func exportGradedAP0(")[1].split(
+        "func exportGradedAP0Sequence"
+    )[0]
+    export_seq = engine.split("func exportGradedAP0Sequence")[1].split(
+        "func decodeAllSourceFrames"
+    )[0]
+    cached = engine.split("func cachedSource")[1].split("func cachedLinear")[0]
+    build = engine.split("private func build(")[1].split("private static func gradeKey")[0]
+    odt_hit = engine.split("func refreshODT(")[1].split("private func build(")[0]
+
+    assert "requireSourceYCbCrUnpack" in preview
+    assert "requireSourceYCbCrUnpack" in preview_cg
+    assert "missingYCbCrTagsChip" in preview
+    assert "无法读取片源 Y′CbCr 矩阵/范围，未写出" in preview
+    assert "No 709-video default" in preview
+    assert "no 709 transfer" in preview.lower() or "no 709 transfer" in preview_cg.lower()
+    assert "rec709OETF" not in preview
+    assert "applyODT" not in preview
+    assert "applyIDT" not in preview
+    assert "bitsPerComponent: 8" in preview_cg
+    assert "writeMatrixRGB" in preview_cg
+    assert "yOff: 16" not in preview_cg
+    assert "yOff: 64" not in preview_cg
+    assert "1.5748" not in write_matrix
+    assert "unpack.rv" in write_matrix
+    assert "unpack.gu" in write_matrix
+    assert "nclc" in require.lower()
+    assert "colr" in require.lower() or "nclc / colr / vui" in engine
+    assert "missingYCbCrTagsChip" in require
+
+    assert "maxLongEdge: Self.maxLongEdge" in cached
+    assert "decodeDownscaled" in cached
+    assert "extractRGB" in cached
+    assert "rgbFloatFromLogPixelBuffer" not in cached
+    assert "exportMaxLongEdge" not in cached
+    assert "localizedDescription" in build
+    assert "无法读取片源 Y′CbCr 矩阵/范围，未写出" in engine
+
+    assert "requireSourceYCbCrUnpack" in movie
+    assert "rgbFloatFromLogPixelBuffer" in movie
+    assert "writeMatrixRGB(" not in movie
+    assert "cgImageFromLogPixelBuffer(" not in movie
+    assert "maxLongEdge: Self.exportMaxLongEdge" in export_first or "exportMaxLongEdge" in export_first
+    assert "maxLongEdge: Self.maxLongEdge" not in export_first
+    assert "maxLongEdge: Self.maxLongEdge" not in export_seq
+    assert "decodeDownscaled" not in export_first
+    assert "decodeDownscaled" not in export_seq
+    assert "extractRGB" not in export_seq
+    assert "/ 255" not in export_seq
+    assert "gradedCache" not in export_seq
+
+    assert "requireSourceYCbCrUnpack" not in odt_hit
+    assert "decodeMovieVideoToolbox" not in odt_hit
+    assert "rgbFloatFromLogPixelBuffer" not in odt_hit
+    assert "publishODTOnly" in odt_hit
+    assert "预览·非成片" in engine
+    assert "整段代理，不是全精度成片" in engine
+
+
 def test_export_write_overlaps_next_copynext():
     """Locked write: EXR of N overlaps sequential copyNext of N+1. One write only."""
     engine = _read(ENGINE)
