@@ -43,6 +43,8 @@ from color.batch import (
     REVEAL_IN_FINDER,
     WRITTEN_CHIP,
     WRITE_FAILED_CHIP,
+    WRITE_LONG_EDGE_CEILING,
+    WRITE_OVERSIZE_CHIP,
     DECODE_FAILED_CHIP,
     BatchClip,
     count_proxy_exrs,
@@ -72,6 +74,7 @@ from color.batch import (
     sidebar_export_chips,
     sidebar_status_chip,
     clip_sequence_reveal_path,
+    require_write_source_pixels,
     skip_reason,
     ycbcr_to_preview_u8,
     ycbcr_to_rgb_float,
@@ -478,7 +481,9 @@ def _assert_export_decode_is_source_ycbcr_float(engine: str) -> None:
     assert "maxLongEdge" not in export_first
     assert "maxLongEdge" not in export_seq
     assert "exportMaxLongEdge" not in engine
-    assert "16384" not in engine
+    assert "static let writeLongEdgeCeiling = 16384" in engine
+    assert "requireWriteSourcePixels" in engine
+    assert "片源边长超过 16384，未写出" in engine
     assert "rgbFloatFromLogPixelBuffer" in movie
     assert "cgImageFromLogPixelBuffer(" not in movie
     assert "extractRGB" not in movie
@@ -734,9 +739,80 @@ def test_missing_ycbcr_tags_fails_closed_no_709_default(tmp_path: Path):
     assert "yOff: 64" not in preview_cg
     assert MISSING_YCBCR_TAGS_CHIP in clip
     assert "missingYCbCrTagsChip" in clip.split("static func shortExportChip")[1]
+    assert "writeOversizeChip" in clip.split("static func shortExportChip")[1]
     assert "Do not map nclc color primaries / transfer / matrix to an IDT" in detector
     _assert_chengpian_not_a_deliverable_claim(MISSING_YCBCR_TAGS_CHIP)
     _assert_chengpian_not_a_deliverable_claim(require)
+
+
+def test_write_16384_is_ceiling_refuse_not_downsample(tmp_path: Path):
+    """16384 refuses larger sources. Write stays 1:1. No scale to 16384/1920."""
+    assert WRITE_LONG_EDGE_CEILING == 16384
+    assert WRITE_OVERSIZE_CHIP == "片源边长超过 16384，未写出"
+    require_write_source_pixels(16384, 1)
+    require_write_source_pixels(1, 16384)
+    with pytest.raises(ValueError, match=WRITE_OVERSIZE_CHIP):
+        require_write_source_pixels(16385, 1)
+    with pytest.raises(ValueError, match=WRITE_OVERSIZE_CHIP):
+        require_write_source_pixels(1, 16385)
+    assert short_export_chip(WRITE_OVERSIZE_CHIP) == WRITE_OVERSIZE_CHIP
+    _assert_chengpian_not_a_deliverable_claim(WRITE_OVERSIZE_CHIP)
+    assert "精准" not in WRITE_OVERSIZE_CHIP
+    assert "完善" not in WRITE_OVERSIZE_CHIP
+
+    clips = [
+        BatchClip("huge.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0)
+    ]
+    huge = np.zeros((2, 16385, 3), dtype=np.float32)
+    dest = tmp_path / "oversize"
+    dest.mkdir()
+    report = process_locked_writes(clips, dest, frames={"huge.mov": [huge]})
+    assert report.written == ()
+    assert report.errors[0].error == WRITE_OVERSIZE_CHIP
+    assert list(dest.glob("**/*.exr")) == []
+    assert list(dest.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
+    chips = sidebar_export_chips(clips, report)
+    assert chips["huge.mov"] == WRITE_OVERSIZE_CHIP
+
+    ok = np.zeros((2, 4, 3), dtype=np.float32)
+    ok.fill(0.18)
+    dest_ok = tmp_path / "ok"
+    dest_ok.mkdir()
+    report_ok = process_locked_writes(
+        [BatchClip("ok.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0)],
+        dest_ok,
+        frames={"ok.mov": [ok]},
+    )
+    assert len(report_ok.written) == 1
+    written = Path(report_ok.written[0].path)
+    assert written.name.endswith("_ACES2065-1_proxy")
+    assert (written / "frame_000000.exr").is_file()
+
+    engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    clip = _read(CLIP)
+    write_float = engine.split("func rgbFloatFromLogPixelBuffer")[1].split(
+        "func applyYCbCrMatrixToFloat"
+    )[0]
+    require = engine.split("func requireWriteSourcePixels")[1].split(
+        "func writeCAT"
+    )[0]
+    assert "static let writeLongEdgeCeiling = 16384" in engine
+    assert "requireWriteSourcePixels" in write_float
+    assert "scale =" not in write_float
+    assert "maxLongEdge" not in write_float
+    assert "exportMaxLongEdge" not in engine
+    assert "writeLongEdgeCeiling" in require
+    assert "scale =" not in require
+    assert "maxLongEdge" not in require
+    assert WRITE_OVERSIZE_CHIP in engine
+    assert WRITE_OVERSIZE_CHIP in clip
+    assert "writeOversizeChip" in clip.split("static func shortExportChip")[1]
+    cached = engine.split("func cachedSource")[1].split("func cachedLinear")[0]
+    assert "maxLongEdge: Self.maxLongEdge" in cached
+    assert "rgbFloatFromLogPixelBuffer" not in cached
+    assert "requireWriteSourcePixels" not in cached
+    assert HONEST_PROXY_NOTE in engine
+    assert "_ACES2065-1_proxy" in clip
 
 
 def test_write_loop_one_pass_no_preview_8bit_no_odt(tmp_path: Path, monkeypatch):

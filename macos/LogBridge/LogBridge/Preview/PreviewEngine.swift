@@ -391,8 +391,20 @@ final class PreviewEngine: ObservableObject {
     /// (`extractRGB` / 255). Still a proxy — 整段代理，不是全精度成片.
     /// Bit-depth going up is still 整段代理，不是全精度成片.
     /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
-    /// Write uses source pixel dimensions (no preview long-edge cap).
+    /// Write is source pixels 1:1. ``writeLongEdgeCeiling`` (16384) is refuse
+    /// only — do not scale export to 16384 or 1920.
     /// Preview display stays ``maxLongEdge`` 1920 / 8-bit.
+    static let writeLongEdgeCeiling = 16384
+    static let writeOversizeChip = "片源边长超过 16384，未写出"
+
+    /// 16384 is a refuse ceiling. Write stays 1:1. Do not scale to 16384 or 1920.
+    static func requireWriteSourcePixels(width: Int, height: Int) throws {
+        if max(width, height) > writeLongEdgeCeiling {
+            throw NSError(domain: "LogBridge", code: 4, userInfo: [
+                NSLocalizedDescriptionKey: writeOversizeChip
+            ])
+        }
+    }
 
     /// Clip-constant CAT for a locked write. Nil = WB off / identity (same as gradeAP0).
     /// Built once per sequence — do not rebuild the CAT per write frame.
@@ -549,6 +561,7 @@ final class PreviewEngine: ObservableObject {
                     NSLocalizedDescriptionKey: "decode/grade failed"
                 ])
             }
+            try requireWriteSourcePixels(width: img.width, height: img.height)
             var rgb = PreviewColor.extractRGB(img)
             try onFrame(&rgb, img.width, img.height)
             return
@@ -563,6 +576,11 @@ final class PreviewEngine: ObservableObject {
         if probe.decision == .refuse { return nil }
         if probe.kind == .still {
             guard let img = decodeStillFullImageIO(url: url) else { return nil }
+            do {
+                try requireWriteSourcePixels(width: img.width, height: img.height)
+            } catch {
+                return nil
+            }
             return (PreviewColor.extractRGB(img), img.width, img.height)
         }
         let formats: [OSType] = [
@@ -885,8 +903,8 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// Matrix-only Y′CbCr → float R′G′B′ at the buffer's native sample depth.
-    /// Source pixel dimensions — no preview long-edge cap.
-    /// Matrix + full/video come from nclc / colr / vui. Missing tags throw
+    /// Source pixels 1:1. ``requireWriteSourcePixels`` refuses above 16384.
+    /// Do not scale. Matrix + full/video come from nclc / colr / vui. Missing tags throw
     /// 「无法读取片源 Y′CbCr 矩阵/范围，未写出」. No 709-video default.
     /// Video-range 10-bit uses 64/876, not /1023. No Rec.709 transfer.
     static func rgbFloatFromLogPixelBuffer(
@@ -902,6 +920,7 @@ final class PreviewEngine: ObservableObject {
                 NSLocalizedDescriptionKey: "decode/grade failed"
             ])
         }
+        try requireWriteSourcePixels(width: w, height: h)
         var rgb = [Float](repeating: 0, count: w * h * 3)
         let fmt = CVPixelBufferGetPixelFormatType(pb)
         if fmt == kCVPixelFormatType_32BGRA || fmt == kCVPixelFormatType_32ARGB {

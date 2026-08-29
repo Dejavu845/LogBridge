@@ -328,7 +328,16 @@ def test_preview_unpack_shares_source_ycbcr_helper():
     engine = _read(ENGINE)
     assert "static let maxLongEdge: CGFloat = 1920" in engine
     assert "exportMaxLongEdge" not in engine
-    assert "16384" not in engine
+    assert "static let writeLongEdgeCeiling = 16384" in engine
+    assert "requireWriteSourcePixels" in engine
+    assert "片源边长超过 16384，未写出" in engine
+    require = engine.split("func requireWriteSourcePixels")[1].split(
+        "func writeCAT"
+    )[0]
+    assert "writeLongEdgeCeiling" in require
+    assert "scale" not in require
+    assert "maxLongEdge" not in require
+    assert "1920" not in require
 
     preview = engine.split("func decodeMovieVideoToolbox")[1].split(
         "func decodeStillImageIO"
@@ -512,7 +521,8 @@ def test_export_write_overlaps_next_copynext():
     assert "copyNextSampleBuffer" in movie
 
     assert "exportMaxLongEdge" not in engine
-    assert "16384" not in engine
+    assert "static let writeLongEdgeCeiling = 16384" in engine
+    assert "requireWriteSourcePixels" in engine
     assert "maxLongEdge" not in export_seq
     assert "decodeDownscaled" not in export_seq
     assert "extractRGB" not in export_seq
@@ -565,7 +575,16 @@ def test_export_write_is_source_pixels_not_preview_1920_8bit():
 
     assert "static let maxLongEdge: CGFloat = 1920" in engine
     assert "exportMaxLongEdge" not in engine
-    assert "16384" not in engine
+    assert "static let writeLongEdgeCeiling = 16384" in engine
+    assert "requireWriteSourcePixels" in engine
+    assert "片源边长超过 16384，未写出" in engine
+    require = engine.split("func requireWriteSourcePixels")[1].split(
+        "func writeCAT"
+    )[0]
+    assert "writeLongEdgeCeiling" in require
+    assert "scale" not in require
+    assert "maxLongEdge" not in require
+    assert "1920" not in require
 
     export_first = engine.split("func exportGradedAP0(")[1].split(
         "func exportGradedAP0Sequence"
@@ -614,6 +633,11 @@ def test_export_write_is_source_pixels_not_preview_1920_8bit():
     assert "gradedCache" not in export_seq
     assert "bitsPerComponent: 8" not in write_float
     assert "u8(" not in write_float
+    assert "requireWriteSourcePixels" in write_float
+    assert "requireWriteSourcePixels" in all_src
+    assert "requireWriteSourcePixels" in first
+    assert "scale =" not in write_float
+    assert "Double(maxLongEdge)" not in write_float
 
     assert "maxLongEdge: Self.maxLongEdge" in cached
     assert "decodeDownscaled" in cached
@@ -639,11 +663,14 @@ def test_export_write_is_source_pixels_not_preview_1920_8bit():
     assert "整段代理，不是全精度成片" in engine
     assert "整段代理，不是全精度成片" in clip
     assert "整段代理，不是全精度成片" in batch
-    assert "source pixel dimensions" in readme
-    assert "source pixel dimensions" in acceptance
-    assert "source pixel dimensions" in batch
-    assert "no 1920 long-edge cap" in readme
-    assert "no 1920 long-edge cap" in acceptance
+    assert "source pixels 1:1" in readme
+    assert "source pixels 1:1" in acceptance
+    assert "source pixels 1:1" in batch
+    assert "refuse ceiling" in readme
+    assert "refuse ceiling" in acceptance
+    assert "片源边长超过 16384，未写出" in readme
+    assert "片源边长超过 16384，未写出" in acceptance
+    assert "片源边长超过 16384，未写出" in batch
     assert "未验证" in readme or "unverified" in readme.lower()
     assert "成片" not in export_seq.replace("不是全精度成片", "")
     assert "完善" not in export_seq

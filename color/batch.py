@@ -22,9 +22,10 @@ proxy, not camera-original — 整段代理，不是全精度成片. Not ACEScct
 Not a Rec.709 .mov/.mp4. Movie preview first-frame unpack shares the same
 nclc/colr/vui matrix+range helper, then quantizes to 8-bit / 1920.
 Stills (TIFF / DPX / EXR) stay ImageIO — already RGB, no Y′CbCr unpack.
-Write uses source pixel dimensions and source-native bit depth (no 1920
-long-edge cap). Write does not use that 8-bit preview buffer.
-Preview/scrub may stay 8-bit-first.
+Write is source pixels 1:1 and source-native bit depth. 16384 is a
+refuse ceiling (「片源边长超过 16384，未写出」), not a downsample
+target. Do not scale export to 16384 or 1920. Write does not use
+the 8-bit preview buffer. Preview/scrub may stay 8-bit-first.
 「N 条已处理」 is clips that produced a sequence, or locked clips attempted
 with a per-clip error — not a preview refresh. Pending clips in the same
 bin do not block.
@@ -141,6 +142,8 @@ FRAME_MISMATCH_CHIP = "帧数对不上"
 MISSING_FPS_CHIP = "读不到帧率，未核对"
 MISSING_DURATION_CHIP = "读不到时长，未核对"
 MISSING_YCBCR_TAGS_CHIP = "无法读取片源 Y′CbCr 矩阵/范围，未写出"
+WRITE_LONG_EDGE_CEILING = 16384
+WRITE_OVERSIZE_CHIP = "片源边长超过 16384，未写出"
 DISK_SHORT_STATUS = "磁盘空间不足，未写出"
 # Uncompressed float32 RGB scanline payload (3 × 4). Not ZIP/PIZ.
 # Header + offset table are not per-pixel; DISK_MARGIN covers them.
@@ -408,6 +411,12 @@ def has_locked_idt(clip: BatchClip) -> bool:
     return True
 
 
+def require_write_source_pixels(width: int, height: int) -> None:
+    """16384 is a refuse ceiling. Write stays 1:1. Do not scale."""
+    if max(int(width), int(height)) > WRITE_LONG_EDGE_CEILING:
+        raise ValueError(WRITE_OVERSIZE_CHIP)
+
+
 def skip_reason(clip: BatchClip) -> str | None:
     """Chinese reason for unlocked / pending clips. None when locked."""
     if has_locked_idt(clip):
@@ -434,6 +443,7 @@ def short_export_chip(
         MISSING_FPS_CHIP,
         MISSING_DURATION_CHIP,
         MISSING_YCBCR_TAGS_CHIP,
+        WRITE_OVERSIZE_CHIP,
     ):
         return error
     low = error.lower()
@@ -1010,6 +1020,13 @@ def process_locked_writes(
             continue
         if not clip.idt:
             errors.append(ClipWrite(name=clip.name, error="no IDT"))
+            continue
+        try:
+            for rgb in rgb_frames:
+                arr = np.asarray(rgb)
+                require_write_source_pixels(arr.shape[1], arr.shape[0])
+        except ValueError as exc:
+            errors.append(ClipWrite(name=clip.name, error=str(exc)))
             continue
         if ycbcr_tags is not None:
             try:
