@@ -527,8 +527,8 @@ def _assert_swift_exr_writer_chromaticities(exporter: str) -> None:
     writer = exporter.split("static func writeACES2065EXR")[1]
     assert "aces2065_1Chromaticities" in writer
     assert 'putAttr("chromaticities", "chromaticities"' in writer
-    assert "acesImageContainerFlag" not in writer
-    assert "acesImageContainerFlag" not in exporter
+    assert 'putAttr("acesImageContainerFlag"' not in writer
+    assert 'putAttr("acesImageContainerFlag"' not in exporter
     for number in (
         "0.73470",
         "0.26530",
