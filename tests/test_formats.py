@@ -54,6 +54,17 @@ def test_stills_preview_and_write_skip_ycbcr_unpack():
     assert "Already RGB" in still or "already RGB" in engine
     assert "requireSourceYCbCrUnpack" not in still
     assert "CGImageSourceCreateThumbnailAtIndex" in still
+    full = engine.split("func decodeStillFullImageIO")[1].split(
+        "/// Preview stills thumbnail"
+    )[0]
+    assert "CGImageSourceCreateImageAtIndex" in full
+    assert "Thumbnail" not in full
+    assert "maxLongEdge" not in full
+    write_stills = engine.split("func decodeAllSourceFrames")[1].split(
+        "func decodeFirstSourceRGB"
+    )[0]
+    assert "decodeStillFullImageIO" in write_stills
+    assert "decodeStillImageIO(" not in write_stills
 
 
 def test_arri_mxf_refused():
