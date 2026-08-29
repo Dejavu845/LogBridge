@@ -444,7 +444,7 @@ final class PreviewEngine: ObservableObject {
     func exportGradedAP0Sequence(
         clip: Clip,
         graph: SerialGraph,
-        writeFrame: (Int, [Float], Int, Int) throws -> Void
+        writeFrame: @escaping (Int, [Float], Int, Int) throws -> Void
     ) throws -> Int {
         try queue.sync {
             guard let idt = clip.idt, !idt.isStub, !clip.needsUserPicker else {
