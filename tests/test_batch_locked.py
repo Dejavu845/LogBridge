@@ -449,6 +449,11 @@ def _assert_export_decode_is_source_ycbcr_float(engine: str) -> None:
     )[0]
     assert "bitsPerComponent: 8" in preview_cg
     assert "writeMatrixRGB" in preview_cg
+    assert "requireSourceYCbCrUnpack" in preview_cg
+    assert "missingYCbCrTagsChip" in preview_cg
+    assert MISSING_YCBCR_TAGS_CHIP in preview_cg
+    assert "yOff: 16" not in preview_cg
+    assert "yOff: 64" not in preview_cg
     assert "/ 255" in preview_extract
     assert HONEST_PROXY_NOTE in engine
     _assert_chengpian_not_a_deliverable_claim(engine.split("func exportGradedAP0Sequence")[0][-400:])
@@ -474,11 +479,12 @@ def test_export_sequence_prefers_10bit_ycbcr():
     assert "writeMatrixRGB" in engine
     ten_block = engine.split("kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange")[-1]
     assert "writeMatrixRGB" in ten_block.split("func writeMatrixRGB")[0]
-    matrix = engine.split("func writeMatrixRGB")[1]
-    assert "1.5748" in matrix
-    assert "0.1873" in matrix
-    assert "0.4681" in matrix
-    assert "1.8556" in matrix
+    matrix = engine.split("func writeMatrixRGB")[1].split("func decodeStillImageIO")[0]
+    assert "unpack.rv" in matrix
+    assert "unpack.gu" in matrix
+    assert "unpack.gv" in matrix
+    assert "unpack.bu" in matrix
+    assert "1.5748" not in matrix
     source_matrix = engine.split("func ycbcrMatrixCoeffs")[1].split(
         "func ycbcrRangeOffsets"
     )[0]
@@ -613,6 +619,19 @@ def test_missing_ycbcr_tags_fails_closed_no_709_default(tmp_path: Path):
     movie = engine.split("func decodeMovieAllFrames")[1].split("func linearAP0Frame")[0]
     assert "requireSourceYCbCrUnpack" in movie
     assert "rec709OETF" not in movie
+    preview = engine.split("func decodeMovieVideoToolbox")[1].split(
+        "func decodeStillImageIO"
+    )[0]
+    preview_cg = engine.split("func cgImageFromLogPixelBuffer")[1].split(
+        "func writeMatrixRGB"
+    )[0]
+    assert "requireSourceYCbCrUnpack" in preview
+    assert "requireSourceYCbCrUnpack" in preview_cg
+    assert MISSING_YCBCR_TAGS_CHIP in preview
+    assert "No 709-video default" in preview
+    assert "rec709OETF" not in preview
+    assert "yOff: 16" not in preview_cg
+    assert "yOff: 64" not in preview_cg
     assert MISSING_YCBCR_TAGS_CHIP in clip
     assert "missingYCbCrTagsChip" in clip.split("static func shortExportChip")[1]
     assert "Do not map nclc color primaries / transfer / matrix to an IDT" in detector
