@@ -677,3 +677,131 @@ def test_export_write_is_source_pixels_not_preview_1920_8bit():
     assert "完善" not in export_seq
     assert "精准" not in export_seq
     assert "acesImageContainerFlag" not in engine
+
+
+def test_per_frame_scrubber_odt_only_no_whole_clip_decode():
+    """Visible movie slider. Cache hit for that frame: ODT only. No 24/30. No disk cache."""
+    engine = _read(ENGINE)
+    clip = _read(CLIP)
+    content = _read(ROOT / "macos/LogBridge/LogBridge/ContentView.swift")
+
+    assert "func setPreviewFrame" in clip
+    assert "func resetPreviewScrub" in clip
+    assert "func scrub(" in engine
+    assert "private func applyScrub" in engine
+    assert "previewScrubLastFrame" in clip
+    assert "previewScrubFail" in clip
+    assert "Slider(" in content
+    assert "struct PreviewScrubBar" in content
+    assert "第 " in content
+    assert " 帧" in content
+
+    reset = clip.split("func resetPreviewScrub()")[1].split("var pendingPickerCount")[0]
+    assert "expectedSourceFrames" in reset
+    assert "MediaFormat.extent" in reset
+    assert "kind == .still" in reset
+    assert "missingFpsChip" in reset or "读不到帧率，未核对" in reset
+    assert "24" not in reset
+    assert "30" not in reset
+    assert "FileManager" not in reset
+    assert "完善" not in reset
+    assert "精准" not in reset
+
+    set_fn = clip.split("func setPreviewFrame")[1].split("func resetPreviewScrub")[0]
+    assert "preview.scrub(" in set_fn
+    assert "preview.refresh(" not in set_fn
+    assert "preview.refreshODT" not in set_fn
+    assert "decodeMovieAllFrames" not in set_fn
+    assert "24" not in set_fn
+    assert "30" not in set_fn
+    assert "精准" not in set_fn
+
+    session_refresh = clip.split("func refreshPreview()")[1].split("func refreshODTOnly()")[0]
+    assert "frameIndex: previewFrameIndex" in session_refresh
+    assert "resetPreviewScrub" in session_refresh
+
+    only = clip.split("func refreshODTOnly()")[1].split("func setPreviewFrame")[0]
+    assert "preview.refreshODT" in only
+    assert "frameIndex: previewFrameIndex" in only
+    assert "preview.refresh(" not in only
+    assert "preview.scrub" not in only
+
+    scrub = engine.split("func scrub(")[1].split("private func publish(")[0]
+    assert "beginPreviewRequest" in scrub
+    assert "retainPreviewCaches" in scrub
+    assert "applyScrub" in scrub
+    assert "gradedCacheHit" in scrub
+    assert "renderODTFromGraded" in scrub
+    assert "cacheHit: true" in scrub
+    assert "source.cgImage" in scrub
+    assert "decodeMovieAllFrames" not in scrub
+    assert "decodeMovieVideoToolbox" not in scrub
+    assert "rgbFloatFromLogPixelBuffer" not in scrub
+    assert "requireSourceYCbCrUnpack" not in scrub
+    assert "applyIDT" not in scrub
+    assert "applyExposure" not in scrub
+    assert "applyWB" not in scrub
+    assert "FileManager" not in scrub
+    assert "writeTo" not in scrub
+    assert "24" not in scrub
+    assert "30" not in scrub
+    assert "精准" not in scrub
+    assert "完善" not in scrub
+
+    cached = engine.split("func cachedSource")[1].split("func cachedLinear")[0]
+    assert "hit.frameIndex == frameIndex" in cached
+    assert "decodeDownscaled" in cached
+    assert "maxLongEdge: Self.maxLongEdge" in cached
+    assert "FileManager" not in cached
+    assert "writeTo" not in cached
+    assert cached.index("isCurrentPreview") < cached.index("decodeDownscaled")
+
+    linear = engine.split("func cachedLinear")[1].split("func scrub(")[0]
+    assert "hit.frameIndex == source.frameIndex" in linear
+
+    seek = engine.split("func readFirstYpCbCrFrame")[1].split(
+        "func cgImageFromLogPixelBuffer"
+    )[0]
+    assert "timeRange" in seek
+    assert "copyNextSampleBuffer" in seek
+    assert "AVAssetImageGenerator" not in seek
+    assert "copyCGImage" not in seek
+    assert "requestedTime" not in seek
+    assert "24" not in seek.replace("60000", "")
+    assert "30" not in seek
+
+    movie = engine.split("func decodeMovieVideoToolbox")[1].split(
+        "func readFirstYpCbCrFrame"
+    )[0]
+    assert "missingFpsChip" in movie
+    assert "24" not in movie
+    assert "30" not in movie
+    assert "return nil" not in movie
+
+    export_seq = engine.split("func exportGradedAP0Sequence")[1].split(
+        "func decodeAllSourceFrames"
+    )[0]
+    movie_write = engine.split("func decodeMovieAllFrames")[1].split(
+        "func linearAP0Frame"
+    )[0]
+    assert "timeRange" not in export_seq
+    assert "timeRange" not in movie_write
+    assert "func scrub(" not in export_seq
+    assert "setPreviewFrame" not in export_seq
+    assert "previewScrub" not in export_seq
+
+    odt_hit = engine.split("func refreshODT(")[1].split("private func build(")[0]
+    assert "func scrub(" not in odt_hit
+    assert "decodeMovieVideoToolbox" not in odt_hit
+    assert "publishODTOnly" in odt_hit
+    assert "gradedCacheHit" in odt_hit
+
+    graph = _read(ROOT / "macos/LogBridge/LogBridge/Models/NodeGraph.swift")
+    assert "var acesOTNote: String" in graph
+    assert "ACEScct timeline / ACES2065-1 EXR deliverable." in graph
+
+    assert "static let maxLongEdge: CGFloat = 1920" in engine
+    assert "预览·非成片" in content
+    assert "预览·非成片" in engine
+    assert "未验证" in clip
+

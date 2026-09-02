@@ -1268,6 +1268,44 @@ def test_selected_clip_glanceable_on_preview():
     assert "成片预览关" not in clip
 
 
+def test_preview_scrub_bar_is_chinese_no_fake_rate():
+    """Movie slider uses duration × fps. Stills stay still. Missing rate: 读不到…."""
+    content = _read(CONTENT)
+    clip = _read(CLIP)
+    bar = content.split("struct PreviewScrubBar")[1].split("struct WriteProgressLine")[0]
+    assert "Slider(" in bar
+    assert "previewScrubFail" in bar
+    assert "previewScrubLastFrame" in bar
+    assert "setPreviewFrame" in bar
+    assert "Button(" not in bar
+    assert "24" not in bar
+    assert "30" not in bar
+    assert "完善" not in bar
+    assert "精准" not in bar
+    assert "预览·非成片" in bar
+    assert "第 " in bar
+    assert " 帧" in bar
+    cleaned = (
+        bar.replace("预览·非成片", "")
+        .replace("不是全精度成片", "")
+        .replace("不是成片", "")
+    )
+    assert "成片" not in cleaned
+
+    reset = clip.split("func resetPreviewScrub()")[1].split("var pendingPickerCount")[0]
+    assert "kind == .still" in reset
+    assert "expectedSourceFrames" in reset
+    assert "missingFpsChip" in reset or "读不到帧率，未核对" in reset
+    assert "24" not in reset
+    assert "30" not in reset
+    assert "精准" not in reset
+    assert "完善" not in reset
+
+    split = content.split("struct SplitPreview")[1].split("struct WriteProgressLine")[0]
+    assert "PreviewScrubBar" in split
+    assert "Button(" not in split
+
+
 def test_forbidden_marketing_copy_stays_forbidden():
     swift = _all_swift()
     docs = (ROOT / "README.md").read_text(encoding="utf-8") + (ROOT / "ACCEPTANCE.md").read_text(

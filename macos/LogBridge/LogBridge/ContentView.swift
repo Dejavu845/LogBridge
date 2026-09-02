@@ -297,11 +297,50 @@ struct SplitPreview: View {
                 }
             }
             .padding(2)
+            PreviewScrubBar(session: session)
             if session.isExporting {
                 WriteProgressLine(text: session.lastExportNote)
             } else if let caption = session.selectedClip?.previewCaption {
                 WriteProgressLine(text: caption)
             }
+        }
+    }
+}
+
+/// Movie: slider first…last from duration × metadata fps. Cache hit: 只重跑 ODT.
+/// Missing fps/duration: Chinese fail, no fake range. Stills: no slider.
+struct PreviewScrubBar: View {
+    @ObservedObject var session: SessionModel
+
+    var body: some View {
+        if session.isExporting {
+            EmptyView()
+        } else if let fail = session.previewScrubFail {
+            Text(fail)
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+        } else if let last = session.previewScrubLastFrame {
+            HStack(spacing: 8) {
+                Slider(
+                    value: Binding(
+                        get: { Double(session.previewFrameIndex) },
+                        set: { session.setPreviewFrame(Int($0.rounded())) }
+                    ),
+                    in: 0...Double(last),
+                    step: 1
+                )
+                .controlSize(.small)
+                .help("预览·非成片")
+                Text("第 \(session.previewFrameIndex + 1) / \(last + 1) 帧")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 88, alignment: .trailing)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
         }
     }
 }
