@@ -533,7 +533,7 @@ final class PreviewEngine: ObservableObject {
             }
             if count < 1 {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: decodeFailedChip
+                    NSLocalizedDescriptionKey: Self.decodeFailedChip
                 ])
             }
             return count
@@ -558,7 +558,7 @@ final class PreviewEngine: ObservableObject {
         if probe.kind == .still {
             guard let img = decodeStillFullImageIO(url: url) else {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: decodeFailedChip
+                    NSLocalizedDescriptionKey: Self.decodeFailedChip
                 ])
             }
             try requireWriteSourcePixels(width: img.width, height: img.height)
@@ -623,7 +623,7 @@ final class PreviewEngine: ObservableObject {
             if count > 0 { return }
         }
         throw NSError(domain: "LogBridge", code: 2, userInfo: [
-            NSLocalizedDescriptionKey: decodeFailedChip
+            NSLocalizedDescriptionKey: Self.decodeFailedChip
         ])
     }
 
@@ -652,7 +652,7 @@ final class PreviewEngine: ObservableObject {
             guard let pb = CMSampleBufferGetImageBuffer(sample) else {
                 if count == 0 { return 0 }
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: decodeFailedChip
+                    NSLocalizedDescriptionKey: Self.decodeFailedChip
                 ])
             }
             var decoded: (rgb: [Float], width: Int, height: Int)
@@ -701,7 +701,7 @@ final class PreviewEngine: ObservableObject {
     static func userFacingFailureNote(_ error: Error) -> String {
         let desc = (error as NSError).localizedDescription
         if desc.hasPrefix("先选择") || desc.contains("读不到元数据") { return desc }
-        if desc == missingYCbCrTagsChip || desc == decodeFailedChip || desc == writeOversizeChip {
+        if desc == missingYCbCrTagsChip || desc == Self.decodeFailedChip || desc == writeOversizeChip {
             return desc
         }
         if desc == MediaFormat.noteCameraRaw || desc == MediaFormat.noteARRIMxf
@@ -714,9 +714,9 @@ final class PreviewEngine: ObservableObject {
         let lower = desc.lowercased()
         if lower.contains("decode") || lower.contains("grade") || lower.contains("parse")
             || desc.contains("解析失败") {
-            return decodeFailedChip
+            return Self.decodeFailedChip
         }
-        return decodeFailedChip
+        return Self.decodeFailedChip
     }
 
     private struct SourceYCbCrUnpack {
@@ -940,7 +940,7 @@ final class PreviewEngine: ObservableObject {
         let h = CVPixelBufferGetHeight(pb)
         guard w > 0, h > 0 else {
             throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: decodeFailedChip
+                NSLocalizedDescriptionKey: Self.decodeFailedChip
             ])
         }
         try requireWriteSourcePixels(width: w, height: h)
@@ -959,7 +959,7 @@ final class PreviewEngine: ObservableObject {
         if fmt == kCVPixelFormatType_422YpCbCr8 {
             guard let base = CVPixelBufferGetBaseAddress(pb) else {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: decodeFailedChip
+                    NSLocalizedDescriptionKey: Self.decodeFailedChip
                 ])
             }
             let stride = CVPixelBufferGetBytesPerRow(pb)
@@ -981,7 +981,7 @@ final class PreviewEngine: ObservableObject {
             guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
                   let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: decodeFailedChip
+                    NSLocalizedDescriptionKey: Self.decodeFailedChip
                 ])
             }
             let yStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
@@ -1007,7 +1007,7 @@ final class PreviewEngine: ObservableObject {
             guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 0),
                   let uvPlane = CVPixelBufferGetBaseAddressOfPlane(pb, 1) else {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: decodeFailedChip
+                    NSLocalizedDescriptionKey: Self.decodeFailedChip
                 ])
             }
             let yStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 0)
@@ -1086,7 +1086,7 @@ final class PreviewEngine: ObservableObject {
         if probe.kind == .still {
             guard let img = decodeStillImageIO(url: url, maxLongEdge: maxLongEdge) else {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: decodeFailedChip
+                    NSLocalizedDescriptionKey: Self.decodeFailedChip
                 ])
             }
             return img
@@ -1113,7 +1113,7 @@ final class PreviewEngine: ObservableObject {
             }
         }
         throw NSError(domain: "LogBridge", code: 2, userInfo: [
-            NSLocalizedDescriptionKey: decodeFailedChip
+            NSLocalizedDescriptionKey: Self.decodeFailedChip
         ])
     }
 

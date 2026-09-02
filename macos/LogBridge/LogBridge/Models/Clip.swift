@@ -388,7 +388,7 @@ final class SessionModel: ObservableObject {
             }
             if count < 1 {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: decodeFailedChip
+                    NSLocalizedDescriptionKey: Self.decodeFailedChip
                 ])
             }
             try Self.verifyLockedProxySequence(clip: clip, seqDir: seqDir)
@@ -537,7 +537,7 @@ final class SessionModel: ObservableObject {
         let lower = desc.lowercased()
         if lower.contains("decode") || lower.contains("grade") || lower.contains("parse")
             || desc.contains("解析失败") {
-            return decodeFailedChip
+            return Self.decodeFailedChip
         }
         return writeFailedChip
     }
@@ -548,7 +548,7 @@ final class SessionModel: ObservableObject {
         if desc.contains("读不到元数据") { return desc }
         if desc == frameMismatchChip || desc == missingFpsChip || desc == missingDurationChip
             || desc == missingYCbCrTagsChip || desc == writeOversizeChip
-            || desc == decodeFailedChip {
+            || desc == Self.decodeFailedChip {
             return desc
         }
         if desc == MediaFormat.noteCameraRaw || desc == MediaFormat.noteARRIMxf
