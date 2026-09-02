@@ -8,6 +8,16 @@ from color.formats import (
     TRY,
     classify,
     empty_metadata_note,
+    NOTE_ARRI_MXF,
+    NOTE_CAMERA_RAW,
+    NOTE_UNKNOWN_CODEC,
+)
+from color.batch import (
+    DECODE_FAILED_CHIP,
+    GENERIC_PARSE_FAILED,
+    MISSING_YCBCR_TAGS_CHIP,
+    user_facing_failure_note,
+    short_export_chip,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -167,3 +177,128 @@ def test_swift_probe_and_decode_locks():
     assert "读不到元数据，先选择 Log 与色域" in detector
     assert "D-Log M" in detector
     assert "Apple Log 2" in detector
+    down = engine.split("func decodeDownscaled")[1].split(
+        "return try decodeMovieVideoToolbox"
+    )[0]
+    assert "decision == .refuse" in down
+    assert "probe.note" in down
+    assert "return nil" not in down.split("if probe.decision == .refuse")[1].split("if probe.kind")[0]
+
+
+def _swift_ui() -> str:
+    return "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in (ROOT / "macos").rglob("*.swift")
+    )
+
+
+def _python_ui() -> str:
+    return "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in (ROOT / "color").glob("*.py")
+    )
+
+
+def test_failure_notes_name_the_class_not_bare_parse_failed():
+    """Detect / IDT / decode / format failures name the class.
+
+    「解析失败」 is not the only (or any) user-facing string for these paths.
+    R3D / BRAW keep the existing refuse note.
+    """
+    assert GENERIC_PARSE_FAILED == "解析失败"
+    assert DECODE_FAILED_CHIP == "解码失败"
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
+    assert empty_metadata_note() == "先选择 Log 与色域"
+    assert MISSING_YCBCR_TAGS_CHIP == "无法读取片源 Y′CbCr 矩阵/范围，未写出"
+
+    assert classify("clip.r3d").note == NOTE_CAMERA_RAW
+    assert classify("clip.braw").note == NOTE_CAMERA_RAW
+    assert classify("A001C001.mxf", "ARRIRAW").note == NOTE_ARRI_MXF
+    assert classify("weird.mov", "r210").note == NOTE_UNKNOWN_CODEC
+
+    assert user_facing_failure_note("decode/grade failed") == DECODE_FAILED_CHIP
+    assert user_facing_failure_note(GENERIC_PARSE_FAILED) == DECODE_FAILED_CHIP
+    assert user_facing_failure_note("Could not decode a preview frame") == DECODE_FAILED_CHIP
+    assert user_facing_failure_note(MISSING_YCBCR_TAGS_CHIP) == MISSING_YCBCR_TAGS_CHIP
+    assert user_facing_failure_note(NOTE_CAMERA_RAW) == NOTE_CAMERA_RAW
+    assert user_facing_failure_note(NOTE_ARRI_MXF) == NOTE_ARRI_MXF
+    assert user_facing_failure_note(NOTE_UNKNOWN_CODEC) == NOTE_UNKNOWN_CODEC
+    assert user_facing_failure_note("读不到元数据，先选择 Log 与色域") == (
+        "读不到元数据，先选择 Log 与色域"
+    )
+    assert user_facing_failure_note(empty_metadata_note()) == empty_metadata_note()
+    assert user_facing_failure_note(DECODE_FAILED_CHIP) == DECODE_FAILED_CHIP
+    assert user_facing_failure_note(GENERIC_PARSE_FAILED) != GENERIC_PARSE_FAILED
+
+    assert short_export_chip(NOTE_CAMERA_RAW) == NOTE_CAMERA_RAW
+    assert short_export_chip(NOTE_ARRI_MXF) == NOTE_ARRI_MXF
+    assert short_export_chip(NOTE_UNKNOWN_CODEC) == NOTE_UNKNOWN_CODEC
+    assert short_export_chip(DECODE_FAILED_CHIP) == DECODE_FAILED_CHIP
+    assert short_export_chip(MISSING_YCBCR_TAGS_CHIP) == MISSING_YCBCR_TAGS_CHIP
+    assert short_export_chip(GENERIC_PARSE_FAILED) == DECODE_FAILED_CHIP
+    assert short_export_chip(GENERIC_PARSE_FAILED) != GENERIC_PARSE_FAILED
+
+    swift = _swift_ui()
+    python = _python_ui()
+    engine = _read(ENGINE)
+    clip = _read(CLIP)
+    detector = _read(DETECTOR)
+    media = _read(MEDIA)
+
+    assert 'NSLocalizedDescriptionKey: "decode/grade failed"' not in swift
+    assert "NSLocalizedDescriptionKey: Self.decodeFailedChip" in engine
+    assert "NSLocalizedDescriptionKey: Self.decodeFailedChip" in clip
+    export_seq = engine.split("func exportGradedAP0Sequence")[1].split(
+        "func decodeAllSourceFrames"
+    )[0]
+    assert "Self.decodeFailedChip" in export_seq
+    export_exr = clip.split("func exportLockedEXR")[1].split(
+        "func cancelLockedDeliverables"
+    )[0]
+    assert "Self.decodeFailedChip" in export_exr
+    assert ": decodeFailedChip" not in export_seq.replace("Self.decodeFailedChip", "")
+    assert ": decodeFailedChip" not in export_exr.replace("Self.decodeFailedChip", "")
+    assert "userFacingFailureNote" in engine
+    assert "preservedFailureNote" in clip
+    assert "decodeFailedChip" in clip.split("static func shortExportChip")[1]
+    assert "noteCameraRaw" in clip.split("static func preservedFailureNote")[1]
+    assert "noteARRIMxf" in clip.split("static func preservedFailureNote")[1]
+    assert NOTE_CAMERA_RAW in media
+    assert NOTE_ARRI_MXF in media
+    assert NOTE_UNKNOWN_CODEC in media
+    assert NOTE_CAMERA_RAW in clip or NOTE_CAMERA_RAW in media
+    assert "读不到元数据，先选择 Log 与色域" in detector
+    assert DECODE_FAILED_CHIP in engine
+    assert DECODE_FAILED_CHIP in clip
+    assert MISSING_YCBCR_TAGS_CHIP in engine
+    assert "probe.note" in engine.split("func decodeDownscaled")[1].split(
+        "func decodeMovieVideoToolbox"
+    )[0]
+    movie = engine.split("func decodeMovieVideoToolbox")[1].split(
+        "func readFirstYpCbCrFrame"
+    )[0]
+    assert "decodeFailedChip" in movie
+    assert "return nil" not in movie
+    build = engine.split("private func build(")[1].split("private static func gradeKey")[0]
+    assert "userFacingFailureNote" in build
+    assert "localizedDescription" not in build
+    import_fn = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    assert "probe.note" in import_fn
+    assert NOTE_CAMERA_RAW.split("：")[0] in media
+    assert GENERIC_PARSE_FAILED not in import_fn
+    assert GENERIC_PARSE_FAILED not in build
+
+    for blob in (swift, python):
+        assert NOTE_CAMERA_RAW in blob
+        assert DECODE_FAILED_CHIP in blob
+        assert "读不到元数据" in blob or "先选择 Log 与色域" in blob
+        cleaned = blob
+        for tok in (
+            f'GENERIC_PARSE_FAILED = "{GENERIC_PARSE_FAILED}"',
+            f'contains("{GENERIC_PARSE_FAILED}")',
+            "error == GENERIC_PARSE_FAILED",
+        ):
+            cleaned = cleaned.replace(tok, "")
+        assert f'"{GENERIC_PARSE_FAILED}"' not in cleaned

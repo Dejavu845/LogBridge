@@ -46,6 +46,9 @@ from color.batch import (
     WRITE_LONG_EDGE_CEILING,
     WRITE_OVERSIZE_CHIP,
     DECODE_FAILED_CHIP,
+    GENERIC_PARSE_FAILED,
+    preserved_failure_note,
+    user_facing_failure_note,
     BatchClip,
     count_proxy_exrs,
     expected_source_frames,
@@ -740,6 +743,8 @@ def test_missing_ycbcr_tags_fails_closed_no_709_default(tmp_path: Path):
     assert MISSING_YCBCR_TAGS_CHIP in clip
     assert "missingYCbCrTagsChip" in clip.split("static func shortExportChip")[1]
     assert "writeOversizeChip" in clip.split("static func shortExportChip")[1]
+    assert "decodeFailedChip" in clip.split("static func shortExportChip")[1]
+    assert "preservedFailureNote" in clip.split("static func shortExportChip")[1]
     assert "Do not map nclc color primaries / transfer / matrix to an IDT" in detector
     _assert_chengpian_not_a_deliverable_claim(MISSING_YCBCR_TAGS_CHIP)
     _assert_chengpian_not_a_deliverable_claim(require)
@@ -1188,8 +1193,19 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
     assert short_export_chip(written=True) == WRITTEN_CHIP
     assert short_export_chip(cancelled=True) is None
     assert short_export_chip("decode/grade failed") == DECODE_FAILED_CHIP
+    assert short_export_chip(DECODE_FAILED_CHIP) == DECODE_FAILED_CHIP
+    assert short_export_chip(GENERIC_PARSE_FAILED) == DECODE_FAILED_CHIP
     assert short_export_chip("no pixels") == DECODE_FAILED_CHIP
     assert short_export_chip("disk full") == WRITE_FAILED_CHIP
+    assert short_export_chip(DECODE_FAILED_CHIP) != WRITE_FAILED_CHIP
+    assert preserved_failure_note(DECODE_FAILED_CHIP) == DECODE_FAILED_CHIP
+    from color.formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_UNKNOWN_CODEC
+
+    assert short_export_chip(NOTE_CAMERA_RAW) == NOTE_CAMERA_RAW
+    assert short_export_chip(NOTE_ARRI_MXF) == NOTE_ARRI_MXF
+    assert short_export_chip(NOTE_UNKNOWN_CODEC) == NOTE_UNKNOWN_CODEC
+    assert user_facing_failure_note(GENERIC_PARSE_FAILED) == DECODE_FAILED_CHIP
+    assert user_facing_failure_note(NOTE_CAMERA_RAW) == NOTE_CAMERA_RAW
     assert "成片" not in (short_export_chip(written=True) or "")
 
     clips = [
@@ -1766,6 +1782,7 @@ def test_verify_missing_fps_fails_and_never_guesses_24_or_30(tmp_path: Path):
     assert "frameMismatchChip" in chip_fn
     assert "missingFpsChip" in chip_fn
     assert "missingYCbCrTagsChip" in chip_fn
+    assert "decodeFailedChip" in chip_fn or "preservedFailureNote" in chip_fn
     media = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/MediaFormat.swift")
     assert "post-write" in media or "EXR count" in media
     assert "func extent(url:" in media

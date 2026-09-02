@@ -388,8 +388,9 @@ def test_preview_unpack_shares_source_ycbcr_helper():
     assert "extractRGB" in cached
     assert "rgbFloatFromLogPixelBuffer" not in cached
     assert "exportMaxLongEdge" not in cached
-    assert "localizedDescription" in build
+    assert "userFacingFailureNote" in build
     assert "无法读取片源 Y′CbCr 矩阵/范围，未写出" in engine
+    assert "解码失败" in engine
 
     assert "requireSourceYCbCrUnpack" in movie
     assert "rgbFloatFromLogPixelBuffer" in movie

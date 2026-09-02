@@ -388,7 +388,7 @@ final class SessionModel: ObservableObject {
             }
             if count < 1 {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: "decode/grade failed"
+                    NSLocalizedDescriptionKey: Self.decodeFailedChip
                 ])
             }
             try Self.verifyLockedProxySequence(clip: clip, seqDir: seqDir)
@@ -529,19 +529,36 @@ final class SessionModel: ObservableObject {
     static let writeOversizeChip = "片源边长超过 16384，未写出"
 
     /// Short Chinese sidebar / status error. Failed write is not silent.
+    /// Keep the real class (格式不接 / 解码失败 / 读不到元数据). Do not collapse to 解析失败.
     static func shortExportChip(for error: Error) -> String {
         if error is LockedWriteCancel { return writeFailedChip }
         let desc = error.localizedDescription
-        if desc.hasPrefix("先选择") { return desc }
-        if desc == frameMismatchChip || desc == missingFpsChip || desc == missingDurationChip
-            || desc == missingYCbCrTagsChip || desc == writeOversizeChip {
-            return desc
-        }
+        if let kept = preservedFailureNote(desc) { return kept }
         let lower = desc.lowercased()
-        if lower.contains("decode") || lower.contains("grade") {
-            return decodeFailedChip
+        if lower.contains("decode") || lower.contains("grade") || lower.contains("parse")
+            || desc.contains("解析失败") {
+            return Self.decodeFailedChip
         }
         return writeFailedChip
+    }
+
+    /// Known Chinese failure notes stay as-is. Never rewrite them to 解析失败 / 写出失败.
+    static func preservedFailureNote(_ desc: String) -> String? {
+        if desc.hasPrefix("先选择") { return desc }
+        if desc.contains("读不到元数据") { return desc }
+        if desc == frameMismatchChip || desc == missingFpsChip || desc == missingDurationChip
+            || desc == missingYCbCrTagsChip || desc == writeOversizeChip
+            || desc == Self.decodeFailedChip {
+            return desc
+        }
+        if desc == MediaFormat.noteCameraRaw || desc == MediaFormat.noteARRIMxf
+            || desc == MediaFormat.noteUnknownCodec {
+            return desc
+        }
+        if desc.contains("不接") || desc.contains("暂不支持") || desc.contains("无法读取") {
+            return desc
+        }
+        return nil
     }
 
     /// Expected EXR count: duration × metadata fps only. Never invent a frame rate.
