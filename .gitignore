@@ -11,3 +11,9 @@ venv/
 xcuserdata/
 DerivedData/
 *.xcuserstate
+
+# Local grey-card samples / numeric goldens stay out of the tree.
+tests/fixtures/grey_card/*
+!tests/fixtures/grey_card/README.md
+!tests/fixtures/grey_card/.gitignore
+

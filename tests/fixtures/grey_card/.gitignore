@@ -1,0 +1,4 @@
+# 本机灰卡样片与金数文件不进仓库。
+*
+!.gitignore
+!README.md
