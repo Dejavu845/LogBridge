@@ -82,6 +82,7 @@ import numpy as np
 
 from .as_shot import WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from .exr_write import write_rgb_exr
+from .formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_UNKNOWN_CODEC
 from .graph import SerialGraph
 
 REASON_PICK_LOG_GAMUT = "先选择 Log 与色域"
@@ -138,6 +139,7 @@ LAST_EXPORT_DIRECTORY_KEY = "logbridge.lastExportDirectory"
 WRITTEN_CHIP = "已写出代理"
 WRITE_FAILED_CHIP = "写出失败"
 DECODE_FAILED_CHIP = "解码失败"
+GENERIC_PARSE_FAILED = "解析失败"
 FRAME_MISMATCH_CHIP = "帧数对不上"
 MISSING_FPS_CHIP = "读不到帧率，未核对"
 MISSING_DURATION_CHIP = "读不到时长，未核对"
@@ -426,6 +428,46 @@ def skip_reason(clip: BatchClip) -> str | None:
     return REASON_PICK_LOG_GAMUT
 
 
+def preserved_failure_note(error: str) -> str | None:
+    """Known Chinese class notes stay as-is. Never rewrite them to 解析失败."""
+    if error.startswith("先选择"):
+        return error
+    if "读不到元数据" in error:
+        return error
+    if error in (
+        FRAME_MISMATCH_CHIP,
+        MISSING_FPS_CHIP,
+        MISSING_DURATION_CHIP,
+        MISSING_YCBCR_TAGS_CHIP,
+        WRITE_OVERSIZE_CHIP,
+        DECODE_FAILED_CHIP,
+        NOTE_CAMERA_RAW,
+        NOTE_ARRI_MXF,
+        NOTE_UNKNOWN_CODEC,
+        PREVIEW_STATUS_DECODE_FAIL,
+    ):
+        return error
+    if "不接" in error or "暂不支持" in error or "无法读取" in error:
+        return error
+    return None
+
+
+def user_facing_failure_note(error: str) -> str:
+    """Preview / import / decode status. Name the class; never bare 解析失败."""
+    if kept := preserved_failure_note(error):
+        return kept
+    low = error.lower()
+    if (
+        "decode" in low
+        or "grade" in low
+        or "parse" in low
+        or "no pixels" in low
+        or error == GENERIC_PARSE_FAILED
+    ):
+        return DECODE_FAILED_CHIP
+    return DECODE_FAILED_CHIP
+
+
 def short_export_chip(
     error: str | None = None, *, written: bool = False, cancelled: bool = False
 ) -> str | None:
@@ -436,18 +478,16 @@ def short_export_chip(
         return WRITTEN_CHIP
     if not error:
         return None
-    if error.startswith("先选择"):
-        return error
-    if error in (
-        FRAME_MISMATCH_CHIP,
-        MISSING_FPS_CHIP,
-        MISSING_DURATION_CHIP,
-        MISSING_YCBCR_TAGS_CHIP,
-        WRITE_OVERSIZE_CHIP,
-    ):
-        return error
+    if kept := preserved_failure_note(error):
+        return kept
     low = error.lower()
-    if "decode" in low or "grade" in low or "no pixels" in low:
+    if (
+        "decode" in low
+        or "grade" in low
+        or "parse" in low
+        or "no pixels" in low
+        or error == GENERIC_PARSE_FAILED
+    ):
         return DECODE_FAILED_CHIP
     return WRITE_FAILED_CHIP
 
