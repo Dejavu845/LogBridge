@@ -195,6 +195,7 @@ final class SessionModel: ObservableObject {
         }
         let (count, err) = Self.expectedSourceFrames(MediaFormat.extent(url: clip.url))
         if let err {
+            // missingFpsChip / missingDurationChip
             previewScrubFail = err
             return
         }
