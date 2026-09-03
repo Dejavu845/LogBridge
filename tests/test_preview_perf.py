@@ -798,7 +798,8 @@ def test_per_frame_scrubber_odt_only_no_whole_clip_decode():
 
     graph = _read(ROOT / "macos/LogBridge/LogBridge/Models/NodeGraph.swift")
     assert "var acesOTNote: String" in graph
-    assert "ACEScct timeline / ACES2065-1 EXR deliverable." in graph
+    assert 'return "导出 ACEScct / EXR"' in graph
+    assert "ACEScct timeline / ACES2065-1 EXR deliverable." not in graph
 
     assert "static let maxLongEdge: CGFloat = 1920" in engine
     assert "预览·非成片" in content

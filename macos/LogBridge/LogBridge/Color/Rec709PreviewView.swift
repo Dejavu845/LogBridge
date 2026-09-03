@@ -56,7 +56,7 @@ struct Rec709PreviewView: View {
     }
 }
 
-/// Overlay on every preview pane. 8-bit thumbnail is not a deliverable.
+/// Overlay on every preview pane. 预览·非成片.
 struct PreviewNotDeliverableBadge: View {
     var body: some View {
         Text("预览·非成片")
@@ -67,8 +67,8 @@ struct PreviewNotDeliverableBadge: View {
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: 5))
             .padding(6)
-            .accessibilityLabel("预览·非成片. 8-bit thumbnail is not a deliverable")
-            .help("8-bit thumbnail is not a deliverable")
+            .accessibilityLabel("预览·非成片")
+            .help("预览·非成片")
     }
 }
 

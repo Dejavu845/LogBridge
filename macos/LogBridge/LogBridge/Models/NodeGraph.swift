@@ -69,17 +69,15 @@ enum ODTMode: String, CaseIterable, Identifiable, Hashable {
     var isHDR: Bool { self == .hlg || self == .pq }
     var isEnabled: Bool { self != .off }
 
-    /// ACES Output Transform / BT.2100 BuiltinTransform (no homemade curve).
+    /// Off: ACEScct/AP0 可交 Resolve. 709 / HLG / PQ: 预览·非成片. HLG/PQ is ColorSync, not ACES OT.
     var acesOTNote: String {
         switch self {
         case .off:
-            return "ACEScct timeline / ACES2065-1 EXR deliverable."
+            return "导出 ACEScct / EXR"
         case .rec709:
-            return "Rec.709 preview only (DIY BT.709 OETF, no RRT). Implemented (unverified)."
-        case .hlg:
-            return "Rec.2100 HLG via ACES Output Transform / BT.2100. Implemented (unverified). Not supported."
-        case .pq:
-            return "Rec.2100 PQ via ACES Output Transform / BT.2100. Implemented (unverified). Not supported."
+            return "DIY 预览·非成片"
+        case .hlg, .pq:
+            return "ColorSync 预览·非成片，不是 ACES OT"
         }
     }
 }
@@ -94,11 +92,11 @@ enum WBSource: String, Hashable {
 
     var title: String {
         switch self {
-        case .asShot: return "as-shot"
-        case .grey: return "grey-card"
+        case .asShot: return "机内"
+        case .grey: return "灰卡"
         case .estimate: return "白平衡（估计）"
-        case .user: return "user"
-        case .unknown: return "as-shot unknown"
+        case .user: return "手调"
+        case .unknown: return "机内未知"
         }
     }
 }

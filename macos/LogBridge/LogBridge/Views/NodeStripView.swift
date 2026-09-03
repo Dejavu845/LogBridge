@@ -50,8 +50,8 @@ struct NodeStripView: View {
                 return "白平衡（估计）"
             }
             if session.graph.asShotUnknown { return "机内未知" }
-            if let cct = session.graph.wbCCT { return "as-shot \(Int(cct)) K" }
-            return "as-shot"
+            if let cct = session.graph.wbCCT { return "机内 \(Int(cct)) K" }
+            return "机内"
         case .odt:
             return session.graph.odt.title
         }
