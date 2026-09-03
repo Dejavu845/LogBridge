@@ -40,6 +40,7 @@ WB_CHIP_AS_SHOT = "机内"
 WB_CHIP_GREY = "灰卡"
 WB_CHIP_USER = "手调"
 WB_CHIP_UNKNOWN = "机内未知"
+WB_CHIP_ESTIMATE_PENDING = "估计确认才写"
 INSPECTOR_REC709_NOTE = "Rec.709 只是预览，不是成片"
 INSPECTOR_EXPORT_NOTE = "导出 ACEScct / EXR，709 / HLG / PQ 窗是预览·非成片"
 IDT_PAIR_HELP = (
@@ -785,6 +786,104 @@ def test_idt_bar_always_visible_no_hidden_picker():
     assert "处理已锁定片段" not in inspector.split("struct InspectorView")[1].split("struct WBInspector")[0]
 
 
+def test_preview_large_inspector_thin_wb_glanceable():
+    """#30 already filled the center. This pass only tightens chrome / WB tones.
+
+    No extra badges, lock buttons, or second process path. acesOTNote untouched.
+    """
+    content = _read(CONTENT)
+    inspector = _read(INSPECTOR)
+    preview = _read(PREVIEW)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    graph = _read(GRAPH)
+    clip = _read(CLIP)
+
+    center = content.split("VStack(spacing: 0)")[1].split(".frame(minWidth: 520)")[0]
+    assert "layoutPriority(1)" in center
+    assert "SplitPreview" in center
+    assert "PairedIDTBar" in center
+    assert center.index("SplitPreview") < center.index("PairedIDTBar")
+    assert center.index("PairedIDTBar") < center.index("ProcessLockedBar")
+    inspector_frame = content.split("InspectorView(session: session)")[1].split("}")[0]
+    assert "maxWidth: 260" in inspector_frame
+    sidebar_frame = content.split("ClipSidebarView(session: session)")[1].split("VStack")[0]
+    assert "maxWidth: 280" in sidebar_frame
+
+    split = content.split("struct SplitPreview")[1].split("struct StatusBar")[0]
+    assert "PreviewNotDeliverableBadge" not in split
+    assert "odtPreviewTitle" in split
+    assert "PreviewScrubBar" in split
+    assert "WriteProgressLine" in split
+    assert "previewCaption" in split
+    assert "Button(" not in split
+    assert "锁 IDT" not in split
+    assert "处理已锁定片段" not in split
+    badge = preview.split("struct PreviewNotDeliverableBadge")[1].split(
+        "struct Rec709TaggedHost"
+    )[0]
+    assert badge.count("Text(") == 1
+    assert 'Text("预览·非成片")' in badge
+    title = clip.split("var odtPreviewTitle")[1].split("var odtPreviewCaption")[0]
+    assert f'return "{PREVIEW_STATUS_ODT_OFF}"' in title
+
+    idt = inspector.split("struct PairedIDTBar")[1].split("struct InspectorView")[0]
+    assert "成对 IDT" in idt
+    assert 'Picker("Paired IDT"' in idt
+    assert ".disabled(" in idt
+    assert "isExporting" in idt
+    assert "if session.isExporting" not in idt
+    assert idt.count("Button(") == 0
+
+    insp = inspector.split("struct InspectorView")[1].split("struct WBInspector")[0]
+    assert "ExposureInspector" in insp
+    assert "WBInspector" in insp
+    assert "ODTInspector" not in insp
+    assert 'Button("处理已锁定片段")' not in insp
+
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    assert f'WBStateChip(title: "{WB_CHIP_AS_SHOT}"' in wb
+    assert f'WBStateChip(title: "{WB_CHIP_ESTIMATE_PENDING}"' in wb
+    assert f'WBStateChip(title: "{WB_CHIP_GREY}"' in wb
+    assert "kind: .asShot" in wb
+    assert "kind: .estimate" in wb
+    assert "kind: .grey" in wb
+    assert "Color.orange" in wb
+    assert "Color.accentColor" in wb
+    assert "Color.primary" in wb
+    assert "autoWBCCT" in wb
+    assert "确认后才写入" in wb
+    assert "白平衡（估计）" in wb
+    assert wb.count("Button(") == 3
+    assert 'Button("点灰卡")' in wb or "点灰卡" in wb
+    assert "估计白平衡" in wb
+    assert "确认估计" in wb
+    assert 'Button("锁 IDT")' not in wb
+    assert 'Button("处理已锁定片段")' not in wb
+
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "showsProcessLockedButton" in bar
+    assert "处理已锁定片段" in bar
+    assert "lockedClipCount" in clip
+    assert "showsProcessLockedButton" in clip
+
+    row = sidebar.split("struct ClipRow")[1]
+    assert '"待选"' in row
+    assert '"已锁定"' in row
+    assert "exportChip" in row
+    assert 'Button("锁 IDT")' not in sidebar
+    assert 'Button("锁定")' not in sidebar
+
+    note = graph.split("var acesOTNote: String")[1].split("enum WBSource")[0]
+    assert f'return "{ACES_OT_NOTE_OFF}"' in note
+    assert f'return "{ACES_OT_NOTE_REC709}"' in note
+    assert f'return "{ACES_OT_NOTE_HDR}"' in note
+
+    for chunk in (center, split, idt, insp, wb, bar, row, badge):
+        assert "精准" not in chunk
+        _chengpian_only_honesty(chunk)
+
+
 def test_sidebar_pending_and_locked_are_glanceable():
     """待选 / 已锁定 are two visual states. No extra lock button."""
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
@@ -1460,9 +1559,14 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
     chips = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
     assert f'WBStateChip(title: "{WB_CHIP_AS_SHOT}"' in chips
     assert f'WBStateChip(title: "{WB_CHIP_GREY}"' in chips
+    assert f'WBStateChip(title: "{WB_CHIP_ESTIMATE_PENDING}"' in chips
     assert "机内未知" in chips
     assert "机内 as-shot" not in chips
     assert "精准" not in chips
+    assert "kind: .asShot" in chips
+    assert "kind: .estimate" in chips
+    assert "kind: .grey" in chips
+    assert "autoWBCCT" in chips
 
     odt = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
     assert f'Text("{INSPECTOR_REC709_NOTE}")' in odt
