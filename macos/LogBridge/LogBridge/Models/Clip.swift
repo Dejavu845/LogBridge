@@ -252,7 +252,8 @@ final class SessionModel: ObservableObject {
         return clip.processSkipReason
     }
 
-    /// Batch: write one ACES2065-1 AP0 proxy EXR sequence per locked clip.
+    /// Batch: write one ACES2065-1 AP0 proxy EXR sequence per locked clip
+    /// and the session Resolve package (XML / DCTL / cube / README).
     /// Unlocked stay listed with a Chinese reason. After the batch,
     /// lastExportNote is 「N 条已写出代理 / M 条待选跳过 / K 条失败」.
     /// Never guess an IDT. Never 一键还原. One process entry point.
@@ -287,6 +288,8 @@ final class SessionModel: ObservableObject {
     }
 
     /// Writes ACES2065-1 AP0 proxy EXR sequences for locked clips only.
+    /// After verified sequences, writes the session Resolve package.
+    /// Incomplete XML/DCTL/cube/README is 「达芬奇包不完整，未写出」.
     func writeLockedDeliverables(locked: [Clip], skippedCount: Int, dest: URL) {
         let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
         if let free = destFreeBytesOverride ?? Self.destVolumeFreeBytes(dest),
@@ -346,6 +349,36 @@ final class SessionModel: ObservableObject {
                     let chip = Self.shortExportChip(for: error)
                     errors.append("\(clip.filename)：\(chip)")
                     self.setExportChip(clipID: clip.id, chip)
+                }
+            }
+            if !cancelled && !written.isEmpty {
+                do {
+                    _ = try ResolveExporter.export(
+                        to: dest,
+                        clips: locked,
+                        includeWBNode: graphCopy.wbEnabled,
+                        cct: graphCopy.wbCCT,
+                        tint: graphCopy.wbTint,
+                        catCCT: graphCopy.effectiveWBCCT,
+                        useEffectiveCAT: true,
+                        srcCCT: graphCopy.effectiveSrcCCT,
+                        srcTint: graphCopy.asShotTint,
+                        odtEnabled: graphCopy.odtEnabled,
+                        exposureStops: graphCopy.exposureStops,
+                        exposureEnabled: graphCopy.exposureEnabled
+                    )
+                    try ResolveExporter.verifyResolveBundle(at: dest)
+                } catch {
+                    ResolveExporter.removeIncompleteResolveBundle(at: dest)
+                    let chip = Self.resolveIncompleteChip
+                    for clip in locked {
+                        let seq = ResolveExporter.deliverableSequenceDirectory(for: clip, in: dest)
+                        if written.contains(seq) {
+                            self.setExportChip(clipID: clip.id, chip)
+                            errors.append("\(clip.filename)：\(chip)")
+                        }
+                    }
+                    written.removeAll()
                 }
             }
             let wrote = written.count
@@ -567,6 +600,7 @@ final class SessionModel: ObservableObject {
     static let missingDurationChip = "读不到时长，未核对"
     static let missingYCbCrTagsChip = "无法读取片源 Y′CbCr 矩阵/范围，未写出"
     static let writeOversizeChip = "片源边长超过 16384，未写出"
+    static let resolveIncompleteChip = "达芬奇包不完整，未写出"
 
     /// Short Chinese sidebar / status error. Failed write is not silent.
     /// Keep the real class (格式不接 / 解码失败 / 读不到元数据). Do not collapse to 解析失败.
@@ -588,7 +622,7 @@ final class SessionModel: ObservableObject {
         if desc.contains("读不到元数据") { return desc }
         if desc == frameMismatchChip || desc == missingFpsChip || desc == missingDurationChip
             || desc == missingYCbCrTagsChip || desc == writeOversizeChip
-            || desc == Self.decodeFailedChip {
+            || desc == Self.decodeFailedChip || desc == resolveIncompleteChip {
             return desc
         }
         if desc == MediaFormat.noteCameraRaw || desc == MediaFormat.noteARRIMxf

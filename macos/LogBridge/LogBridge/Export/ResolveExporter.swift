@@ -92,6 +92,12 @@ enum ResolveExporter {
         for idt in idts {
             try write("01_IDT_\(idt.rawValue).cube", idtCube(idt: idt, size: lutSize))
         }
+        do {
+            try verifyResolveBundle(at: directory)
+        } catch {
+            removeIncompleteResolveBundle(at: directory)
+            throw error
+        }
         return written
     }
 
@@ -787,6 +793,61 @@ enum ResolveExporter {
 
         M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
         """
+    }
+
+    /// XML / DCTL / cube / README. Openable set. Not 01_IDT_*.
+    static let resolveRequiredNames = ["graph.xml", "README_RESOLVE.md", "03_WB.dctl", "03_WB.cube"]
+    static let resolveBundleFilenames = [
+        "README_RESOLVE.md",
+        "graph.xml",
+        "graph.dot",
+        "02_Exposure.cube",
+        "02_Exposure.dctl",
+        "03_WB.cdl",
+        "03_WB.ccc",
+        "03_WB.dctl",
+        "03_WB.cube",
+        "04_ODT_Rec709.cube",
+    ]
+    static let resolveIncompleteChip = "达芬奇包不完整，未写出"
+
+    /// XML / DCTL / cube / README must exist, be readable, and not empty.
+    static func verifyResolveBundle(at directory: URL) throws {
+        for name in resolveRequiredNames {
+            let url = directory.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                throw NSError(domain: "LogBridge", code: 4, userInfo: [
+                    NSLocalizedDescriptionKey: resolveIncompleteChip
+                ])
+            }
+            let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+            let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
+            guard size > 0 else {
+                throw NSError(domain: "LogBridge", code: 4, userInfo: [
+                    NSLocalizedDescriptionKey: resolveIncompleteChip
+                ])
+            }
+            _ = try Data(contentsOf: url)
+        }
+    }
+
+    /// Drop a half Resolve package. Leave ``_ACES2065-1_proxy`` folders.
+    static func removeIncompleteResolveBundle(at directory: URL) {
+        for name in resolveBundleFilenames {
+            let url = directory.appendingPathComponent(name)
+            try? FileManager.default.removeItem(at: url)
+        }
+        guard let items = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        for url in items {
+            let name = url.lastPathComponent
+            if name.hasPrefix("01_IDT_"), url.pathExtension.lowercased() == "cube" {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
     }
 
     /// Proxy sequence folder. Mirrors ``color.batch.deliverable_dir_name``.

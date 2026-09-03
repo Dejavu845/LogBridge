@@ -52,6 +52,12 @@ duration is 「读不到时长，未核对」 — never default 24 or 30, and do
 not reuse the dest-disk 24 fps × 60 s guess. A mismatch is
 「帧数对不上」; the folder is removed so it is not 已写出代理.
 
+A successful locked process also writes the session Resolve package
+into the same dest (``graph.xml``, DCTL, cube, ``README_RESOLVE.md``)
+so the folder is openable. Missing or unreadable files fail closed
+with 「达芬奇包不完整，未写出」; a silent half bundle is removed.
+Do not claim ACES OT in that README. CI 绿不等于达芬奇已验证。不是全精度成片. Not a movie.
+
 When 「处理已锁定片段」 finishes (ok / cancel / disk abort / frame
 check), ``lastExportNote`` is one Chinese three-bucket summary:
 「N 条已写出代理 / M 条待选跳过 / K 条失败」 plus 失败原因
@@ -151,6 +157,31 @@ MISSING_YCBCR_TAGS_CHIP = "无法读取片源 Y′CbCr 矩阵/范围，未写出
 WRITE_LONG_EDGE_CEILING = 16384
 WRITE_OVERSIZE_CHIP = "片源边长超过 16384，未写出"
 DISK_SHORT_STATUS = "磁盘空间不足，未写出"
+RESOLVE_INCOMPLETE_CHIP = "达芬奇包不完整，未写出"
+# Openable Resolve set. XML + DCTL + cube + README. Not 01_IDT_*.
+RESOLVE_REQUIRED_XML = "graph.xml"
+RESOLVE_REQUIRED_README = "README_RESOLVE.md"
+RESOLVE_REQUIRED_DCTL = "03_WB.dctl"
+RESOLVE_REQUIRED_CUBE = "03_WB.cube"
+RESOLVE_REQUIRED_NAMES = (
+    RESOLVE_REQUIRED_XML,
+    RESOLVE_REQUIRED_README,
+    RESOLVE_REQUIRED_DCTL,
+    RESOLVE_REQUIRED_CUBE,
+)
+# Session package files (not ``_ACES2065-1_proxy`` folders).
+RESOLVE_BUNDLE_FILENAMES = (
+    "README_RESOLVE.md",
+    "graph.xml",
+    "graph.dot",
+    "02_Exposure.cube",
+    "02_Exposure.dctl",
+    "03_WB.cdl",
+    "03_WB.ccc",
+    "03_WB.dctl",
+    "03_WB.cube",
+    "04_ODT_Rec709.cube",
+)
 # Uncompressed float32 RGB scanline payload (3 × 4). Not ZIP/PIZ.
 # Header + offset table are not per-pixel; DISK_MARGIN covers them.
 BYTES_PER_EXR_PIXEL = 12
@@ -445,6 +476,7 @@ def preserved_failure_note(error: str) -> str | None:
         MISSING_YCBCR_TAGS_CHIP,
         WRITE_OVERSIZE_CHIP,
         DECODE_FAILED_CHIP,
+        RESOLVE_INCOMPLETE_CHIP,
         NOTE_CAMERA_RAW,
         NOTE_ARRI_MXF,
         NOTE_UNKNOWN_CODEC,
@@ -646,6 +678,47 @@ def verify_locked_proxy_sequence(seq_dir, clip: BatchClip) -> tuple[bool, str | 
     if expected is None or not frames_count_matches(written, expected):
         return False, FRAME_MISMATCH_CHIP
     return True, None
+
+
+def _readable_nonempty(path) -> bool:
+    """True when ``path`` is a regular file, readable, and not empty."""
+    dest = Path(path)
+    try:
+        if not dest.is_file():
+            return False
+        if dest.stat().st_size < 1:
+            return False
+        dest.read_bytes()
+    except OSError:
+        return False
+    return True
+
+
+def verify_resolve_bundle(dest) -> tuple[bool, str | None]:
+    """XML / DCTL / cube / README must exist, be readable, and not empty.
+
+    Success → (True, None). Failure → (False, 「达芬奇包不完整，未写出」).
+    Does not invent files. Does not touch ``_ACES2065-1_proxy`` folders.
+    """
+    folder = Path(dest)
+    for name in RESOLVE_REQUIRED_NAMES:
+        if not _readable_nonempty(folder / name):
+            return False, RESOLVE_INCOMPLETE_CHIP
+    return True, None
+
+
+def remove_incomplete_resolve_bundle(dest) -> None:
+    """Drop a half Resolve package. Leave proxy EXR sequence folders."""
+    folder = Path(dest)
+    if not folder.is_dir():
+        return
+    for name in RESOLVE_BUNDLE_FILENAMES:
+        path = folder / name
+        if path.is_file():
+            path.unlink()
+    for path in folder.glob("01_IDT_*.cube"):
+        if path.is_file():
+            path.unlink()
 
 
 def clip_pixel_count(
@@ -997,6 +1070,8 @@ def process_locked_writes(
     on_progress: Callable[[str], None] | None = None,
     free_bytes: int | None = None,
     ycbcr_tags: dict[str, dict] | None = None,
+    resolve_write_fn: Callable[..., object] | None = None,
+    resolve_lut_size: int = 5,
 ) -> BatchWriteReport:
     """Write an ACES2065-1 proxy EXR sequence for locked clips only.
 
@@ -1027,6 +1102,14 @@ def process_locked_writes(
     each clip. Missing tags fail that clip with
     「无法读取片源 Y′CbCr 矩阵/范围，未写出」 and write no folder.
     No silent BT.709 + video-range default.
+
+    After at least one verified EXR sequence and no cancel, write the
+    session Resolve package (XML / DCTL / cube / README) into ``dest``.
+    Missing or unreadable files fail the session with
+    「达芬奇包不完整，未写出」 and the half package is removed.
+    ``resolve_write_fn`` is the test hook; default is
+    ``export_locked_resolve_bundle``. Python LUT size defaults to 5
+    (Swift stays 17). Not a movie. 不是全精度成片.
     """
     dest = Path(dest)
     plan = plan_locked_batch(clips)
@@ -1122,6 +1205,26 @@ def process_locked_writes(
             if seq_dir.exists():
                 shutil.rmtree(seq_dir)
             errors.append(ClipWrite(name=clip.name, error=str(exc)))
+    if written and not cancelled:
+        try:
+            if resolve_write_fn is not None:
+                resolve_write_fn(dest, clips, graph, resolve_lut_size)
+            else:
+                from .resolve_export import export_locked_resolve_bundle
+
+                export_locked_resolve_bundle(
+                    dest, clips, graph=graph, lut_size=resolve_lut_size
+                )
+            ok, resolve_err = verify_resolve_bundle(dest)
+            if not ok:
+                raise OSError(resolve_err or RESOLVE_INCOMPLETE_CHIP)
+        except Exception:  # noqa: BLE001 — session fail-closed, keep EXR folders
+            remove_incomplete_resolve_bundle(dest)
+            for item in written:
+                errors.append(
+                    ClipWrite(name=item.name, error=RESOLVE_INCOMPLETE_CHIP)
+                )
+            written = []
     return BatchWriteReport(
         written=tuple(written),
         skipped=plan.skipped,
