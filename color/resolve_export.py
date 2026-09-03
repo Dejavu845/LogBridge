@@ -941,6 +941,16 @@ def export_resolve_bundle(
     _w("04_ODT_Rec709.cube", odt_cube_bytes(size=lut_size))
     for idt_id in idt_ids:
         _w(f"01_IDT_{idt_id}.cube", idt_cube_bytes(idt_id, size=lut_size))
+    from .batch import (
+        RESOLVE_INCOMPLETE_CHIP,
+        remove_incomplete_resolve_bundle,
+        verify_resolve_bundle,
+    )
+
+    ok, err = verify_resolve_bundle(dest)
+    if not ok:
+        remove_incomplete_resolve_bundle(dest)
+        raise OSError(err or RESOLVE_INCOMPLETE_CHIP)
     return written
 
 

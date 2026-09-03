@@ -48,6 +48,12 @@ from color.batch import (
     WRITE_OVERSIZE_CHIP,
     DECODE_FAILED_CHIP,
     GENERIC_PARSE_FAILED,
+    RESOLVE_INCOMPLETE_CHIP,
+    RESOLVE_REQUIRED_NAMES,
+    RESOLVE_REQUIRED_XML,
+    RESOLVE_REQUIRED_README,
+    RESOLVE_REQUIRED_DCTL,
+    RESOLVE_REQUIRED_CUBE,
     preserved_failure_note,
     user_facing_failure_note,
     BatchClip,
@@ -55,6 +61,8 @@ from color.batch import (
     expected_source_frames,
     frames_count_matches,
     verify_locked_proxy_sequence,
+    verify_resolve_bundle,
+    remove_incomplete_resolve_bundle,
     cancelled_status_text,
     confirm_auto_wb,
     deliverable_dir_name,
@@ -1985,3 +1993,184 @@ def test_post_batch_summary_three_buckets(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(readme)
     _assert_chengpian_not_a_deliverable_claim(acceptance)
     _assert_chengpian_not_a_deliverable_claim(content)
+
+
+def test_locked_success_implies_exr_and_complete_resolve_bundle(tmp_path: Path):
+    """Success: EXR sequence on disk + non-empty XML/DCTL/cube/README."""
+    assert RESOLVE_INCOMPLETE_CHIP == "达芬奇包不完整，未写出"
+    assert RESOLVE_REQUIRED_NAMES == (
+        RESOLVE_REQUIRED_XML,
+        RESOLVE_REQUIRED_README,
+        RESOLVE_REQUIRED_DCTL,
+        RESOLVE_REQUIRED_CUBE,
+    )
+    assert short_export_chip(RESOLVE_INCOMPLETE_CHIP) == RESOLVE_INCOMPLETE_CHIP
+    _assert_chengpian_not_a_deliverable_claim(RESOLVE_INCOMPLETE_CHIP)
+    assert "精准" not in RESOLVE_INCOMPLETE_CHIP
+    assert "完善" not in RESOLVE_INCOMPLETE_CHIP
+
+    locked = BatchClip(
+        "locked.mov",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=1.0,
+        fps=1.0,
+    )
+    pending = BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True)
+    dest = tmp_path / "ok"
+    report = process_locked_writes(
+        [locked, pending],
+        dest,
+        frames={"locked.mov": _slog3_grey(), "pending.mov": _slog3_grey()},
+    )
+    assert report.written
+    assert report.written[0].name == "locked.mov"
+    seq = dest / deliverable_dir_name("locked.mov")
+    assert seq.name.endswith("_ACES2065-1_proxy")
+    assert seq.is_dir()
+    assert (seq / sequence_frame_name(0)).is_file()
+    assert not (dest / deliverable_dir_name("pending.mov")).exists()
+    ok, err = verify_resolve_bundle(dest)
+    assert ok is True
+    assert err is None
+    for name in RESOLVE_REQUIRED_NAMES:
+        path = dest / name
+        assert path.is_file()
+        assert path.stat().st_size > 0
+        text = path.read_text(encoding="utf-8")
+        assert text.strip()
+        _assert_chengpian_not_a_deliverable_claim(text)
+    readme = (dest / RESOLVE_REQUIRED_README).read_text(encoding="utf-8")
+    assert "Not an ACES Output Transform" in readme
+    assert "不是** ACES OT / RRT" in readme or "不是 ACES OT" in readme
+    assert "不是全精度成片" in readme
+    chips = sidebar_export_chips([locked, pending], report)
+    assert chips["locked.mov"] == WRITTEN_CHIP
+    assert chips["pending.mov"] == REASON_PICK_PAIRED_IDT
+    assert list(dest.glob("**/*.mov")) == []
+    assert list(dest.glob("**/*.mp4")) == []
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+
+    write_src = inspect.getsource(process_locked_writes)
+    assert "verify_resolve_bundle" in write_src
+    assert "export_locked_resolve_bundle" in write_src
+    assert "AVAssetWriter" not in write_src
+    assert "AVAssetExport" not in write_src
+    assert "AVAssetExportSession" not in write_src
+
+    clip = _read(CLIP)
+    write_body = clip.split("func writeLockedDeliverables")[1].split(
+        "func exportLockedEXR"
+    )[0]
+    export_exr = clip.split("func exportLockedEXR")[1].split(
+        "func cancelLockedDeliverables"
+    )[0]
+    assert "ResolveExporter.export" in write_body
+    assert "verifyResolveBundle" in write_body
+    assert "removeIncompleteResolveBundle" in write_body
+    assert "resolveIncompleteChip" in write_body
+    assert RESOLVE_INCOMPLETE_CHIP in clip
+    assert "verifyResolveBundle" in _read(
+        SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift"
+    )
+    assert RESOLVE_INCOMPLETE_CHIP in _read(
+        SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift"
+    )
+    assert "AVAssetWriter" not in export_exr
+    assert "AVAssetExport" not in export_exr
+    assert ".mov" not in export_exr
+    readme_doc = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert RESOLVE_INCOMPLETE_CHIP in readme_doc
+    assert RESOLVE_INCOMPLETE_CHIP in acceptance
+    _assert_chengpian_not_a_deliverable_claim(readme_doc)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)
+    _assert_chengpian_not_a_deliverable_claim(write_body)
+
+
+def test_incomplete_resolve_bundle_fails_chinese(tmp_path: Path):
+    """Missing / empty / unreadable Resolve files: 达芬奇包不完整，未写出."""
+    locked = BatchClip(
+        "locked.mov",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=1.0,
+        fps=1.0,
+    )
+    dest = tmp_path / "half"
+    dest.mkdir()
+    (dest / "graph.xml").write_text("")
+    ok, err = verify_resolve_bundle(dest)
+    assert ok is False
+    assert err == RESOLVE_INCOMPLETE_CHIP
+    (dest / "graph.xml").write_text("<LogBridgeResolveGraph/>")
+    (dest / "README_RESOLVE.md").write_text("x")
+    (dest / "03_WB.dctl").write_text("x")
+    # cube missing
+    ok, err = verify_resolve_bundle(dest)
+    assert ok is False
+    assert err == RESOLVE_INCOMPLETE_CHIP
+
+    def incomplete(dest_dir, clips, graph, lut_size):
+        folder = Path(dest_dir)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "graph.xml").write_text("<x/>")
+        (folder / "README_RESOLVE.md").write_text("half")
+        return []
+
+    dest_w = tmp_path / "write"
+    report = process_locked_writes(
+        [locked],
+        dest_w,
+        frames={"locked.mov": _slog3_grey()},
+        resolve_write_fn=incomplete,
+    )
+    assert report.written == ()
+    assert report.errors[0].name == "locked.mov"
+    assert report.errors[0].error == RESOLVE_INCOMPLETE_CHIP
+    chips = sidebar_export_chips([locked], report)
+    assert chips["locked.mov"] == RESOLVE_INCOMPLETE_CHIP
+    assert chips["locked.mov"] != WRITTEN_CHIP
+    assert not (dest_w / "graph.xml").exists()
+    assert not (dest_w / "README_RESOLVE.md").exists()
+    assert not (dest_w / "03_WB.dctl").exists()
+    assert not (dest_w / "03_WB.cube").exists()
+    # Half Resolve package is gone. EXR sequence may remain; not 已写出代理.
+    assert "1 条失败" in report.processed_status_text
+    assert RESOLVE_INCOMPLETE_CHIP in report.processed_status_text
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+    assert list(dest_w.glob("**/*.mov")) == []
+
+    def empty_files(dest_dir, clips, graph, lut_size):
+        folder = Path(dest_dir)
+        folder.mkdir(parents=True, exist_ok=True)
+        for name in RESOLVE_REQUIRED_NAMES:
+            (folder / name).write_text("")
+        return [folder / name for name in RESOLVE_REQUIRED_NAMES]
+
+    dest_e = tmp_path / "empty"
+    empty = process_locked_writes(
+        [locked],
+        dest_e,
+        frames={"locked.mov": _slog3_grey()},
+        resolve_write_fn=empty_files,
+    )
+    assert empty.written == ()
+    assert empty.errors[0].error == RESOLVE_INCOMPLETE_CHIP
+    assert sidebar_export_chips([locked], empty)["locked.mov"] == RESOLVE_INCOMPLETE_CHIP
+    for name in RESOLVE_REQUIRED_NAMES:
+        assert not (dest_e / name).exists()
+    remove_incomplete_resolve_bundle(dest_e)
+
+    clip = _read(CLIP)
+    chip_fn = clip.split("static func shortExportChip")[1].split(
+        "static func expectedSourceFrames"
+    )[0]
+    assert "resolveIncompleteChip" in chip_fn
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    assert "func verifyResolveBundle" in exporter
+    assert "func removeIncompleteResolveBundle" in exporter
+    assert "resolveRequiredNames" in exporter
+    write_src = inspect.getsource(process_locked_writes)
+    assert "AVAssetWriter" not in write_src
+    assert "AVAssetExport" not in write_src
