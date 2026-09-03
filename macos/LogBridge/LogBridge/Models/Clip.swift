@@ -248,7 +248,7 @@ final class SessionModel: ObservableObject {
     }
 
     var processSelectedBlockedReason: String? {
-        guard let clip = selectedClip else { return "No clip selected" }
+        guard let clip = selectedClip else { return "没有素材" }
         return clip.processSkipReason
     }
 
@@ -274,7 +274,7 @@ final class SessionModel: ObservableObject {
         panel.canCreateDirectories = true
         panel.prompt = "写出"
         let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
-        panel.message = "已锁定片段写出 ACES2065-1 代理 EXR 序列（AP0 线性）。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。" + estimate.pickerSuffix
+        panel.message = "已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。" + estimate.pickerSuffix
         if let remembered = settings.lastExportDirectoryURL {
             panel.directoryURL = remembered
         }
@@ -1149,7 +1149,7 @@ final class SessionModel: ObservableObject {
                 note += "\nWrote \(written.count) files to \(url.path). \(locked.count) 条已锁定 / \(skipped.count) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。预览·非成片。已实现（未验证）。"
                 self.lastExportNote = note
             } catch {
-                self.lastExportNote = "Export failed: \(error.localizedDescription)"
+                self.lastExportNote = Self.shortExportChip(for: error)
             }
         }
     }

@@ -208,9 +208,13 @@ struct ProcessLockedBar: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .help("整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。")
+                    .help("写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。")
                 }
             }
+            Text("写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if session.showsBatchSummary {
                 Text(session.lastExportNote)
                     .font(.caption2)

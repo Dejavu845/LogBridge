@@ -107,12 +107,16 @@ PROCESSED_STATUS_TEMPLATE = (
     "整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
 )
 FOLDER_PICKER_MESSAGE = (
-    "已锁定片段写出 ACES2065-1 代理 EXR 序列（AP0 线性）。"
+    "已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。"
     "整段代理，不是全精度成片。"
     "未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
     "预览·非成片。已实现（未验证）。"
 )
+PROCESS_DELIVERABLE_NOTE = (
+    "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。"
+)
 PROCESS_BUTTON_HELP = (
+    "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。"
     "整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
     "待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
 )
