@@ -2083,6 +2083,11 @@ def test_locked_success_implies_exr_and_complete_resolve_bundle(tmp_path: Path):
     acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
     assert RESOLVE_INCOMPLETE_CHIP in readme_doc
     assert RESOLVE_INCOMPLETE_CHIP in acceptance
+    assert "CI 绿不等于达芬奇已验证" in readme_doc
+    assert "CI 绿不等于达芬奇已验证" in acceptance
+    assert "CI 绿不等于达芬奇已验证" in _read(ROOT / "color/batch.py")
+    assert HONEST_PROXY_NOTE in readme_doc
+    assert HONEST_PROXY_NOTE in acceptance
     _assert_chengpian_not_a_deliverable_claim(readme_doc)
     _assert_chengpian_not_a_deliverable_claim(acceptance)
     _assert_chengpian_not_a_deliverable_claim(write_body)

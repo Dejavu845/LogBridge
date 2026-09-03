@@ -56,7 +56,7 @@ A successful locked process also writes the session Resolve package
 into the same dest (``graph.xml``, DCTL, cube, ``README_RESOLVE.md``)
 so the folder is openable. Missing or unreadable files fail closed
 with 「达芬奇包不完整，未写出」; a silent half bundle is removed.
-Do not claim ACES OT in that README. 不是全精度成片. Not a .mov.
+Do not claim ACES OT in that README. CI 绿不等于达芬奇已验证。不是全精度成片. Not a movie.
 
 When 「处理已锁定片段」 finishes (ok / cancel / disk abort / frame
 check), ``lastExportNote`` is one Chinese three-bucket summary:
