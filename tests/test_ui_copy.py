@@ -17,6 +17,7 @@ from color.batch import (
     PREVIEW_STATUS_PROXY,
     PROCESS_BUTTON,
     PROCESS_BUTTON_HELP,
+    PROCESS_DELIVERABLE_NOTE,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
     SKIPPED_BUCKET,
@@ -293,7 +294,11 @@ def test_process_bar_and_advanced_help_are_chinese():
     assert SKIPPED_BUCKET == "待选跳过"
     assert REASON_PICK_LOG_GAMUT == "先选择 Log 与色域"
     assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
+    assert PROCESS_DELIVERABLE_NOTE == (
+        "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。"
+    )
     assert PROCESS_BUTTON_HELP == (
+        "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。"
         "整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
         "待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
     )
@@ -303,10 +308,15 @@ def test_process_bar_and_advanced_help_are_chinese():
     assert ADVANCED_DISCLOSURE_HELP == "节点与导出 ACEScct / EXR。默认收起。预览·非成片。"
 
     assert f'.help("{PROCESS_BUTTON_HELP}")' in bar
+    assert f'Text("{PROCESS_DELIVERABLE_NOTE}")' in bar
     assert f'.help("{ADVANCED_EXPORT_HELP}")' in advanced
     assert f'.help("{ADVANCED_DISCLOSURE_HELP}")' in advanced
     assert 'DisclosureGroup("高级"' in advanced
     assert PROCESS_BUTTON in bar
+    assert PROCESS_DELIVERABLE_NOTE in bar
+    assert "代理 EXR" in bar
+    assert "不是 mov" in bar
+    assert "_ACES2065-1_proxy" in bar
     assert HONEST_PROXY_NOTE in bar
     assert SKIPPED_BUCKET in bar
     assert REASON_PICK_LOG_GAMUT in bar
@@ -1304,6 +1314,71 @@ def test_preview_scrub_bar_is_chinese_no_fake_rate():
     split = content.split("struct SplitPreview")[1].split("struct WriteProgressLine")[0]
     assert "PreviewScrubBar" in split
     assert "Button(" not in split
+
+
+def test_process_ui_says_proxy_exr_not_mov_and_failures_stay_chinese():
+    """Trial path: process bar / sidebar say 代理 EXR, not mov. Failures stay Chinese chips."""
+    content = _read(CONTENT)
+    clip = _read(CLIP)
+    engine = _read(ENGINE)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    status_bar = content.split("struct StatusBar")[1]
+    write_body = clip.split("func writeLockedDeliverables")[1].split(
+        "func exportLockedEXR"
+    )[0]
+    export_exr = clip.split("func exportLockedEXR")[1].split(
+        "func cancelLockedDeliverables"
+    )[0]
+    resolve_fn = clip.split("func exportResolve()")[1]
+
+    assert PROCESS_DELIVERABLE_NOTE == (
+        "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。"
+    )
+    assert PROCESS_DELIVERABLE_NOTE in bar
+    assert PROCESS_BUTTON_HELP in bar
+    assert "代理 EXR" in bar
+    assert "不是 mov" in bar
+    assert "_ACES2065-1_proxy" in bar
+    assert HONEST_PROXY_NOTE in bar
+    assert "成片" not in bar.replace("不是全精度成片", "")
+    assert "完善" not in bar
+    assert "精准" not in bar
+    assert ".mov" not in bar.replace("不是 mov", "")
+    assert "709 mov" not in bar.lower()
+
+    assert "代理 EXR" in sidebar
+    assert "不是 mov" in sidebar
+    assert "完善" not in sidebar
+    assert "精准" not in sidebar
+
+    assert "decode/grade failed" not in bar
+    assert "decode/grade failed" not in status_bar
+    assert "Export failed" not in bar
+    assert "Export failed" not in status_bar
+    assert "Export failed" not in resolve_fn
+    assert "shortExportChip" in resolve_fn
+    assert "No clip selected" not in clip
+    assert 'return "没有素材"' in clip.split("var processSelectedBlockedReason")[1]
+
+    preview_status = engine.split("func refresh(")[1].split("func refreshODT(")[0]
+    assert "decode/grade failed" not in preview_status
+    assert "Export failed" not in preview_status
+    assert "userFacingFailureNote" in engine
+    assert "decode/grade failed" not in engine
+    assert "Export failed" not in engine
+
+    assert "exportChip" in sidebar
+    assert "shortExportChip" in write_body
+    assert "decodeFailedChip" in clip.split("static func shortExportChip")[1]
+    assert "exportGradedAP0Sequence" in export_exr
+    assert "writeACES2065EXR" in export_exr
+    assert "applyODT" not in export_exr
+    assert "16384" in clip
+    assert "片源边长超过 16384，未写出" in clip
+    assert "AVAssetWriter" not in export_exr
+    assert ".mov" not in export_exr
+    assert bar.count("Button(") == 1
 
 
 def test_forbidden_marketing_copy_stays_forbidden():

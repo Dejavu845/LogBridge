@@ -248,6 +248,9 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     media = _read(MEDIA)
 
     assert 'NSLocalizedDescriptionKey: "decode/grade failed"' not in swift
+    assert "decode/grade failed" not in swift
+    assert "Export failed" not in clip
+    assert "No clip selected" not in clip
     assert "NSLocalizedDescriptionKey: Self.decodeFailedChip" in engine
     assert "NSLocalizedDescriptionKey: Self.decodeFailedChip" in clip
     export_seq = engine.split("func exportGradedAP0Sequence")[1].split(

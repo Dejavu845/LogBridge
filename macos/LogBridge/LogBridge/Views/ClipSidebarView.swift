@@ -25,7 +25,7 @@ struct ClipSidebarView: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 6)
 
-            Text("拖入 → 锁 IDT → 曝光/WB → 处理已锁定片段。未锁定的跳过，不猜。")
+            Text("拖入 → 锁 IDT → 曝光/WB → 处理已锁定片段（代理 EXR 序列，不是 mov）。未锁定的跳过，不猜。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)

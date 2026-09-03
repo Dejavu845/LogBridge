@@ -34,6 +34,7 @@ from color.batch import (
     MISSING_FPS_CHIP,
     PROCESS_BUTTON,
     PROCESS_BUTTON_HELP,
+    PROCESS_DELIVERABLE_NOTE,
     BATCH_SUMMARY_TEMPLATE,
     PROCESSED_STATUS_TEMPLATE,
     SKIPPED_BUCKET,
@@ -943,16 +944,28 @@ def test_honest_proxy_copy_and_filename():
     assert "ACES2065-1" in FOLDER_PICKER_MESSAGE
     assert "ACEScct" not in FOLDER_PICKER_MESSAGE
     assert HONEST_PROXY_NOTE in PROCESS_BUTTON_HELP
+    assert PROCESS_DELIVERABLE_NOTE in PROCESS_BUTTON_HELP or HONEST_PROXY_NOTE in PROCESS_DELIVERABLE_NOTE
+    assert "代理 EXR" in PROCESS_BUTTON_HELP
+    assert "不是 mov" in PROCESS_BUTTON_HELP
+    assert "_ACES2065-1_proxy" in PROCESS_BUTTON_HELP
     assert "不是 ACEScct" in PROCESS_BUTTON_HELP
     assert SKIPPED_BUCKET in PROCESS_BUTTON_HELP
     assert REASON_PICK_LOG_GAMUT in PROCESS_BUTTON_HELP
     assert REASON_PICK_PAIRED_IDT in PROCESS_BUTTON_HELP
     assert "Unlocked stay listed" not in PROCESS_BUTTON_HELP
     assert "Never 一键还原" not in PROCESS_BUTTON_HELP
+    assert "代理 EXR" in PROCESS_DELIVERABLE_NOTE
+    assert "不是 mov" in PROCESS_DELIVERABLE_NOTE
+    assert "_ACES2065-1_proxy" in PROCESS_DELIVERABLE_NOTE
+    assert HONEST_PROXY_NOTE in PROCESS_DELIVERABLE_NOTE
+    assert "代理 EXR" in FOLDER_PICKER_MESSAGE
+    assert "不是 mov" in FOLDER_PICKER_MESSAGE
+    assert "_ACES2065-1_proxy" in FOLDER_PICKER_MESSAGE
     clip = _read(CLIP)
     content = _read(CONTENT)
     exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
     assert PROCESS_BUTTON_HELP in content
+    assert PROCESS_DELIVERABLE_NOTE in content
     assert FOLDER_PICKER_MESSAGE in clip
     assert processed_status_text(0, 0).replace("0 条已处理 / 0 条已跳过", "") in clip or HONEST_PROXY_NOTE in clip
     assert HONEST_PROXY_NOTE in content
