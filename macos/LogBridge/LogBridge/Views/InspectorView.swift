@@ -35,8 +35,8 @@ struct PairedIDTBar: View {
                 .controlSize(.small)
                 .frame(maxWidth: 420)
                 .disabled(session.isExporting)
-                // S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine. C-Log2 / C-Log3 + Cinema Gamut vs BT.2020. Venice pair only if detected.
-                .help("S-Log3 + S-Gamut3 vs S-Log3 + S-Gamut3.Cine. C-Log2 / C-Log3 + Cinema Gamut vs BT.2020. Venice pair only if detected.")
+                // S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。
+                .help("S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。")
                 HStack(spacing: 6) {
                     Text(clip.verificationBadge)
                         .font(.caption2)
@@ -110,7 +110,7 @@ struct WBInspector: View {
             .controlSize(.small)
             // Three states only. Estimate chip lights AFTER confirm, never on propose.
             HStack(spacing: 4) {
-                WBStateChip(title: "机内 as-shot", on: session.graph.wbSource == .asShot)
+                WBStateChip(title: "机内", on: session.graph.wbSource == .asShot)
                 WBStateChip(
                     title: "白平衡（估计）",
                     on: session.graph.wbSource == .estimate
@@ -134,12 +134,12 @@ struct WBInspector: View {
                 session.pickingNeutral.toggle()
             }
             .controlSize(.small)
-            .help("Pick neutral / 点灰卡: sample after IDT in ACES2065-1 (AP0) linear; overrides metadata. Writes the existing CAT node.")
+            .help("点灰卡：IDT 后 ACES2065-1 (AP0) 线性取样，覆盖元数据。写入现有 CAT。")
             Button("估计白平衡") {
                 session.proposeAutoWB()
             }
             .controlSize(.small)
-            .help("白平衡（估计）: SoG p=6 in ACEScg after IDT. Does not write CAT. Low confidence stays empty. Not 精准.")
+            .help("白平衡（估计）：IDT 后 ACEScg SoG p=6。不写 CAT。把握不够就空着。")
             if session.graph.autoWBCCT != nil {
                 Text("白平衡（估计） \(Int(session.graph.autoWBCCT ?? 0)) K — 确认后才写入，一点不会写入")
                     .font(.caption2)
@@ -234,16 +234,19 @@ struct ODTInspector: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if session.graph.odt == .rec709 {
-                Text("Rec.709 is preview only, not the standard deliverable. Tagged CGColorSpace.itur_709 only when this node is Rec.709. No RRT. Implemented (unverified).")
+                Text("Rec.709 只是预览，不是成片")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             if session.graph.odt.isHDR {
-                Text("ColorSync itur_2100. 预览·非成片，未与 709 匹配. 已实现（未验证）. Not an ACES Output Transform. No homemade HLG/PQ. Not supported. Not 一键精准.")
+                Text("ColorSync itur_2100。预览·非成片，未与 709 匹配。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text("Working space: \(session.graph.workingSpace.rawValue). 导出 ACEScct / EXR is the timeline deliverable. Rec.709 / HLG / PQ panes are 预览·非成片 — not a finished grade.")
+            Text("工作空间：\(session.graph.workingSpace.rawValue)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("导出 ACEScct / EXR，709 / HLG / PQ 窗是预览·非成片")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -280,14 +283,14 @@ struct ExposureInspector: View {
                         .font(.caption.monospacedDigit())
                         .frame(width: 60, alignment: .trailing)
                 }
-                Text(String(format: "Linear gain 2^stops = %.4f", pow(2.0, session.graph.exposureStops)))
+                Text(String(format: "线性增益 2^stops = %.4f", pow(2.0, session.graph.exposureStops)))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            Text("User-facing unit is stops. After IDT, in ACES2065-1 linear: rgb × (2^stops). Do not add/subtract Log code values. Preview cache stores post-IDT linear; exposure applies in linear before WB.")
+            Text("单位是档。IDT 后 ACES2065-1 线性：rgb × (2^stops)。不加不减 Log 码值。预览缓存存 IDT 后线性；曝光在 WB 前线性作用。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            Text("预览·非成片 — Rec.709 / HLG / PQ are preview only, not a finished picture.")
+            Text("预览·非成片")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

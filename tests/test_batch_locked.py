@@ -232,7 +232,8 @@ def test_swift_mirrors_locked_batch_and_one_button():
     assert "PairedIDTBar" in content
     assert "InspectorView" in content
     assert PROCESS_BUTTON in swift
-    assert "机内 as-shot" in inspector
+    assert "机内" in inspector
+    assert "机内 as-shot" not in inspector
     assert "白平衡（估计）" in inspector
     assert "灰卡" in inspector
     assert "on: session.graph.wbSource == .estimate" in inspector

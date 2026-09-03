@@ -30,6 +30,24 @@ CONTENT = SWIFT_ROOT / "LogBridge/LogBridge/ContentView.swift"
 PREVIEW = SWIFT_ROOT / "LogBridge/LogBridge/Color/Rec709PreviewView.swift"
 CLIP = SWIFT_ROOT / "LogBridge/LogBridge/Models/Clip.swift"
 ENGINE = SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift"
+GRAPH = SWIFT_ROOT / "LogBridge/LogBridge/Models/NodeGraph.swift"
+NODE_STRIP = SWIFT_ROOT / "LogBridge/LogBridge/Views/NodeStripView.swift"
+
+ACES_OT_NOTE_OFF = "导出 ACEScct / EXR"
+ACES_OT_NOTE_REC709 = "DIY 预览·非成片"
+ACES_OT_NOTE_HDR = "ColorSync 预览·非成片，不是 ACES OT"
+WB_CHIP_AS_SHOT = "机内"
+WB_CHIP_GREY = "灰卡"
+WB_CHIP_USER = "手调"
+WB_CHIP_UNKNOWN = "机内未知"
+INSPECTOR_REC709_NOTE = "Rec.709 只是预览，不是成片"
+INSPECTOR_EXPORT_NOTE = "导出 ACEScct / EXR，709 / HLG / PQ 窗是预览·非成片"
+IDT_PAIR_HELP = (
+    "S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。"
+    "C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。"
+    "Venice 对仅在检测到时出现。"
+)
+PICK_NEUTRAL_HELP = "点灰卡：IDT 后 ACES2065-1 (AP0) 线性取样，覆盖元数据。写入现有 CAT。"
 
 
 def _read(p: Path) -> str:
@@ -65,10 +83,12 @@ def test_primary_button_is_locked_chinese():
 def test_preview_overlay_badge_feichengpian():
     preview = _read(PREVIEW)
     assert "预览·非成片" in preview
-    assert "8-bit thumbnail is not a deliverable" in preview
     assert "PreviewNotDeliverableBadge" in preview
     badge = preview.split("struct PreviewNotDeliverableBadge")[1].split("struct Rec709TaggedHost")[0]
     assert 'Text("预览·非成片")' in badge
+    assert '.help("预览·非成片")' in badge
+    assert '.accessibilityLabel("预览·非成片")' in badge
+    assert "8-bit thumbnail is not a deliverable" not in badge
     assert 'Text("8-bit thumbnail is not a deliverable")' not in badge
 
 
@@ -80,7 +100,8 @@ def test_paired_idt_picker_not_two_dropdowns():
     assert 'Picker("Gamut"' not in inspector
     assert "S-Log3 + S-Gamut3" in inspector
     assert "S-Log3 + S-Gamut3.Cine" in inspector
-    assert "Venice pair only if detected" in inspector
+    assert "Venice 对仅在检测到时出现" in inspector
+    assert "Venice pair only if detected" not in inspector
 
 
 def test_pending_clips_block_process_and_export():
@@ -158,13 +179,15 @@ def test_exposure_inspector_and_preview_not_finished_picture():
     assert "ExposureInspector" in inspector
     assert "Stops" in inspector
     assert "2^stops" in inspector or "2 ** stops" in inspector or "rgb × (2^stops)" in inspector
-    assert "Do not add/subtract Log code values" in inspector
+    assert "不加不减 Log 码值" in inspector
+    assert "Do not add/subtract Log code values" not in inspector
     swift = _all_swift()
     assert "case exposure" in swift or "case .exposure" in swift
     assert "applyExposure" in swift
     assert "02_Exposure" in swift
-    assert "not a finished" in (inspector + swift).lower() or "not a finished picture" in inspector
+    assert "not a finished" not in inspector.lower()
     assert "预览·非成片" in inspector
+    assert "不是成片" in inspector
 
 
 def test_no_bundled_manufacturer_demos():
@@ -180,13 +203,15 @@ def test_no_bundled_manufacturer_demos():
 
 def test_as_shot_wb_copy_and_no_5600_guess():
     inspector = _read(INSPECTOR)
-    assert "as-shot" in inspector.lower() or "As-shot" in inspector
-    assert "Pick neutral" in inspector
+    assert "机内" in inspector
+    assert "机内 as-shot" not in inspector
+    assert "点灰卡：IDT 后 ACES2065-1 (AP0)" in inspector
+    assert "Pick neutral" not in inspector
     assert "5600" in inspector  # named so we can say we do not guess it
     assert "6504" in inspector
     assert "不猜 5600" in inspector
     assert "ACES2065-1 (AP0)" in inspector
-    assert "after IDT" in inspector
+    assert "IDT 后" in inspector
     assert "已实现（未验证）" in inspector
     assert "CAT(user→D65)·inv(CAT(as→D65))" in inspector
     assert "单位阵" in inspector
@@ -1393,3 +1418,121 @@ def test_forbidden_marketing_copy_stays_forbidden():
             assert "不写" in swift or "never" in swift.lower() or "Never" in swift
     assert "精准" in tests
     assert "全格式已支持" in docs  # named as out of scope / do not write
+
+
+def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
+    """acesOTNote / inspector / WB chips / listed help stay locked Chinese."""
+    graph = _read(GRAPH)
+    inspector = _read(INSPECTOR)
+    preview = _read(PREVIEW)
+    strip = _read(NODE_STRIP)
+
+    note = graph.split("var acesOTNote: String")[1].split("enum WBSource")[0]
+    assert ACES_OT_NOTE_OFF == "导出 ACEScct / EXR"
+    assert ACES_OT_NOTE_REC709 == "DIY 预览·非成片"
+    assert ACES_OT_NOTE_HDR == "ColorSync 预览·非成片，不是 ACES OT"
+    assert f'return "{ACES_OT_NOTE_OFF}"' in note
+    assert f'return "{ACES_OT_NOTE_REC709}"' in note
+    assert f'return "{ACES_OT_NOTE_HDR}"' in note
+    assert note.count(f'return "{ACES_OT_NOTE_HDR}"') == 1
+    assert "case .hlg, .pq:" in note
+    assert "ACEScct timeline" not in note
+    assert "ACES2065-1 EXR deliverable" not in note
+    assert "via ACES Output Transform" not in note
+    assert "Implemented (unverified)" not in note
+    _chengpian_only_honesty(ACES_OT_NOTE_OFF)
+    _chengpian_only_honesty(ACES_OT_NOTE_REC709)
+    _chengpian_only_honesty(ACES_OT_NOTE_HDR)
+    _chengpian_only_honesty(note)
+
+    titles = graph.split("enum WBSource")[1].split("struct SerialGraph")[0]
+    assert f'case .asShot: return "{WB_CHIP_AS_SHOT}"' in titles
+    assert f'case .grey: return "{WB_CHIP_GREY}"' in titles
+    assert f'case .user: return "{WB_CHIP_USER}"' in titles
+    assert f'case .unknown: return "{WB_CHIP_UNKNOWN}"' in titles
+    assert 'return "as-shot"' not in titles
+    assert 'return "grey-card"' not in titles
+    assert 'return "user"' not in titles
+    assert 'return "as-shot unknown"' not in titles
+    assert "精准" not in titles
+    _chengpian_only_honesty(titles)
+
+    chips = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    assert f'WBStateChip(title: "{WB_CHIP_AS_SHOT}"' in chips
+    assert f'WBStateChip(title: "{WB_CHIP_GREY}"' in chips
+    assert "机内未知" in chips
+    assert "机内 as-shot" not in chips
+    assert "精准" not in chips
+
+    odt = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
+    assert f'Text("{INSPECTOR_REC709_NOTE}")' in odt
+    assert f'Text("{INSPECTOR_EXPORT_NOTE}")' in odt
+    assert 'Text("工作空间：\\(session.graph.workingSpace.rawValue)")' in odt
+    assert "ColorSync itur_2100。预览·非成片，未与 709 匹配。" in odt
+    assert "acesOTNote" in odt
+    assert "Working space:" not in odt
+    assert "Rec.709 is preview only" not in odt
+    assert "Not an ACES Output Transform" not in odt
+    assert "not a finished" not in odt.lower()
+    assert "精准" not in odt
+    _chengpian_only_honesty(INSPECTOR_REC709_NOTE)
+    _chengpian_only_honesty(INSPECTOR_EXPORT_NOTE)
+    _chengpian_only_honesty(odt)
+
+    exposure = inspector.split("struct ExposureInspector")[1]
+    assert "线性增益 2^stops" in exposure
+    assert "Linear gain" not in exposure
+    assert "不加不减 Log 码值" in exposure
+    assert "User-facing unit is stops" not in exposure
+    assert "not a finished" not in exposure.lower()
+    assert "精准" not in exposure
+    _chengpian_only_honesty(exposure)
+
+    assert f'.help("{IDT_PAIR_HELP}")' in inspector
+    assert f'.help("{PICK_NEUTRAL_HELP}")' in inspector
+    assert "Pick neutral" not in inspector
+    assert "Venice pair only if detected" not in inspector
+    assert "8-bit thumbnail is not a deliverable" not in inspector
+
+    badge = preview.split("struct PreviewNotDeliverableBadge")[1].split(
+        "struct Rec709TaggedHost"
+    )[0]
+    assert '.help("预览·非成片")' in badge
+    assert '.accessibilityLabel("预览·非成片")' in badge
+    assert "8-bit thumbnail is not a deliverable" not in badge
+    assert "精准" not in badge
+    _chengpian_only_honesty(badge)
+
+    assert 'return "机内"' in strip
+    assert "as-shot" not in strip
+    assert "精准" not in strip
+    _chengpian_only_honesty(strip)
+
+    leftover_english = (
+        "ACEScct timeline",
+        "ACES2065-1 EXR deliverable",
+        "Rec.709 preview only",
+        "via ACES Output Transform",
+        "Working space:",
+        "Linear gain",
+        "Pick neutral",
+        "8-bit thumbnail is not a deliverable",
+        "Venice pair only if detected",
+        "Not an ACES Output Transform",
+        "not a finished",
+        "机内 as-shot",
+        "as-shot unknown",
+        "grey-card",
+    )
+    for chunk in (note, titles, chips, odt, exposure, badge, strip):
+        for token in leftover_english:
+            assert token not in chunk, token
+        assert "精准" not in chunk
+        _chengpian_only_honesty(chunk)
+
+    for help_text in _help_literals(inspector) + _help_literals(preview):
+        assert "Pick neutral" not in help_text
+        assert "8-bit thumbnail is not a deliverable" not in help_text
+        assert "Venice pair only if detected" not in help_text
+        assert "精准" not in help_text
+        _chengpian_only_honesty(help_text)
