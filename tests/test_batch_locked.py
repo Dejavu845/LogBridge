@@ -99,7 +99,9 @@ from color.batch import (
 )
 from color.curves import linear_to_slog3
 from color.exr_write import (
+    ACES2065_1_ADOPTED_NEUTRAL,
     ACES2065_1_CHROMATICITIES,
+    read_exr_adopted_neutral,
     read_exr_attributes,
     read_exr_chromaticities,
     read_rgb_exr,
@@ -118,6 +120,8 @@ ST2065_1_CHROMATICITIES = (
     0.32168,
     0.33767,
 )
+# OpenEXR adoptedNeutral: ACES white xy. Same Wx, Wy as chromaticities.
+ST2065_1_ADOPTED_NEUTRAL = (0.32168, 0.33767)
 D65_XY = (0.3127, 0.329)
 AP1_PRIMARIES_XY = (0.713, 0.293, 0.165, 0.830, 0.128, 0.044)
 
@@ -329,8 +333,14 @@ def test_locked_exr_is_aces2065_and_mixed_bin_writes(tmp_path: Path):
 
 
 def test_exr_writers_lock_st2065_1_ap0_chromaticities(tmp_path: Path):
-    """Both write paths emit ST 2065-1 AP0 + ACES white. Not D65, not AP1."""
+    """Both write paths emit ST 2065-1 AP0 + ACES white. Not D65, not AP1.
+
+    Header also writes adoptedNeutral as that ACES white. Header only —
+    CI 绿不等于达芬奇已验证. Not an ACES container claim.
+    """
     assert ACES2065_1_CHROMATICITIES == ST2065_1_CHROMATICITIES
+    assert ACES2065_1_ADOPTED_NEUTRAL == ST2065_1_ADOPTED_NEUTRAL
+    assert ACES2065_1_ADOPTED_NEUTRAL == ST2065_1_CHROMATICITIES[6:8]
     rgb = np.array([[[0.18, 0.09, 0.04]]], dtype=np.float32)
     direct = tmp_path / "direct.exr"
     write_rgb_exr(direct, rgb)
@@ -530,25 +540,42 @@ def _f32(*values: float) -> tuple[float, ...]:
 
 
 def _assert_st2065_1_chromaticities_on_disk(path: Path) -> None:
-    """Python write path: header chromaticities are ST 2065-1 AP0 + ACES white."""
+    """Python write path: header chromaticities are ST 2065-1 AP0 + ACES white.
+
+    Also locks adoptedNeutral to that ACES white. No acesImageContainerFlag.
+    CI 绿不等于达芬奇已验证.
+    """
     expected = _f32(*ST2065_1_CHROMATICITIES)
     chroma = read_exr_chromaticities(path)
     assert chroma == expected
     assert chroma[6:8] != _f32(*D65_XY)
     assert chroma[:6] != _f32(*AP1_PRIMARIES_XY)
+    expected_neutral = _f32(*ST2065_1_ADOPTED_NEUTRAL)
+    neutral = read_exr_adopted_neutral(path)
+    assert neutral == expected_neutral
+    assert neutral == chroma[6:8]
     attrs = read_exr_attributes(path)
     assert "chromaticities" in attrs
     assert attrs["chromaticities"][0] == "chromaticities"
+    assert "adoptedNeutral" in attrs
+    assert attrs["adoptedNeutral"][0] == "v2f"
     assert "acesImageContainerFlag" not in attrs
 
 
 def _assert_swift_exr_writer_chromaticities(exporter: str) -> None:
-    """Swift write path: same 8 numbers. Fail if D65 or AP1 chromas are used."""
+    """Swift write path: same 8 numbers. Fail if D65 or AP1 chromas are used.
+
+    Also locks adoptedNeutral (ACES white xy). No acesImageContainerFlag.
+    """
     assert ACES2065_1_CHROMATICITIES == ST2065_1_CHROMATICITIES
+    assert ACES2065_1_ADOPTED_NEUTRAL == ST2065_1_ADOPTED_NEUTRAL
     const = exporter.split("aces2065_1Chromaticities: [Float] = [")[1].split("]")[0]
+    adopted = exporter.split("aces2065_1AdoptedNeutral: [Float] = [")[1].split("]")[0]
     writer = exporter.split("static func writeACES2065EXR")[1]
     assert "aces2065_1Chromaticities" in writer
+    assert "aces2065_1AdoptedNeutral" in writer
     assert 'putAttr("chromaticities", "chromaticities"' in writer
+    assert 'putAttr("adoptedNeutral", "v2f"' in writer
     assert 'putAttr("acesImageContainerFlag"' not in writer
     assert 'putAttr("acesImageContainerFlag"' not in exporter
     for number in (
@@ -562,6 +589,8 @@ def _assert_swift_exr_writer_chromaticities(exporter: str) -> None:
         "0.33767",
     ):
         assert number in const
+    for number in ("0.32168", "0.33767"):
+        assert number in adopted
     for forbidden in (
         "0.3127",
         "0.3290",
@@ -574,6 +603,7 @@ def _assert_swift_exr_writer_chromaticities(exporter: str) -> None:
         "0.044",
     ):
         assert forbidden not in const
+        assert forbidden not in adopted
         assert forbidden not in writer.split("putAttr(\"compression\"")[0]
 
 

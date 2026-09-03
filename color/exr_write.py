@@ -5,7 +5,9 @@ assert files on disk without OpenEXR/ImageIO. Pixel values are stored as
 given — this module does not apply an IDT, CAT, exposure, or ODT.
 
 The header writes OpenEXR ``chromaticities`` for SMPTE ST 2065-1 / ACES
-AP0 primaries and ACES white. It does not write ``acesImageContainerFlag``.
+AP0 primaries and ACES white, plus ``adoptedNeutral`` as that same ACES
+white xy. It does not write ``acesImageContainerFlag``. Header only —
+not an ACES container or DaVinci verification claim.
 """
 
 from __future__ import annotations
@@ -28,6 +30,12 @@ ACES2065_1_CHROMATICITIES = (
     1.00000,
     0.00010,
     -0.07700,
+    0.32168,
+    0.33767,
+)
+
+# OpenEXR adoptedNeutral (v2f): ACES white xy. Same Wx, Wy as chromaticities.
+ACES2065_1_ADOPTED_NEUTRAL = (
     0.32168,
     0.33767,
 )
@@ -78,6 +86,12 @@ def _chromaticities_payload(
     return struct.pack("<8f", *values)
 
 
+def _adopted_neutral_payload(
+    values: tuple[float, float] = ACES2065_1_ADOPTED_NEUTRAL,
+) -> bytes:
+    return struct.pack("<ff", *values)
+
+
 def write_rgb_exr(path, rgb) -> Path:
     """Write uncompressed RGB float32 scanline EXR. Container only."""
     dest = Path(path)
@@ -96,6 +110,11 @@ def write_rgb_exr(path, rgb) -> Path:
                 "chromaticities",
                 "chromaticities",
                 _chromaticities_payload(),
+            ),
+            _attr(
+                "adoptedNeutral",
+                "v2f",
+                _adopted_neutral_payload(),
             ),
             _attr("compression", "compression", struct.pack("<B", 0)),
             _attr("dataWindow", "box2i", box),
@@ -177,6 +196,18 @@ def read_exr_chromaticities(path) -> tuple[float, ...]:
     if typ != "chromaticities" or len(payload) != 32:
         raise ValueError(f"Bad chromaticities attribute ({typ!r}, {len(payload)} bytes)")
     return struct.unpack("<8f", payload)
+
+
+def read_exr_adopted_neutral(path) -> tuple[float, float]:
+    """Read OpenEXR ``adoptedNeutral`` (2 little-endian floats, CIE xy)."""
+    attrs = read_exr_attributes(path)
+    entry = attrs.get("adoptedNeutral")
+    if not entry:
+        raise ValueError("EXR missing adoptedNeutral")
+    typ, payload = entry
+    if typ != "v2f" or len(payload) != 8:
+        raise ValueError(f"Bad adoptedNeutral attribute ({typ!r}, {len(payload)} bytes)")
+    return struct.unpack("<ff", payload)
 
 
 def read_rgb_exr(path) -> np.ndarray:
