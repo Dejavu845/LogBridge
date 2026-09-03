@@ -187,7 +187,7 @@ struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
                 Text(session.lockStatusText)
                     .font(.caption.weight(.semibold))
@@ -223,7 +223,7 @@ struct ProcessLockedBar: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
         .background(Color.primary.opacity(0.03))
     }
 }
@@ -258,7 +258,7 @@ struct AdvancedPanel: View {
         }
         .help("节点与导出 ACEScct / EXR。默认收起。预览·非成片。")
         .padding(.horizontal, 10)
-        .padding(.vertical, 3)
+        .padding(.vertical, 2)
         .background(Color.primary.opacity(0.02))
     }
 }
@@ -300,7 +300,6 @@ struct SplitPreview: View {
                     )
                 }
             }
-            .padding(2)
             PreviewScrubBar(session: session)
             if session.isExporting {
                 WriteProgressLine(text: session.lastExportNote)
@@ -325,7 +324,7 @@ struct PreviewScrubBar: View {
                 .foregroundStyle(.orange)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.vertical, 3)
         } else if let last = session.previewScrubLastFrame {
             HStack(spacing: 8) {
                 Slider(
@@ -344,7 +343,7 @@ struct PreviewScrubBar: View {
                     .frame(minWidth: 88, alignment: .trailing)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.vertical, 3)
         }
     }
 }
@@ -361,7 +360,7 @@ struct WriteProgressLine: View {
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.vertical, 3)
             .background(Color.accentColor.opacity(0.08))
     }
 }
@@ -403,7 +402,7 @@ struct StatusBar: View {
         }
         .font(.caption)
         .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
         .background(.bar)
     }
 }
