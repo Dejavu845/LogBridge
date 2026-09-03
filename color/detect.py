@@ -474,7 +474,7 @@ def detect_clip(
     if user_idt:
         if user_idt not in IDT_PAIRS:
             raise KeyError(f"Unknown IDT {user_idt!r}")
-        return _with_as_shot(_pair(user_idt, "user", "user picker"), as_shot)
+        return _with_as_shot(_pair(user_idt, "user", "用户选择成对 IDT"), as_shot)
     # Prefer the most specific partial result so the UI can lock the curve.
     for partial in (hit, fn):
         if partial is not None:
@@ -486,7 +486,7 @@ def detect_clip(
             None,
             "unresolved",
             True,
-            "读不到元数据，先选择 Log 与色域。QuickTime nclc is never used.",
+            "读不到元数据，先选择 Log 与色域。",
         ),
         as_shot,
     )

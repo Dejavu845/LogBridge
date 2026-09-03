@@ -27,7 +27,7 @@ struct PairedIDTBar: View {
             }
             if let clip = session.selectedClip {
                 // One locked pair per row. Never two independent curve/gamut dropdowns.
-                Picker("Paired IDT", selection: Binding(
+                Picker("用户选择成对 IDT", selection: Binding(
                     get: { clip.idt },
                     set: { newValue in
                         if let idt = newValue {
@@ -47,7 +47,7 @@ struct PairedIDTBar: View {
                 // S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。
                 .help("S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。")
                 HStack(spacing: 6) {
-                    Text("来源：\(clip.detectionSource.rawValue)")
+                    Text("来源：\(clip.detectionSource.title)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     if clip.veniceDetected {

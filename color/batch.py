@@ -126,6 +126,26 @@ PROCESS_BUTTON_HELP = (
     "整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
     "待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
 )
+# User-visible Swift copy (trial usability). Python constants above stay
+# locked by tests/test_batch_locked.py (owned by PR #63).
+PROCESS_BUTTON_HELP_UI = "写出的是图片序列（EXR），不是 mp4/mov"
+PROCESS_DELIVERABLE_NOTE_UI = "代理 EXR，不是视频。整段代理，不是全精度成片。"
+FOLDER_PICKER_MESSAGE_UI = (
+    "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。"
+    "整段代理，不是全精度成片。"
+    "未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
+    "预览·非成片。已实现（未验证）。"
+)
+PROGRESS_STATUS_HELP = "按每一帧出一张图，不是一条视频"
+EMPTY_STATE_STEP_1 = "把混源文件夹拖进来"
+EMPTY_STATE_STEP_2 = "每条选成对 Log 与色域"
+EMPTY_STATE_STEP_3 = "点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
+EMPTY_STATE_STEPS = (
+    "1 把混源文件夹拖进来  2 每条选成对 Log 与色域  "
+    "3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
+)
+USER_PICKED_IDT_NOTE = "用户选择成对 IDT"
+MISSING_YCBCR_TAGS_CHIP_UI = "读不出片源色彩标签，没法写出"
 ADVANCED_EXPORT_HELP = (
     "只处理已锁定片段。待选跳过。709 预览。预览·非成片。不必全部锁定。"
 )

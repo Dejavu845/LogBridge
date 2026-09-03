@@ -368,6 +368,7 @@ def test_preview_unpack_shares_source_ycbcr_helper():
     assert "requireSourceYCbCrUnpack" in preview_cg
     assert "missingYCbCrTagsChip" in preview
     assert "无法读取片源 Y′CbCr 矩阵/范围，未写出" in preview
+    assert 'static let missingYCbCrTagsChip = "读不出片源色彩标签，没法写出"' in engine
     assert "No 709-video default" in preview
     assert "no 709 transfer" in preview.lower() or "no 709 transfer" in preview_cg.lower()
     assert "rec709OETF" not in preview
@@ -390,6 +391,7 @@ def test_preview_unpack_shares_source_ycbcr_helper():
     assert "exportMaxLongEdge" not in cached
     assert "userFacingFailureNote" in build
     assert "无法读取片源 Y′CbCr 矩阵/范围，未写出" in engine
+    assert "读不出片源色彩标签，没法写出" in engine
     assert "解码失败" in engine
 
     assert "requireSourceYCbCrUnpack" in movie
