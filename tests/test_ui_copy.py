@@ -57,6 +57,10 @@ IDT_PAIR_HELP = (
     "Venice 对仅在检测到时出现。"
 )
 PICK_NEUTRAL_HELP = "点灰卡：IDT 后 ACES2065-1 (AP0) 线性取样，覆盖元数据。写入现有 CAT。"
+SOURCE_LABEL_METADATA = "元数据"
+SOURCE_LABEL_FILENAME = "文件名"
+SOURCE_LABEL_MODEL = "机型"
+SOURCE_LABEL_UNRESOLVED = "读不到"
 
 
 def _read(p: Path) -> str:
@@ -1762,3 +1766,64 @@ def test_trial_usability_copy_is_locked():
     assert "AVAssetWriter" not in clip.split("func exportLockedEXR")[1].split(
         "func cancelLockedDeliverables"
     )[0]
+
+
+def test_inspector_source_and_locked_pair_labels_are_chinese():
+    """Inspector 来源 uses the five Chinese DetectionSource titles. lockedPairLabel reuses 先选择成对 IDT."""
+    clip = _read(CLIP)
+    inspector = _read(INSPECTOR)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    strip = _read(NODE_STRIP)
+    title = clip.split("enum DetectionSource")[1].split("struct ProxyDiskEstimate")[0]
+    source_line = inspector.split('Text("来源：')[1].split("\n")[0]
+    label = clip.split("var lockedPairLabel")[1].split("var pickerPairs")[0]
+    ui_title = _code_without_comments(title)
+    ui_inspector = _code_without_comments(inspector)
+    ui_clip = _code_without_comments(clip)
+    ui_label = _code_without_comments(label)
+    paired_bar = inspector.split("struct PairedIDTBar")[1].split("struct InspectorView")[0]
+    ui_paired = _code_without_comments(paired_bar)
+
+    assert SOURCE_LABEL_METADATA == "元数据"
+    assert SOURCE_LABEL_FILENAME == "文件名"
+    assert SOURCE_LABEL_MODEL == "机型"
+    assert SOURCE_LABEL_UNRESOLVED == "读不到"
+    assert USER_PICKED_IDT_NOTE == "用户选择成对 IDT"
+    assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
+
+    assert f'case .metadata: return "{SOURCE_LABEL_METADATA}"' in title
+    assert f'case .filename: return "{SOURCE_LABEL_FILENAME}"' in title
+    assert f'case .model: return "{SOURCE_LABEL_MODEL}"' in title
+    assert f'case .user: return "{USER_PICKED_IDT_NOTE}"' in title
+    assert f'case .unresolved: return "{SOURCE_LABEL_UNRESOLVED}"' in title
+    assert "return rawValue" not in ui_title
+    for raw in ("metadata", "filename", "model", "unresolved"):
+        assert f'return "{raw}"' not in title
+
+    assert 'Text("来源：\\(clip.detectionSource.title)")' in inspector
+    assert "detectionSource.rawValue" not in ui_inspector
+    assert "detectionSource.title" in source_line
+    assert "rawValue" not in source_line
+    for raw in ("metadata", "filename", "model", "unresolved"):
+        assert raw not in source_line
+        assert f'来源：{raw}' not in ui_paired
+        assert f'来源：{raw}' not in ui_inspector
+
+    assert f'return "\\(curve) + {REASON_PICK_PAIRED_IDT}"' in label
+    assert f'return "{REASON_PICK_PAIRED_IDT}"' in label
+    assert REASON_PICK_PAIRED_IDT in ui_label
+    assert "(pick pair)" not in ui_label
+    assert "(pick pair)" not in ui_clip
+    assert "(pick pair)" not in ui_inspector
+    assert "(pick pair)" not in _code_without_comments(sidebar)
+    assert "(pick pair)" not in _code_without_comments(strip)
+    assert "选配对" not in ui_label
+    assert "挑选成对" not in ui_label
+    assert "选配对" not in ui_clip
+    assert "挑选成对" not in ui_clip
+
+    assert paired_bar.count("Button(") == 0
+    assert "精准" not in ui_title
+    assert "精准" not in ui_label
+    _chengpian_only_honesty(ui_title)
+    _chengpian_only_honesty(ui_label)

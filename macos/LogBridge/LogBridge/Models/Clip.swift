@@ -36,7 +36,7 @@ struct Clip: Identifiable, Hashable {
             return idt.pairLabel
         }
         if let curve = detectedCurve {
-            return "\(curve) + (pick pair)"
+            return "\(curve) + 先选择成对 IDT"
         }
         return "先选择成对 IDT"
     }
@@ -92,11 +92,14 @@ enum DetectionSource: String, Hashable {
     case user
     case unresolved
 
-    /// User-visible label. English raw values stay off the picker path.
+    /// User-visible 来源 label. English raw values stay off the inspector line.
     var title: String {
         switch self {
+        case .metadata: return "元数据"
+        case .filename: return "文件名"
+        case .model: return "机型"
         case .user: return "用户选择成对 IDT"
-        case .metadata, .filename, .model, .unresolved: return rawValue
+        case .unresolved: return "读不到"
         }
     }
 }
