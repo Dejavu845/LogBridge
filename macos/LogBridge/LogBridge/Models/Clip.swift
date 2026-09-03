@@ -138,6 +138,13 @@ final class SessionModel: ObservableObject {
     /// Tiny-disk / test mock. When set, dest free-space check uses this
     /// instead of the volume. Nil reads the real volume.
     var destFreeBytesOverride: Int64? = nil
+    /// Movie slider index. Stills stay 0. Missing fps/duration does not invent a range.
+    @Published var previewFrameIndex: Int = 0
+    /// Last index (duration × metadata fps − 1). Nil: still, or no clip, or fail.
+    @Published var previewScrubLastFrame: Int? = nil
+    /// 「读不到帧率，未核对」 / 「读不到时长，未核对」. No slider. No 24/30 guess.
+    @Published var previewScrubFail: String? = nil
+    private var previewScrubClipID: UUID?
 
     let preview = PreviewEngine()
     let settings = AppSettings.shared
@@ -156,12 +163,45 @@ final class SessionModel: ObservableObject {
         // Selected clip (or grade) changed. PreviewEngine keeps only this
         // clip's preview source/linear/graded and drops a stale first-frame
         // if selection already moved on. Write path is not this cache.
-        preview.refresh(clip: selectedClip, graph: graph)
+        if selectedID != previewScrubClipID {
+            resetPreviewScrub()
+        }
+        preview.refresh(clip: selectedClip, graph: graph, frameIndex: previewFrameIndex)
     }
 
     /// ODT / scrub: do not invalidate graded linear (IDT+exposure+WB).
     func refreshODTOnly() {
-        preview.refreshODT(clip: selectedClip, graph: graph)
+        preview.refreshODT(clip: selectedClip, graph: graph, frameIndex: previewFrameIndex)
+    }
+
+    /// Slider: first…last from duration × metadata fps. No 24/30 guess.
+    /// Cache hit for that frame: ODT only. Miss: decode that frame only.
+    func setPreviewFrame(_ index: Int) {
+        guard let last = previewScrubLastFrame else { return }
+        let next = max(0, min(index, last))
+        previewFrameIndex = next
+        preview.scrub(clip: selectedClip, graph: graph, frameIndex: next)
+    }
+
+    /// Stills: no slider. Movies: duration × metadata fps. Missing → Chinese fail.
+    func resetPreviewScrub() {
+        previewScrubClipID = selectedID
+        previewFrameIndex = 0
+        previewScrubLastFrame = nil
+        previewScrubFail = nil
+        guard let clip = selectedClip else { return }
+        if MediaFormat.probe(url: clip.url).kind == .still {
+            return
+        }
+        let (count, err) = Self.expectedSourceFrames(MediaFormat.extent(url: clip.url))
+        if let err {
+            // missingFpsChip / missingDurationChip
+            previewScrubFail = err
+            return
+        }
+        if let count {
+            previewScrubLastFrame = max(0, count - 1)
+        }
     }
 
     /// HDR layer could not enable EDR. Empty right pane. Never fall back to 709.

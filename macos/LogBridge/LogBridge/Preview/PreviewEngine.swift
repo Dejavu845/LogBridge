@@ -38,6 +38,8 @@ final class PreviewEngine: ObservableObject {
     private let genLock = NSLock()
     private var generation: UInt64 = 0
     private var requestedClipID: UUID?
+    private var requestedFrameIndex: Int = 0
+    private var nextRequestedFrameIndex: Int = 0
     private var pendingPreviewWork: DispatchWorkItem?
 
     private var sourceCache: [UUID: SourceFrame] = [:]
@@ -46,6 +48,7 @@ final class PreviewEngine: ObservableObject {
 
     struct SourceFrame {
         let url: URL
+        let frameIndex: Int
         let width: Int
         let height: Int
         let rgb: [Float]
@@ -54,6 +57,7 @@ final class PreviewEngine: ObservableObject {
 
     struct LinearFrame {
         let idtID: String
+        let frameIndex: Int
         let width: Int
         let height: Int
         let rgb: [Float]
@@ -61,6 +65,7 @@ final class PreviewEngine: ObservableObject {
 
     struct GradedFrame {
         let key: String
+        let frameIndex: Int
         let width: Int
         let height: Int
         let rgb: [Float]
@@ -106,12 +111,20 @@ final class PreviewEngine: ObservableObject {
         genLock.lock()
         generation += 1
         requestedClipID = clipID
+        requestedFrameIndex = nextRequestedFrameIndex
         let gen = generation
         genLock.unlock()
         return gen
     }
 
-    /// Latest selection + generation. Stale first-frame must not publish.
+    private func lockedRequestedFrameIndex() -> Int {
+        genLock.lock()
+        defer { genLock.unlock() }
+        return requestedFrameIndex
+    }
+
+    /// Latest selection + generation. Stale first-frame / stale scrub must not publish.
+    /// Generation bumps per slider tick, so an older frame cannot publish.
     private func isCurrentPreview(generation gen: UInt64, clipID: UUID?) -> Bool {
         genLock.lock()
         defer { genLock.unlock() }
@@ -127,7 +140,8 @@ final class PreviewEngine: ObservableObject {
         queue.async(execute: work)
     }
 
-    func refresh(clip: Clip?, graph: SerialGraph) {
+    func refresh(clip: Clip?, graph: SerialGraph, frameIndex: Int = 0) {
+        nextRequestedFrameIndex = frameIndex
         let gen = beginPreviewRequest(clipID: clip?.id)
         retainPreviewCaches(keeping: clip?.id)
         guard let clip else {
@@ -145,12 +159,13 @@ final class PreviewEngine: ObservableObject {
         status = "正在解码预览…"
         let graphCopy = graph
         enqueuePreview { [weak self] in
-            self?.build(clip: clip, graph: graphCopy, generation: gen)
+            self?.build(clip: clip, graph: graphCopy, frameIndex: frameIndex, generation: gen)
         }
     }
 
     /// Scrub / ODT switch: reuse graded linear (IDT+exposure+WB). Only re-run ODT.
-    func refreshODT(clip: Clip?, graph: SerialGraph) {
+    func refreshODT(clip: Clip?, graph: SerialGraph, frameIndex: Int = 0) {
+        nextRequestedFrameIndex = frameIndex
         let gen = beginPreviewRequest(clipID: clip?.id)
         retainPreviewCaches(keeping: clip?.id)
         guard let clip else {
@@ -165,7 +180,9 @@ final class PreviewEngine: ObservableObject {
         }
         let graphCopy = graph
         enqueuePreview { [weak self] in
-            self?.applyODTFromGradedOrRebuild(clip: clip, graph: graphCopy, generation: gen)
+            self?.applyODTFromGradedOrRebuild(
+                clip: clip, graph: graphCopy, frameIndex: frameIndex, generation: gen
+            )
         }
     }
 
@@ -174,22 +191,28 @@ final class PreviewEngine: ObservableObject {
     /// Does not go through the write-path unpack. Preview stays 8-bit-first.
     /// Cache miss (new clip, exposure/WB/IDT change, or no graded buffer):
     /// rebuild linear once, then ODT-only again.
-    private func applyODTFromGradedOrRebuild(clip: Clip, graph: SerialGraph, generation: UInt64) {
+    private func applyODTFromGradedOrRebuild(
+        clip: Clip, graph: SerialGraph, frameIndex: Int, generation: UInt64
+    ) {
         guard isCurrentPreview(generation: generation, clipID: clip.id) else { return }
         // Stale work may have refilled another clip after the main-thread retain.
         retainPreviewCaches(keeping: clip.id)
         if let idt = clip.idt, !idt.isStub,
-           let graded = gradedCacheHit(clipID: clip.id, idt: idt, graph: graph) {
+           let graded = gradedCacheHit(clipID: clip.id, idt: idt, graph: graph, frameIndex: frameIndex) {
             let (odtCG, note) = renderODTFromGraded(graded: graded, graph: graph, cacheHit: true)
             publishODTOnly(generation: generation, clipID: clip.id, odt: odtCG, status: note)
             return
         }
-        build(clip: clip, graph: graph, generation: generation)
+        build(clip: clip, graph: graph, frameIndex: frameIndex, generation: generation)
     }
 
-    private func gradedCacheHit(clipID: UUID, idt: IDT, graph: SerialGraph) -> GradedFrame? {
+    private func gradedCacheHit(
+        clipID: UUID, idt: IDT, graph: SerialGraph, frameIndex: Int
+    ) -> GradedFrame? {
         let key = Self.gradeKey(idt: idt, graph: graph)
-        guard let hit = gradedCache[clipID], hit.key == key else { return nil }
+        guard let hit = gradedCache[clipID], hit.key == key, hit.frameIndex == frameIndex else {
+            return nil
+        }
         return hit
     }
 
@@ -260,7 +283,7 @@ final class PreviewEngine: ObservableObject {
         return status
     }
 
-    private func build(clip: Clip, graph: SerialGraph, generation: UInt64) {
+    private func build(clip: Clip, graph: SerialGraph, frameIndex: Int, generation: UInt64) {
         guard isCurrentPreview(generation: generation, clipID: clip.id) else { return }
         retainPreviewCaches(keeping: clip.id)
         let source: SourceFrame?
@@ -306,7 +329,8 @@ final class PreviewEngine: ObservableObject {
     private func cachedGraded(clipID: UUID, idt: IDT, linear: LinearFrame, graph: SerialGraph) -> GradedFrame {
         let key = Self.gradeKey(idt: idt, graph: graph)
         if let hit = gradedCache[clipID], hit.key == key,
-           hit.width == linear.width, hit.height == linear.height {
+           hit.width == linear.width, hit.height == linear.height,
+           hit.frameIndex == linear.frameIndex {
             return hit
         }
         var work = linear.rgb
@@ -332,23 +356,40 @@ final class PreviewEngine: ObservableObject {
                 )
             }
         }
-        let frame = GradedFrame(key: key, width: linear.width, height: linear.height, rgb: work)
+        let frame = GradedFrame(
+            key: key,
+            frameIndex: linear.frameIndex,
+            width: linear.width,
+            height: linear.height,
+            rgb: work
+        )
         gradedCache[clipID] = frame
         return frame
     }
 
+    /// In-memory only. Do not write the preview cache to disk.
     private func cachedSource(clip: Clip, generation: UInt64) throws -> SourceFrame? {
-        if let hit = sourceCache[clip.id], hit.url == clip.url {
+        let frameIndex = lockedRequestedFrameIndex()
+        if let hit = sourceCache[clip.id], hit.url == clip.url, hit.frameIndex == frameIndex {
             return hit
         }
         // Selection already moved: do not start a stale first-frame decode.
-        guard isCurrentPreview(generation: generation, clipID: clip.id) else { return nil }
-        guard let cg = try Self.decodeDownscaled(url: clip.url, maxLongEdge: Self.maxLongEdge) else {
+        guard isCurrentPreview(generation: generation, clipID: clip.id) else {
+            return nil
+        }
+        guard let cg = try Self.decodeDownscaled(
+            url: clip.url, maxLongEdge: Self.maxLongEdge, frameIndex: frameIndex
+        ) else {
+            return nil
+        }
+        // Stale scrub decode must not replace a newer frame's in-memory cache.
+        guard isCurrentPreview(generation: generation, clipID: clip.id) else {
             return nil
         }
         let rgb = PreviewColor.extractRGB(cg)
         let frame = SourceFrame(
             url: clip.url,
+            frameIndex: frameIndex,
             width: cg.width,
             height: cg.height,
             rgb: rgb,
@@ -360,14 +401,64 @@ final class PreviewEngine: ObservableObject {
 
     private func cachedLinear(clipID: UUID, idt: IDT, source: SourceFrame) -> LinearFrame {
         if let hit = linearCache[clipID], hit.idtID == idt.rawValue,
-           hit.width == source.width, hit.height == source.height {
+           hit.width == source.width, hit.height == source.height,
+           hit.frameIndex == source.frameIndex {
             return hit
         }
         var rgb = source.rgb
         PreviewColor.applyIDT(rgb: &rgb, idt: idt)
-        let frame = LinearFrame(idtID: idt.rawValue, width: source.width, height: source.height, rgb: rgb)
+        let frame = LinearFrame(
+            idtID: idt.rawValue,
+            frameIndex: source.frameIndex,
+            width: source.width,
+            height: source.height,
+            rgb: rgb
+        )
         linearCache[clipID] = frame
         return frame
+    }
+
+    /// Per-frame slider. Cache hit for this frame: ODT only on graded/linear.
+    /// Does not tear that frame's linear cache. Does not decode the whole clip.
+    /// Cache miss: decode this requested frame only, then ODT.
+    /// In-memory only. Do not write the preview cache to disk.
+    func scrub(clip: Clip?, graph: SerialGraph, frameIndex: Int) {
+        nextRequestedFrameIndex = frameIndex
+        let gen = beginPreviewRequest(clipID: clip?.id)
+        retainPreviewCaches(keeping: clip?.id)
+        guard let clip else {
+            sourceImage = nil
+            odtImage = nil
+            status = "没有素材"
+            isWorking = false
+            enqueuePreview { [weak self] in
+                self?.retainPreviewCaches(keeping: nil)
+            }
+            return
+        }
+        let graphCopy = graph
+        enqueuePreview { [weak self] in
+            self?.applyScrub(clip: clip, graph: graphCopy, frameIndex: frameIndex, generation: gen)
+        }
+    }
+
+    private func applyScrub(clip: Clip, graph: SerialGraph, frameIndex: Int, generation: UInt64) {
+        guard isCurrentPreview(generation: generation, clipID: clip.id) else {
+            return
+        }
+        retainPreviewCaches(keeping: clip.id)
+        if let idt = clip.idt, !idt.isStub,
+           let source = sourceCache[clip.id],
+           source.url == clip.url,
+           source.frameIndex == frameIndex,
+           let graded = gradedCacheHit(
+            clipID: clip.id, idt: idt, graph: graph, frameIndex: frameIndex
+           ) {
+            let (odtCG, note) = renderODTFromGraded(graded: graded, graph: graph, cacheHit: true)
+            publish(generation: generation, clipID: clip.id, source: source.cgImage, odt: odtCG, status: note)
+            return
+        }
+        build(clip: clip, graph: graph, frameIndex: frameIndex, generation: generation)
     }
 
     private func publish(generation: UInt64, clipID: UUID, source: CGImage?, odt: CGImage?, status: String) {
@@ -700,7 +791,7 @@ final class PreviewEngine: ObservableObject {
     /// Preview / import status. Name the class; do not collapse to 解析失败 or English parse-failed.
     static func userFacingFailureNote(_ error: Error) -> String {
         let desc = (error as NSError).localizedDescription
-        if desc.hasPrefix("先选择") || desc.contains("读不到元数据") { return desc }
+        if desc.hasPrefix("先选择") || desc.contains("读不到") { return desc }
         if desc == missingYCbCrTagsChip || desc == Self.decodeFailedChip || desc == writeOversizeChip {
             return desc
         }
@@ -1076,7 +1167,7 @@ final class PreviewEngine: ObservableObject {
     /// Stills: ImageIO only (TIFF / DPX / EXR are already RGB).
     /// Do not run Y′CbCr unpack on stills. Policy in MediaFormat.
     /// VT decode only — do not let VT emit Rec.709. No Core Image Display P3.
-    static func decodeDownscaled(url: URL, maxLongEdge: CGFloat) throws -> CGImage? {
+    static func decodeDownscaled(url: URL, maxLongEdge: CGFloat, frameIndex: Int = 0) throws -> CGImage? {
         let probe = MediaFormat.probe(url: url)
         if probe.decision == .refuse {
             throw NSError(domain: "LogBridge", code: 2, userInfo: [
@@ -1091,7 +1182,7 @@ final class PreviewEngine: ObservableObject {
             }
             return img
         }
-        return try decodeMovieVideoToolbox(url: url, maxLongEdge: maxLongEdge)
+        return try decodeMovieVideoToolbox(url: url, maxLongEdge: maxLongEdge, frameIndex: frameIndex)
     }
 
     /// VideoToolbox / AVAssetReader: first frame as Y′CbCr.
@@ -1101,14 +1192,29 @@ final class PreviewEngine: ObservableObject {
     /// Then quantize to 8-bit for display (long-edge ``maxLongEdge``, preview 1920).
     /// Try 8-bit 420, then 8-bit 422, then 10-bit 420. Bit-depth only — no transfer.
     /// Never set AVVideoColorPropertiesKey. Never copyCGImage.
-    static func decodeMovieVideoToolbox(url: URL, maxLongEdge: CGFloat) throws -> CGImage? {
+    static func decodeMovieVideoToolbox(url: URL, maxLongEdge: CGFloat, frameIndex: Int = 0) throws -> CGImage? {
         let formats: [OSType] = [
             kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
             kCVPixelFormatType_422YpCbCr8,
             kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
         ]
+        var fps: Double?
+        if let f = MediaFormat.extent(url: url).fps, f.isFinite, f > 0 {
+            fps = f
+        }
+        if frameIndex > 0, fps == nil {
+            throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: SessionModel.missingFpsChip
+            ])
+        }
         for fmt in formats {
-            if let img = try readFirstYpCbCrFrame(url: url, pixelFormat: fmt, maxLongEdge: maxLongEdge) {
+            if let img = try readFirstYpCbCrFrame(
+                url: url,
+                pixelFormat: fmt,
+                maxLongEdge: maxLongEdge,
+                frameIndex: frameIndex,
+                fps: fps
+            ) {
                 return img
             }
         }
@@ -1117,7 +1223,16 @@ final class PreviewEngine: ObservableObject {
         ])
     }
 
-    private static func readFirstYpCbCrFrame(url: URL, pixelFormat: OSType, maxLongEdge: CGFloat) throws -> CGImage? {
+    /// One preview sample. Frame 0 is the first copyNext. Later frames start
+    /// the reader at duration × metadata fps. Do not invent a frame rate.
+    /// Not the write loop.
+    private static func readFirstYpCbCrFrame(
+        url: URL,
+        pixelFormat: OSType,
+        maxLongEdge: CGFloat,
+        frameIndex: Int = 0,
+        fps: Double? = nil
+    ) throws -> CGImage? {
         let asset = AVURLAsset(url: url)
         guard let track = asset.tracks(withMediaType: .video).first,
               let reader = try? AVAssetReader(asset: asset) else { return nil }
@@ -1129,6 +1244,10 @@ final class PreviewEngine: ObservableObject {
         output.alwaysCopiesSampleData = false
         guard reader.canAdd(output) else { return nil }
         reader.add(output)
+        if frameIndex > 0, let fps, fps > 0 {
+            let start = CMTime(seconds: Double(frameIndex) / fps, preferredTimescale: 60000)
+            reader.timeRange = CMTimeRange(start: start, duration: .positiveInfinity)
+        }
         guard reader.startReading(),
               let sample = output.copyNextSampleBuffer(),
               let pb = CMSampleBufferGetImageBuffer(sample) else { return nil }
