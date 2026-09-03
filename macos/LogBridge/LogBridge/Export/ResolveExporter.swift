@@ -876,9 +876,15 @@ enum ResolveExporter {
         0.32168, 0.33767,
     ]
 
+    /// OpenEXR `adoptedNeutral` (v2f): ACES white xy. Same Wx, Wy as chromaticities.
+    /// Header only. Not an ACES container or DaVinci verification claim.
+    static let aces2065_1AdoptedNeutral: [Float] = [
+        0.32168, 0.33767,
+    ]
+
     /// Uncompressed scanline RGB float32 EXR. Container only — no color math.
-    /// Matches ``color.exr_write.write_rgb_exr``. Writes ST 2065-1 chromaticities.
-    /// Does not write ``acesImageContainerFlag``.
+    /// Matches ``color.exr_write.write_rgb_exr``. Writes ST 2065-1 chromaticities
+    /// and ACES-white ``adoptedNeutral``. Does not write ``acesImageContainerFlag``.
     static func writeACES2065EXR(rgb: [Float], width: Int, height: Int, to url: URL) throws {
         guard width > 0, height > 0, rgb.count >= width * height * 3 else {
             throw NSError(domain: "LogBridge", code: 3, userInfo: [
@@ -934,6 +940,12 @@ enum ResolveExporter {
             chroma.append(Data(bytes: &bits, count: 4))
         }
         putAttr("chromaticities", "chromaticities", chroma)
+        var adopted = Data()
+        for v in aces2065_1AdoptedNeutral {
+            var bits = v.bitPattern.littleEndian
+            adopted.append(Data(bytes: &bits, count: 4))
+        }
+        putAttr("adoptedNeutral", "v2f", adopted)
         putAttr("compression", "compression", Data([0]))
         var box = Data()
         for v: Int32 in [0, 0, Int32(width - 1), Int32(height - 1)] {
