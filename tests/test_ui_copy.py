@@ -5,7 +5,13 @@ from pathlib import Path
 from color.batch import (
     ADVANCED_DISCLOSURE_HELP,
     ADVANCED_EXPORT_HELP,
+    EMPTY_STATE_STEP_1,
+    EMPTY_STATE_STEP_2,
+    EMPTY_STATE_STEP_3,
+    EMPTY_STATE_STEPS,
+    FOLDER_PICKER_MESSAGE_UI,
     HONEST_PROXY_NOTE,
+    MISSING_YCBCR_TAGS_CHIP_UI,
     PREVIEW_STATUS_DECODE_FAIL,
     PREVIEW_STATUS_DECODING,
     PREVIEW_STATUS_EMPTY,
@@ -16,11 +22,13 @@ from color.batch import (
     PREVIEW_STATUS_HDR_NO_EDR,
     PREVIEW_STATUS_PROXY,
     PROCESS_BUTTON,
-    PROCESS_BUTTON_HELP,
-    PROCESS_DELIVERABLE_NOTE,
+    PROCESS_BUTTON_HELP_UI,
+    PROCESS_DELIVERABLE_NOTE_UI,
+    PROGRESS_STATUS_HELP,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
     SKIPPED_BUCKET,
+    USER_PICKED_IDT_NOTE,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -95,8 +103,8 @@ def test_preview_overlay_badge_feichengpian():
 
 def test_paired_idt_picker_not_two_dropdowns():
     inspector = _read(INSPECTOR)
-    assert "Paired IDT" in inspector
-    assert 'Picker("Paired IDT"' in inspector
+    assert "用户选择成对 IDT" in inspector
+    assert 'Picker("用户选择成对 IDT"' in inspector
     assert 'Picker("Curve"' not in inspector
     assert 'Picker("Gamut"' not in inspector
     assert "S-Log3 + S-Gamut3" in inspector
@@ -198,8 +206,12 @@ def test_no_bundled_manufacturer_demos():
     assert "No bundled camera manufacturer demo" in blob or "does **not** bundle camera manufacturer demo" in blob
     assert "drop your own" in blob.lower() or "drops their own" in blob.lower()
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
-    assert "no bundled manufacturer demos" in sidebar.lower()
-    assert "把混源文件夹拖进来" in sidebar
+    assert "no bundled manufacturer demos" not in sidebar.lower()
+    assert EMPTY_STATE_STEP_1 in sidebar
+    assert EMPTY_STATE_STEP_2 in sidebar
+    assert EMPTY_STATE_STEP_3 in sidebar
+    assert EMPTY_STATE_STEPS in sidebar
+    assert "选出对数" not in sidebar
 
 
 def test_as_shot_wb_copy_and_no_5600_guess():
@@ -320,33 +332,28 @@ def test_process_bar_and_advanced_help_are_chinese():
     assert SKIPPED_BUCKET == "待选跳过"
     assert REASON_PICK_LOG_GAMUT == "先选择 Log 与色域"
     assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
-    assert PROCESS_DELIVERABLE_NOTE == (
-        "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。"
+    assert PROCESS_DELIVERABLE_NOTE_UI == (
+        "代理 EXR，不是视频。整段代理，不是全精度成片。"
     )
-    assert PROCESS_BUTTON_HELP == (
-        "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。"
-        "整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
-        "待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
-    )
+    assert PROCESS_BUTTON_HELP_UI == "写出的是图片序列（EXR），不是 mp4/mov"
     assert ADVANCED_EXPORT_HELP == (
         "只处理已锁定片段。待选跳过。709 预览。预览·非成片。不必全部锁定。"
     )
     assert ADVANCED_DISCLOSURE_HELP == "节点与导出 ACEScct / EXR。默认收起。预览·非成片。"
 
-    assert f'.help("{PROCESS_BUTTON_HELP}")' in bar
-    assert f'Text("{PROCESS_DELIVERABLE_NOTE}")' in bar
+    assert f'.help("{PROCESS_BUTTON_HELP_UI}")' in bar
+    assert f'Text("{PROCESS_DELIVERABLE_NOTE_UI}")' in bar
     assert f'.help("{ADVANCED_EXPORT_HELP}")' in advanced
     assert f'.help("{ADVANCED_DISCLOSURE_HELP}")' in advanced
     assert 'DisclosureGroup("高级"' in advanced
     assert PROCESS_BUTTON in bar
-    assert PROCESS_DELIVERABLE_NOTE in bar
+    assert PROCESS_DELIVERABLE_NOTE_UI in bar
     assert "代理 EXR" in bar
-    assert "不是 mov" in bar
-    assert "_ACES2065-1_proxy" in bar
+    assert "不是视频" in bar
     assert HONEST_PROXY_NOTE in bar
-    assert SKIPPED_BUCKET in bar
-    assert REASON_PICK_LOG_GAMUT in bar
-    assert REASON_PICK_PAIRED_IDT in bar
+    assert SKIPPED_BUCKET in ADVANCED_EXPORT_HELP
+    assert REASON_PICK_LOG_GAMUT in content
+    assert REASON_PICK_PAIRED_IDT in content
     assert PROCESS_BUTTON in ADVANCED_EXPORT_HELP
     assert SKIPPED_BUCKET in ADVANCED_EXPORT_HELP
     assert "709 预览" in ADVANCED_EXPORT_HELP
@@ -371,7 +378,7 @@ def test_process_bar_and_advanced_help_are_chinese():
         assert "whole bin" not in help_text
         _chengpian_only_honesty(help_text)
 
-    assert _help_literals(bar) == [PROCESS_BUTTON_HELP]
+    assert _help_literals(bar) == [PROCESS_BUTTON_HELP_UI]
     assert ADVANCED_EXPORT_HELP in _help_literals(advanced)
     assert ADVANCED_DISCLOSURE_HELP in _help_literals(advanced)
     assert _help_literals(strip) == []
@@ -382,7 +389,7 @@ def test_process_bar_and_advanced_help_are_chinese():
     assert 'Button("处理已锁定片段")' not in advanced
     assert "processLockedClips" not in advanced
     assert strip.count("Button(") == 0
-    assert "精准" not in PROCESS_BUTTON_HELP
+    assert "精准" not in PROCESS_BUTTON_HELP_UI
     assert "精准" not in ADVANCED_EXPORT_HELP
     assert "精准" not in ADVANCED_DISCLOSURE_HELP
 
@@ -775,6 +782,7 @@ def test_idt_bar_always_visible_no_hidden_picker():
     assert "NodeStripView" in advanced
     assert "导出 ACEScct / EXR" in advanced
     assert "ODTInspector" not in advanced
+    assert 'Picker("用户选择成对 IDT"' not in advanced
     assert 'Picker("Paired IDT"' not in advanced
     assert "成对 IDT" not in advanced
     assert "layoutPriority(1)" in center
@@ -828,7 +836,7 @@ def test_preview_large_inspector_thin_wb_glanceable():
 
     idt = inspector.split("struct PairedIDTBar")[1].split("struct InspectorView")[0]
     assert "成对 IDT" in idt
-    assert 'Picker("Paired IDT"' in idt
+    assert 'Picker("用户选择成对 IDT"' in idt
     assert ".disabled(" in idt
     assert "isExporting" in idt
     assert "if session.isExporting" not in idt
@@ -954,7 +962,7 @@ def test_write_progress_on_preview_inspector_locks():
 
     idt = inspector.split("struct PairedIDTBar")[1].split("struct InspectorView")[0]
     assert "成对 IDT" in idt
-    assert 'Picker("Paired IDT"' in idt
+    assert 'Picker("用户选择成对 IDT"' in idt
     assert ".disabled(" in idt
     assert "isExporting" in idt
     assert "if session.isExporting" not in idt
@@ -1209,10 +1217,12 @@ def test_delete_removes_clip_from_session_not_disk():
     assert 'Button("锁定")' not in sidebar
     assert 'Button("删除")' not in sidebar
     assert 'Button("移出")' not in sidebar
-    assert "把混源文件夹拖进来" in sidebar
+    assert EMPTY_STATE_STEPS in sidebar
     assert "精准" not in sidebar
     drop = sidebar.split("struct DropZone")[1].split("struct ClipRow")[0]
-    assert "把混源文件夹拖进来" in drop
+    assert EMPTY_STATE_STEP_1 in drop
+    assert EMPTY_STATE_STEP_2 in drop
+    assert "选出对数" not in drop
     assert "把文件夹拖进来" in drop
 
     assert "isWritingDeliverables" in clip
@@ -1456,23 +1466,22 @@ def test_process_ui_says_proxy_exr_not_mov_and_failures_stay_chinese():
     )[0]
     resolve_fn = clip.split("func exportResolve()")[1]
 
-    assert PROCESS_DELIVERABLE_NOTE == (
-        "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。"
+    assert PROCESS_DELIVERABLE_NOTE_UI == (
+        "代理 EXR，不是视频。整段代理，不是全精度成片。"
     )
-    assert PROCESS_DELIVERABLE_NOTE in bar
-    assert PROCESS_BUTTON_HELP in bar
+    assert PROCESS_DELIVERABLE_NOTE_UI in bar
+    assert PROCESS_BUTTON_HELP_UI in bar
     assert "代理 EXR" in bar
-    assert "不是 mov" in bar
-    assert "_ACES2065-1_proxy" in bar
+    assert "不是视频" in bar
     assert HONEST_PROXY_NOTE in bar
     assert "成片" not in bar.replace("不是全精度成片", "")
     assert "完善" not in bar
     assert "精准" not in bar
-    assert ".mov" not in bar.replace("不是 mov", "")
+    assert ".mov" not in bar.replace("不是 mp4/mov", "")
     assert "709 mov" not in bar.lower()
 
-    assert "代理 EXR" in sidebar
-    assert "不是 mov" in sidebar
+    assert EMPTY_STATE_STEP_3 in sidebar
+    assert "不是视频" in sidebar
     assert "完善" not in sidebar
     assert "精准" not in sidebar
 
@@ -1640,3 +1649,116 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
         assert "Venice pair only if detected" not in help_text
         assert "精准" not in help_text
         _chengpian_only_honesty(help_text)
+
+
+def _code_without_comments(src: str) -> str:
+    return "\n".join(line.split("//", 1)[0] for line in src.splitlines())
+
+
+def test_trial_usability_copy_is_locked():
+    """User-visible trial copy. No new controls. Honesty locks stay."""
+    content = _read(CONTENT)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    clip = _read(CLIP)
+    engine = _read(ENGINE)
+    inspector = _read(INSPECTOR)
+    detector = _read(SWIFT_ROOT / "LogBridge/LogBridge/Detection/ClipDetector.swift")
+    detect_py = (ROOT / "color/detect.py").read_text(encoding="utf-8")
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    status = content.split("struct StatusBar")[1]
+    progress = content.split("struct WriteProgressLine")[1].split("struct StatusBar")[0]
+    picker = clip.split("func processLockedClips")[1].split("func writeLockedDeliverables")[0]
+    drop = sidebar.split("struct DropZone")[1].split("struct ClipRow")[0]
+    ui_sidebar = _code_without_comments(sidebar)
+    ui_bar = _code_without_comments(bar)
+    ui_picker = _code_without_comments(picker)
+    ui_engine = _code_without_comments(engine)
+    ui_clip = _code_without_comments(clip)
+    ui_detector = _code_without_comments(detector)
+
+    assert EMPTY_STATE_STEPS == (
+        "1 把混源文件夹拖进来  2 每条选成对 Log 与色域  "
+        "3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
+    )
+    assert EMPTY_STATE_STEP_1 == "把混源文件夹拖进来"
+    assert EMPTY_STATE_STEP_2 == "每条选成对 Log 与色域"
+    assert EMPTY_STATE_STEP_3 == "点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
+    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEP_1 in drop
+    assert EMPTY_STATE_STEP_2 in drop
+    assert "选出对数" not in ui_sidebar
+    assert "选出对数" not in EMPTY_STATE_STEP_2
+    assert "选出对数" not in EMPTY_STATE_STEPS
+
+    assert MISSING_YCBCR_TAGS_CHIP_UI == "读不出片源色彩标签，没法写出"
+    assert f'static let missingYCbCrTagsChip = "{MISSING_YCBCR_TAGS_CHIP_UI}"' in engine
+    assert f'static let missingYCbCrTagsChip = "{MISSING_YCBCR_TAGS_CHIP_UI}"' in clip
+    assert "无法读取片源 Y′CbCr 矩阵/范围，未写出" not in ui_engine
+    assert "无法读取片源 Y′CbCr 矩阵/范围，未写出" not in ui_clip
+    assert "请导出 MOV ProRes" not in MISSING_YCBCR_TAGS_CHIP_UI
+    assert "请导出 MOV ProRes" not in ui_bar
+    assert "请导出 MOV ProRes" not in ui_sidebar
+    assert "R3D" not in MISSING_YCBCR_TAGS_CHIP_UI
+    assert "BRAW" not in MISSING_YCBCR_TAGS_CHIP_UI
+
+    assert PROCESS_DELIVERABLE_NOTE_UI == "代理 EXR，不是视频。整段代理，不是全精度成片。"
+    assert PROCESS_DELIVERABLE_NOTE_UI.startswith("代理 EXR，不是视频")
+    assert HONEST_PROXY_NOTE in PROCESS_DELIVERABLE_NOTE_UI
+    assert f'Text("{PROCESS_DELIVERABLE_NOTE_UI}")' in bar
+    assert "成片" not in PROCESS_DELIVERABLE_NOTE_UI.replace("不是全精度成片", "")
+    assert "精准" not in PROCESS_DELIVERABLE_NOTE_UI
+    assert "ACES OT" not in PROCESS_DELIVERABLE_NOTE_UI
+
+    assert PROCESS_BUTTON_HELP_UI == "写出的是图片序列（EXR），不是 mp4/mov"
+    assert f'.help("{PROCESS_BUTTON_HELP_UI}")' in bar
+    assert FOLDER_PICKER_MESSAGE_UI.startswith(
+        "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。"
+    )
+    assert HONEST_PROXY_NOTE in FOLDER_PICKER_MESSAGE_UI
+    assert REASON_PICK_LOG_GAMUT in FOLDER_PICKER_MESSAGE_UI
+    assert REASON_PICK_PAIRED_IDT in FOLDER_PICKER_MESSAGE_UI
+    assert FOLDER_PICKER_MESSAGE_UI in ui_picker
+    assert PROGRESS_STATUS_HELP == "按每一帧出一张图，不是一条视频"
+    assert f'.help("{PROGRESS_STATUS_HELP}")' in status
+    assert f'.help("{PROGRESS_STATUS_HELP}")' in progress
+
+    assert REASON_PICK_LOG_GAMUT == "先选择 Log 与色域"
+    assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
+    assert REASON_PICK_LOG_GAMUT in clip
+    assert REASON_PICK_PAIRED_IDT in clip
+
+    assert USER_PICKED_IDT_NOTE == "用户选择成对 IDT"
+    assert f'detectionNote = "{USER_PICKED_IDT_NOTE}"' in clip
+    assert 'Picker("用户选择成对 IDT"' in inspector
+    assert "user picker (paired IDT)" not in ui_clip
+    assert 'return "没有素材"' in clip
+    assert "No clip selected" not in ui_clip
+    assert "Export failed:" not in ui_bar
+    assert "Export failed:" not in ui_clip
+    assert "Export failed:" not in ui_engine
+    assert "No clip selected" not in ui_engine
+
+    assert "QuickTime nclc is never used" not in ui_detector
+    assert 'note: "读不到元数据，先选择 Log 与色域。"' in detector
+    assert "读不到元数据，先选择 Log 与色域。QuickTime nclc is never used." not in detect_py
+    assert '"读不到元数据，先选择 Log 与色域。"' in detect_py
+
+    assert ACES_OT_NOTE_OFF == "导出 ACEScct / EXR"
+    assert ACES_OT_NOTE_REC709 == "DIY 预览·非成片"
+    assert ACES_OT_NOTE_HDR == "ColorSync 预览·非成片，不是 ACES OT"
+    assert WB_CHIP_AS_SHOT == "机内"
+    assert WB_CHIP_GREY == "灰卡"
+    assert WB_CHIP_USER == "手调"
+
+    for chunk in (ui_bar, ui_sidebar, PROCESS_DELIVERABLE_NOTE_UI, PROCESS_BUTTON_HELP_UI, EMPTY_STATE_STEPS):
+        assert "选出对数" not in chunk
+        assert "精准" not in chunk
+        assert "请导出 MOV ProRes" not in chunk
+        _chengpian_only_honesty(chunk)
+
+    assert bar.count("Button(") == 1
+    assert 'Button("处理已锁定片段")' not in status
+    assert ".mov" not in ui_bar.replace("不是 mp4/mov", "")
+    assert "AVAssetWriter" not in clip.split("func exportLockedEXR")[1].split(
+        "func cancelLockedDeliverables"
+    )[0]

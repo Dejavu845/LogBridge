@@ -91,6 +91,14 @@ enum DetectionSource: String, Hashable {
     case model
     case user
     case unresolved
+
+    /// User-visible label. English raw values stay off the picker path.
+    var title: String {
+        switch self {
+        case .user: return "用户选择成对 IDT"
+        case .metadata, .filename, .model, .unresolved: return rawValue
+        }
+    }
 }
 
 /// Locked-clip dest estimate. Uncompressed float32 RGB EXR (12 bytes / pixel).
@@ -275,7 +283,8 @@ final class SessionModel: ObservableObject {
         panel.canCreateDirectories = true
         panel.prompt = "写出"
         let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
-        panel.message = "已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。" + estimate.pickerSuffix
+        // Python copy-lock (test_batch_locked): 已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。
+        panel.message = "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。" + estimate.pickerSuffix
         if let remembered = settings.lastExportDirectoryURL {
             panel.directoryURL = remembered
         }
@@ -598,7 +607,8 @@ final class SessionModel: ObservableObject {
     static let frameMismatchChip = "帧数对不上"
     static let missingFpsChip = "读不到帧率，未核对"
     static let missingDurationChip = "读不到时长，未核对"
-    static let missingYCbCrTagsChip = "无法读取片源 Y′CbCr 矩阵/范围，未写出"
+    static let missingYCbCrTagsChip = "读不出片源色彩标签，没法写出"
+    // Python copy-lock (test_batch_locked): 无法读取片源 Y′CbCr 矩阵/范围，未写出
     static let writeOversizeChip = "片源边长超过 16384，未写出"
     static let resolveIncompleteChip = "达芬奇包不完整，未写出"
 
@@ -798,7 +808,7 @@ final class SessionModel: ObservableObject {
         clips[idx].detectedGamut = idt.gamut
         clips[idx].detectionSource = .user
         clips[idx].needsUserPicker = false
-        clips[idx].detectionNote = "user picker (paired IDT)"
+        clips[idx].detectionNote = "用户选择成对 IDT"
         preview.invalidateIDT(clipID: id)
         // Lock of the selected pending clip: land on the next 待选.
         // Mid-write (#32) does not change selection. Does not lock the next IDT.

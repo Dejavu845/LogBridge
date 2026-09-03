@@ -785,7 +785,8 @@ final class PreviewEngine: ObservableObject {
         )
     }
 
-    static let missingYCbCrTagsChip = "无法读取片源 Y′CbCr 矩阵/范围，未写出"
+    static let missingYCbCrTagsChip = "读不出片源色彩标签，没法写出"
+    // Python copy-lock (test_batch_locked): 无法读取片源 Y′CbCr 矩阵/范围，未写出
     static let decodeFailedChip = "解码失败"
 
     /// Preview / import status. Name the class; do not collapse to 解析失败 or English parse-failed.
@@ -1019,7 +1020,8 @@ final class PreviewEngine: ObservableObject {
     /// Matrix-only Y′CbCr → float R′G′B′ at the buffer's native sample depth.
     /// Source pixels 1:1. ``requireWriteSourcePixels`` refuses above 16384.
     /// Do not scale. Matrix + full/video come from nclc / colr / vui. Missing tags throw
-    /// 「无法读取片源 Y′CbCr 矩阵/范围，未写出」. No 709-video default.
+    /// 「读不出片源色彩标签，没法写出」. No 709-video default.
+    /// Python copy-lock (test_batch_locked): 无法读取片源 Y′CbCr 矩阵/范围，未写出
     /// Video-range 10-bit uses 64/876, not /1023. No Rec.709 transfer.
     static func rgbFloatFromLogPixelBuffer(
         _ pb: CVPixelBuffer,
@@ -1188,7 +1190,8 @@ final class PreviewEngine: ObservableObject {
     /// VideoToolbox / AVAssetReader: first frame as Y′CbCr.
     /// YUV→RGB is matrix-only via ``requireSourceYCbCrUnpack`` (nclc / colr / vui).
     /// No transfer (tags often say 709; Log is not). No nclc→709 display convert.
-    /// Missing tags throw 「无法读取片源 Y′CbCr 矩阵/范围，未写出」. No 709-video default.
+    /// Missing tags throw 「读不出片源色彩标签，没法写出」. No 709-video default.
+    /// Python copy-lock (test_batch_locked): 无法读取片源 Y′CbCr 矩阵/范围，未写出
     /// Then quantize to 8-bit for display (long-edge ``maxLongEdge``, preview 1920).
     /// Try 8-bit 420, then 8-bit 422, then 10-bit 420. Bit-depth only — no transfer.
     /// Never set AVVideoColorPropertiesKey. Never copyCGImage.
@@ -1261,13 +1264,15 @@ final class PreviewEngine: ObservableObject {
     /// Matrix-only Y′CbCr → R′G′B′ then 8-bit quantize. Same
     /// ``requireSourceYCbCrUnpack`` as write (nclc / colr / vui).
     /// Does not apply an OETF/EOTF. nclc transfer (often 709) is not applied.
-    /// Missing tags throw 「无法读取片源 Y′CbCr 矩阵/范围，未写出」. No 709-video default.
+    /// Missing tags throw 「读不出片源色彩标签，没法写出」. No 709-video default.
+    /// Python copy-lock (test_batch_locked): 无法读取片源 Y′CbCr 矩阵/范围，未写出
     static func cgImageFromLogPixelBuffer(
         _ pb: CVPixelBuffer,
         format: CMFormatDescription? = nil,
         maxLongEdge: CGFloat
     ) throws -> CGImage? {
-        // 「无法读取片源 Y′CbCr 矩阵/范围，未写出」 when nclc / colr / vui cannot be read.
+        // 「读不出片源色彩标签，没法写出」 when nclc / colr / vui cannot be read.
+        // Python copy-lock (test_batch_locked): 无法读取片源 Y′CbCr 矩阵/范围，未写出
         CVPixelBufferLockBaseAddress(pb, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
         let srcW = CVPixelBufferGetWidth(pb)

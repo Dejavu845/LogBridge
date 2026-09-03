@@ -16,6 +16,7 @@ from color.batch import (
     DECODE_FAILED_CHIP,
     GENERIC_PARSE_FAILED,
     MISSING_YCBCR_TAGS_CHIP,
+    MISSING_YCBCR_TAGS_CHIP_UI,
     user_facing_failure_note,
     short_export_chip,
 )
@@ -212,6 +213,7 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
     assert empty_metadata_note() == "先选择 Log 与色域"
     assert MISSING_YCBCR_TAGS_CHIP == "无法读取片源 Y′CbCr 矩阵/范围，未写出"
+    assert MISSING_YCBCR_TAGS_CHIP_UI == "读不出片源色彩标签，没法写出"
 
     assert classify("clip.r3d").note == NOTE_CAMERA_RAW
     assert classify("clip.braw").note == NOTE_CAMERA_RAW
@@ -276,6 +278,8 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     assert DECODE_FAILED_CHIP in engine
     assert DECODE_FAILED_CHIP in clip
     assert MISSING_YCBCR_TAGS_CHIP in engine
+    assert f'static let missingYCbCrTagsChip = "{MISSING_YCBCR_TAGS_CHIP_UI}"' in engine
+    assert f'static let missingYCbCrTagsChip = "{MISSING_YCBCR_TAGS_CHIP_UI}"' in clip
     assert "probe.note" in engine.split("func decodeDownscaled")[1].split(
         "func decodeMovieVideoToolbox"
     )[0]
