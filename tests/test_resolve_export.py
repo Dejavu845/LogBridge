@@ -11,7 +11,15 @@ from color.as_shot import WB_SOURCE_GREY
 from color.batch import (
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
+    RESOLVE_INCOMPLETE_CHIP,
+    RESOLVE_REQUIRED_CUBE,
+    RESOLVE_REQUIRED_DCTL,
+    RESOLVE_REQUIRED_NAMES,
+    RESOLVE_REQUIRED_README,
+    RESOLVE_REQUIRED_XML,
+    WRITTEN_CHIP,
     BatchClip,
+    verify_resolve_bundle,
 )
 from color.graph import SerialGraph
 from color.resolve_export import (
@@ -261,6 +269,30 @@ def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
     assert "精准" not in cleaned
     assert "一键还原" not in cleaned
     assert "一键校准" not in cleaned
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        RESOLVE_REQUIRED_XML,
+        RESOLVE_REQUIRED_README,
+        RESOLVE_REQUIRED_DCTL,
+        RESOLVE_REQUIRED_CUBE,
+    ],
+)
+def test_missing_resolve_package_file_fails_chinese(tmp_path: Path, missing: str):
+    """Missing graph.xml / DCTL / cube / README: 达芬奇包不完整，未写出. Not 已写出代理."""
+    dest = tmp_path / "half"
+    dest.mkdir()
+    for name in RESOLVE_REQUIRED_NAMES:
+        if name == missing:
+            continue
+        (dest / name).write_text("x")
+    ok, err = verify_resolve_bundle(dest)
+    assert ok is False
+    assert err == RESOLVE_INCOMPLETE_CHIP
+    assert err != WRITTEN_CHIP
+    assert (dest / missing).exists() is False
 
 
 def test_unlocked_never_exported(tmp_path: Path):

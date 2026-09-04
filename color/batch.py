@@ -47,16 +47,20 @@ A cancelled in-progress clip is not 已写出; completed clips keep
 
 After a locked write, count EXRs in ``{stem}_ACES2065-1_proxy/`` and
 compare to source duration × metadata fps only. Off-by-one is accepted
-(inclusive last frame). Missing fps is 「读不到帧率，未核对」; missing
-duration is 「读不到时长，未核对」 — never default 24 or 30, and do
+(inclusive last frame). An empty ``_ACES2065-1_proxy`` (no EXRs /
+0 frames) is 「帧数对不上」; the folder is removed. Decode that wrote
+nothing is 「解码失败」 (no folder). Missing fps is 「读不到帧率，未核对」;
+missing duration is 「读不到时长，未核对」 — never default 24 or 30, and do
 not reuse the dest-disk 24 fps × 60 s guess. A mismatch is
 「帧数对不上」; the folder is removed so it is not 已写出代理.
 
 A successful locked process also writes the session Resolve package
 into the same dest (``graph.xml``, DCTL, cube, ``README_RESOLVE.md``)
-so the folder is openable. Missing or unreadable files fail closed
-with 「达芬奇包不完整，未写出」; a silent half bundle is removed.
-Do not claim ACES OT in that README. CI 绿不等于达芬奇已验证。不是全精度成片. Not a movie.
+so the folder is openable. Missing or empty ``graph.xml`` / DCTL / cube
+/ ``README_RESOLVE.md`` fail closed with 「达芬奇包不完整，未写出」;
+the half package and those ``_proxy`` folders are removed so they are
+not 已写出代理. Do not claim ACES OT in that README.
+CI 绿不等于达芬奇已验证。不是全精度成片. Not a movie.
 
 When 「处理已锁定片段」 finishes (ok / cancel / disk abort / frame
 check), ``lastExportNote`` is one Chinese three-bucket summary:
@@ -684,6 +688,8 @@ def frames_count_matches(written: int, expected: int) -> bool:
 def verify_locked_proxy_sequence(seq_dir, clip: BatchClip) -> tuple[bool, str | None]:
     """Post-write check. Folder exists, EXRs exist, count matches metadata.
 
+    Empty ``_ACES2065-1_proxy`` (no EXRs / 0 frames) fails first as
+    「帧数对不上」 — do not fall through to a timing chip.
     Success → (True, None) so the caller may mark 已写出代理.
     Failure → (False, Chinese chip). Caller must drop the folder so it is
     not advertised as a finished sequence.
@@ -692,6 +698,8 @@ def verify_locked_proxy_sequence(seq_dir, clip: BatchClip) -> tuple[bool, str | 
     if not folder.is_dir():
         return False, FRAME_MISMATCH_CHIP
     written = count_proxy_exrs(folder)
+    if written < 1:
+        return False, FRAME_MISMATCH_CHIP
     expected, timing_err = expected_source_frames(clip)
     if timing_err is not None:
         return False, timing_err
@@ -728,7 +736,11 @@ def verify_resolve_bundle(dest) -> tuple[bool, str | None]:
 
 
 def remove_incomplete_resolve_bundle(dest) -> None:
-    """Drop a half Resolve package. Leave proxy EXR sequence folders."""
+    """Drop a half Resolve package (XML / DCTL / cube / README).
+
+    Does not touch ``_ACES2065-1_proxy`` folders. Locked-write callers that
+    must not mark 已写出代理 also call ``remove_failed_proxy_dir``.
+    """
     folder = Path(dest)
     if not folder.is_dir():
         return
@@ -739,6 +751,20 @@ def remove_incomplete_resolve_bundle(dest) -> None:
     for path in folder.glob("01_IDT_*.cube"):
         if path.is_file():
             path.unlink()
+
+
+def remove_failed_proxy_dir(seq_dir) -> None:
+    """Drop a ``_ACES2065-1_proxy`` folder that must not be 已写出代理.
+
+    Empty folders, zero-frame writes, and half packages after a Resolve
+    fail-closed. Name must end with ``_ACES2065-1_proxy``.
+    """
+    folder = Path(seq_dir)
+    if not folder.is_dir():
+        return
+    if not folder.name.endswith(DELIVERABLE_DIR_SUFFIX):
+        return
+    shutil.rmtree(folder)
 
 
 def clip_pixel_count(
@@ -1125,11 +1151,13 @@ def process_locked_writes(
 
     After at least one verified EXR sequence and no cancel, write the
     session Resolve package (XML / DCTL / cube / README) into ``dest``.
-    Missing or unreadable files fail the session with
-    「达芬奇包不完整，未写出」 and the half package is removed.
-    ``resolve_write_fn`` is the test hook; default is
-    ``export_locked_resolve_bundle``. Python LUT size defaults to 5
-    (Swift stays 17). Not a movie. 不是全精度成片.
+    Missing or empty ``graph.xml`` / DCTL / cube / ``README_RESOLVE.md``
+    fail the session with 「达芬奇包不完整，未写出」. The half package
+    and those ``_proxy`` folders are removed so they are not 已写出代理.
+    Empty ``_ACES2065-1_proxy`` / 0 frames fail closed (「帧数对不上」 /
+    「解码失败」) and leave no success folder. ``resolve_write_fn`` is
+    the test hook; default is ``export_locked_resolve_bundle``. Python
+    LUT size defaults to 5 (Swift stays 17). Not a movie. 不是全精度成片.
     """
     dest = Path(dest)
     plan = plan_locked_batch(clips)
@@ -1163,7 +1191,8 @@ def process_locked_writes(
         seq_dir = dest / deliverable_dir_name(clip.name)
         rgb_frames = as_frame_sequence(frames.get(clip.name))
         if not rgb_frames:
-            errors.append(ClipWrite(name=clip.name, error="no pixels"))
+            remove_failed_proxy_dir(seq_dir)
+            errors.append(ClipWrite(name=clip.name, error=DECODE_FAILED_CHIP))
             continue
         if not clip.idt:
             errors.append(ClipWrite(name=clip.name, error="no IDT"))
@@ -1212,8 +1241,7 @@ def process_locked_writes(
                 break
             ok, verify_err = verify_locked_proxy_sequence(seq_dir, clip)
             if not ok:
-                if seq_dir.exists():
-                    shutil.rmtree(seq_dir)
+                remove_failed_proxy_dir(seq_dir)
                 errors.append(
                     ClipWrite(name=clip.name, error=verify_err or FRAME_MISMATCH_CHIP)
                 )
@@ -1222,8 +1250,7 @@ def process_locked_writes(
                 ClipWrite(name=clip.name, path=str(seq_dir), frame_count=len(rgb_frames))
             )
         except Exception as exc:  # noqa: BLE001 — per-clip error, keep going
-            if seq_dir.exists():
-                shutil.rmtree(seq_dir)
+            remove_failed_proxy_dir(seq_dir)
             errors.append(ClipWrite(name=clip.name, error=str(exc)))
     if written and not cancelled:
         try:
@@ -1238,9 +1265,11 @@ def process_locked_writes(
             ok, resolve_err = verify_resolve_bundle(dest)
             if not ok:
                 raise OSError(resolve_err or RESOLVE_INCOMPLETE_CHIP)
-        except Exception:  # noqa: BLE001 — session fail-closed, keep EXR folders
+        except Exception:  # noqa: BLE001 — session fail-closed, drop half package + _proxy
             remove_incomplete_resolve_bundle(dest)
             for item in written:
+                if item.path:
+                    remove_failed_proxy_dir(item.path)
                 errors.append(
                     ClipWrite(name=item.name, error=RESOLVE_INCOMPLETE_CHIP)
                 )
