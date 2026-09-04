@@ -182,6 +182,16 @@ struct HDRPreviewView: View {
             HDRTaggedHost(image: image, odt: odt, onLayerFail: onLayerFail)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
+            // Empty right pane: same 「HDR 预览建不出」 chip. Never 709 pixels.
+            if image == nil, title == HDRPreviewColor.buildFailStatus {
+                Text(HDRPreviewColor.buildFailStatus)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+                    .accessibilityLabel(HDRPreviewColor.buildFailStatus)
+            }
             PreviewNotDeliverableBadge()
             HDRPaneTitle(title: title)
         }

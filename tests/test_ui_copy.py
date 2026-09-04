@@ -609,13 +609,20 @@ def test_odt_preview_caption_is_locked_chinese():
     assert "case .off:" in caption
     assert f'return "{PREVIEW_STATUS_ODT_OFF}"' in caption
     assert f'return "{PREVIEW_STATUS_NOT_DELIVERABLE}"' in caption
+    assert f'return "{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in caption
+    assert f'return "{PREVIEW_STATUS_HDR_NO_EDR}"' in caption
     assert "acesOTNote" not in caption
     assert "badge" not in caption
     assert "成片预览关" not in caption
     assert "精准" not in caption
     _chengpian_only_honesty(caption)
 
-    allowed = {PREVIEW_STATUS_ODT_OFF, PREVIEW_STATUS_NOT_DELIVERABLE}
+    allowed = {
+        PREVIEW_STATUS_ODT_OFF,
+        PREVIEW_STATUS_NOT_DELIVERABLE,
+        PREVIEW_STATUS_HDR_BUILD_FAIL,
+        PREVIEW_STATUS_HDR_NO_EDR,
+    }
     leftover_english = (
         "Node 4 off",
         "ACEScct deliverable",
@@ -633,13 +640,15 @@ def test_odt_preview_caption_is_locked_chinese():
         "finished picture",
         "itur_709",
     )
+    hdr_chips = {PREVIEW_STATUS_HDR_BUILD_FAIL, PREVIEW_STATUS_HDR_NO_EDR}
     for lit in _odt_preview_caption_literals(caption):
         assert lit in allowed, lit
         for token in leftover_english:
             assert token not in lit, (token, lit)
         assert "成片预览关" not in lit
         assert "精准" not in lit
-        assert not re.search(r"[A-Za-z]", lit), lit
+        if lit not in hdr_chips:
+            assert not re.search(r"[A-Za-z]", lit), lit
         _chengpian_only_honesty(lit)
 
     for token in leftover_english:
@@ -760,6 +769,27 @@ def test_hdr_preview_colorsync_fail_closed_no_709_fallback():
     assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in resolved
     assert "displayHasEDR" in resolved
     assert "applyODT" not in resolved
+
+    # Real-Mac surfaces: pane title / hover / empty pane reuse the same chips.
+    title = clip.split("var odtPreviewTitle")[1].split("var odtPreviewCaption")[0]
+    caption = clip.split("var odtPreviewCaption")[1].split("func setIDT")[0]
+    assert "graph.odt.isHDR" in title
+    assert "preview.status" in title
+    assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in title
+    assert f'"{PREVIEW_STATUS_HDR_NO_EDR}"' in title
+    assert f'return "{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in title
+    assert f'return "{PREVIEW_STATUS_HDR_NO_EDR}"' in title
+    assert "applyODT" not in title
+    assert "graph.odt.isHDR" in caption
+    assert "preview.status" in caption
+    assert f'return "{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in caption
+    assert f'return "{PREVIEW_STATUS_HDR_NO_EDR}"' in caption
+    assert f'return "{PREVIEW_STATUS_NOT_DELIVERABLE}"' in caption
+    hdr_view = hdr.split("struct HDRPreviewView")[1].split("private struct HDRPaneTitle")[0]
+    assert "image == nil" in hdr_view
+    assert "HDRPreviewColor.buildFailStatus" in hdr_view
+    assert "Button(" not in hdr_view
+    assert "applyODT" not in hdr_view
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
