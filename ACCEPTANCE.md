@@ -6,7 +6,7 @@ Default language is **ACEScct** / **ACES2065-1**. Rec.709 is preview only. Rec.2
 
 ## 真机达芬奇验收（人话清单）
 
-**CI 绿不等于达芬奇已验证。** 下面是人在自己的 Mac + 达芬奇上要走的一遍，不是算法，也不是 GitHub Actions。**整段代理，不是全精度成片。** 不写精准。不写 ACES OT 已验。本机怎么编出试用包，见 README 的「本机试用」。
+**CI 绿不等于达芬奇已验证。** 下面是人在自己的 Mac + 达芬奇上要走的一遍，不是算法，也不是 GitHub Actions。**整段代理，不是全精度成片。** 不写精准。不写 ACES OT 已验。本机怎么编出试用包、Archive 后 `.app` 落哪、怎么拷到另一台、Gatekeeper / 隔离（`xattr`），见 README 的「本机试用」。不要公证。
 
 仓库不带厂商样片。用自己的片子。
 

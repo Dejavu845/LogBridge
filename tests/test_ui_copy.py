@@ -229,6 +229,39 @@ def test_docs_name_resolve_real_machine_checklist():
     assert "整段代理，不是全精度成片" in acceptance
     assert "不是视频" in acceptance
     assert "ACEScct 成片" not in blob
+    # P2 trial copy: Archive → .app path → another Mac → Gatekeeper / xattr.
+    assert "Products/Applications" in readme
+    assert "LogBridge.app" in readme
+    assert "Gatekeeper" in readme
+    assert "隔离" in readme
+    assert "xattr" in readme
+    assert "com.apple.quarantine" in readme
+    assert "clear-app-quarantine.sh" in readme
+    assert "不要" in readme and "公证" in readme
+    assert "notarytool" in readme
+    assert "Gatekeeper" in acceptance
+    assert "xattr" in acceptance
+    assert "不要公证" in acceptance
+
+
+def test_trial_quarantine_script_is_local_xattr_only():
+    """Helper documents / applies quarantine clear. Not a notarize path."""
+    script_path = ROOT / "scripts" / "clear-app-quarantine.sh"
+    assert script_path.is_file()
+    text = script_path.read_text(encoding="utf-8")
+    assert "xattr -dr com.apple.quarantine" in text
+    assert "不是公证" in text
+    assert "notarytool" in text  # named so we can say we do not run it
+    assert "不要拿去提交 Apple" in text
+    assert "整段代理，不是全精度成片" in text
+    assert "CI 绿不等于达芬奇已验证" in text
+    assert "altool" not in text
+    assert "APPLE_ID" not in text
+    assert "xcrun notarytool" not in text
+    assert "--submit" not in text
+    assert "store-credentials" not in text
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "clear-app-quarantine.sh" in readme
 
 
 def test_exposure_inspector_and_preview_not_finished_picture():
