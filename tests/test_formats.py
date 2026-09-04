@@ -241,6 +241,13 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     assert short_export_chip(MISSING_YCBCR_TAGS_CHIP) == MISSING_YCBCR_TAGS_CHIP
     assert short_export_chip(GENERIC_PARSE_FAILED) == DECODE_FAILED_CHIP
     assert short_export_chip(GENERIC_PARSE_FAILED) != GENERIC_PARSE_FAILED
+    from color.batch import EMPTY_RGB_CHIP, REASON_PICK_PAIRED_IDT
+
+    assert short_export_chip("empty RGB buffer") == EMPTY_RGB_CHIP
+    assert short_export_chip(EMPTY_RGB_CHIP) == EMPTY_RGB_CHIP
+    assert short_export_chip("no IDT") == REASON_PICK_PAIRED_IDT
+    assert user_facing_failure_note("empty RGB buffer") == EMPTY_RGB_CHIP
+    assert user_facing_failure_note("no IDT") == REASON_PICK_PAIRED_IDT
 
     swift = _swift_ui()
     python = _python_ui()

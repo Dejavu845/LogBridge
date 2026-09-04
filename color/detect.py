@@ -20,6 +20,14 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .as_shot import AsShotWB, read_as_shot_wb
+from .batch import (
+    NOTE_CLOG2_NO_GAMUT,
+    NOTE_CLOG3_NO_GAMUT,
+    NOTE_DLOG_M,
+    NOTE_SLOG3_NO_GAMUT,
+    NOTE_SLOG3_NO_GAMUT_VENICE,
+    NOTE_VENICE_PICK,
+)
 from .gamuts import IDT_PAIRS, VENICE_IDTS
 
 
@@ -263,9 +271,7 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
             None,
             "metadata",
             True,
-            "S-Log3 from Sony metadata without gamut; pick a paired IDT "
-            "(S-Log3 + S-Gamut3 or S-Log3 + S-Gamut3.Cine). Never default Cine"
-            + (" (Venice pairs offered — Venice body detected)" if venice else ""),
+            NOTE_SLOG3_NO_GAMUT_VENICE if venice else NOTE_SLOG3_NO_GAMUT,
             venice_detected=venice,
         )
 
@@ -284,8 +290,7 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
             None,
             "metadata",
             True,
-            "C-Log2 from Canon metadata without gamut; pick a paired IDT "
-            "(C-Log2 + Cinema Gamut or C-Log2 + BT.2020). Never default Cinema Gamut",
+            NOTE_CLOG2_NO_GAMUT,
         )
     if "c-log3" in canon or "clog3" in canon:
         if "cinema" in canon_gamut or "cgamut" in canon_gamut or "c-gamut" in canon_gamut:
@@ -298,8 +303,7 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
             None,
             "metadata",
             True,
-            "C-Log3 from Canon metadata without gamut; pick a paired IDT "
-            "(C-Log3 + Cinema Gamut or C-Log3 + BT.2020). Never default Cinema Gamut",
+            NOTE_CLOG3_NO_GAMUT,
         )
 
     rmd = str(cleaned.get("red_rmd_colorspace", cleaned.get("red_color_space", ""))).lower()
@@ -337,7 +341,7 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
             None,
             "metadata",
             True,
-            "D-Log M is unsupported. D-Log + D-Gamut (2017 white paper) is implemented (unverified).",
+            NOTE_DLOG_M,
         )
     if "d-log" in dji or "dlog" in dji:
         return _pair("dji_dlog_dgamut", "metadata", "DJI D-Log metadata")
@@ -362,7 +366,7 @@ def _unsupported_filename(name: str) -> Detection | None:
             None,
             "filename",
             True,
-            "D-Log M is unsupported. D-Log + D-Gamut (2017) is implemented (unverified).",
+            NOTE_DLOG_M,
         )
     return None
 
@@ -384,8 +388,7 @@ def detect_from_filename(path: str) -> Detection | None:
             None,
             "filename",
             True,
-            "C-Log2 in filename without gamut; pick a paired IDT "
-            "(C-Log2 + Cinema Gamut or C-Log2 + BT.2020). Never default Cinema Gamut",
+            NOTE_CLOG2_NO_GAMUT,
         )
     if "c-log3" in name or "clog3" in name:
         if "cinema" in name or "cgamut" in name or "c-gamut" in name:
@@ -398,8 +401,7 @@ def detect_from_filename(path: str) -> Detection | None:
             None,
             "filename",
             True,
-            "C-Log3 in filename without gamut; pick a paired IDT "
-            "(C-Log3 + Cinema Gamut or C-Log3 + BT.2020). Never default Cinema Gamut",
+            NOTE_CLOG3_NO_GAMUT,
         )
     # Check more specific tokens first (already ordered).
     venice = _venice_hit(name)
@@ -420,9 +422,7 @@ def detect_from_filename(path: str) -> Detection | None:
             None,
             "filename",
             True,
-            "S-Log3 in filename without gamut; pick a paired IDT "
-            "(S-Log3 + S-Gamut3 or S-Log3 + S-Gamut3.Cine). Never default Cine"
-            + (" (Venice pairs offered)" if venice else ""),
+            NOTE_SLOG3_NO_GAMUT_VENICE if venice else NOTE_SLOG3_NO_GAMUT,
             venice_detected=venice,
         )
     return None
@@ -438,8 +438,7 @@ def detect_from_model(model: str) -> Detection | None:
             None,
             "model",
             True,
-            "Venice camera detected; pick a paired IDT "
-            "(S-Log3 + S-Gamut3 (Venice) or S-Log3 + S-Gamut3.Cine (Venice)). Never default.",
+            NOTE_VENICE_PICK,
             venice_detected=True,
         )
     for token, idt_id in _MODEL_HINTS:

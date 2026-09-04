@@ -793,7 +793,8 @@ final class PreviewEngine: ObservableObject {
     static func userFacingFailureNote(_ error: Error) -> String {
         let desc = (error as NSError).localizedDescription
         if desc.hasPrefix("先选择") || desc.contains("读不到") { return desc }
-        if desc == missingYCbCrTagsChip || desc == Self.decodeFailedChip || desc == writeOversizeChip {
+        if desc == missingYCbCrTagsChip || desc == Self.decodeFailedChip || desc == writeOversizeChip
+            || desc == SessionModel.stubChip || desc == SessionModel.emptyRGBChip {
             return desc
         }
         if desc == MediaFormat.noteCameraRaw || desc == MediaFormat.noteARRIMxf
@@ -802,6 +803,12 @@ final class PreviewEngine: ObservableObject {
         }
         if desc.contains("不接") || desc.contains("暂不支持") || desc.contains("无法读取") {
             return desc
+        }
+        if desc == "no IDT" || desc == "IDT is required" {
+            return "先选择成对 IDT"
+        }
+        if desc == "empty RGB buffer" {
+            return SessionModel.emptyRGBChip
         }
         let lower = desc.lowercased()
         if lower.contains("decode") || lower.contains("grade") || lower.contains("parse")

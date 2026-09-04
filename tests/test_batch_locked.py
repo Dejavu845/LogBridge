@@ -1251,6 +1251,12 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
     assert short_export_chip("no pixels") == DECODE_FAILED_CHIP
     assert short_export_chip("disk full") == WRITE_FAILED_CHIP
     assert short_export_chip(DECODE_FAILED_CHIP) != WRITE_FAILED_CHIP
+    from color.batch import EMPTY_RGB_CHIP, REASON_PICK_PAIRED_IDT
+
+    assert short_export_chip("empty RGB buffer") == EMPTY_RGB_CHIP
+    assert short_export_chip(EMPTY_RGB_CHIP) == EMPTY_RGB_CHIP
+    assert short_export_chip("no IDT") == REASON_PICK_PAIRED_IDT
+    assert short_export_chip("write produced no file") == WRITE_FAILED_CHIP
     assert preserved_failure_note(DECODE_FAILED_CHIP) == DECODE_FAILED_CHIP
     from color.formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_UNKNOWN_CODEC
 
