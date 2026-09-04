@@ -791,6 +791,15 @@ final class SessionModel: ObservableObject {
     }
 
     var odtPreviewTitle: String {
+        // Real-Mac HDR pane: existing #53 chips, not new copy.
+        if graph.odt.isHDR {
+            if preview.status == "HDR 预览建不出" {
+                return "HDR 预览建不出"
+            }
+            if preview.status == "屏幕无 EDR，预览被压到 SDR" {
+                return "屏幕无 EDR，预览被压到 SDR"
+            }
+        }
         switch graph.odt {
         case .off:
             return "709 预览关"
@@ -804,7 +813,15 @@ final class SessionModel: ObservableObject {
     }
 
     var odtPreviewCaption: String {
-        // Hover on the Rec.709 pane. Existing phrases only (#43 / #47).
+        // Hover: existing phrases only (#43 / #47 / #53). No new chip.
+        if graph.odt.isHDR {
+            if preview.status == "HDR 预览建不出" {
+                return "HDR 预览建不出"
+            }
+            if preview.status == "屏幕无 EDR，预览被压到 SDR" {
+                return "屏幕无 EDR，预览被压到 SDR"
+            }
+        }
         switch graph.odt {
         case .off:
             return "709 预览关"
