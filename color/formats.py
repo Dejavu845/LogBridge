@@ -62,6 +62,9 @@ CAMERA_RAW_MARKERS = (
 NOTE_ARRI_MXF = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
 NOTE_CAMERA_RAW = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
 NOTE_UNKNOWN_CODEC = "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
+# Accept notes (already Chinese; API names kept). Success-path lock.
+NOTE_STILL_ACCEPT = "静帧 {ext} 走 ImageIO。不是成片。"
+NOTE_MOVIE_ACCEPT = "MOV/MP4：ProRes / H.264 / HEVC 走 AVAssetReader Y′CbCr。不走 copyCGImage。"
 
 # Folder expand lists these so a refuse note can fire. Not a support claim.
 EXPAND_EXTENSIONS = (
@@ -103,7 +106,7 @@ def classify(path: str | Path, codec: str | None = None) -> FormatDecision:
             action=ACCEPT,
             container=ext,
             codec=codec_n,
-            note=f"静帧 {ext.upper()} 走 ImageIO。不是成片。",
+            note=NOTE_STILL_ACCEPT.format(ext=ext.upper()),
             kind="still",
         )
 
@@ -128,7 +131,7 @@ def classify(path: str | Path, codec: str | None = None) -> FormatDecision:
             action=ACCEPT,
             container=ext,
             codec=codec_n,
-            note="MOV/MP4：ProRes / H.264 / HEVC 走 AVAssetReader Y′CbCr。不走 copyCGImage。",
+            note=NOTE_MOVIE_ACCEPT,
             kind="movie",
         )
 

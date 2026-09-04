@@ -74,13 +74,19 @@ def test_filename_slog3_without_gamut_needs_picker():
 
 
 def test_filename_sgamut3_cine_is_explicit():
+    from color.batch import NOTE_FILENAME_SGAMUT3_CINE
+
     d = detect_from_filename("A001_SLog3_SGamut3.Cine.mov")
     assert d.idt_id == "sony_slog3_sgamut3cine"
+    assert d.note == NOTE_FILENAME_SGAMUT3_CINE
 
 
 def test_filename_sgamut3_without_cine():
+    from color.batch import NOTE_FILENAME_SGAMUT3
+
     d = detect_from_filename("A001_SLog3_SGamut3.mov")
     assert d.idt_id == "sony_slog3_sgamut3"
+    assert d.note == NOTE_FILENAME_SGAMUT3
 
 
 def test_red_rmd():
@@ -96,9 +102,12 @@ def test_user_picker_when_unresolved():
 
 
 def test_model_hint_alexa35():
+    from color.batch import NOTE_MODEL_HINT
+
     d = detect_clip("plain.mxf", model="ARRI ALEXA 35")
     assert d.idt_id == "arri_logc4_awg4"
     assert d.source == "model"
+    assert d.note == NOTE_MODEL_HINT
 
 
 
@@ -274,8 +283,11 @@ def test_filename_clog3_without_gamut_needs_picker():
 
 
 def test_filename_clog3_cinema_gamut():
+    from color.batch import NOTE_FILENAME_CLOG3_CGAMUT
+
     d = detect_from_filename("A001_CLog3_CinemaGamut.mov")
     assert d.idt_id == "canon_clog3_cgamut"
+    assert d.note == NOTE_FILENAME_CLOG3_CGAMUT
 
 
 def test_filename_clog2_without_gamut_needs_picker():
@@ -321,8 +333,11 @@ def test_filename_dlog_m_unsupported():
 
 
 def test_filename_apple_log2_locks_awg_not_bt2020():
+    from color.batch import NOTE_FILENAME_APPLE_LOG2
+
     d = detect_from_filename("IMG_AppleLog2.mov")
     assert d.idt_id == "apple_log2_awg"
+    assert d.note == NOTE_FILENAME_APPLE_LOG2
     assert d.gamut == "AppleWideGamut"
     assert d.gamut != "BT2020"
     assert "Apple Wide Gamut" in picker_labels([d.idt_id])[0][1]
@@ -330,8 +345,11 @@ def test_filename_apple_log2_locks_awg_not_bt2020():
 
 
 def test_filename_logc3_locks_ei800_awg3_not_bare_logc3():
+    from color.batch import NOTE_FILENAME_LOGC3
+
     d = detect_from_filename("A001_LogC3_take.mxf")
     assert d.idt_id == "arri_logc3_ei800_awg3"
+    assert d.note == NOTE_FILENAME_LOGC3
     assert d.curve == "logc3_ei800"
     assert d.gamut == "AWG3"
     label = picker_labels([d.idt_id])[0][1]
@@ -374,8 +392,12 @@ def test_swift_ui_names_logc3_ei800_awg3_and_apple_log2_awg():
     assert 'case appleLog2AWG = "apple_log2_awg"' in idt
     assert "appleLog2Stub" not in idt
     assert "arriLogC3Stub" not in idt
-    assert "filename LogC3 EI800 + AWG3" in detector
-    assert "filename Apple Log 2 + Apple Wide Gamut" in detector
+    from color.batch import NOTE_FILENAME_APPLE_LOG2, NOTE_FILENAME_LOGC3
+
+    assert NOTE_FILENAME_LOGC3 in detector
+    assert NOTE_FILENAME_APPLE_LOG2 in detector
+    assert "filename LogC3 EI800 + AWG3" not in detector
+    assert "filename Apple Log 2 + Apple Wide Gamut" not in detector
     assert "ARRI LogC3 is unsupported" not in detector
     assert "Apple Log 2 is unsupported" not in detector
     from color.batch import NOTE_DLOG_M

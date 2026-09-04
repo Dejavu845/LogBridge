@@ -10,6 +10,8 @@ from color.formats import (
     empty_metadata_note,
     NOTE_ARRI_MXF,
     NOTE_CAMERA_RAW,
+    NOTE_MOVIE_ACCEPT,
+    NOTE_STILL_ACCEPT,
     NOTE_UNKNOWN_CODEC,
 )
 from color.batch import (
@@ -34,6 +36,7 @@ def _read(p: Path) -> str:
 
 def test_mov_mp4_prores_h264_hevc_accept():
     assert classify("A.mov").action == ACCEPT
+    assert classify("A.mov").note == NOTE_MOVIE_ACCEPT
     assert classify("A.mp4", "avc1").action == ACCEPT
     assert classify("A.m4v", "hvc1").action == ACCEPT
     assert classify("A.mov", "apch").action == ACCEPT
@@ -47,6 +50,7 @@ def test_stills_tiff_dpx_exr_accept():
         assert d.action == ACCEPT
         assert d.kind == "still"
         assert "ImageIO" in d.note
+        assert d.note == NOTE_STILL_ACCEPT.format(ext=name.rsplit(".", 1)[-1].upper())
 
 
 def test_stills_preview_and_write_skip_ycbcr_unpack():

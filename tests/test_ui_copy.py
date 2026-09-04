@@ -40,6 +40,14 @@ from color.batch import (
     SKIPPED_BUCKET,
     STUB_CHIP,
     USER_PICKED_IDT_NOTE,
+    WROTE_FILES_NOTE,
+    NOTE_FILENAME_SGAMUT3,
+    NOTE_FILENAME_SGAMUT3_CINE,
+    NOTE_FILENAME_LOGC3,
+    NOTE_FILENAME_AWG3,
+    NOTE_FILENAME_APPLE_LOG2,
+    NOTE_MODEL_HINT,
+    NOTE_META_RED_RMD,
     short_export_chip,
     user_facing_failure_note,
 )
@@ -1999,3 +2007,122 @@ def test_leftover_english_failure_chips_are_chinese():
     ):
         _chengpian_only_honesty(note)
         assert "完善" not in note
+
+
+def test_success_path_english_notes_are_chinese():
+    """Success / accept / export-done leftovers stay locked Chinese.
+
+    Failure chips from #69/#67/#68 are re-locked, not rewritten.
+    ImageIO / copyCGImage accept notes stay the existing Chinese + API names.
+    """
+    from color.formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_MOVIE_ACCEPT, NOTE_STILL_ACCEPT
+
+    clip = _read(CLIP)
+    detector = _read(SWIFT_ROOT / "LogBridge/LogBridge/Detection/ClipDetector.swift")
+    media = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/MediaFormat.swift")
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    detect_py = (ROOT / "color/detect.py").read_text(encoding="utf-8")
+    formats_py = (ROOT / "color/formats.py").read_text(encoding="utf-8")
+
+    assert WROTE_FILES_NOTE == "已写出 {n} 个文件"
+    assert NOTE_FILENAME_SGAMUT3 == "文件名 S-Gamut3"
+    assert NOTE_FILENAME_SGAMUT3_CINE == "文件名 S-Gamut3.Cine"
+    assert NOTE_FILENAME_LOGC3 == "文件名 LogC3 EI800 + AWG3"
+    assert NOTE_FILENAME_AWG3 == "文件名 AWG3 (LogC3 EI800 + AWG3)"
+    assert NOTE_FILENAME_APPLE_LOG2 == "文件名 Apple Log 2 + Apple Wide Gamut"
+    assert NOTE_MODEL_HINT == "机型提示"
+    assert NOTE_META_RED_RMD == "元数据 RED RMD"
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 走 ImageIO。不是成片。"
+    assert NOTE_MOVIE_ACCEPT == (
+        "MOV/MP4：ProRes / H.264 / HEVC 走 AVAssetReader Y′CbCr。不走 copyCGImage。"
+    )
+
+    # Existing Chinese failure chips stay locked.
+    assert STUB_CHIP == "未实现"
+    assert EMPTY_RGB_CHIP == "RGB 是空的，未写出"
+    assert NOTE_DLOG_M == "D-Log M 暂不支持，请用 D-Log + D-Gamut"
+    assert NOTE_SLOG3_NO_GAMUT == "S-Log3 没有色域，先选择成对 IDT"
+    assert NOTE_SLOG3_NO_GAMUT_VENICE == "S-Log3 没有色域，检测到 Venice，先选择成对 IDT"
+    assert NOTE_CLOG2_NO_GAMUT == "C-Log2 没有色域，先选择成对 IDT"
+    assert NOTE_CLOG3_NO_GAMUT == "C-Log3 没有色域，先选择成对 IDT"
+    assert NOTE_VENICE_PICK == "检测到 Venice，先选择成对 IDT"
+    assert MISSING_YCBCR_TAGS_CHIP_UI == "读不出片源色彩标签，没法写出"
+    assert RESOLVE_INCOMPLETE_CHIP == "达芬奇包不完整，未写出"
+    assert FRAME_MISMATCH_CHIP == "帧数对不上"
+    assert DECODE_FAILED_CHIP == "解码失败"
+    assert PREVIEW_STATUS_HDR_BUILD_FAIL == "HDR 预览建不出"
+    assert PREVIEW_STATUS_HDR_NO_EDR == "屏幕无 EDR，预览被压到 SDR"
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
+
+    ui_clip = _code_without_comments(clip)
+    assert "已写出 \\(written.count) 个文件" in clip
+    assert HONEST_PROXY_NOTE in clip.split("func exportResolve()")[1]
+    assert "Wrote " not in ui_clip
+    assert "files to" not in ui_clip
+
+    ui_detector = _code_without_comments(detector)
+    assert f'note: "{NOTE_FILENAME_SGAMUT3_CINE}"' in detector
+    assert f'note: "{NOTE_FILENAME_SGAMUT3}"' in detector
+    assert f'note: "{NOTE_FILENAME_LOGC3}"' in detector
+    assert f'note: "{NOTE_FILENAME_AWG3}"' in detector
+    assert f'note: "{NOTE_FILENAME_APPLE_LOG2}"' in detector
+    assert f'note: "{NOTE_MODEL_HINT}"' in detector
+    assert f'note: "{NOTE_META_RED_RMD}"' in detector
+    leftover_en = (
+        "filename S-Gamut3",
+        "filename S-Gamut3.Cine",
+        "filename LogC3",
+        "filename Apple Log",
+        "filename C-Log2",
+        "filename C-Log3",
+        "filename V-Log",
+        "filename F-Log2",
+        "filename N-Log",
+        "filename Log3G10",
+        "filename D-Log",
+        "filename LogC4",
+        "model hint",
+        "RED RMD sidecar present",
+        "Wrote ",
+        "files to",
+    )
+    for token in leftover_en:
+        assert token not in ui_detector, token
+        assert token not in ui_clip, token
+
+    assert NOTE_STILL_ACCEPT.split("{ext}")[0] in media
+    assert "走 ImageIO。不是成片。" in media
+    assert NOTE_MOVIE_ACCEPT in media
+    assert NOTE_STILL_ACCEPT in formats_py
+    assert NOTE_MOVIE_ACCEPT in formats_py
+
+    note_fn = exporter.split("static func exportNote")[1].split("static func export(")[0]
+    assert "待定 / 单位阵" in note_fn
+    assert "pending / identity" not in note_fn
+    assert "绿品" in note_fn
+    assert HONEST_PROXY_NOTE in note_fn
+
+    assert "NOTE_FILENAME_SGAMUT3" in detect_py
+    assert "filename token" not in detect_py
+    assert "camera model" not in detect_py
+    assert "Sony Acquisition metadata" not in detect_py
+    assert "Canon vendor metadata" not in detect_py
+
+    for note in (
+        NOTE_FILENAME_SGAMUT3,
+        NOTE_FILENAME_SGAMUT3_CINE,
+        NOTE_FILENAME_LOGC3,
+        NOTE_FILENAME_AWG3,
+        NOTE_FILENAME_APPLE_LOG2,
+        NOTE_MODEL_HINT,
+        NOTE_META_RED_RMD,
+        NOTE_STILL_ACCEPT,
+        NOTE_MOVIE_ACCEPT,
+        WROTE_FILES_NOTE,
+        HONEST_PROXY_NOTE,
+    ):
+        _chengpian_only_honesty(note)
+        assert "完善" not in note
+        assert "精准" not in note
