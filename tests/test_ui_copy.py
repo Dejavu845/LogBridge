@@ -187,6 +187,29 @@ def test_docs_name_the_review_locks():
     assert "先选择成对 IDT" in blob
 
 
+def test_docs_name_resolve_real_machine_checklist():
+    """P0 human checklist: CI 绿 ≠ Resolve 已验. 本机试用 / Archive. No new color numbers."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    blob = readme + "\n" + acceptance
+    assert "CI 绿不等于达芬奇已验证" in acceptance
+    assert "CI 绿不等于达芬奇已验证" in readme
+    assert "_ACES2065-1_proxy" in acceptance
+    assert "adoptedNeutral" in acceptance
+    assert "ACES 白" in acceptance
+    assert "本机试用" in readme
+    assert "本机试用" in acceptance
+    assert "Archive" in readme
+    assert "归档" in readme
+    assert "处理已锁定片段" in acceptance
+    assert "chromaticities" in acceptance
+    assert "达芬奇包" in acceptance
+    assert "HDR 预览建不出" in acceptance
+    assert "整段代理，不是全精度成片" in acceptance
+    assert "不是视频" in acceptance
+    assert "ACEScct 成片" not in blob
+
+
 def test_exposure_inspector_and_preview_not_finished_picture():
     inspector = _read(INSPECTOR)
     assert "ExposureInspector" in inspector

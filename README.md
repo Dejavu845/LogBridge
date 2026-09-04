@@ -39,11 +39,57 @@ Python curves in `color/` are the source of truth for 18% tests. Regenerating OC
 python3 scripts/generate_ocio_assets.py
 ```
 
-## Open in Xcode (macOS)
+## 本机试用：Mac 上打开 / Archive（不懂 Xcode 也能跟）
 
-1. Copy this tree to a Mac.
-2. Open `macos/LogBridge/LogBridge.xcodeproj` in Xcode 15+ (macOS 14 deployment target).
-3. Select the **LogBridge** scheme, destination **My Mac**, and Run.
+这是 **本机试用包**，不是商店上架。不要去做 App Store 分发、公证（notarization）、付费开发者账号。本机 Run 或 Archive 拷出 `.app` 就够。
+
+**提醒：写出的代理 EXR 是图序列，不是视频。** 整段代理，不是全精度成片。**CI 绿不等于达芬奇已验证。** 真机达芬奇怎么点、看什么算对，见 `ACCEPTANCE.md` 的「真机达芬奇验收」。
+
+Open in Xcode (macOS). Xcode 15+，macOS 14 deployment target.
+
+### 1. 拿到仓库
+
+家里这台 Mac 打开「终端」：
+
+```bash
+git clone https://github.com/Dejavu845/LogBridge.git
+cd LogBridge
+```
+
+已经有文件夹就进入后执行 `git pull origin main`。
+
+### 2. 安装 Xcode（没有的话）
+
+Mac App Store 搜 Xcode，免费装。第一次打开会装额外组件，等它做完。不需要付费 Apple Developer。
+
+### 3. 打开工程
+
+访达里走进仓库，打开：
+
+`macos/LogBridge/LogBridge.xcodeproj`
+
+双击即可。或在 Xcode：文件 → 打开…，选这个 `.xcodeproj`。要的是工程文件，不是随便一个 `.swift`。
+
+### 4. 选 LogBridge scheme
+
+窗口左上角方案菜单选 **LogBridge**，右边设备选 **My Mac**。不要选 iPhone / 模拟器。
+
+### 5. 本机直接跑（最快）
+
+菜单 **产品 → 运行**（Product → Run），或按 ⌘R。编完会弹出 LogBridge 窗口。这就是本机试用。
+
+### 6. 要一个 .app 试用包：Archive
+
+1. 菜单 **产品 → 归档**（Product → Archive）。等编译结束。
+2. 会弹出 **管理器 / Organizer**，左边是这次 Archive。
+3. 最简单：右键这次 Archive → **Show in Finder** → 打开那个 `.xcarchive` → 走进 `Products/Applications/`，把 `LogBridge.app` 拷到任意文件夹，双击就能开。
+4. 或者点 **Distribute App**（分发）→ 选 **Copy App**（拷贝 App）或 Development 本机拷贝。**不要**选 App Store Connect、Developer ID 公证、上架。
+
+这是本机试用包，不是商店发行。
+
+### 7. 打开后别忘了
+
+拖自己的混源 Log 文件夹。每条选出成对 Log 与色域，锁定后点 **处理已锁定片段**。得到的是 `_ACES2065-1_proxy` 图序列，**不是视频**。
 
 Layout: empty-state drop zone (folder of mixed clips) → clip list (LazyVStack; **待选** / **已锁定** are two visual states — type, weight, chip, left accent; no extra lock button; Up/Down in the main window moves the selected clip, ignored while writing; Delete/Backspace removes the selected clip from the session only — does not delete the source file or an already-written `_proxy` folder; ignored while writing; text / numeric fields keep Delete; no extra button, no confirm sheet; Escape while writing is the same 取消, idle Escape does nothing; no extra button) | split preview (dominates) + paired IDT + **处理已锁定片段** | thinner Exposure / WB inspector. Node strip + **导出 ACEScct / EXR** are behind **高级**.
 
@@ -147,7 +193,7 @@ The macOS split preview is **not** a full-resolution render. Both panes show a *
 
 ## Verification status
 
-No golden samples have been measured. Do not claim accuracy. **CI 绿不等于达芬奇已验证。** 整段代理，不是全精度成片. See `ACCEPTANCE.md`.
+No golden samples have been measured. Do not claim accuracy. **CI 绿不等于达芬奇已验证。** 整段代理，不是全精度成片. See `ACCEPTANCE.md` 「真机达芬奇验收」.
 
 ## Out of scope (M1)
 

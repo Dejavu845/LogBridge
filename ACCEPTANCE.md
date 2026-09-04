@@ -4,6 +4,50 @@ Nothing below is claimed as passing. IDTs and HDR OTs are **implemented (unverif
 
 Default language is **ACEScct** / **ACES2065-1**. Rec.709 is preview only. Rec.2100 HLG / PQ are ACES Output Transform / BT.2100 (unverified). WB is ACES2065-1 (AP0) scene-linear. Implemented (unverified). Not supported. Not 一键精准.
 
+## 真机达芬奇验收（人话清单）
+
+**CI 绿不等于达芬奇已验证。** 下面是人在自己的 Mac + 达芬奇上要走的一遍，不是算法，也不是 GitHub Actions。**整段代理，不是全精度成片。** 不写精准。不写 ACES OT 已验。本机怎么编出试用包，见 README 的「本机试用」。
+
+仓库不带厂商样片。用自己的片子。
+
+### 1. 拖什么
+
+把**混源 Log 文件夹**拖进窗口（自己拍的、混相机的都行）。不要用厂商样片。空状态那行就是：把混源文件夹拖进来。
+
+### 2. 点什么
+
+每条素材选出**成对 Log 与色域**（例如 S-Log3 + S-Gamut3，不要两个独立下拉乱配）。选完即锁定。有锁定条数后，点 **处理已锁定片段**。没锁的会显示「先选择 Log 与色域」或「先选择成对 IDT」，不会偷偷猜。
+
+### 3. 写出什么
+
+每条已锁定素材得到一个 `{文件名}_ACES2065-1_proxy` 夹，里面是**逐帧 EXR 图序列**（`frame_000000.exr` …），**不是** mp4 / mov 视频。代理 EXR 不是视频。
+
+同一目标文件夹还会有一份**达芬奇包**：`graph.xml`、DCTL、cube、`README_RESOLVE.md`。缺文件或半包会失败成「达芬奇包不完整，未写出」。
+
+### 4. 在 Resolve 看什么算对
+
+- 达芬奇能打开这份包，能把 XML / DCTL / cube 挂上节点。
+- 时间线能挂上 `_ACES2065-1_proxy` 图序列（当图片序列，不当视频）。
+- 抽一帧 EXR 看头：有 `chromaticities`（ST 2065-1 AP0）和 `adoptedNeutral`（ACES 白 0.32168 0.33767）。这只说明头写了 ACES 白，不说明画面已验。
+- 代理仍是代理。**整段代理，不是全精度成片。** 预览·非成片。
+
+### 5. 看什么算不对
+
+- 包打不开，或节点挂不上。
+- 半包（缺 XML / DCTL / cube / `README_RESOLVE.md`）。
+- 状态出现「帧数对不上」（夹被删掉，不算已写出代理）。
+- 把代理当成品用。
+
+### 6. 有 EDR 屏
+
+可以顺手点 HLG / PQ 的 ColorSync 预览（预览·非成片）。建不出就停在「HDR 预览建不出」：空右边，不要当成 bug 去回退 709。没有 EDR 会看到「屏幕无 EDR，预览被压到 SDR」。这不是 ACES OT 已验。
+
+### 7. 到处要记住的诚实句
+
+- **整段代理，不是全精度成片。**
+- **CI 绿不等于达芬奇已验证。**
+- 不写精准。不写 ACES OT 已验。不要把 709 预览当成输出。
+
 ## Golden grey-card samples (per log)
 
 Shoot or obtain a grey card (18% reflectance) in each encoding, exposed to the manufacturer’s documented mid-grey code value. Decode with `color/` and confirm ACES scene-linear RGB ≈ 0.18, 0.18, 0.18 after IDT.
@@ -62,7 +106,7 @@ Gate: screenshot or Instruments/Core Image probe showing the *ODT* drawable colo
 - WB is a linear AP0 Bradford/CAT02 3×3 (or DI-free DCTL on ACES2065-1 / ACEScct-decoded-to-linear), not baked into the IDT or Rec.709 cubes.
 - Standard deliverable is **ACEScct or ACES2065-1 EXR / ACES workflow** (**导出 ACEScct / EXR**). Rec.709 cube is **709 预览** (DIY BT.709 OETF, no RRT) — never an ACES Output Transform. 预览·非成片. Rec.2100 HLG/PQ are optional ACES/BT.2100 OT (unverified). Remaining graph when WB is off: IDT → ACEScct, no bake.
 
-Gate: open the export in Resolve; bypassing the WB node must restore uncorrected camera linear (after IDT). Implemented (unverified).
+Gate: open the export in Resolve; bypassing the WB node must restore uncorrected camera linear (after IDT). Implemented (unverified). 人话步骤见上面「真机达芬奇验收」。**CI 绿不等于达芬奇已验证。**
 
 ## HDR OT via ACES/BT.2100 (M2-start)
 
