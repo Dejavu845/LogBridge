@@ -831,7 +831,9 @@ enum ResolveExporter {
         }
     }
 
-    /// Drop a half Resolve package. Leave ``_ACES2065-1_proxy`` folders.
+    /// Drop a half Resolve package (XML / DCTL / cube / README).
+    /// Does not touch ``_ACES2065-1_proxy`` folders. Locked-write callers
+    /// that must not mark 已写出代理 also call ``removeFailedProxySequence``.
     static func removeIncompleteResolveBundle(at directory: URL) {
         for name in resolveBundleFilenames {
             let url = directory.appendingPathComponent(name)
@@ -848,6 +850,13 @@ enum ResolveExporter {
                 try? FileManager.default.removeItem(at: url)
             }
         }
+    }
+
+    /// Drop a ``_ACES2065-1_proxy`` folder that must not be 已写出代理.
+    /// Empty folders, zero-frame writes, and half packages after a Resolve fail-closed.
+    static func removeFailedProxySequence(at seqDir: URL) {
+        guard seqDir.lastPathComponent.hasSuffix("_ACES2065-1_proxy") else { return }
+        try? FileManager.default.removeItem(at: seqDir)
     }
 
     /// Proxy sequence folder. Mirrors ``color.batch.deliverable_dir_name``.

@@ -63,6 +63,7 @@ from color.batch import (
     verify_locked_proxy_sequence,
     verify_resolve_bundle,
     remove_incomplete_resolve_bundle,
+    remove_failed_proxy_dir,
     cancelled_status_text,
     confirm_auto_wb,
     deliverable_dir_name,
@@ -1171,7 +1172,7 @@ def test_cancel_removes_in_progress_folder_keeps_completed(tmp_path: Path):
     clip = _read(CLIP)
     export_body = clip.split("func exportLockedEXR")[1].split("func cancelLockedDeliverables")[0]
     assert "LockedWriteCancel" in export_body
-    assert "removeItem(at: seqDir)" in export_body
+    assert "removeFailedProxySequence" in export_body
 
 
 def test_last_export_folder_and_finder_reveal(tmp_path: Path):
@@ -1821,7 +1822,7 @@ def test_verify_missing_fps_fails_and_never_guesses_24_or_30(tmp_path: Path):
         "func cancelLockedDeliverables"
     )[0]
     assert "verifyLockedProxySequence" in export_body
-    assert "removeItem(at: seqDir)" in export_body
+    assert "removeFailedProxySequence" in export_body
     assert "countProxyEXRs" in clip_src
     assert "framesCountMatches" in clip_src
     assert FRAME_MISMATCH_CHIP in clip_src
@@ -2169,7 +2170,10 @@ def test_incomplete_resolve_bundle_fails_chinese(tmp_path: Path):
     assert not (dest_w / "README_RESOLVE.md").exists()
     assert not (dest_w / "03_WB.dctl").exists()
     assert not (dest_w / "03_WB.cube").exists()
-    # Half Resolve package is gone. EXR sequence may remain; not 已写出代理.
+    # Half package and the `_proxy` folder are gone — not 已写出代理.
+    assert not (dest_w / deliverable_dir_name("locked.mov")).exists()
+    assert list(dest_w.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
+    assert list(dest_w.glob("**/*.exr")) == []
     assert "1 条失败" in report.processed_status_text
     assert RESOLVE_INCOMPLETE_CHIP in report.processed_status_text
     assert HONEST_PROXY_NOTE in report.processed_status_text
@@ -2195,6 +2199,8 @@ def test_incomplete_resolve_bundle_fails_chinese(tmp_path: Path):
     assert sidebar_export_chips([locked], empty)["locked.mov"] == RESOLVE_INCOMPLETE_CHIP
     for name in RESOLVE_REQUIRED_NAMES:
         assert not (dest_e / name).exists()
+    assert not (dest_e / deliverable_dir_name("locked.mov")).exists()
+    assert list(dest_e.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
     remove_incomplete_resolve_bundle(dest_e)
 
     clip = _read(CLIP)
@@ -2205,7 +2211,300 @@ def test_incomplete_resolve_bundle_fails_chinese(tmp_path: Path):
     exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
     assert "func verifyResolveBundle" in exporter
     assert "func removeIncompleteResolveBundle" in exporter
+    assert "func removeFailedProxySequence" in exporter
     assert "resolveRequiredNames" in exporter
+    write_body = clip.split("func writeLockedDeliverables")[1].split(
+        "func exportLockedEXR"
+    )[0]
+    resolve_fail = write_body.split("removeIncompleteResolveBundle")[1].split(
+        "written.removeAll"
+    )[0]
+    assert "removeFailedProxySequence" in resolve_fail
     write_src = inspect.getsource(process_locked_writes)
+    assert "remove_failed_proxy_dir" in write_src
     assert "AVAssetWriter" not in write_src
     assert "AVAssetExport" not in write_src
+
+
+def test_empty_proxy_folder_fails_not_written(tmp_path: Path):
+    """Empty `_ACES2065-1_proxy` (no EXRs): 帧数对不上, folder gone, not 已写出代理."""
+    locked = BatchClip(
+        "locked.mov",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=1.0,
+        fps=1.0,
+    )
+    pending = BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True)
+    dest = tmp_path / "empty_dir"
+    dest.mkdir()
+    seq = dest / deliverable_dir_name("locked.mov")
+    seq.mkdir()
+    assert count_proxy_exrs(seq) == 0
+    ok, err = verify_locked_proxy_sequence(seq, locked)
+    assert ok is False
+    assert err == FRAME_MISMATCH_CHIP
+    assert err != WRITTEN_CHIP
+    # Empty folder fails as 帧数对不上 even when fps/duration are missing.
+    no_timing = BatchClip("still.mov", idt="sony_slog3_sgamut3")
+    empty_no_timing = tmp_path / "still_ACES2065-1_proxy"
+    empty_no_timing.mkdir()
+    ok_t, err_t = verify_locked_proxy_sequence(empty_no_timing, no_timing)
+    assert ok_t is False
+    assert err_t == FRAME_MISMATCH_CHIP
+    assert err_t != MISSING_FPS_CHIP
+    assert err_t != MISSING_DURATION_CHIP
+    verify_src = inspect.getsource(verify_locked_proxy_sequence)
+    assert "written < 1" in verify_src
+    assert verify_src.index("written < 1") < verify_src.index("expected_source_frames")
+
+    def no_exr(path: Path, rgb) -> None:
+        return
+
+    dest_w = tmp_path / "write"
+    report = process_locked_writes(
+        [locked, pending],
+        dest_w,
+        frames={"locked.mov": _slog3_grey(), "pending.mov": _slog3_grey()},
+        write_fn=no_exr,
+    )
+    assert report.written == ()
+    assert report.errors[0].name == "locked.mov"
+    assert report.errors[0].error == FRAME_MISMATCH_CHIP
+    chips = sidebar_export_chips([locked, pending], report)
+    assert chips["locked.mov"] == FRAME_MISMATCH_CHIP
+    assert chips["locked.mov"] != WRITTEN_CHIP
+    assert chips["pending.mov"] == REASON_PICK_PAIRED_IDT
+    assert not (dest_w / deliverable_dir_name("locked.mov")).exists()
+    assert not (dest_w / deliverable_dir_name("pending.mov")).exists()
+    assert list(dest_w.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
+    assert list(dest_w.glob("**/*.exr")) == []
+    assert clip_sequence_reveal_path(
+        "locked.mov", dest_w, chips["locked.mov"]
+    ) is None
+    leftover = dest_w / deliverable_dir_name("locked.mov")
+    leftover.mkdir()
+    remove_failed_proxy_dir(leftover)
+    assert not leftover.exists()
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+    assert "精准" not in report.processed_status_text
+    assert list(dest_w.glob("**/*.mov")) == []
+
+    clip = _read(CLIP)
+    verify_swift = clip.split("static func verifyLockedProxySequence")[1].split(
+        "private func clearExportChips"
+    )[0]
+    assert "written < 1" in verify_swift
+    assert verify_swift.index("written < 1") < verify_swift.index("expectedSourceFrames")
+    export_body = clip.split("func exportLockedEXR")[1].split(
+        "func cancelLockedDeliverables"
+    )[0]
+    assert "removeFailedProxySequence" in export_body
+    assert "count < 1" in export_body
+    assert "decodeFailedChip" in export_body
+    assert DECODE_FAILED_CHIP in clip
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    assert "func removeFailedProxySequence" in exporter
+    assert "_ACES2065-1_proxy" in exporter.split("func removeFailedProxySequence")[1]
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert "empty `_ACES2065-1_proxy`" in readme
+    assert "empty `_ACES2065-1_proxy`" in acceptance
+    assert FRAME_MISMATCH_CHIP in readme
+    assert FRAME_MISMATCH_CHIP in acceptance
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        RESOLVE_REQUIRED_XML,
+        RESOLVE_REQUIRED_README,
+        RESOLVE_REQUIRED_DCTL,
+        RESOLVE_REQUIRED_CUBE,
+    ],
+)
+def test_missing_resolve_file_fails_not_written(tmp_path: Path, missing: str):
+    """Each of graph.xml / DCTL / cube / README missing: 达芬奇包不完整，未写出."""
+    locked = BatchClip(
+        "locked.mov",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=1.0,
+        fps=1.0,
+    )
+    dest = tmp_path / "half"
+    dest.mkdir()
+    for name in RESOLVE_REQUIRED_NAMES:
+        if name == missing:
+            continue
+        (dest / name).write_text("x")
+    ok, err = verify_resolve_bundle(dest)
+    assert ok is False
+    assert err == RESOLVE_INCOMPLETE_CHIP
+
+    def omit_one(dest_dir, clips, graph, lut_size):
+        folder = Path(dest_dir)
+        folder.mkdir(parents=True, exist_ok=True)
+        for name in RESOLVE_REQUIRED_NAMES:
+            if name == missing:
+                continue
+            (folder / name).write_text("payload")
+        return [folder / name for name in RESOLVE_REQUIRED_NAMES if name != missing]
+
+    dest_w = tmp_path / "write"
+    report = process_locked_writes(
+        [locked],
+        dest_w,
+        frames={"locked.mov": _slog3_grey()},
+        resolve_write_fn=omit_one,
+    )
+    assert report.written == ()
+    assert report.errors[0].name == "locked.mov"
+    assert report.errors[0].error == RESOLVE_INCOMPLETE_CHIP
+    chips = sidebar_export_chips([locked], report)
+    assert chips["locked.mov"] == RESOLVE_INCOMPLETE_CHIP
+    assert chips["locked.mov"] != WRITTEN_CHIP
+    assert clip_sequence_reveal_path("locked.mov", dest_w, chips["locked.mov"]) is None
+    for name in RESOLVE_REQUIRED_NAMES:
+        assert not (dest_w / name).exists()
+    assert not (dest_w / deliverable_dir_name("locked.mov")).exists()
+    assert list(dest_w.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
+    assert list(dest_w.glob("**/*.exr")) == []
+    assert "1 条失败" in report.processed_status_text
+    assert RESOLVE_INCOMPLETE_CHIP in report.processed_status_text
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+    assert "精准" not in report.processed_status_text
+    assert list(dest_w.glob("**/*.mov")) == []
+
+
+@pytest.mark.parametrize(
+    "empty_name",
+    [
+        RESOLVE_REQUIRED_XML,
+        RESOLVE_REQUIRED_README,
+        RESOLVE_REQUIRED_DCTL,
+        RESOLVE_REQUIRED_CUBE,
+    ],
+)
+def test_empty_resolve_file_fails_not_written(tmp_path: Path, empty_name: str):
+    """Each of graph.xml / DCTL / cube / README empty: 达芬奇包不完整，未写出."""
+    locked = BatchClip(
+        "locked.mov",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=1.0,
+        fps=1.0,
+    )
+    dest = tmp_path / "empty_one"
+    dest.mkdir()
+    for name in RESOLVE_REQUIRED_NAMES:
+        (dest / name).write_text("" if name == empty_name else "payload")
+    ok, err = verify_resolve_bundle(dest)
+    assert ok is False
+    assert err == RESOLVE_INCOMPLETE_CHIP
+
+    def empty_one(dest_dir, clips, graph, lut_size):
+        folder = Path(dest_dir)
+        folder.mkdir(parents=True, exist_ok=True)
+        for name in RESOLVE_REQUIRED_NAMES:
+            (folder / name).write_text("" if name == empty_name else "payload")
+        return [folder / name for name in RESOLVE_REQUIRED_NAMES]
+
+    dest_w = tmp_path / "write"
+    report = process_locked_writes(
+        [locked],
+        dest_w,
+        frames={"locked.mov": _slog3_grey()},
+        resolve_write_fn=empty_one,
+    )
+    assert report.written == ()
+    assert report.errors[0].error == RESOLVE_INCOMPLETE_CHIP
+    chips = sidebar_export_chips([locked], report)
+    assert chips["locked.mov"] == RESOLVE_INCOMPLETE_CHIP
+    assert chips["locked.mov"] != WRITTEN_CHIP
+    for name in RESOLVE_REQUIRED_NAMES:
+        assert not (dest_w / name).exists()
+    assert not (dest_w / deliverable_dir_name("locked.mov")).exists()
+    assert list(dest_w.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+
+
+def test_zero_frames_fails_not_written(tmp_path: Path):
+    """Decode wrote nothing / sequence empty: 解码失败, no folder, not 已写出代理."""
+    locked = BatchClip(
+        "locked.mov",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=1.0,
+        fps=24.0,
+        frame_count=0,
+    )
+    pending = BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True)
+    dest = tmp_path / "zero"
+    dest.mkdir()
+    leftover = dest / deliverable_dir_name("locked.mov")
+    leftover.mkdir()
+    report = process_locked_writes(
+        [locked, pending],
+        dest,
+        frames={"locked.mov": [], "pending.mov": []},
+    )
+    assert report.written == ()
+    assert report.errors[0].name == "locked.mov"
+    assert report.errors[0].error == DECODE_FAILED_CHIP
+    chips = sidebar_export_chips([locked, pending], report)
+    assert chips["locked.mov"] == DECODE_FAILED_CHIP
+    assert chips["locked.mov"] != WRITTEN_CHIP
+    assert chips["pending.mov"] == REASON_PICK_PAIRED_IDT
+    assert not leftover.exists()
+    assert not (dest / deliverable_dir_name("locked.mov")).exists()
+    assert not (dest / deliverable_dir_name("pending.mov")).exists()
+    assert list(dest.glob("*" + DELIVERABLE_DIR_SUFFIX)) == []
+    assert list(dest.glob("**/*.exr")) == []
+    assert clip_sequence_reveal_path("locked.mov", dest, chips["locked.mov"]) is None
+    assert "0 条已写出代理" in report.processed_status_text
+    assert "1 条失败" in report.processed_status_text
+    assert DECODE_FAILED_CHIP in report.processed_status_text
+    assert HONEST_PROXY_NOTE in report.processed_status_text
+    _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
+    assert "精准" not in report.processed_status_text
+    assert list(dest.glob("**/*.mov")) == []
+
+    empty_stack = np.zeros((0, 2, 2, 3), dtype=np.float32)
+    dest_s = tmp_path / "empty_stack"
+    dest_s.mkdir()
+    stack = process_locked_writes(
+        [locked],
+        dest_s,
+        frames={"locked.mov": empty_stack},
+    )
+    assert stack.written == ()
+    assert stack.errors[0].error == DECODE_FAILED_CHIP
+    assert sidebar_export_chips([locked], stack)["locked.mov"] == DECODE_FAILED_CHIP
+    assert not (dest_s / deliverable_dir_name("locked.mov")).exists()
+
+    clip = _read(CLIP)
+    export_body = clip.split("func exportLockedEXR")[1].split(
+        "func cancelLockedDeliverables"
+    )[0]
+    assert "count < 1" in export_body
+    assert "decodeFailedChip" in export_body
+    assert "removeFailedProxySequence" in export_body
+    engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    seq_fn = engine.split("func exportGradedAP0Sequence")[1].split(
+        "func decodeAllSourceFrames"
+    )[0]
+    assert "count < 1" in seq_fn
+    assert "decodeFailedChip" in seq_fn
+    write_src = inspect.getsource(process_locked_writes)
+    assert "DECODE_FAILED_CHIP" in write_src
+    assert "no pixels" not in write_src
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert DECODE_FAILED_CHIP in readme
+    assert DECODE_FAILED_CHIP in acceptance
+    assert "0 frames" in readme
+    assert "0 frames" in acceptance
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    _assert_chengpian_not_a_deliverable_claim(acceptance)

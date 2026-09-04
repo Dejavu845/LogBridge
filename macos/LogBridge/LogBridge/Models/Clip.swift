@@ -301,7 +301,9 @@ final class SessionModel: ObservableObject {
 
     /// Writes ACES2065-1 AP0 proxy EXR sequences for locked clips only.
     /// After verified sequences, writes the session Resolve package.
-    /// Incomplete XML/DCTL/cube/README is 「达芬奇包不完整，未写出」.
+    /// Incomplete XML/DCTL/cube/README is 「达芬奇包不完整，未写出」;
+    /// the half package and those `_proxy` folders are removed.
+    /// Empty `_ACES2065-1_proxy` / 0 frames fail closed (帧数对不上 / 解码失败).
     func writeLockedDeliverables(locked: [Clip], skippedCount: Int, dest: URL) {
         let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
         if let free = destFreeBytesOverride ?? Self.destVolumeFreeBytes(dest),
@@ -386,6 +388,7 @@ final class SessionModel: ObservableObject {
                     for clip in locked {
                         let seq = ResolveExporter.deliverableSequenceDirectory(for: clip, in: dest)
                         if written.contains(seq) {
+                            ResolveExporter.removeFailedProxySequence(at: seq)
                             self.setExportChip(clipID: clip.id, chip)
                             errors.append("\(clip.filename)：\(chip)")
                         }
@@ -439,7 +442,8 @@ final class SessionModel: ObservableObject {
 
     /// One ACES2065-1 AP0 proxy EXR sequence. Source Y′CbCr → float + PreviewColor grade; no ODT.
     /// After write, count EXRs against duration × metadata fps only.
-    /// Mismatch / missing timing is a Chinese failure; the folder is removed.
+    /// Empty folder / 0 frames / mismatch / missing timing is a Chinese failure;
+    /// the folder is removed so it is not 已写出代理.
     /// Not ACEScct. Not a Rec.709 movie. 整段代理，不是全精度成片.
     func exportLockedEXR(
         clip: Clip,
@@ -478,7 +482,7 @@ final class SessionModel: ObservableObject {
             }
             try Self.verifyLockedProxySequence(clip: clip, seqDir: seqDir)
         } catch {
-            try? FileManager.default.removeItem(at: seqDir)
+            ResolveExporter.removeFailedProxySequence(at: seqDir)
             throw error
         }
         return seqDir
@@ -685,6 +689,7 @@ final class SessionModel: ObservableObject {
     }
 
     /// Post-write check. Throws a Chinese chip. Caller removes the folder.
+    /// Empty `_ACES2065-1_proxy` (no EXRs / 0 frames) fails first as 帧数对不上.
     static func verifyLockedProxySequence(clip: Clip, seqDir: URL) throws {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: seqDir.path, isDirectory: &isDir),
@@ -694,6 +699,11 @@ final class SessionModel: ObservableObject {
             ])
         }
         let written = countProxyEXRs(in: seqDir)
+        if written < 1 {
+            throw NSError(domain: "LogBridge", code: 4, userInfo: [
+                NSLocalizedDescriptionKey: frameMismatchChip
+            ])
+        }
         let (expected, timingErr) = expectedSourceFrames(MediaFormat.extent(url: clip.url))
         if let timingErr {
             throw NSError(domain: "LogBridge", code: 4, userInfo: [
