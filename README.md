@@ -80,12 +80,54 @@ Mac App Store 搜 Xcode，免费装。第一次打开会装额外组件，等它
 
 ### 6. 要一个 .app 试用包：Archive
 
-1. 菜单 **产品 → 归档**（Product → Archive）。等编译结束。
-2. 会弹出 **管理器 / Organizer**，左边是这次 Archive。
-3. 最简单：右键这次 Archive → **Show in Finder** → 打开那个 `.xcarchive` → 走进 `Products/Applications/`，把 `LogBridge.app` 拷到任意文件夹，双击就能开。
-4. 或者点 **Distribute App**（分发）→ 选 **Copy App**（拷贝 App）或 Development 本机拷贝。**不要**选 App Store Connect、Developer ID 公证、上架。
+编出来的是 **本机试用包**，不是商店发行。**不要**公证（notarization），**不要** App Store / Developer ID / 付费账号。Archive 走 Release，和 ⌘R 的 Debug 不是同一份；试用拷这份 `.app`。
 
-这是本机试用包，不是商店发行。
+#### 6.1 在 Xcode 里归档
+
+1. 左上角方案是 **LogBridge**，设备是 **My Mac**（不是 iPhone / 模拟器）。「产品 → 归档」灰掉了，多半是设备选错了。
+2. 签名：Signing 勾 Automatically manage signing。Xcode → Settings → Accounts 加自己的免费 Apple ID（Personal Team）即可。不要买付费开发者、不要选 Developer ID、不要去公证。
+3. 菜单 **产品 → 归档**（Product → Archive）。等编译结束。
+4. 会弹出 **管理器 / Organizer**。没弹：菜单 **窗口 → 管理器**（Window → Organizer）。左边是这次 Archive。
+
+#### 6.2 `.app` 落在哪
+
+两条路，随便一条。要的是整份 `LogBridge.app`（它是一个包），不要只拷里面的可执行文件。
+
+- **访达里拆 Archive（少点菜单）**  
+  右键这次 Archive → **Show in Finder** → 打开那个 `.xcarchive`（或「显示包内容」）→ 走进 `Products/Applications/`，里面就是 `LogBridge.app`。  
+  磁盘上大致在：
+
+  `~/Library/Developer/Xcode/Archives/年-月-日/LogBridge 日期.xcarchive/Products/Applications/LogBridge.app`
+
+  `Library` 默认隐藏：访达 → 前往 → 前往文件夹…（⇧⌘G），贴上面那行。日期按当天的 Archive 名走，不要猜旧包。
+
+- **分发 → 拷贝 App**  
+  Organizer 里点 **Distribute App** → 选 **Copy App**（拷贝 App）。选一个文件夹，Xcode 把 `LogBridge.app` 拷过去。**不要**选 App Store Connect、Developer ID、公证、上架。
+
+#### 6.3 拷到本机或另一台 Mac
+
+整份 `.app` 拖到桌面、U 盘、共享文件夹都行。另一台用 AirDrop / U 盘 / 共享盘拷过去，放到任意文件夹。压缩用访达「压缩」整个 `.app`；解压后应仍是 `LogBridge.app`，不是散文件。
+
+这是试用拷贝，不是安装器，不是已公证发行。打开后仍是：**整段代理，不是全精度成片。** **CI 绿不等于达芬奇已验证。** 已实现、未验证。
+
+#### 6.4 另一台打不开：Gatekeeper / 隔离
+
+从别的盘或网上拷来的 `.app`，系统常打上隔离属性（`com.apple.quarantine`）。没公证的试用包会被 Gatekeeper 拦住。常见提示：
+
+- 「无法打开，因为来自身份不明的开发者」
+- 「已损坏，无法打开」（有时只是隔离，不是真坏了）
+
+本机可以这样（**仍不是公证**）：
+
+1. **按住 Control 点** `LogBridge.app` → **打开** → 再点打开。
+2. 或：系统设置 → 隐私与安全性 → 往下翻 → **仍要打开**。
+3. 或：仓库里的小脚本（你自己在终端跑，无密钥、不上传）：
+
+```bash
+./scripts/clear-app-quarantine.sh /拷来的路径/LogBridge.app
+```
+
+脚本只做 `xattr -dr com.apple.quarantine`，不签名、不提交 Apple、不声称已公证。清完再双击。不要为了试用去跑 `notarytool` / 上传公证。
 
 ### 7. 打开后别忘了
 
@@ -217,7 +259,7 @@ color/          Python source of truth (curves, WB, serial graph, pipeline, dete
 tests/          pytest (must pass on Linux)
 ocio/           config.ocio (BuiltinTransform) + handwritten F-Log2 / N-Log LUTs
 macos/LogBridge Xcode / SwiftUI (preview + IDT + process; node strip in 高级)
-scripts/        LUT/config generator
+scripts/        LUT/config generator；本机试用清隔离（clear-app-quarantine.sh，不是公证）
 ```
 
 ## 许可证 / License
