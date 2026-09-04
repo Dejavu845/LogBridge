@@ -1225,7 +1225,7 @@ final class SessionModel: ObservableObject {
                     cct: self.graph.wbCCT,
                     tint: self.graph.wbTint
                 )
-                note += "\nWrote \(written.count) files to \(url.path). \(locked.count) 条已锁定 / \(skipped.count) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。预览·非成片。已实现（未验证）。"
+                note += "\n已写出 \(written.count) 个文件。\(locked.count) 条已锁定 / \(skipped.count) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。预览·非成片。已实现（未验证）。整段代理，不是全精度成片。"
                 self.lastExportNote = note
             } catch {
                 self.lastExportNote = Self.shortExportChip(for: error)

@@ -24,6 +24,38 @@ from .batch import (
     NOTE_CLOG2_NO_GAMUT,
     NOTE_CLOG3_NO_GAMUT,
     NOTE_DLOG_M,
+    NOTE_FILENAME_APPLE_LOG,
+    NOTE_FILENAME_APPLE_LOG2,
+    NOTE_FILENAME_AWG3,
+    NOTE_FILENAME_CLOG2_BT2020,
+    NOTE_FILENAME_CLOG2_CGAMUT,
+    NOTE_FILENAME_CLOG3_BT2020,
+    NOTE_FILENAME_CLOG3_CGAMUT,
+    NOTE_FILENAME_DLOG,
+    NOTE_FILENAME_FLOG2,
+    NOTE_FILENAME_LOG3G10,
+    NOTE_FILENAME_LOGC3,
+    NOTE_FILENAME_LOGC4,
+    NOTE_FILENAME_NLOG,
+    NOTE_FILENAME_SGAMUT3,
+    NOTE_FILENAME_SGAMUT3_CINE,
+    NOTE_FILENAME_VLOG,
+    NOTE_META_APPLE_LOG,
+    NOTE_META_APPLE_LOG2,
+    NOTE_META_ARRI_MXF,
+    NOTE_META_CLOG2_BT2020,
+    NOTE_META_CLOG2_CGAMUT,
+    NOTE_META_CLOG3_BT2020,
+    NOTE_META_CLOG3_CGAMUT,
+    NOTE_META_DLOG,
+    NOTE_META_FUJI,
+    NOTE_META_LOGC3,
+    NOTE_META_NIKON,
+    NOTE_META_PANA,
+    NOTE_META_RED_RMD,
+    NOTE_META_SONY,
+    NOTE_META_SONY_VENICE,
+    NOTE_MODEL_HINT,
     NOTE_SLOG3_NO_GAMUT,
     NOTE_SLOG3_NO_GAMUT_VENICE,
     NOTE_VENICE_PICK,
@@ -129,6 +161,35 @@ class Detection:
     venice_detected: bool = False
     as_shot_cct: float | None = None
     as_shot_tint: float = 0.0
+
+
+_FILENAME_NOTE_BY_IDT = {
+    "sony_slog3_sgamut3cine": NOTE_FILENAME_SGAMUT3_CINE,
+    "sony_slog3_sgamut3cine_venice": NOTE_FILENAME_SGAMUT3_CINE,
+    "sony_slog3_sgamut3": NOTE_FILENAME_SGAMUT3,
+    "sony_slog3_sgamut3_venice": NOTE_FILENAME_SGAMUT3,
+    "arri_logc4_awg4": NOTE_FILENAME_LOGC4,
+    "panasonic_vlog_vgamut": NOTE_FILENAME_VLOG,
+    "fujifilm_flog2_bt2020": NOTE_FILENAME_FLOG2,
+    "nikon_nlog_bt2020": NOTE_FILENAME_NLOG,
+    "red_log3g10_rwg": NOTE_FILENAME_LOG3G10,
+    "apple_log2_awg": NOTE_FILENAME_APPLE_LOG2,
+    "arri_logc3_ei800_awg3": NOTE_FILENAME_LOGC3,
+    "apple_log_bt2020": NOTE_FILENAME_APPLE_LOG,
+    "dji_dlog_dgamut": NOTE_FILENAME_DLOG,
+    "canon_clog2_cgamut": NOTE_FILENAME_CLOG2_CGAMUT,
+    "canon_clog2_bt2020": NOTE_FILENAME_CLOG2_BT2020,
+    "canon_clog3_cgamut": NOTE_FILENAME_CLOG3_CGAMUT,
+    "canon_clog3_bt2020": NOTE_FILENAME_CLOG3_BT2020,
+}
+
+
+def _filename_success_note(idt_id: str, token: str) -> str:
+    if token == "awg3":
+        return NOTE_FILENAME_AWG3
+    if "cine" in token:
+        return NOTE_FILENAME_SGAMUT3_CINE
+    return _FILENAME_NOTE_BY_IDT.get(idt_id, f"文件名 {token}")
 
 
 def _pair(idt_id: str, source: str, note: str) -> Detection:
@@ -238,7 +299,7 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
 
     arri = str(cleaned.get("arri_mxf_color_space", cleaned.get("arri_color_space", ""))).lower()
     if "logc4" in arri or "awg4" in arri or "wide gamut 4" in arri:
-        return _pair("arri_logc4_awg4", "metadata", "ARRI MXF color space")
+        return _pair("arri_logc4_awg4", "metadata", NOTE_META_ARRI_MXF)
 
     sony = str(
         cleaned.get("sony_acquisition_gamut", cleaned.get("sony_color_gamut", ""))
@@ -256,13 +317,13 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
             return _pair(
                 _sony_pair(True, venice),
                 "metadata",
-                "Sony Acquisition metadata" + (" (Venice)" if venice else ""),
+                NOTE_META_SONY_VENICE if venice else NOTE_META_SONY,
             )
         if "s-gamut3" in sony or "sgamut3" in sony:
             return _pair(
                 _sony_pair(False, venice),
                 "metadata",
-                "Sony Acquisition metadata" + (" (Venice)" if venice else ""),
+                NOTE_META_SONY_VENICE if venice else NOTE_META_SONY,
             )
         # Curve known, gamut not: do not default to Cine or Venice.
         return Detection(
@@ -281,9 +342,9 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
     ).lower()
     if "c-log2" in canon or "clog2" in canon:
         if "cinema" in canon_gamut or "cgamut" in canon_gamut or "c-gamut" in canon_gamut:
-            return _pair("canon_clog2_cgamut", "metadata", "Canon vendor metadata (C-Log2 + Cinema Gamut)")
+            return _pair("canon_clog2_cgamut", "metadata", NOTE_META_CLOG2_CGAMUT)
         if "2020" in canon_gamut or "bt.2020" in canon_gamut or "bt2020" in canon_gamut:
-            return _pair("canon_clog2_bt2020", "metadata", "Canon vendor metadata (C-Log2 + BT.2020)")
+            return _pair("canon_clog2_bt2020", "metadata", NOTE_META_CLOG2_BT2020)
         return Detection(
             None,
             "clog2",
@@ -294,9 +355,9 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
         )
     if "c-log3" in canon or "clog3" in canon:
         if "cinema" in canon_gamut or "cgamut" in canon_gamut or "c-gamut" in canon_gamut:
-            return _pair("canon_clog3_cgamut", "metadata", "Canon vendor metadata (C-Log3 + Cinema Gamut)")
+            return _pair("canon_clog3_cgamut", "metadata", NOTE_META_CLOG3_CGAMUT)
         if "2020" in canon_gamut or "bt.2020" in canon_gamut or "bt2020" in canon_gamut:
-            return _pair("canon_clog3_bt2020", "metadata", "Canon vendor metadata (C-Log3 + BT.2020)")
+            return _pair("canon_clog3_bt2020", "metadata", NOTE_META_CLOG3_BT2020)
         return Detection(
             None,
             "clog3",
@@ -309,29 +370,29 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
     rmd = str(cleaned.get("red_rmd_colorspace", cleaned.get("red_color_space", ""))).lower()
     rmd_gamma = str(cleaned.get("red_rmd_gamma", "")).lower()
     if "log3g10" in rmd or "log3g10" in rmd_gamma or "redwidegamut" in rmd:
-        return _pair("red_log3g10_rwg", "metadata", "RED RMD")
+        return _pair("red_log3g10_rwg", "metadata", NOTE_META_RED_RMD)
 
     fuji = str(cleaned.get("fuji_film_simulation", cleaned.get("fuji_log", ""))).lower()
     if "f-log2" in fuji or "flog2" in fuji:
-        return _pair("fujifilm_flog2_bt2020", "metadata", "Fujifilm metadata")
+        return _pair("fujifilm_flog2_bt2020", "metadata", NOTE_META_FUJI)
 
     nikon = str(cleaned.get("nikon_gamma", cleaned.get("nikon_nlog", ""))).lower()
     if "n-log" in nikon or "nlog" in nikon:
-        return _pair("nikon_nlog_bt2020", "metadata", "Nikon metadata")
+        return _pair("nikon_nlog_bt2020", "metadata", NOTE_META_NIKON)
 
     pana = str(cleaned.get("panasonic_gamma", "")).lower()
     if "v-log" in pana or "vlog" in pana:
-        return _pair("panasonic_vlog_vgamut", "metadata", "Panasonic metadata")
+        return _pair("panasonic_vlog_vgamut", "metadata", NOTE_META_PANA)
 
     apple = str(cleaned.get("apple_log", cleaned.get("apple_gamma", ""))).lower()
     if "apple log 2" in apple or "applelog2" in apple:
         return _pair(
             "apple_log2_awg",
             "metadata",
-            "Apple Log 2 + Apple Wide Gamut (not BT.2020)",
+            NOTE_META_APPLE_LOG2,
         )
     if "apple log" in apple or "applelog" in apple:
-        return _pair("apple_log_bt2020", "metadata", "Apple Log metadata")
+        return _pair("apple_log_bt2020", "metadata", NOTE_META_APPLE_LOG)
 
     dji = str(cleaned.get("dji_gamma", cleaned.get("dji_log", ""))).lower()
     if "d-log m" in dji or "dlog m" in dji or "dlogm" in dji or "d-logm" in dji:
@@ -344,14 +405,14 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
             NOTE_DLOG_M,
         )
     if "d-log" in dji or "dlog" in dji:
-        return _pair("dji_dlog_dgamut", "metadata", "DJI D-Log metadata")
+        return _pair("dji_dlog_dgamut", "metadata", NOTE_META_DLOG)
 
     arri_logc3 = str(cleaned.get("arri_mxf_color_space", cleaned.get("arri_color_space", ""))).lower()
     if "logc3" in arri_logc3 and "logc4" not in arri_logc3:
         return _pair(
             "arri_logc3_ei800_awg3",
             "metadata",
-            "ARRI LogC3 EI800 + AWG3 (only implemented LogC3 pair)",
+            NOTE_META_LOGC3,
         )
 
     return None
@@ -379,9 +440,9 @@ def detect_from_filename(path: str) -> Detection | None:
     # C-Log2 / C-Log3 are paired — lock only when a gamut token is present.
     if "c-log2" in name or "clog2" in name:
         if "cinema" in name or "cgamut" in name or "c-gamut" in name:
-            return _pair("canon_clog2_cgamut", "filename", "filename C-Log2 + Cinema Gamut")
+            return _pair("canon_clog2_cgamut", "filename", NOTE_FILENAME_CLOG2_CGAMUT)
         if "bt.2020" in name or "bt2020" in name or "rec2020" in name or "rec.2020" in name:
-            return _pair("canon_clog2_bt2020", "filename", "filename C-Log2 + BT.2020")
+            return _pair("canon_clog2_bt2020", "filename", NOTE_FILENAME_CLOG2_BT2020)
         return Detection(
             None,
             "clog2",
@@ -392,9 +453,9 @@ def detect_from_filename(path: str) -> Detection | None:
         )
     if "c-log3" in name or "clog3" in name:
         if "cinema" in name or "cgamut" in name or "c-gamut" in name:
-            return _pair("canon_clog3_cgamut", "filename", "filename C-Log3 + Cinema Gamut")
+            return _pair("canon_clog3_cgamut", "filename", NOTE_FILENAME_CLOG3_CGAMUT)
         if "bt.2020" in name or "bt2020" in name or "rec2020" in name or "rec.2020" in name:
-            return _pair("canon_clog3_bt2020", "filename", "filename C-Log3 + BT.2020")
+            return _pair("canon_clog3_bt2020", "filename", NOTE_FILENAME_CLOG3_BT2020)
         return Detection(
             None,
             "clog3",
@@ -410,10 +471,15 @@ def detect_from_filename(path: str) -> Detection | None:
             if token in ("sgamut3", "s-gamut3") and "cine" in name:
                 continue  # let the cine tokens win; they are listed first
             if "cine" in token:
-                return _pair(_sony_pair(True, venice), "filename", f"filename token {token!r}")
+                return _pair(
+                    _sony_pair(True, venice),
+                    "filename",
+                    _filename_success_note(_sony_pair(True, venice), token),
+                )
             if idt_id in ("sony_slog3_sgamut3", "sony_slog3_sgamut3cine"):
-                return _pair(_sony_pair(False, venice), "filename", f"filename token {token!r}")
-            return _pair(idt_id, "filename", f"filename token {token!r}")
+                pair = _sony_pair(False, venice)
+                return _pair(pair, "filename", _filename_success_note(pair, token))
+            return _pair(idt_id, "filename", _filename_success_note(idt_id, token))
     # S-Log3 without gamut token: do not assume Cine or Venice.
     if "s-log3" in name or "slog3" in name:
         return Detection(
@@ -443,7 +509,7 @@ def detect_from_model(model: str) -> Detection | None:
         )
     for token, idt_id in _MODEL_HINTS:
         if token in m:
-            return _pair(idt_id, "model", f"camera model {token!r}")
+            return _pair(idt_id, "model", NOTE_MODEL_HINT)
     return None
 
 

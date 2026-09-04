@@ -130,7 +130,7 @@ enum ClipDetector {
         _ = discardQuickTimeNCLC(asset)
 
         if let arri = readARRIColorSpace(url: url) {
-            return locked(.arriLogC4AWG4, source: .metadata, note: "ARRI MXF \(arri)")
+            return locked(.arriLogC4AWG4, source: .metadata, note: "元数据 ARRI MXF \(arri)")
         }
         if let sony = readSonyAcquisition(url: url) {
             return sony
@@ -156,25 +156,25 @@ enum ClipDetector {
         let cineTokens = ["sgamut3.cine", "s-gamut3.cine", "sgamut3cine", "sgamut3_cine"]
         let venice = name.contains("venice")
         if cineTokens.contains(where: { name.contains($0) }) {
-            return locked(venice ? .sonySLog3SGamut3CineVenice : .sonySLog3SGamut3Cine, source: .filename, note: "filename S-Gamut3.Cine")
+            return locked(venice ? .sonySLog3SGamut3CineVenice : .sonySLog3SGamut3Cine, source: .filename, note: "文件名 S-Gamut3.Cine")
         }
         if name.contains("sgamut3") || name.contains("s-gamut3") {
-            return locked(venice ? .sonySLog3SGamut3Venice : .sonySLog3SGamut3, source: .filename, note: "filename S-Gamut3")
+            return locked(venice ? .sonySLog3SGamut3Venice : .sonySLog3SGamut3, source: .filename, note: "文件名 S-Gamut3")
         }
         if name.contains("logc4") || name.contains("awg4") {
-            return locked(.arriLogC4AWG4, source: .filename, note: "filename LogC4/AWG4")
+            return locked(.arriLogC4AWG4, source: .filename, note: "文件名 LogC4/AWG4")
         }
         if name.contains("v-log") || name.contains("vlog") || name.contains("vgamut") {
-            return locked(.panasonicVLogVGamut, source: .filename, note: "filename V-Log")
+            return locked(.panasonicVLogVGamut, source: .filename, note: "文件名 V-Log")
         }
         if name.contains("f-log2") || name.contains("flog2") {
-            return locked(.fujiFLog2BT2020, source: .filename, note: "filename F-Log2")
+            return locked(.fujiFLog2BT2020, source: .filename, note: "文件名 F-Log2")
         }
         if name.contains("n-log") || name.contains("nlog") {
-            return locked(.nikonNLogBT2020, source: .filename, note: "filename N-Log")
+            return locked(.nikonNLogBT2020, source: .filename, note: "文件名 N-Log")
         }
         if name.contains("log3g10") || name.contains("redwidegamut") {
-            return locked(.redLog3G10RWG, source: .filename, note: "filename Log3G10")
+            return locked(.redLog3G10RWG, source: .filename, note: "文件名 Log3G10")
         }
         if name.contains("d-log m") || name.contains("dlog m") || name.contains("dlogm") || name.contains("d-logm") {
             return DetectionResult(
@@ -183,20 +183,20 @@ enum ClipDetector {
             )
         }
         if name.contains("apple log 2") || name.contains("applelog2") || name.contains("apple-log-2") {
-            return locked(.appleLog2AWG, source: .filename, note: "filename Apple Log 2 + Apple Wide Gamut")
+            return locked(.appleLog2AWG, source: .filename, note: "文件名 Apple Log 2 + Apple Wide Gamut")
         }
         if name.contains("logc3") && !name.contains("logc4") {
-            return locked(.arriLogC3EI800AWG3, source: .filename, note: "filename LogC3 EI800 + AWG3")
+            return locked(.arriLogC3EI800AWG3, source: .filename, note: "文件名 LogC3 EI800 + AWG3")
         }
         if name.contains("awg3") && !name.contains("awg4") {
-            return locked(.arriLogC3EI800AWG3, source: .filename, note: "filename AWG3 (LogC3 EI800 + AWG3)")
+            return locked(.arriLogC3EI800AWG3, source: .filename, note: "文件名 AWG3 (LogC3 EI800 + AWG3)")
         }
         if name.contains("c-log2") || name.contains("clog2") {
             if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {
-                return locked(.canonCLog2CGamut, source: .filename, note: "filename C-Log2 + Cinema Gamut")
+                return locked(.canonCLog2CGamut, source: .filename, note: "文件名 C-Log2 + Cinema Gamut")
             }
             if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
-                return locked(.canonCLog2BT2020, source: .filename, note: "filename C-Log2 + BT.2020")
+                return locked(.canonCLog2BT2020, source: .filename, note: "文件名 C-Log2 + BT.2020")
             }
             return DetectionResult(
                 idt: nil,
@@ -209,10 +209,10 @@ enum ClipDetector {
         }
         if name.contains("c-log3") || name.contains("clog3") {
             if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {
-                return locked(.canonCLog3CGamut, source: .filename, note: "filename C-Log3 + Cinema Gamut")
+                return locked(.canonCLog3CGamut, source: .filename, note: "文件名 C-Log3 + Cinema Gamut")
             }
             if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
-                return locked(.canonCLog3BT2020, source: .filename, note: "filename C-Log3 + BT.2020")
+                return locked(.canonCLog3BT2020, source: .filename, note: "文件名 C-Log3 + BT.2020")
             }
             return DetectionResult(
                 idt: nil,
@@ -224,10 +224,10 @@ enum ClipDetector {
             )
         }
         if name.contains("apple log") || name.contains("applelog") {
-            return locked(.appleLogBT2020, source: .filename, note: "filename Apple Log")
+            return locked(.appleLogBT2020, source: .filename, note: "文件名 Apple Log")
         }
         if name.contains("d-log") || name.contains("dlog") || name.contains("d-gamut") || name.contains("dgamut") {
-            return locked(.djiDLogDGamut, source: .filename, note: "filename D-Log")
+            return locked(.djiDLogDGamut, source: .filename, note: "文件名 D-Log")
         }
         if name.contains("s-log3") || name.contains("slog3") {
             return DetectionResult(
@@ -260,13 +260,13 @@ enum ClipDetector {
             )
         }
         if m.contains("alexa 35") || m.contains("alexa35") || m.contains("alexa 265") {
-            return locked(.arriLogC4AWG4, source: .model, note: "model hint")
+            return locked(.arriLogC4AWG4, source: .model, note: "机型提示")
         }
         if m.contains("varicam") {
-            return locked(.panasonicVLogVGamut, source: .model, note: "model hint")
+            return locked(.panasonicVLogVGamut, source: .model, note: "机型提示")
         }
         if m.contains("komodo") || m.contains("v-raptor") || m.contains("dsmc2") {
-            return locked(.redLog3G10RWG, source: .model, note: "model hint")
+            return locked(.redLog3G10RWG, source: .model, note: "机型提示")
         }
         return nil
     }
@@ -309,7 +309,7 @@ enum ClipDetector {
         let sidecar = url.deletingPathExtension().appendingPathExtension("rmd")
         if FileManager.default.fileExists(atPath: sidecar.path) {
             // Presence of RMD is a hint, not a parse. Later slice reads color_space.
-            return locked(.redLog3G10RWG, source: .metadata, note: "RED RMD sidecar present")
+            return locked(.redLog3G10RWG, source: .metadata, note: "元数据 RED RMD")
         }
         return nil
     }
