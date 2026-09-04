@@ -58,14 +58,19 @@ def test_sony_slog3_without_gamut_does_not_default_cine():
     assert d.curve == "slog3"
     assert d.gamut is None
     assert d.needs_user_picker
-    assert "Cine" in d.note or "cine" in d.note.lower()
+    from color.batch import NOTE_SLOG3_NO_GAMUT
+
+    assert d.note == NOTE_SLOG3_NO_GAMUT
 
 
 def test_filename_slog3_without_gamut_needs_picker():
+    from color.batch import NOTE_SLOG3_NO_GAMUT
+
     d = detect_from_filename("A001_SLog3_take.mov")
     assert d.curve == "slog3"
     assert d.gamut is None
     assert d.needs_user_picker
+    assert d.note == NOTE_SLOG3_NO_GAMUT
 
 
 def test_filename_sgamut3_cine_is_explicit():
@@ -105,10 +110,13 @@ def test_venice_filename_with_sgamut3_is_venice_idt():
 
 
 def test_venice_model_alone_does_not_default_gamut():
+    from color.batch import NOTE_VENICE_PICK
+
     d = detect_clip("plain.mov", model="Sony VENICE 2")
     assert d.idt_id is None
     assert d.needs_user_picker
     assert d.curve == "slog3"
+    assert d.note == NOTE_VENICE_PICK
 
 
 def test_slog3_without_venice_is_not_venice():
@@ -164,10 +172,13 @@ def test_one_click_blocked_until_pair_chosen():
 
 
 def test_filename_venice_slog3_without_gamut_offers_venice_pairs():
+    from color.batch import NOTE_SLOG3_NO_GAMUT_VENICE
+
     d = detect_from_filename("A001_Venice_SLog3_take.mov")
     assert d.needs_user_picker
     assert d.venice_detected
     assert d.idt_id is None
+    assert d.note == NOTE_SLOG3_NO_GAMUT_VENICE
     assert can_one_click_process(d) is False
     pairs = picker_pairs_for_detection(d)
     assert pairs == list(SLOG3_VENICE_PAIRS)
@@ -210,7 +221,9 @@ def test_canon_clog2_without_gamut_does_not_default_cinema_gamut():
     assert d.gamut is None
     assert d.needs_user_picker
     assert d.idt_id is None
-    assert "Cinema Gamut" in d.note
+    from color.batch import NOTE_CLOG2_NO_GAMUT
+
+    assert d.note == NOTE_CLOG2_NO_GAMUT
 
 
 def test_canon_clog2_metadata_cinema_gamut_locks():
@@ -234,7 +247,9 @@ def test_canon_clog3_without_gamut_does_not_default_cinema_gamut():
     assert d.gamut is None
     assert d.needs_user_picker
     assert d.idt_id is None
-    assert "Cinema Gamut" in d.note
+    from color.batch import NOTE_CLOG3_NO_GAMUT
+
+    assert d.note == NOTE_CLOG3_NO_GAMUT
 
 
 def test_canon_clog3_metadata_cinema_gamut_locks():
@@ -294,6 +309,9 @@ def test_filename_dlog_m_unsupported():
     d = detect_from_filename("Osmo_DLogM_clip.mov")
     assert d.idt_id is None
     assert d.needs_user_picker
+    from color.batch import NOTE_DLOG_M
+
+    assert d.note == NOTE_DLOG_M
     assert "D-Log M" in d.note
     from color.gamuts import IDT_PAIRS
     from color.stubs import STUB_IDTS
@@ -360,4 +378,7 @@ def test_swift_ui_names_logc3_ei800_awg3_and_apple_log2_awg():
     assert "filename Apple Log 2 + Apple Wide Gamut" in detector
     assert "ARRI LogC3 is unsupported" not in detector
     assert "Apple Log 2 is unsupported" not in detector
-    assert "D-Log M is unsupported" in detector
+    from color.batch import NOTE_DLOG_M
+
+    assert NOTE_DLOG_M in detector
+    assert "D-Log M is unsupported" not in detector

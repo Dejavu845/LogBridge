@@ -5,13 +5,22 @@ from pathlib import Path
 from color.batch import (
     ADVANCED_DISCLOSURE_HELP,
     ADVANCED_EXPORT_HELP,
+    DECODE_FAILED_CHIP,
+    EMPTY_RGB_CHIP,
     EMPTY_STATE_STEP_1,
     EMPTY_STATE_STEP_2,
     EMPTY_STATE_STEP_3,
     EMPTY_STATE_STEPS,
     FOLDER_PICKER_MESSAGE_UI,
+    FRAME_MISMATCH_CHIP,
     HONEST_PROXY_NOTE,
     MISSING_YCBCR_TAGS_CHIP_UI,
+    NOTE_CLOG2_NO_GAMUT,
+    NOTE_CLOG3_NO_GAMUT,
+    NOTE_DLOG_M,
+    NOTE_SLOG3_NO_GAMUT,
+    NOTE_SLOG3_NO_GAMUT_VENICE,
+    NOTE_VENICE_PICK,
     PREVIEW_STATUS_DECODE_FAIL,
     PREVIEW_STATUS_DECODING,
     PREVIEW_STATUS_EMPTY,
@@ -27,8 +36,12 @@ from color.batch import (
     PROGRESS_STATUS_HELP,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
+    RESOLVE_INCOMPLETE_CHIP,
     SKIPPED_BUCKET,
+    STUB_CHIP,
     USER_PICKED_IDT_NOTE,
+    short_export_chip,
+    user_facing_failure_note,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1880,3 +1893,109 @@ def test_inspector_source_and_locked_pair_labels_are_chinese():
     assert "精准" not in ui_label
     _chengpian_only_honesty(ui_title)
     _chengpian_only_honesty(ui_label)
+
+
+def test_leftover_english_failure_chips_are_chinese():
+    """Failure chips that were still English / jargon stay locked Chinese.
+
+    Existing good Chinese chips are re-locked. Color / write paths untouched.
+    """
+    from color.formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_UNKNOWN_CODEC
+
+    clip = _read(CLIP)
+    detector = _read(SWIFT_ROOT / "LogBridge/LogBridge/Detection/ClipDetector.swift")
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    idt = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/IDT.swift")
+    engine = _read(ENGINE)
+
+    assert STUB_CHIP == "未实现"
+    assert EMPTY_RGB_CHIP == "RGB 是空的，未写出"
+    assert NOTE_DLOG_M == "D-Log M 暂不支持，请用 D-Log + D-Gamut"
+    assert NOTE_SLOG3_NO_GAMUT == "S-Log3 没有色域，先选择成对 IDT"
+    assert NOTE_SLOG3_NO_GAMUT_VENICE == "S-Log3 没有色域，检测到 Venice，先选择成对 IDT"
+    assert NOTE_CLOG2_NO_GAMUT == "C-Log2 没有色域，先选择成对 IDT"
+    assert NOTE_CLOG3_NO_GAMUT == "C-Log3 没有色域，先选择成对 IDT"
+    assert NOTE_VENICE_PICK == "检测到 Venice，先选择成对 IDT"
+
+    # Untouched good Chinese failure chips stay locked.
+    assert MISSING_YCBCR_TAGS_CHIP_UI == "读不出片源色彩标签，没法写出"
+    assert RESOLVE_INCOMPLETE_CHIP == "达芬奇包不完整，未写出"
+    assert FRAME_MISMATCH_CHIP == "帧数对不上"
+    assert DECODE_FAILED_CHIP == "解码失败"
+    assert PREVIEW_STATUS_HDR_BUILD_FAIL == "HDR 预览建不出"
+    assert PREVIEW_STATUS_HDR_NO_EDR == "屏幕无 EDR，预览被压到 SDR"
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
+
+    badge = clip.split("var verificationBadge")[1].split("var sidebarStatusChip")[0]
+    assert f'return "{STUB_CHIP}"' in badge
+    assert 'return "stub"' not in badge
+    assert '"待选"' in badge
+    assert "已实现（未验证）" in badge
+
+    assert f'static let stubChip = "{STUB_CHIP}"' in clip
+    assert f'static let emptyRGBChip = "{EMPTY_RGB_CHIP}"' in clip
+    assert f'NSLocalizedDescriptionKey: SessionModel.emptyRGBChip' in exporter
+    assert 'NSLocalizedDescriptionKey: "empty RGB buffer"' not in exporter
+    assert '"empty RGB buffer"' not in _code_without_comments(exporter)
+
+    assert f'case .djiDLogMStub: return "{STUB_CHIP}"' in idt
+    assert 'return "(unsupported)"' not in idt
+
+    ui_detector = _code_without_comments(detector)
+    assert f'note: "{NOTE_DLOG_M}"' in detector
+    assert f'note: "{NOTE_CLOG2_NO_GAMUT}"' in detector
+    assert f'note: "{NOTE_CLOG3_NO_GAMUT}"' in detector
+    assert f'? "{NOTE_SLOG3_NO_GAMUT_VENICE}"' in detector
+    assert f': "{NOTE_SLOG3_NO_GAMUT}"' in detector
+    assert f'note: "{NOTE_VENICE_PICK}"' in detector
+    leftover_en = (
+        "D-Log M is unsupported",
+        "in filename without gamut",
+        "Venice camera detected",
+        "Never default Cinema Gamut",
+        "Never default Cine",
+    )
+    for token in leftover_en:
+        assert token not in ui_detector, token
+        assert token not in _code_without_comments(clip), token
+        assert token not in _code_without_comments(exporter), token
+    assert 'note: "empty RGB buffer"' not in exporter
+    assert 'return "stub"' not in clip
+    batch_src = (ROOT / "color/batch.py").read_text(encoding="utf-8")
+    assert 'error="no IDT"' not in batch_src
+    assert "error=REASON_PICK_PAIRED_IDT" in batch_src
+
+    assert user_facing_failure_note("empty RGB buffer") == EMPTY_RGB_CHIP
+    assert user_facing_failure_note(EMPTY_RGB_CHIP) == EMPTY_RGB_CHIP
+    assert user_facing_failure_note("no IDT") == REASON_PICK_PAIRED_IDT
+    assert user_facing_failure_note(NOTE_DLOG_M) == NOTE_DLOG_M
+    assert user_facing_failure_note(NOTE_SLOG3_NO_GAMUT) == NOTE_SLOG3_NO_GAMUT
+    assert short_export_chip("empty RGB buffer") == EMPTY_RGB_CHIP
+    assert short_export_chip(EMPTY_RGB_CHIP) == EMPTY_RGB_CHIP
+    assert short_export_chip("no IDT") == REASON_PICK_PAIRED_IDT
+    assert short_export_chip("write produced no file") == "写出失败"
+    assert short_export_chip(NOTE_CAMERA_RAW) == NOTE_CAMERA_RAW
+    assert short_export_chip(MISSING_YCBCR_TAGS_CHIP_UI) == MISSING_YCBCR_TAGS_CHIP_UI
+    assert short_export_chip(RESOLVE_INCOMPLETE_CHIP) == RESOLVE_INCOMPLETE_CHIP
+    assert short_export_chip(FRAME_MISMATCH_CHIP) == FRAME_MISMATCH_CHIP
+    assert short_export_chip(DECODE_FAILED_CHIP) == DECODE_FAILED_CHIP
+
+    assert "SessionModel.emptyRGBChip" in engine
+    assert 'NSLocalizedDescriptionKey: "empty RGB buffer"' not in engine
+    assert "精准" not in NOTE_DLOG_M
+    assert "精准" not in EMPTY_RGB_CHIP
+    assert "精准" not in STUB_CHIP
+    for note in (
+        STUB_CHIP,
+        EMPTY_RGB_CHIP,
+        NOTE_DLOG_M,
+        NOTE_SLOG3_NO_GAMUT,
+        NOTE_SLOG3_NO_GAMUT_VENICE,
+        NOTE_CLOG2_NO_GAMUT,
+        NOTE_CLOG3_NO_GAMUT,
+        NOTE_VENICE_PICK,
+    ):
+        _chengpian_only_honesty(note)
+        assert "完善" not in note

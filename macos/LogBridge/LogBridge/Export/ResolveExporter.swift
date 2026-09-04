@@ -897,7 +897,7 @@ enum ResolveExporter {
     static func writeACES2065EXR(rgb: [Float], width: Int, height: Int, to url: URL) throws {
         guard width > 0, height > 0, rgb.count >= width * height * 3 else {
             throw NSError(domain: "LogBridge", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "empty RGB buffer"
+                NSLocalizedDescriptionKey: SessionModel.emptyRGBChip
             ])
         }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

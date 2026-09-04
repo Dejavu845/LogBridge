@@ -179,7 +179,7 @@ enum ClipDetector {
         if name.contains("d-log m") || name.contains("dlog m") || name.contains("dlogm") || name.contains("d-logm") {
             return DetectionResult(
                 idt: nil, curve: nil, gamut: nil, source: .filename, needsUserPicker: true,
-                note: "D-Log M is unsupported. D-Log + D-Gamut (2017) is implemented (unverified)."
+                note: "D-Log M 暂不支持，请用 D-Log + D-Gamut"
             )
         }
         if name.contains("apple log 2") || name.contains("applelog2") || name.contains("apple-log-2") {
@@ -204,7 +204,7 @@ enum ClipDetector {
                 gamut: nil,
                 source: .filename,
                 needsUserPicker: true,
-                note: "C-Log2 in filename without gamut; pick C-Log2 + Cinema Gamut or C-Log2 + BT.2020. Never default Cinema Gamut."
+                note: "C-Log2 没有色域，先选择成对 IDT"
             )
         }
         if name.contains("c-log3") || name.contains("clog3") {
@@ -220,7 +220,7 @@ enum ClipDetector {
                 gamut: nil,
                 source: .filename,
                 needsUserPicker: true,
-                note: "C-Log3 in filename without gamut; pick C-Log3 + Cinema Gamut or C-Log3 + BT.2020. Never default Cinema Gamut."
+                note: "C-Log3 没有色域，先选择成对 IDT"
             )
         }
         if name.contains("apple log") || name.contains("applelog") {
@@ -237,8 +237,8 @@ enum ClipDetector {
                 source: .filename,
                 needsUserPicker: true,
                 note: venice
-                    ? "S-Log3 in filename without gamut; Venice detected — pick S-Log3 + S-Gamut3 or S-Log3 + S-Gamut3.Cine (Venice). Never default Cine."
-                    : "S-Log3 in filename without gamut; pick S-Log3 + S-Gamut3 or S-Log3 + S-Gamut3.Cine. Never default Cine.",
+                    ? "S-Log3 没有色域，检测到 Venice，先选择成对 IDT"
+                    : "S-Log3 没有色域，先选择成对 IDT",
                 veniceDetected: venice
             )
         }
@@ -255,7 +255,7 @@ enum ClipDetector {
                 gamut: nil,
                 source: .model,
                 needsUserPicker: true,
-                note: "Venice camera detected; pick S-Log3 + S-Gamut3 (Venice) or S-Log3 + S-Gamut3.Cine (Venice). Never default.",
+                note: "检测到 Venice，先选择成对 IDT",
                 veniceDetected: true
             )
         }

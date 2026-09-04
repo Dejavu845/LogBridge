@@ -97,6 +97,15 @@ from .graph import SerialGraph
 
 REASON_PICK_LOG_GAMUT = "先选择 Log 与色域"
 REASON_PICK_PAIRED_IDT = "先选择成对 IDT"
+# Leftover English failure chips → short Chinese. Copy only.
+STUB_CHIP = "未实现"
+EMPTY_RGB_CHIP = "RGB 是空的，未写出"
+NOTE_DLOG_M = "D-Log M 暂不支持，请用 D-Log + D-Gamut"
+NOTE_SLOG3_NO_GAMUT = "S-Log3 没有色域，先选择成对 IDT"
+NOTE_SLOG3_NO_GAMUT_VENICE = "S-Log3 没有色域，检测到 Venice，先选择成对 IDT"
+NOTE_CLOG2_NO_GAMUT = "C-Log2 没有色域，先选择成对 IDT"
+NOTE_CLOG3_NO_GAMUT = "C-Log3 没有色域，先选择成对 IDT"
+NOTE_VENICE_PICK = "检测到 Venice，先选择成对 IDT"
 # preview.status (Swift PreviewEngine). Existing phrases only. No 精准.
 PREVIEW_STATUS_EMPTY = "没有素材"
 PREVIEW_STATUS_DECODING = "正在解码预览…"
@@ -498,6 +507,7 @@ def preserved_failure_note(error: str) -> str | None:
         MISSING_FPS_CHIP,
         MISSING_DURATION_CHIP,
         MISSING_YCBCR_TAGS_CHIP,
+        MISSING_YCBCR_TAGS_CHIP_UI,
         WRITE_OVERSIZE_CHIP,
         DECODE_FAILED_CHIP,
         RESOLVE_INCOMPLETE_CHIP,
@@ -505,6 +515,14 @@ def preserved_failure_note(error: str) -> str | None:
         NOTE_ARRI_MXF,
         NOTE_UNKNOWN_CODEC,
         PREVIEW_STATUS_DECODE_FAIL,
+        STUB_CHIP,
+        EMPTY_RGB_CHIP,
+        NOTE_DLOG_M,
+        NOTE_SLOG3_NO_GAMUT,
+        NOTE_SLOG3_NO_GAMUT_VENICE,
+        NOTE_CLOG2_NO_GAMUT,
+        NOTE_CLOG3_NO_GAMUT,
+        NOTE_VENICE_PICK,
     ):
         return error
     if "不接" in error or "暂不支持" in error or "无法读取" in error:
@@ -517,6 +535,10 @@ def user_facing_failure_note(error: str) -> str:
     if kept := preserved_failure_note(error):
         return kept
     low = error.lower()
+    if error in ("no IDT", "IDT is required"):
+        return REASON_PICK_PAIRED_IDT
+    if error in ("empty RGB buffer", "write produced no file"):
+        return EMPTY_RGB_CHIP if error == "empty RGB buffer" else WRITE_FAILED_CHIP
     if (
         "decode" in low
         or "grade" in low
@@ -541,6 +563,10 @@ def short_export_chip(
     if kept := preserved_failure_note(error):
         return kept
     low = error.lower()
+    if error in ("no IDT", "IDT is required"):
+        return REASON_PICK_PAIRED_IDT
+    if error in ("empty RGB buffer", "write produced no file"):
+        return EMPTY_RGB_CHIP if error == "empty RGB buffer" else WRITE_FAILED_CHIP
     if (
         "decode" in low
         or "grade" in low
@@ -1195,7 +1221,7 @@ def process_locked_writes(
             errors.append(ClipWrite(name=clip.name, error=DECODE_FAILED_CHIP))
             continue
         if not clip.idt:
-            errors.append(ClipWrite(name=clip.name, error="no IDT"))
+            errors.append(ClipWrite(name=clip.name, error=REASON_PICK_PAIRED_IDT))
             continue
         try:
             for rgb in rgb_frames:
@@ -1230,7 +1256,7 @@ def process_locked_writes(
                 linear = graph.apply_ap0(rgb, clip.idt, setup=write_setup)
                 writer(out, np.asarray(linear, dtype=np.float32))
                 if write_fn is None and not out.is_file():
-                    raise OSError("write produced no file")
+                    raise OSError(WRITE_FAILED_CHIP)
                 if on_progress:
                     on_progress(
                         progress_text(

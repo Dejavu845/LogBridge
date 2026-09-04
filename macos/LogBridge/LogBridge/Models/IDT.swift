@@ -65,7 +65,7 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         case .appleLog2AWG: return "Apple Wide Gamut"
         case .djiDLogDGamut: return "D-Gamut"
         case .arriLogC3EI800AWG3: return "AWG3"
-        case .djiDLogMStub: return "(unsupported)"
+        case .djiDLogMStub: return "未实现"
         }
     }
 

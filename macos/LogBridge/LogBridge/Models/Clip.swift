@@ -68,7 +68,7 @@ struct Clip: Identifiable, Hashable {
     }
 
     var verificationBadge: String {
-        if let idt, idt.isStub { return "stub" }
+        if let idt, idt.isStub { return "未实现" }
         if isPending { return "待选" }
         return "已实现（未验证）"
     }
@@ -611,6 +611,8 @@ final class SessionModel: ObservableObject {
     static let wroteProxyChip = "已写出代理"
     static let decodeFailedChip = "解码失败"
     static let writeFailedChip = "写出失败"
+    static let stubChip = "未实现"
+    static let emptyRGBChip = "RGB 是空的，未写出"
     static let frameMismatchChip = "帧数对不上"
     static let missingFpsChip = "读不到帧率，未核对"
     static let missingDurationChip = "读不到时长，未核对"
@@ -625,6 +627,8 @@ final class SessionModel: ObservableObject {
         if error is LockedWriteCancel { return writeFailedChip }
         let desc = error.localizedDescription
         if let kept = preservedFailureNote(desc) { return kept }
+        if desc == "no IDT" || desc == "IDT is required" { return "先选择成对 IDT" }
+        if desc == "empty RGB buffer" { return emptyRGBChip }
         let lower = desc.lowercased()
         if lower.contains("decode") || lower.contains("grade") || lower.contains("parse")
             || desc.contains("解析失败") {
@@ -639,7 +643,8 @@ final class SessionModel: ObservableObject {
         if desc.contains("读不到元数据") { return desc }
         if desc == frameMismatchChip || desc == missingFpsChip || desc == missingDurationChip
             || desc == missingYCbCrTagsChip || desc == writeOversizeChip
-            || desc == Self.decodeFailedChip || desc == resolveIncompleteChip {
+            || desc == Self.decodeFailedChip || desc == resolveIncompleteChip
+            || desc == stubChip || desc == emptyRGBChip {
             return desc
         }
         if desc == MediaFormat.noteCameraRaw || desc == MediaFormat.noteARRIMxf
