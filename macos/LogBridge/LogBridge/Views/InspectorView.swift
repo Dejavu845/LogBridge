@@ -193,7 +193,7 @@ struct WBInspector: View {
                         .font(.caption.monospacedDigit())
                         .frame(width: 52, alignment: .trailing)
                 }
-                Picker("CAT", selection: Binding(
+                Picker("适应方法", selection: Binding(
                     get: { session.graph.wbMethod },
                     set: { session.setWBParams(method: $0) }
                 )) {
