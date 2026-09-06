@@ -103,6 +103,7 @@ NODE_STRIP_EXPOSURE_DETAIL = "%+.2f 档"
 INSPECTOR_WB_CCT_LABEL = "色温"
 INSPECTOR_EXPOSURE_UNIT_LABEL = "档"
 INSPECTOR_ODT_PICKER_TITLE = "预览输出"
+INSPECTOR_WB_CAT_PICKER_TITLE = "适应方法"
 INSPECTOR_HDR_PREVIEW_NOTE = (
     "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
 )
@@ -447,6 +448,9 @@ def test_user_visible_english_leftovers_are_chinese():
     assert 'Text("CCT")' not in wb
     assert 'Text("绿品")' in wb
     assert 'Text("Tint")' not in wb
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}"' in wb
+    assert 'Picker("适应方法"' in wb
+    assert 'Picker("CAT"' not in wb
     assert INSPECTOR_WB_HELP in wb
     assert "机内色温只填旋钮，默认是单位阵。" in wb
     assert "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。" in wb
@@ -1213,7 +1217,9 @@ def test_inspector_wb_cct_label_sewen():
     assert "in: 2000...10000," in wb
     assert "step: 10" in wb
     assert 'Text("绿品")' in wb
-    assert 'Picker("CAT"' in wb
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}"' in wb
+    assert 'Picker("适应方法"' in wb
+    assert 'Picker("CAT"' not in wb
     assert 'Text("Bradford")' in wb
     assert 'Text("CAT02")' in wb
     assert "white_balance_matrix" not in wb
@@ -1301,7 +1307,9 @@ def test_inspector_exposure_unit_label_dang():
     assert "in: 2000...10000," in wb
     assert "step: 10" in wb
     assert 'Text("绿品")' in wb
-    assert 'Picker("CAT"' in wb
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}"' in wb
+    assert 'Picker("适应方法"' in wb
+    assert 'Picker("CAT"' not in wb
     assert 'Text("Bradford")' in wb
     assert 'Text("CAT02")' in wb
     assert 'Text("Bradford").tag("bradford")' in wb
@@ -1536,7 +1544,9 @@ def test_odt_inspector_preview_output_zh():
     assert "itur_2100_HLG" in hdr
     assert "itur_2100_PQ" in hdr
     assert "session.graph.odt.title" in detail
-    assert 'Picker("CAT"' in wb
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}"' in wb
+    assert 'Picker("适应方法"' in wb
+    assert 'Picker("CAT"' not in wb
     assert 'Text("Bradford")' in wb
     assert 'Text("CAT02")' in wb
 
@@ -1642,7 +1652,9 @@ def test_settings_wb_help_no_cat_jargon():
     assert "proposeAutoWB" in wb
     assert "pickingNeutral" in wb
     assert "点灰卡" in wb
-    assert 'Picker("CAT"' in wb
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}"' in wb
+    assert 'Picker("适应方法"' in wb
+    assert 'Picker("CAT"' not in wb
     assert 'Text("Bradford")' in wb
     assert 'Text("CAT02")' in wb
 
@@ -1651,6 +1663,131 @@ def test_settings_wb_help_no_cat_jargon():
     assert "精准" not in settings or "不写精准" in settings
     assert "达芬奇已验证" not in settings
     _chengpian_only_honesty(SETTINGS_WB_HELP)
+
+
+def test_inspector_wb_cat_picker_shiying_fangfa():
+    """Inspector ㉓ 验法: Picker("CAT") → 适应方法. ⑮–㉒ frozen. No alg."""
+    import re
+
+    inspector = _read(INSPECTOR)
+    settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
+    exposure = inspector.split("struct ExposureInspector")[1]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    odt = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
+    strip = _read(NODE_STRIP)
+    detail = strip.split("private func chipDetail")[1].split("private struct NodeConnector")[0]
+    wb_swift = _read(SWIFT_ROOT / "LogBridge/LogBridge/Color/WhiteBalance.swift")
+    ui_wb = _code_without_comments(wb)
+    ui_inspector = _code_without_comments(inspector)
+    ui_swift = _code_without_comments(_all_swift())
+
+    # 验法㉓-1: picker title 一字不差.
+    assert INSPECTOR_WB_CAT_PICKER_TITLE == "适应方法"
+    assert _picker_literals(wb) == [INSPECTOR_WB_CAT_PICKER_TITLE]
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}"' in wb
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}", selection: Binding(' in wb
+    assert 'Picker("适应方法"' in ui_wb
+    assert INSPECTOR_WB_CAT_PICKER_TITLE in _picker_literals(inspector)
+    assert INSPECTOR_WB_CAT_PICKER_TITLE in _picker_literals(ui_swift)
+
+    # 验法㉓-2: ban user-facing Picker("CAT") / isolated CAT as picker TITLE.
+    assert "CAT" not in _picker_literals(wb)
+    assert "CAT" not in _picker_literals(inspector)
+    assert "CAT" not in _picker_literals(ui_swift)
+    assert 'Picker("CAT")' not in ui_wb
+    assert 'Picker("CAT"' not in ui_wb
+    assert 'Picker("CAT")' not in ui_inspector
+    assert 'Picker("CAT"' not in ui_inspector
+    assert 'Picker("CAT")' not in ui_swift
+    assert 'Picker("CAT"' not in ui_swift
+    for title in _picker_literals(ui_swift):
+        assert re.search(r"(?<![A-Za-z0-9])CAT(?![A-Za-z0-9])", title) is None, title
+
+    # 验法㉓-3: Bradford / CAT02 option labels + tags 一字不动. ⑮–㉒ locked copy stay.
+    assert 'Text("Bradford")' in wb
+    assert 'Text("CAT02")' in wb
+    assert 'Text("Bradford").tag("bradford")' in wb
+    assert 'Text("CAT02").tag("cat02")' in wb
+    assert _text_literals(wb).count("Bradford") == 1
+    assert _text_literals(wb).count("CAT02") == 1
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_WB_HELP == (
+        "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert f'Text("{INSPECTOR_WB_HELP}")' in wb
+    assert PICK_NEUTRAL_HELP == (
+        "点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。"
+    )
+    assert WB_ESTIMATE_HELP == (
+        "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
+    )
+    assert _help_literals(wb) == [PICK_NEUTRAL_HELP, WB_ESTIMATE_HELP]
+    assert f'.help("{PICK_NEUTRAL_HELP}")' in wb
+    assert f'.help("{WB_ESTIMATE_HELP}")' in wb
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert _plus_2f_format_literals(exposure) == ["%+.2f 档"]
+    assert (
+        'Text(String(format: "%+.2f 档", session.graph.exposureStops))'
+        in exposure
+    )
+    assert "%+.2f st" not in exposure
+    assert INSPECTOR_WB_CCT_LABEL == "色温"
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert 'Text("色温")' in wb
+    assert 'Text("CCT")' not in wb
+    assert INSPECTOR_EXPOSURE_UNIT_LABEL == "档"
+    assert f'Text("{INSPECTOR_EXPOSURE_UNIT_LABEL}")' in exposure
+    assert 'Text("档")' in exposure
+    assert 'Text("档（Stops）")' not in exposure
+    assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
+    assert _plus_2f_format_literals(strip) == ["%+.2f 档"]
+    assert (
+        f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}", session.graph.exposureStops)'
+        in detail
+    )
+    assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
+    assert INSPECTOR_HDR_PREVIEW_NOTE == (
+        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+    )
+    assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt
+    assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt
+    assert 'Picker("ODT"' not in odt
+    assert "ColorSync itur_2100" not in odt
+    assert SETTINGS_WB_HELP == (
+        "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+    )
+    assert f'Text("{SETTINGS_WB_HELP}")' in settings
+    assert "不写入 CAT" not in SETTINGS_WB_HELP
+    assert "CAT" not in SETTINGS_WB_HELP
+
+    # 验法㉓-4: CAT enum / algorithm / matrix / color pipeline / grey-card / estimate stay.
+    assert "session.graph.wbMethod" in wb
+    assert "session.setWBParams(method: $0)" in wb
+    assert "static let bradford" in wb_swift
+    assert "static let cat02" in wb_swift
+    assert "static func catMatrix" in wb_swift
+    assert 'method == "cat02" ? cat02 : bradford' in wb_swift
+    assert "white_balance_matrix" not in wb
+    assert "catMatrix" not in wb
+    assert "proposeAutoWB" in wb
+    assert "pickingNeutral" in wb
+    assert "点灰卡" in wb
+    assert "in: 2000...10000," in wb
+    assert "step: 10" in wb
+    assert 'Text("绿品")' in wb
+
+    # 验法㉓-5: test_ui_copy locks Picker("适应方法") and bans Picker("CAT") (above).
+    assert "完善" not in wb
+    assert "精准" not in wb
+    assert "达芬奇已验证" not in wb
+    _chengpian_only_honesty(INSPECTOR_WB_CAT_PICKER_TITLE)
+    _chengpian_only_honesty(wb)
 
 
 def test_idt_bar_always_visible_no_hidden_picker():
