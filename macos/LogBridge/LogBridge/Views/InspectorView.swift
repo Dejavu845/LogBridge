@@ -160,7 +160,7 @@ struct WBInspector: View {
             }
             if session.graph.wbEnabled {
                 HStack {
-                    Text("CCT")
+                    Text("色温")
                         .font(.caption)
                         .frame(width: 36, alignment: .leading)
                     Slider(

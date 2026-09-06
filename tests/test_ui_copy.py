@@ -93,6 +93,7 @@ INSPECTOR_WB_HELP = (
 )
 INSPECTOR_GAIN_LIVE = "线性增益 = "
 INSPECTOR_EXPOSURE_READOUT = "%+.2f 档"
+INSPECTOR_WB_CCT_LABEL = "色温"
 INSPECTOR_HELP_FORMULA_BANNED = (
     "CAT(user→D65)",
     "2^stops",
@@ -425,6 +426,8 @@ def test_user_visible_english_leftovers_are_chinese():
     assert 'Text("implemented (unverified)")' not in sidebar
 
     wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert 'Text("CCT")' not in wb
     assert 'Text("绿品")' in wb
     assert 'Text("Tint")' not in wb
     assert INSPECTOR_WB_HELP in wb
@@ -1098,6 +1101,69 @@ def test_inspector_exposure_readout_unit_dang():
     assert "精准" not in exposure
     assert "达芬奇已验证" not in exposure
     _chengpian_only_honesty(exposure)
+
+
+def test_inspector_wb_cct_label_sewen():
+    """Inspector ⑱: user-facing CCT label → 色温. Identifiers / K / ⑮⑯⑰ stay."""
+    inspector = _read(INSPECTOR)
+    exposure = inspector.split("struct ExposureInspector")[1]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+
+    # Lock user-facing 色温.
+    assert INSPECTOR_WB_CCT_LABEL == "色温"
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert 'Text("色温")' in wb
+
+    # Ban user-facing label CCT (not code identifiers).
+    assert 'Text("CCT")' not in wb
+    assert "wbCCT" in wb
+    assert "autoWBCCT" in wb
+    assert "wbCCTDisplay" in wb
+    assert "session.setWBParams(cct: $0)" in wb
+
+    # Kelvin readout K stays.
+    assert '"\\(Int($0)) K"' in wb
+    assert "机内未知" in wb
+
+    # ⑮ three help sentences + ⑯ two .help + ⑰ readout 一字不差.
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_WB_HELP == (
+        "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert f'Text("{INSPECTOR_WB_HELP}")' in wb
+    assert PICK_NEUTRAL_HELP == (
+        "点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。"
+    )
+    assert WB_ESTIMATE_HELP == (
+        "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
+    )
+    assert f'.help("{PICK_NEUTRAL_HELP}")' in wb
+    assert f'.help("{WB_ESTIMATE_HELP}")' in wb
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert (
+        f'String(format: "{INSPECTOR_EXPOSURE_READOUT}", session.graph.exposureStops)'
+        in exposure
+    )
+    assert "%+.2f st" not in exposure
+
+    # Sliders / CAT stay.
+    assert "in: 2000...10000," in wb
+    assert "step: 10" in wb
+    assert 'Text("绿品")' in wb
+    assert 'Picker("CAT"' in wb
+    assert 'Text("Bradford")' in wb
+    assert 'Text("CAT02")' in wb
+
+    assert "完善" not in wb
+    assert "精准" not in wb
+    assert "达芬奇已验证" not in wb
+    _chengpian_only_honesty(wb)
 
 
 def test_idt_bar_always_visible_no_hidden_picker():
@@ -2034,6 +2100,8 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
     assert "kind: .estimate" in chips
     assert "kind: .grey" in chips
     assert "autoWBCCT" in chips
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in chips
+    assert 'Text("CCT")' not in chips
 
     odt = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
     assert f'Text("{INSPECTOR_REC709_NOTE}")' in odt
