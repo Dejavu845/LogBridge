@@ -93,6 +93,7 @@ INSPECTOR_WB_HELP = (
 )
 INSPECTOR_GAIN_LIVE = "线性增益 = "
 INSPECTOR_EXPOSURE_READOUT = "%+.2f 档"
+NODE_STRIP_EXPOSURE_DETAIL = "%+.2f 档"
 INSPECTOR_WB_CCT_LABEL = "色温"
 INSPECTOR_EXPOSURE_UNIT_LABEL = "档"
 INSPECTOR_HELP_FORMULA_BANNED = (
@@ -473,7 +474,7 @@ def _help_literals(src: str) -> list[str]:
 
 
 def _plus_2f_format_literals(src: str) -> list[str]:
-    """`String(format: "%+.2f …")` literals — Inspector exposure live readout."""
+    """`String(format: "%+.2f …")` literals — Inspector / NodeStrip exposure readout."""
     import re
 
     found: list[str] = []
@@ -1289,6 +1290,113 @@ def test_inspector_exposure_unit_label_dang():
     assert "精准" not in exposure
     assert "达芬奇已验证" not in exposure
     _chengpian_only_honesty(exposure)
+
+
+def test_node_strip_exposure_detail_unit_dang():
+    """NodeStrip ⑳ 验法: chip detail st → 档. ⑮–⑲ frozen. No alg/㉑."""
+    import re
+
+    strip = _read(NODE_STRIP)
+    inspector = _read(INSPECTOR)
+    exposure = inspector.split("struct ExposureInspector")[1]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    detail = strip.split("private func chipDetail")[1].split("private struct NodeConnector")[0]
+    ui_detail = _code_without_comments(detail)
+
+    # 验法⑳-1: format 一字不差. Specifier stays %+.2f; unit suffix only.
+    assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
+    fmts = _plus_2f_format_literals(strip)
+    assert fmts == ["%+.2f 档"]
+    assert _plus_2f_format_literals(detail) == ["%+.2f 档"]
+    assert (
+        'String(format: "%+.2f 档", session.graph.exposureStops)'
+        in detail
+    )
+    assert (
+        f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}", session.graph.exposureStops)'
+        in detail
+    )
+    assert "case .exposure:" in detail
+
+    # 验法⑳-2: ban user-facing `%+.2f st` / isolated st on that readout.
+    assert "%+.2f st" not in strip
+    assert "%+.2f st" not in detail
+    assert 'String(format: "%+.2f st"' not in strip
+    assert 'String(format: "%+.2f st"' not in detail
+    assert " st" not in NODE_STRIP_EXPOSURE_DETAIL
+    suffixes = [fmt[len("%+.2f") :] for fmt in fmts]
+    assert suffixes == [" 档"]
+    for suffix in suffixes:
+        unit = suffix.strip()
+        assert unit == "档"
+        assert unit != "st"
+        assert "st" not in unit
+    for lit in re.findall(r'"([^"]*)"', ui_detail):
+        assert re.search(r"(?<![A-Za-z])st(?![A-Za-z])", lit) is None, lit
+
+    # 验法⑳-3: ⑮–⑲ frozen. Do not touch Inspector Text("档").
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_WB_HELP == (
+        "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert f'Text("{INSPECTOR_WB_HELP}")' in wb
+    assert PICK_NEUTRAL_HELP == (
+        "点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。"
+    )
+    assert WB_ESTIMATE_HELP == (
+        "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
+    )
+    assert _help_literals(wb) == [PICK_NEUTRAL_HELP, WB_ESTIMATE_HELP]
+    assert f'.help("{PICK_NEUTRAL_HELP}")' in wb
+    assert f'.help("{WB_ESTIMATE_HELP}")' in wb
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert _plus_2f_format_literals(exposure) == ["%+.2f 档"]
+    assert (
+        'Text(String(format: "%+.2f 档", session.graph.exposureStops))'
+        in exposure
+    )
+    assert "%+.2f st" not in exposure
+    assert INSPECTOR_WB_CCT_LABEL == "色温"
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert 'Text("色温")' in wb
+    assert 'Text("CCT")' not in wb
+    assert INSPECTOR_EXPOSURE_UNIT_LABEL == "档"
+    assert f'Text("{INSPECTOR_EXPOSURE_UNIT_LABEL}")' in exposure
+    assert 'Text("档")' in exposure
+    assert 'Text("档（Stops）")' not in exposure
+
+    # 验法⑳-4: algorithms / selection / color pipeline stay. Not ㉑.
+    assert "session.selectedNode == slot" in strip
+    assert "session.selectedNode = slot" in strip
+    assert "session.graph.isEnabled(slot)" in strip
+    assert "session.graph.exposureEnabled" in detail
+    assert "session.graph.exposureStops" in detail
+    assert "session.setExposureStops($0)" in exposure
+    assert "pow(2.0, session.graph.exposureStops)" in exposure
+    assert "in: -8...8," in exposure
+    assert "step: 0.05" in exposure
+    assert 'return session.selectedClip?.lockedPairLabel ?? "没有素材"' in detail
+    assert 'return "已旁路"' in detail
+    assert 'return "灰卡"' in detail
+    assert 'return "白平衡（估计）"' in detail
+    assert 'return "机内未知"' in detail
+    assert 'return "机内"' in detail
+    assert "session.graph.odt.title" in detail
+    assert 'Text("节点")' in strip
+    assert 'Text("已实现（未验证）")' in strip
+    assert 'Text("关")' in strip
+
+    # 验法⑳-5: test_ui_copy locks `%+.2f 档` and bans `%+.2f st` (above).
+    assert "完善" not in strip
+    assert "精准" not in strip
+    assert "达芬奇已验证" not in strip
+    _chengpian_only_honesty(strip)
 
 
 def test_idt_bar_always_visible_no_hidden_picker():
