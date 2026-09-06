@@ -74,6 +74,12 @@ NODE_STRIP = SWIFT_ROOT / "LogBridge/LogBridge/Views/NodeStripView.swift"
 SETTINGS_PREVIEW_HELP = (
     "默认 Rec.709（角标预览·非成片）。不是成片，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
 )
+SETTINGS_WB_HELP = (
+    "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+)
+SETTINGS_WB_HELP_BANNED = (
+    "不写入 CAT",
+)
 ACES_OT_NOTE_OFF = "导出 ACEScct / EXR"
 ACES_OT_NOTE_REC709 = "DIY 预览·非成片"
 ACES_OT_NOTE_HDR = "ColorSync 预览·非成片，不是 ACES OT"
@@ -452,6 +458,7 @@ def test_user_visible_english_leftovers_are_chinese():
     assert "已实现（未验证）" in settings
     assert "implemented (unverified)" not in settings.lower()
     assert SETTINGS_PREVIEW_HELP in settings
+    assert SETTINGS_WB_HELP in settings
     assert "预览·非成片" in settings
     assert "DIY OETF" not in _code_without_comments(settings)
     assert "DIY" not in _code_without_comments(settings)
@@ -1542,6 +1549,110 @@ def test_odt_inspector_preview_output_zh():
     _chengpian_only_honesty(odt)
 
 
+def test_settings_wb_help_no_cat_jargon():
+    """Settings ㉒ 验法: WB help 去「不写入 CAT」. ㉑ and earlier frozen. No alg."""
+    import re
+
+    settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
+    inspector = _read(INSPECTOR)
+    exposure = inspector.split("struct ExposureInspector")[1]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    odt = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
+    strip = _read(NODE_STRIP)
+    detail = strip.split("private func chipDetail")[1].split("private struct NodeConnector")[0]
+    ui_settings = _code_without_comments(settings)
+    settings_labels = _text_literals(settings)
+    wb_help = next(lit for lit in settings_labels if lit.startswith("默认关。打开后只提示"))
+
+    # 验法㉒-1: Settings WB help 一字不差.
+    assert SETTINGS_WB_HELP == (
+        "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+    )
+    assert f'Text("{SETTINGS_WB_HELP}")' in settings
+    assert SETTINGS_WB_HELP in settings_labels
+    assert settings_labels.count(SETTINGS_WB_HELP) == 1
+    assert wb_help == SETTINGS_WB_HELP
+    assert SETTINGS_PREVIEW_HELP in settings
+    assert 'Toggle("导入后提示估计白平衡", isOn: $settings.promptEstimateWBOnImport)' in settings
+
+    # 验法㉒-2: ban 不写入 CAT / bare CAT on that Settings help.
+    assert "不写入 CAT" not in SETTINGS_WB_HELP
+    assert "不写入 CAT" not in wb_help
+    assert "不写入 CAT" not in ui_settings
+    assert (
+        "默认关。打开后只提示「白平衡（估计）」，不写入 CAT，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+        not in settings
+    )
+    for token in SETTINGS_WB_HELP_BANNED:
+        assert token not in SETTINGS_WB_HELP
+        assert token not in wb_help
+    assert re.search(r"(?<![A-Za-z0-9])CAT(?![A-Za-z0-9])", SETTINGS_WB_HELP) is None
+    assert re.search(r"(?<![A-Za-z0-9])CAT(?![A-Za-z0-9])", wb_help) is None
+    assert "CAT" not in SETTINGS_WB_HELP
+    assert "CAT" not in wb_help
+
+    # 验法㉒-3: ㉑ and earlier locked copy 一字不差.
+    assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
+    assert INSPECTOR_HDR_PREVIEW_NOTE == (
+        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+    )
+    assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt
+    assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt
+    assert 'Picker("ODT"' not in odt
+    assert "ColorSync itur_2100" not in odt
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_WB_HELP == (
+        "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert f'Text("{INSPECTOR_WB_HELP}")' in wb
+    assert PICK_NEUTRAL_HELP == (
+        "点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。"
+    )
+    assert WB_ESTIMATE_HELP == (
+        "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
+    )
+    assert _help_literals(wb) == [PICK_NEUTRAL_HELP, WB_ESTIMATE_HELP]
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert _plus_2f_format_literals(exposure) == ["%+.2f 档"]
+    assert INSPECTOR_WB_CCT_LABEL == "色温"
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert INSPECTOR_EXPOSURE_UNIT_LABEL == "档"
+    assert f'Text("{INSPECTOR_EXPOSURE_UNIT_LABEL}")' in exposure
+    assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
+    assert _plus_2f_format_literals(strip) == ["%+.2f 档"]
+    assert (
+        f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}", session.graph.exposureStops)'
+        in detail
+    )
+    assert INSPECTOR_REC709_NOTE == "Rec.709 只是预览，不是成片"
+    assert f'Text("{INSPECTOR_REC709_NOTE}")' in odt
+
+    # 验法㉒-4: toggle / estimate algorithm / grey-card real test stay. Not ㉓.
+    assert "promptEstimateWBOnImport" in settings
+    assert "settings.promptEstimateWBOnImport" in settings
+    assert "session.setODT(newValue)" in settings
+    assert "settings.blockUnlockedIDT" in settings
+    assert ".disabled(true)" in settings
+    assert "proposeAutoWB" in wb
+    assert "pickingNeutral" in wb
+    assert "点灰卡" in wb
+    assert 'Picker("CAT"' in wb
+    assert 'Text("Bradford")' in wb
+    assert 'Text("CAT02")' in wb
+
+    # 验法㉒-5: test_ui_copy locks the new sentence + bans (above).
+    assert "完善" not in settings
+    assert "精准" not in settings or "不写精准" in settings
+    assert "达芬奇已验证" not in settings
+    _chengpian_only_honesty(SETTINGS_WB_HELP)
+
+
 def test_idt_bar_always_visible_no_hidden_picker():
     content = _read(CONTENT)
     inspector = _read(INSPECTOR)
@@ -2577,6 +2688,8 @@ def test_settings_preview_help_has_no_diy_oetf():
     settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
     ui = _code_without_comments(settings)
     assert SETTINGS_PREVIEW_HELP in settings
+    assert SETTINGS_WB_HELP in settings
+    assert f'Text("{SETTINGS_WB_HELP}")' in settings
     assert "预览·非成片" in settings
     assert "角标预览·非成片" in settings
     assert "DIY OETF" not in ui
@@ -2588,6 +2701,7 @@ def test_settings_preview_help_has_no_diy_oetf():
     assert "精准" not in settings or "不写精准" in settings
     assert "达芬奇已验证" not in settings
     _chengpian_only_honesty(SETTINGS_PREVIEW_HELP)
+    _chengpian_only_honesty(SETTINGS_WB_HELP)
 
 
 def test_trial_usability_copy_is_locked():

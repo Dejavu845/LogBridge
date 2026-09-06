@@ -28,7 +28,7 @@ struct SettingsView: View {
 
             Section {
                 Toggle("导入后提示估计白平衡", isOn: $settings.promptEstimateWBOnImport)
-                Text("默认关。打开后只提示「白平衡（估计）」，不写入 CAT，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。")
+                Text("默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

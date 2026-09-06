@@ -12,6 +12,9 @@ SIDEBAR = ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift"
 SETTINGS_PREVIEW_HELP = (
     "默认 Rec.709（角标预览·非成片）。不是成片，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
 )
+SETTINGS_WB_HELP = (
+    "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+)
 
 
 def _read(p: Path) -> str:
@@ -33,6 +36,10 @@ def test_settings_copy_is_chinese():
     assert 'Text("Rec.2100 HLG 预览·非成片").tag(ODTMode.hlg)' in s
     assert 'Text("Rec.2100 PQ 预览·非成片").tag(ODTMode.pq)' in s
     assert SETTINGS_PREVIEW_HELP in s
+    assert SETTINGS_WB_HELP in s
+    assert f'Text("{SETTINGS_WB_HELP}")' in s
+    assert "不写入 CAT" not in SETTINGS_WB_HELP
+    assert "CAT" not in SETTINGS_WB_HELP
     assert "预览·非成片" in s
     assert "角标预览·非成片" in s
     assert "DIY OETF" not in ui
