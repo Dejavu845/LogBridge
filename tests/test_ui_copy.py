@@ -625,7 +625,9 @@ def test_preview_status_is_locked_chinese():
     content = _read(CONTENT)
     clip = _read(CLIP)
 
-    assert PREVIEW_STATUS_ODT_CACHE_HIT == "只重跑 ODT"
+    assert PREVIEW_STATUS_ODT_CACHE_HIT == "只重跑预览输出"
+    assert "只重跑 ODT" not in PREVIEW_STATUS_ODT_CACHE_HIT
+    assert "ODT" not in PREVIEW_STATUS_ODT_CACHE_HIT
     assert PREVIEW_STATUS_PROXY == "预览代理，不是成片"
     assert PREVIEW_STATUS_NOT_DELIVERABLE == "预览·非成片"
     assert PREVIEW_STATUS_ODT_OFF == "709 预览关"
@@ -698,6 +700,7 @@ def test_preview_status_is_locked_chinese():
         "Preview proxy",
         "先选择成对 Log 与色域",
         "成片预览关",
+        "只重跑 ODT",
     )
     for lit in _preview_status_literals(engine):
         for token in banned:
@@ -1788,6 +1791,133 @@ def test_inspector_wb_cat_picker_shiying_fangfa():
     assert "达芬奇已验证" not in wb
     _chengpian_only_honesty(INSPECTOR_WB_CAT_PICKER_TITLE)
     _chengpian_only_honesty(wb)
+
+
+def test_preview_engine_odt_cache_hit_zh():
+    """PreviewEngine ㉔ 验法: 只重跑 ODT → 只重跑预览输出. ⑮–㉓ frozen. No alg."""
+    import re
+
+    engine = _read(ENGINE)
+    inspector = _read(INSPECTOR)
+    settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
+    exposure = inspector.split("struct ExposureInspector")[1]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    odt_insp = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
+    strip = _read(NODE_STRIP)
+    detail = strip.split("private func chipDetail")[1].split("private struct NodeConnector")[0]
+    odt = engine.split("func renderODTFromGraded")[1].split("func publishODTOnly")[0]
+    ui_odt = _code_without_comments(odt)
+    ui_engine = _code_without_comments(engine)
+    status_lits = _preview_status_literals(engine)
+
+    # 验法㉔-1: cache-hit status 一字不差.
+    assert PREVIEW_STATUS_ODT_CACHE_HIT == "只重跑预览输出"
+    assert f'"{PREVIEW_STATUS_ODT_CACHE_HIT}"' in odt
+    assert 'note = "只重跑预览输出"' in ui_odt
+    assert PREVIEW_STATUS_ODT_CACHE_HIT in status_lits
+    assert "cacheHit" in odt
+
+    # 验法㉔-2: ban user-facing 只重跑 ODT / bare ODT jargon on that string.
+    assert "只重跑 ODT" not in PREVIEW_STATUS_ODT_CACHE_HIT
+    assert "ODT" not in PREVIEW_STATUS_ODT_CACHE_HIT
+    assert "只重跑 ODT" not in ui_odt
+    assert "只重跑 ODT" not in ui_engine
+    assert 'note = "只重跑 ODT"' not in ui_odt
+    assert 'note = "只重跑 ODT"' not in ui_engine
+    assert "只重跑 ODT" not in status_lits
+    for lit in status_lits:
+        assert "只重跑 ODT" not in lit
+        if lit == PREVIEW_STATUS_ODT_CACHE_HIT:
+            assert "ODT" not in lit
+            assert re.search(r"(?<![A-Za-z0-9])ODT(?![A-Za-z0-9])", lit) is None
+            assert not re.search(r"[A-Za-z]", lit), lit
+
+    # 验法㉔-3: ⑮–㉓ locked copy 一字不差.
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_WB_HELP == (
+        "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert f'Text("{INSPECTOR_WB_HELP}")' in wb
+    assert PICK_NEUTRAL_HELP == (
+        "点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。"
+    )
+    assert WB_ESTIMATE_HELP == (
+        "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
+    )
+    assert _help_literals(wb) == [PICK_NEUTRAL_HELP, WB_ESTIMATE_HELP]
+    assert f'.help("{PICK_NEUTRAL_HELP}")' in wb
+    assert f'.help("{WB_ESTIMATE_HELP}")' in wb
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert _plus_2f_format_literals(exposure) == ["%+.2f 档"]
+    assert (
+        'Text(String(format: "%+.2f 档", session.graph.exposureStops))'
+        in exposure
+    )
+    assert "%+.2f st" not in exposure
+    assert INSPECTOR_WB_CCT_LABEL == "色温"
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert 'Text("色温")' in wb
+    assert 'Text("CCT")' not in wb
+    assert INSPECTOR_EXPOSURE_UNIT_LABEL == "档"
+    assert f'Text("{INSPECTOR_EXPOSURE_UNIT_LABEL}")' in exposure
+    assert 'Text("档")' in exposure
+    assert 'Text("档（Stops）")' not in exposure
+    assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
+    assert _plus_2f_format_literals(strip) == ["%+.2f 档"]
+    assert (
+        f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}", session.graph.exposureStops)'
+        in detail
+    )
+    assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
+    assert INSPECTOR_HDR_PREVIEW_NOTE == (
+        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+    )
+    assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt_insp
+    assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt_insp
+    assert 'Picker("ODT"' not in odt_insp
+    assert "ColorSync itur_2100" not in odt_insp
+    assert SETTINGS_WB_HELP == (
+        "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+    )
+    assert f'Text("{SETTINGS_WB_HELP}")' in settings
+    assert "不写入 CAT" not in SETTINGS_WB_HELP
+    assert "CAT" not in SETTINGS_WB_HELP
+    assert INSPECTOR_WB_CAT_PICKER_TITLE == "适应方法"
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}"' in wb
+    assert 'Picker("适应方法"' in wb
+    assert 'Picker("CAT"' not in wb
+    assert 'Text("Bradford")' in wb
+    assert 'Text("CAT02")' in wb
+    assert 'Text("Bradford").tag("bradford")' in wb
+    assert 'Text("CAT02").tag("cat02")' in wb
+
+    # 验法㉔-4: ODT algorithm / PreviewEngine pipeline stay. Not ㉕.
+    assert "applyODT" in odt
+    assert "HDRPreviewColor.encodeFromGradedAP0" in odt
+    assert "PreviewColor.applyODT" in engine
+    assert "func renderODTFromGraded" in engine
+    assert "func publishODTOnly" in engine
+    assert "func refreshODT(" in engine
+    assert PREVIEW_STATUS_PROXY == "预览代理，不是成片"
+    assert PREVIEW_STATUS_NOT_DELIVERABLE == "预览·非成片"
+    assert PREVIEW_STATUS_ODT_OFF == "709 预览关"
+    assert f'"{PREVIEW_STATUS_PROXY}"' in odt
+    assert f'"{PREVIEW_STATUS_NOT_DELIVERABLE}"' in odt
+    assert f'"{PREVIEW_STATUS_ODT_OFF}"' in odt
+    assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in odt
+
+    # 验法㉔-5: test_ui_copy locks 只重跑预览输出 and bans 只重跑 ODT (above).
+    assert "完善" not in odt
+    assert "精准" not in odt
+    assert "达芬奇已验证" not in odt
+    _chengpian_only_honesty(PREVIEW_STATUS_ODT_CACHE_HIT)
+    _chengpian_only_honesty(odt)
 
 
 def test_idt_bar_always_visible_no_hidden_picker():

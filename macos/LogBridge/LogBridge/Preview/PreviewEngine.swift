@@ -222,8 +222,8 @@ final class PreviewEngine: ObservableObject {
         var odtCG: CGImage?
         var note = "预览代理，不是成片"
         if cacheHit {
-            // Scrub does not re-run IDT. Visible status is 只重跑 ODT.
-            note = "只重跑 ODT"
+            // Scrub does not re-run IDT. Visible status is 只重跑预览输出.
+            note = "只重跑预览输出"
         }
         if graph.odt == .rec709 {
             PreviewColor.applyODT(rgb: &work)
