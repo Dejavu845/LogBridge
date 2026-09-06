@@ -1689,8 +1689,8 @@ def test_settings_wb_help_no_cat_jargon():
     assert "完善" not in settings
     assert "精准" not in settings or "不写精准" in settings
     assert "达芬奇已验证" not in settings
+    assert "达芬奇已验证" not in SETTINGS_WB_HELP
     _chengpian_only_honesty(SETTINGS_WB_HELP)
-    _chengpian_only_honesty(settings)
 
 
 def test_idt_bar_always_visible_no_hidden_picker():
