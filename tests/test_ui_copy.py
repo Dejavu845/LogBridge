@@ -363,7 +363,7 @@ def test_as_shot_wb_copy_and_no_5600_guess():
     assert "ACES2065-1 (AP0)" not in inspector
     assert "写入现有 CAT" not in inspector
     assert "SoG p=6" not in inspector
-    assert "IDT 后" in inspector
+    assert "IDT 之后" in inspector
     assert "已实现（未验证）" in inspector
     assert "CAT(user→D65)" not in inspector
     assert "单位阵" in inspector
