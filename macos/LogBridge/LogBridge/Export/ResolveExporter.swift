@@ -25,7 +25,7 @@ enum ResolveExporter {
         lines.append("Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换，不是成片。")
         lines.append("关闭白平衡时写出旁路（不改颜色），不写进查找表。")
         lines.append("主按钮时间线/EXR 是整段代理，不是全精度成片（ACES2065-1 _proxy 序列），不是 ACEScct。")
-        lines.append("机内色温只填旋钮，默认 CAT 是单位阵。用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。")
+        lines.append("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。")
         let cctLabel = cct.map { "\(Int($0)) K" } ?? "待定 / 单位阵（不猜 5600 或 6504）"
         lines.append("WB 节点：\(includeWBNode ? "开（按色温/绿品校正，\(cctLabel)，绿品 \(tint)）" : "已写出但默认旁路（不改颜色）")")
         lines.append("ODT：709 预览（不是 ACES 输出变换），默认关。预览·非成片。")
@@ -749,7 +749,7 @@ enum ResolveExporter {
         - Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换，不是成片。
         - 关闭白平衡时写出旁路（不改颜色），不写进查找表。
         - 主按钮时间线/EXR 是 **整段代理，不是全精度成片**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
-        - 机内色温只填旋钮，默认 CAT 是单位阵。用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。
+        - 机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。
 
         ## Graph (serial nodes)
 
@@ -764,7 +764,7 @@ enum ResolveExporter {
            - `03_WB.cube` — ACEScct wrap of the linear AP0 Bradford/CAT02 3×3 (decode → ACES2065-1 CAT → encode).
            - `03_WB.dctl` — DI-free DCTL: decode ACEScct → AP1→AP0 → AP0 3×3 → encode. **Bypass WB** or disable node 2 = IDT → ACEScct, no bake.
            - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
-           - CCT \(cctLabel(cct)), tint \(tint), method Bradford. As-shot fills knobs (UI only); default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT is 待定 / 单位阵 (do not guess 5600 or 6504). Scene-linear only.
+           - 色温 \(cctLabel(cct))，绿品 \(tint)，方法 Bradford。机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。读不到则为待定/单位阵，不猜 5600 或 6504。
 
         3. **709 预览** — `04_ODT_Rec709.cube` or CST
            - Optional preview node, off by default. Off = ACEScct deliverable.

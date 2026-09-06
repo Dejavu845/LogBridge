@@ -23,11 +23,13 @@ from color.batch import (
 )
 from color.graph import SerialGraph
 from color.resolve_export import (
+    EXPORT_NOTE_IN_CAMERA,
     EXPORT_NOTE_REC709,
     EXPORT_NOTE_WB_BYPASS,
     EXPORT_NOTE_WB_OFF,
     GRAPH_ODT_USER,
     GRAPH_ODT_XML_DESC,
+    GRAPH_WB_SUMMARY,
     REC709_CUBE_COMMENT,
     REC709_CUBE_TITLE,
     REC709_PREVIEW_LABEL,
@@ -328,6 +330,29 @@ HONESTY_BANNED = (
     "不烘焙白平衡",
     "完善",
     "精准",
+    "CAT(user→D65)",
+    "CAT(user→D65)·inv(CAT(as→D65))",
+    "默认 CAT 是单位阵",
+    "相对变换 CAT",
+    "绝对 CAT",
+)
+GRAPH_WB_SUMMARY_LOCKED = (
+    "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
+    "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+    "读不到则为待定/单位阵，不猜 5600 或 6504。"
+)
+GRAPH_WB_SWIFT = (
+    "色温 \\(cctLabel(cct))，绿品 \\(tint)，方法 Bradford。"
+    "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+    "读不到则为待定/单位阵，不猜 5600 或 6504。"
+)
+GRAPH_WB_BANNED = (
+    "identity",
+    "CAT(user→D65)",
+    "CAT(user→D65)·inv(CAT(as→D65))",
+    "As-shot fills knobs",
+    "default CAT is identity",
+    "Scene-linear only",
 )
 
 
@@ -345,6 +370,14 @@ def _honesty_lines(text: str) -> list[str]:
 
 def _graph_section(text: str) -> str:
     return text.split("## Graph (serial nodes)", 1)[1].split("## How to bypass", 1)[0]
+
+
+def _graph_wb_summary_line(text: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip().lstrip("- ").strip()
+        if "机内只填旋钮" in stripped and "方法 Bradford" in stripped:
+            return stripped
+    raise AssertionError("Graph WB summary line missing")
 
 
 GRAPH_ODT_BANNED = (
@@ -505,9 +538,18 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
         assert token not in EXPORT_NOTE_WB_BYPASS
         assert token not in EXPORT_NOTE_REC709
     assert "identity" not in honesty
-    assert "机内色温只填旋钮，默认 CAT 是单位阵。" in honesty
-    assert "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。" in honesty
-    assert "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。" in honesty
+    assert EXPORT_NOTE_IN_CAMERA == (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert EXPORT_NOTE_IN_CAMERA in honesty
+    assert EXPORT_NOTE_IN_CAMERA in RESOLVE_README_HONESTY
+    assert "默认 CAT 是单位阵" not in honesty
+    assert "CAT(user→D65)" not in honesty
+    assert "CAT(user→D65)·inv(CAT(as→D65))" not in honesty
+    assert "相对变换" not in honesty
+    assert "绝对 CAT" not in honesty
     assert "机内白转到 D65" not in readme
     assert "精准" not in readme
     assert "一键还原" not in readme
@@ -517,6 +559,13 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
     assert GRAPH_ODT_USER in graph
     for token in GRAPH_ODT_BANNED:
         assert token not in graph
+    assert GRAPH_WB_SUMMARY == GRAPH_WB_SUMMARY_LOCKED
+    wb_line = _graph_wb_summary_line(graph)
+    assert wb_line == GRAPH_WB_SUMMARY.format(cctLabel="6504 K", tint=0.0)
+    assert not wb_line.startswith("CCT")
+    assert "CCT" not in wb_line.replace("ACEScct", "")
+    for token in GRAPH_WB_BANNED:
+        assert token not in wb_line, token
     cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
     assert REC709_PREVIEW_LABEL in cube
     assert REC709_CUBE_COMMENT in cube
@@ -555,20 +604,29 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
         assert "709 预览" in blob
         assert "整段代理，不是全精度成片" in blob
         assert "已实现（未验证）" in blob
-        assert "机内色温只填旋钮，默认 CAT 是单位阵。" in blob
-        assert "CAT(user→D65)·inv(CAT(as→D65))" in blob
+        assert EXPORT_NOTE_IN_CAMERA in blob
+        assert "默认 CAT 是单位阵" not in blob
+        assert "CAT(user→D65)" not in blob
+        assert "CAT(user→D65)·inv(CAT(as→D65))" not in blob
+        assert "相对变换" not in blob
+        assert "绝对 CAT" not in blob
         assert "3200→5600 变暖" in blob
         assert "不猜 5600" in blob
         assert "机内白转到 D65" not in blob
         assert "精准" not in blob
         assert "一键还原" not in blob
-        stripped = blob.replace("CAT(user→D65)·inv(CAT(as→D65))", "")
-        assert "CAT(as→D65)" not in stripped
         _assert_chengpian_not_a_deliverable_claim(blob)
     swift_graph = _graph_section(readme_fn)
     assert GRAPH_ODT_USER in swift_graph
     for token in GRAPH_ODT_BANNED:
         assert token not in swift_graph
+    swift_wb = _graph_wb_summary_line(readme_fn)
+    assert GRAPH_WB_SWIFT in readme_fn
+    assert swift_wb == GRAPH_WB_SWIFT
+    assert not swift_wb.startswith("CCT")
+    assert "CCT" not in swift_wb.replace("ACEScct", "")
+    for token in GRAPH_WB_BANNED:
+        assert token not in swift_wb, token
     ui_note = "\n".join(line.split("//", 1)[0] for line in note_fn.splitlines())
     assert "identity" not in ui_note
     assert "enabled=false" not in ui_note
@@ -658,6 +716,9 @@ def test_readme_graph_odt_user_copy_is_locked_chinese(tmp_path: Path):
     written_graph = _graph_section(readme)
     assert GRAPH_ODT_USER in py_graph
     assert GRAPH_ODT_USER in written_graph
+    assert _graph_wb_summary_line(py_graph) == GRAPH_WB_SUMMARY.format(
+        cctLabel="3200 K", tint=0.0
+    )
     assert "709 预览" in written_graph
     assert "预览·非成片" in written_graph
     for token in GRAPH_ODT_BANNED:
@@ -742,6 +803,84 @@ def test_readme_graph_odt_user_copy_is_locked_chinese(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(written_graph)
     _assert_chengpian_not_a_deliverable_claim(xml)
     _assert_chengpian_not_a_deliverable_claim(cube)
+
+
+def test_readme_resolve_graph_wb_summary_plain_chinese(tmp_path: Path):
+    """README_RESOLVE ㉕: honesty / Graph WB 人话. Align ⑮. XML / TITLE / nodes stay."""
+    export_resolve_bundle(
+        tmp_path, idt_ids=["arri_logc4_awg4"], include_wb=True, cct=3200.0, lut_size=5
+    )
+    readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
+    xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    honesty = readme.split("## Graph (serial nodes)")[0]
+    graph = _graph_section(readme)
+
+    assert EXPORT_NOTE_IN_CAMERA == (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert EXPORT_NOTE_IN_CAMERA in honesty
+    assert GRAPH_WB_SUMMARY == GRAPH_WB_SUMMARY_LOCKED
+    wb_line = _graph_wb_summary_line(graph)
+    assert wb_line == GRAPH_WB_SUMMARY.format(cctLabel="3200 K", tint=0.0)
+    assert "未验证" in readme
+    assert "预览·非成片" in readme
+    for token in HONESTY_BANNED:
+        assert token not in honesty, token
+    assert "identity" not in honesty
+    assert "CAT(user→D65)" not in honesty
+    assert "默认 CAT 是单位阵" not in honesty
+    assert not wb_line.startswith("CCT")
+    assert "CCT" not in wb_line.replace("ACEScct", "")
+    for token in GRAPH_WB_BANNED:
+        assert token not in wb_line, token
+
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
+    assert EXPORT_NOTE_IN_CAMERA in generated
+    assert _graph_wb_summary_line(generated) == GRAPH_WB_SUMMARY.format(
+        cctLabel="3200 K", tint=0.25
+    )
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    readme_fn = swift.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    note_fn = swift.split("static func exportNote")[1].split("static func export(")[0]
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    assert EXPORT_NOTE_IN_CAMERA in note_fn
+    assert EXPORT_NOTE_IN_CAMERA in readme_fn
+    assert GRAPH_WB_SWIFT in readme_fn
+    assert _honesty_lines(_dedent_swift_honesty(readme_fn)) == _honesty_lines(
+        RESOLVE_README_HONESTY
+    )
+    assert _graph_wb_summary_line(readme_fn) == GRAPH_WB_SWIFT
+    assert "GRAPH_WB_SUMMARY.format" in py
+    assert '"色温 {cctLabel}，绿品 {tint}，方法 Bradford。"' in py
+
+    # FROZEN: cube TITLE, XML structure / filenames, node filenames.
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
+    assert LOCKED_REC709_CUBE_TITLE in swift
+    assert 'name="WB"' in xml
+    assert "default CAT is identity" in xml
+    assert "default CAT is identity" in xml_fn
+    for name in LOCKED_NODE_FILES:
+        assert name in readme
+        assert name in readme_fn
+    for name in LOCKED_BUNDLE_FILES:
+        assert f'"{name}"' in swift
+    assert "达芬奇已验证" not in honesty
+    assert "达芬奇已验证" not in wb_line
+    _assert_chengpian_not_a_deliverable_claim(honesty)
+    _assert_chengpian_not_a_deliverable_claim(wb_line)
 
 
 def test_709_cube_labeled_preview_not_aces_ot(tmp_path: Path):
@@ -910,7 +1049,8 @@ def test_resolve_package_placeholders_are_locked_chinese(tmp_path: Path):
     assert f'?? "{RESOLVE_CCT_PENDING_LABEL}"' in cct_fn
     assert "pending / identity" not in cct_fn
     assert RESOLVE_CCT_PENDING_LABEL in xml_fn
-    assert RESOLVE_CCT_PENDING_LABEL in readme_fn
+    assert GRAPH_WB_SWIFT in readme_fn
+    assert "待定/单位阵" in readme_fn
     assert RESOLVE_README_EMPTY_IDT in readme_fn
     assert RESOLVE_README_EMPTY_IDT in py_readme
     assert RESOLVE_README_EMPTY_IDT not in xml_fn

@@ -133,6 +133,12 @@ REC709_CUBE_TITLE = (
 GRAPH_ODT_USER = "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
 REC709_CUBE_COMMENT = f"# {GRAPH_ODT_USER}"
 GRAPH_ODT_XML_DESC = GRAPH_ODT_USER
+# Graph WB summary (knife ㉕). Placeholders {cctLabel} / {tint}. Copy only.
+GRAPH_WB_SUMMARY = (
+    "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
+    "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+    "读不到则为待定/单位阵，不猜 5600 或 6504。"
+)
 # User-visible Resolve exportNote (UI). Package TITLE / XML stay as-is.
 EXPORT_NOTE_TITLE = "LogBridge M1 Resolve 导出（已实现（未验证））"
 EXPORT_NOTE_WORKSPACE = "工作空间：ACEScct 时间线 / ACES2065-1 交换。"
@@ -142,9 +148,9 @@ EXPORT_NOTE_PROXY = (
     "主按钮时间线/EXR 是整段代理，不是全精度成片（ACES2065-1 _proxy 序列），不是 ACEScct。"
 )
 EXPORT_NOTE_IN_CAMERA = (
-    "机内色温只填旋钮，默认 CAT 是单位阵。"
-    "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。"
-    "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。"
+    "机内色温只填旋钮，默认是单位阵。"
+    "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+    "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
 )
 EXPORT_NOTE_WB_ON = "开（按色温/绿品校正，{cctLabel}，绿品 {tint}）"
 EXPORT_NOTE_WB_OFF = "已写出但默认旁路（不改颜色）"
@@ -199,13 +205,13 @@ def export_note(
     return "\n".join(lines)
 
 
-# User-facing Resolve package honesty notes. Align exportNote (knife ⑤). Copy only.
+# User-facing Resolve package honesty notes. Align Inspector ⑮ (knife ㉕). Copy only.
 RESOLVE_README_HONESTY = f"""## 诚实说明
 
 - {EXPORT_NOTE_REC709}
 - {EXPORT_NOTE_WB_BYPASS}
 - 主按钮时间线/EXR 是 **整段代理，不是全精度成片**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
-- 机内色温只填旋钮，默认 CAT 是单位阵。用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。
+- {EXPORT_NOTE_IN_CAMERA}
 """
 
 
@@ -850,6 +856,7 @@ def format_readme(
     )
     exp_state = "开启" if exposure_enabled else "旁路 / bypassed"
     gain = stops_to_gain(exposure_stops) if exposure_enabled else 1.0
+    wb_summary = GRAPH_WB_SUMMARY.format(cctLabel=_cct_label(cct), tint=tint)
     return f"""# LogBridge Resolve 导出
 
 状态：**已实现（未验证）**。不是相机支持声明。
@@ -877,7 +884,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
    - `03_WB.cube` — 3D LUT of the Bradford/CAT02 3×3 in ACES2065-1 (AP0), wrapped in ACEScct so it sits on the ACEScct timeline.
    - `03_WB.dctl` — same 3×3 as a DCTL (Decode ACEScct → matrix → Encode ACEScct). Checkbox **Bypass WB** inside the DCTL, or disable the node.
    - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
-   - CCT {_cct_label(cct)}, tint {tint}, method Bradford (CAT02 selectable in code). As-shot fills knobs (UI only); default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT is identity (not 5600 K). Scene-linear only.
+   - {wb_summary}
 
 4. **ODT** — Off (ACEScct deliverable, default) | Rec.709 预览 | Rec.2100 HLG | Rec.2100 PQ
    - Rec.709: `04_ODT_Rec709.cube` or CST. {GRAPH_ODT_USER}
