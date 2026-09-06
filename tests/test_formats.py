@@ -350,6 +350,9 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     try_skip = import_fn.split("if probe.decision == .tryDecode")[1].split(
         "let detection = ClipDetector.detect"
     )[0]
+    assert "codecFourCC" in try_skip
+    assert r"\(MediaFormat.noteMxfNoTrack)" in try_skip
+    assert r"\(MediaFormat.noteARRIMxf)" not in try_skip
     assert "noteMxfNoTrack" in try_skip
     assert "noteARRIMxf" not in try_skip
     assert NOTE_CAMERA_RAW.split("：")[0] in media
@@ -395,6 +398,16 @@ def test_import_skip_summary_header_and_chips():
     assert note.startswith("未导入 4 条：")
     assert note.splitlines()[0] == "未导入 4 条："
     assert note.splitlines()[1:] == lines
+
+    # N>1 header still works when skip lines include the new no-track chip.
+    with_new = [
+        f"clip.r3d：{NOTE_CAMERA_RAW}",
+        f"blank.mxf：{NOTE_MXF_NO_TRACK}",
+        f"A001.mxf：{NOTE_ARRI_MXF}",
+    ]
+    mixed = import_skip_summary(with_new)
+    assert mixed.startswith("未导入 3 条：")
+    assert mixed.splitlines()[1:] == with_new
 
     clip = _read(CLIP)
     media = _read(MEDIA)

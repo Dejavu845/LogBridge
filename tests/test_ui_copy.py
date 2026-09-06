@@ -2295,6 +2295,7 @@ def test_mxf_no_track_chip_not_arri():
         NOTE_STILL_ACCEPT,
         NOTE_UNKNOWN_CODEC,
         classify,
+        import_skip_summary,
     )
 
     assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
@@ -2313,14 +2314,15 @@ def test_mxf_no_track_chip_not_arri():
         assert d.note == NOTE_ARRI_MXF, codec
         assert d.note != NOTE_MXF_NO_TRACK, codec
 
-    # codecFourCC==nil / no fourCC tryDecode uses the new chip, not noteARRIMxf.
+    # 1. importURL tryDecode + codecFourCC==nil: new chip, not noteARRIMxf.
+    # 2. MediaFormat try line is split — no ARRI splice on generic try / undecodable.
     none = classify("clip.mxf")
+    assert none.action == "try"
     assert none.note == NOTE_MXF_NO_TRACK
     assert NOTE_ARRI_MXF not in none.note
     assert "ARRI MXF" not in none.note
-
-    # Known MXF tryDecode note must not concatenate the ARRI chip.
     known = classify("clip.mxf", "apcn")
+    assert known.action == "try"
     assert known.note == NOTE_MXF_TRY
     assert NOTE_ARRI_MXF not in known.note
     assert "ARRI MXF" not in known.note
@@ -2338,6 +2340,24 @@ def test_mxf_no_track_chip_not_arri():
     assert classify("nope.xyz").note == NOTE_REFUSE_CONTAINER
     assert classify("ok.mov").note == NOTE_MOVIE_ACCEPT
 
+    # N>1 import-skip header still works with new chip lines. Old chips stay.
+    mixed = [
+        f"A.r3d：{NOTE_CAMERA_RAW}",
+        f"B.mxf：{NOTE_MXF_NO_TRACK}",
+        f"C.mxf：{NOTE_ARRI_MXF}",
+        f"D.ari：{NOTE_CAMERA_RAW}",
+    ]
+    skip_note = import_skip_summary(mixed)
+    assert skip_note.startswith("未导入 4 条：")
+    assert skip_note.splitlines()[0] == "未导入 4 条："
+    assert skip_note.splitlines()[1:] == mixed
+    assert NOTE_MXF_NO_TRACK in skip_note
+    assert NOTE_ARRI_MXF in skip_note
+    assert NOTE_CAMERA_RAW in skip_note
+    one = [f"solo.mxf：{NOTE_MXF_NO_TRACK}"]
+    assert import_skip_summary(one) == one[0]
+    assert not import_skip_summary(one).startswith("未导入")
+
     clip = _read(CLIP)
     media = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/MediaFormat.swift")
     formats_py = (ROOT / "color/formats.py").read_text(encoding="utf-8")
@@ -2345,18 +2365,23 @@ def test_mxf_no_track_chip_not_arri():
     try_skip = import_fn.split("if probe.decision == .tryDecode")[1].split(
         "let detection = ClipDetector.detect"
     )[0]
+    assert "codecFourCC" in try_skip
     assert "noteMxfNoTrack" in try_skip
     assert "noteARRIMxf" not in try_skip
-    assert NOTE_MXF_NO_TRACK in media
-    assert NOTE_ARRI_MXF in media
-    assert NOTE_MXF_TRY in media
+    assert r"\(MediaFormat.noteMxfNoTrack)" in try_skip
+    assert r"\(MediaFormat.noteARRIMxf)" not in try_skip
+    assert 'static let noteMxfNoTrack = "MXF：系统认不出可解轨道，未导入"' in media
+    assert 'static let noteARRIMxf = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"' in media
+    assert 'static let noteMxfTry = "MXF 只试系统认得出的 ProRes / AVC / HEVC。"' in media
     assert "+ noteARRIMxf" not in media
     assert "+ NOTE_ARRI_MXF" not in formats_py
-    assert NOTE_MXF_NO_TRACK in formats_py
+    assert 'NOTE_MXF_NO_TRACK = "MXF：系统认不出可解轨道，未导入"' in formats_py
+    assert 'NOTE_MXF_TRY = "MXF 只试系统认得出的 ProRes / AVC / HEVC。"' in formats_py
     assert NOTE_STILL_ACCEPT in formats_py
     assert NOTE_MOVIE_ACCEPT in media
     assert "noteMxfNoTrack" in clip.split("static func preservedFailureNote")[1]
     _chengpian_only_honesty(NOTE_MXF_NO_TRACK)
     _chengpian_only_honesty(NOTE_ARRI_MXF)
+    _chengpian_only_honesty(skip_note)
     assert "完善" not in NOTE_MXF_NO_TRACK
     assert "精准" not in NOTE_MXF_NO_TRACK
