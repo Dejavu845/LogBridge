@@ -129,9 +129,11 @@ REC709_PREVIEW_LABEL = "709 预览"
 REC709_CUBE_TITLE = (
     "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
 )
-REC709_CUBE_COMMENT = (
-    "# 709 预览. 预览·非成片. DIY BT.709 OETF preview. "
-    "Not an ACES Output Transform / RRT."
+# Graph / ODT / Description / cube # comment (knife ⑭). TITLE string stays.
+GRAPH_ODT_USER = "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+REC709_CUBE_COMMENT = f"# {GRAPH_ODT_USER}"
+GRAPH_ODT_XML_DESC = (
+    f"{GRAPH_ODT_USER} Off = ACEScct deliverable (or ACES2065-1 EXR)."
 )
 # User-visible Resolve exportNote (UI). Package TITLE / XML stay as-is.
 EXPORT_NOTE_TITLE = "LogBridge M1 Resolve 导出（已实现（未验证））"
@@ -689,7 +691,7 @@ def format_dot(
   idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\nor Resolve CST → ACEScct (ACES workflow)"];
   exp  [label="Exposure (bypassable/zeroable)\\nACES2065-1 linear gain\\n{exposure_stops:+.2f} stops  gain {gain:.4f}\\n02_Exposure.cube / .dctl", style="filled,{exp_style}", fillcolor="{exp_fill}"];
   wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n{_cct_label(cct)}  tint {tint}\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,{wb_style}", fillcolor="{wb_fill}"];
-  odt  [label="709 预览 (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\nBT.709 OETF, not ACES OT"];
+  odt  [label="709 预览 (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\n{GRAPH_ODT_USER}"];
   timeline [shape=oval, label="Timeline\\nACEScct"];
 
   clip -> idt -> exp -> wb -> odt;
@@ -797,11 +799,7 @@ def format_graph_xml(
         )
     else:
         odt_type = "LUT_or_CST"
-        odt_desc = (
-            "Rec.709 预览 preview ODT only (BT.709 OETF, no RRT). "
-            "Not an ACES Output Transform. 预览·非成片. "
-            "Off = ACEScct deliverable (or ACES2065-1 EXR)."
-        )
+        odt_desc = GRAPH_ODT_XML_DESC
         odt_payload = (
             '    <File role="lut">04_ODT_Rec709.cube</File>\n'
             '    <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" '
@@ -864,7 +862,7 @@ def format_readme(
 Timeline color management: **ACEScct**, ACES workflow. Scene-linear interchange: **ACES2065-1**.
 Do not set DaVinci Wide Gamut Intermediate as the default deliverable.
 
-Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 / HLG / PQ are preview only.
+Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 / HLG / PQ 是预览·非成片。
 
 1. **IDT** — `01_IDT_<idt>.cube` or Color Space Transform
    - Input: camera log / camera gamut (`{idt_list}`)
@@ -884,7 +882,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
    - CCT {_cct_label(cct)}, tint {tint}, method Bradford (CAT02 selectable in code). As-shot fills knobs (UI only); default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT is identity (not 5600 K). Scene-linear only.
 
 4. **ODT** — Off (ACEScct deliverable, default) | Rec.709 预览 | Rec.2100 HLG | Rec.2100 PQ
-   - Rec.709: `04_ODT_Rec709.cube` or CST. **709 预览**, preview only, off by default. DIY BT.709 OETF, no RRT. Not an ACES Output Transform. 预览·非成片.
+   - Rec.709: `04_ODT_Rec709.cube` or CST. {GRAPH_ODT_USER}
    - Rec.2100 HLG / PQ: ACES Output Transform / BT.2100 OCIO Builtin (no homemade curve). Implemented (unverified). Not a support claim.
    - Contains **no** white balance and **no** exposure. Optional later node.
 

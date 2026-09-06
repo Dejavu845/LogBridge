@@ -212,7 +212,9 @@ def test_export_xml_declares_hdr_aces_ot():
         ["arri_logc4_awg4"], 6504.0, 0.0, include_wb=False
     )
     assert 'name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="false"' in xml_off
-    assert "preview ODT only" in xml_off
+    assert "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。" in xml_off
+    assert "preview ODT only" not in xml_off
+    assert "Not an ACES Output Transform" not in xml_off
 
 
 def test_docs_hdr_ot_unverified_not_supported():

@@ -2756,6 +2756,8 @@ def test_export_note_is_plain_chinese():
         EXPORT_NOTE_WB_OFF,
         EXPORT_NOTE_WB_ON,
         EXPORT_NOTE_WORKSPACE,
+        GRAPH_ODT_USER,
+        GRAPH_ODT_XML_DESC,
         REC709_CUBE_COMMENT,
         REC709_CUBE_TITLE,
         RESOLVE_README_HONESTY,
@@ -2898,11 +2900,16 @@ def test_export_note_is_plain_chinese():
     )[0]
     assert REC709_CUBE_TITLE in odt_fn
     assert REC709_CUBE_TITLE in py
-    assert "DIY BT.709 OETF preview" in py
-    assert "Not an ACES Output Transform / RRT." in py
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert REC709_CUBE_COMMENT == f"# {GRAPH_ODT_USER}"
     assert REC709_CUBE_COMMENT.startswith("# 709 预览")
-    assert "DIY BT.709 OETF preview" in odt_fn
-    assert "Not an ACES Output Transform" in odt_fn
+    assert GRAPH_ODT_USER in odt_fn
+    assert f'"{REC709_CUBE_COMMENT}"' in odt_fn
+    assert "DIY BT.709 OETF" not in odt_fn
+    assert "preview only" not in odt_fn
+    assert "Not an ACES Output Transform" not in odt_fn
     assert 'name="ODT_Rec709"' in xml_fn or "ODT_Rec709" in xml_fn
     assert "bypassable" in xml_fn
     assert "enabled" in xml_fn
@@ -2946,8 +2953,24 @@ def test_export_note_is_plain_chinese():
     ):
         assert name in exporter
         assert name in py
-    # Graph technical docs keep jargon. Honesty notes do not.
-    assert "DIY BT.709 OETF" in readme_fn
+    graph_fn = readme_fn.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    py_graph = py_readme.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    assert GRAPH_ODT_USER in graph_fn
+    assert GRAPH_ODT_USER in py_graph or f"{{GRAPH_ODT_USER}}" in py_graph
+    assert "预览·非成片" in graph_fn
+    assert "预览·非成片" in py_graph
+    for token in ("DIY BT.709 OETF", "preview only", "Not an ACES Output Transform"):
+        assert token not in graph_fn
+        assert token not in py_graph
+    assert GRAPH_ODT_XML_DESC in exporter
+    assert "完善" not in graph_fn
+    assert "精准" not in graph_fn
+    assert "达芬奇已验证" not in graph_fn
     assert "Bradford" in readme_fn
     assert "func uniqueImplementedIDTs" in exporter
     assert "includeWBNode" in exporter
