@@ -424,7 +424,6 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
         assert "709 预览" in blob
         assert "整段代理，不是全精度成片" in blob
         assert "已实现（未验证）" in blob
-        assert "identity" in blob and "enabled=false" in blob
         assert "机内色温只填旋钮，默认 CAT 是单位阵。" in blob
         assert "CAT(user→D65)·inv(CAT(as→D65))" in blob
         assert "3200→5600 变暖" in blob
@@ -435,6 +434,15 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
         stripped = blob.replace("CAT(user→D65)·inv(CAT(as→D65))", "")
         assert "CAT(as→D65)" not in stripped
         _assert_chengpian_not_a_deliverable_claim(blob)
+    # Package README keeps jargon. User-visible exportNote does not.
+    assert "identity" in readme_fn and "enabled=false" in readme_fn
+    assert "DIY BT.709 OETF" in readme_fn
+    ui_note = "\n".join(line.split("//", 1)[0] for line in note_fn.splitlines())
+    assert "identity" not in ui_note
+    assert "enabled=false" not in ui_note
+    assert "DIY BT.709 OETF" not in ui_note
+    assert "Bradford CAT" not in ui_note
+    assert "stops" not in ui_note
 
 
 def test_709_cube_labeled_preview_not_aces_ot(tmp_path: Path):

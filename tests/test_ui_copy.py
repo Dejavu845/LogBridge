@@ -2650,3 +2650,168 @@ def test_disk_estimate_assumption_is_plain_chinese():
     assert "float32" not in _code_without_comments(panel)
     assert "bytesPerEXRPixel" in clip
     assert "12" in clip.split("bytesPerEXRPixel")[1].split("conservativeFPS")[0]
+
+
+def test_export_note_is_plain_chinese():
+    """User-visible exportNote locks. TITLE / XML / graph / color stay."""
+    from color.resolve_export import (
+        EXPORT_NOTE_CCT_PENDING,
+        EXPORT_NOTE_EXPOSURE,
+        EXPORT_NOTE_FILES,
+        EXPORT_NOTE_IN_CAMERA,
+        EXPORT_NOTE_LOCKED_ONLY,
+        EXPORT_NOTE_ODT,
+        EXPORT_NOTE_PROXY,
+        EXPORT_NOTE_REC709,
+        EXPORT_NOTE_TITLE,
+        EXPORT_NOTE_WB_BYPASS,
+        EXPORT_NOTE_WB_OFF,
+        EXPORT_NOTE_WB_ON,
+        EXPORT_NOTE_WORKSPACE,
+        REC709_CUBE_COMMENT,
+        REC709_CUBE_TITLE,
+        export_note,
+    )
+
+    assert EXPORT_NOTE_REC709 == (
+        "Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换，不是成片。"
+    )
+    assert EXPORT_NOTE_WB_BYPASS == "关闭白平衡时写出旁路（不改颜色），不写进查找表。"
+    assert EXPORT_NOTE_WB_ON == "开（按色温/绿品校正，{cctLabel}，绿品 {tint}）"
+    assert EXPORT_NOTE_WB_OFF == "已写出但默认旁路（不改颜色）"
+    assert EXPORT_NOTE_ODT == (
+        "ODT：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+    )
+    assert EXPORT_NOTE_EXPOSURE == (
+        "曝光是独立节点（以档为单位；0 档不写进 IDT/白平衡）。旁路白平衡：关掉白平衡节点。"
+    )
+    assert EXPORT_NOTE_TITLE == "LogBridge M1 Resolve 导出（已实现（未验证））"
+    assert EXPORT_NOTE_WORKSPACE == "工作空间：ACEScct 时间线 / ACES2065-1 交换。"
+    assert EXPORT_NOTE_PROXY == (
+        "主按钮时间线/EXR 是整段代理，不是全精度成片"
+        "（ACES2065-1 _proxy 序列），不是 ACEScct。"
+    )
+    assert "ACEScct" in EXPORT_NOTE_WORKSPACE
+    assert "ACES2065-1" in EXPORT_NOTE_WORKSPACE
+    assert "_proxy" in EXPORT_NOTE_PROXY
+    assert "已实现（未验证）" in EXPORT_NOTE_TITLE
+    assert HONEST_PROXY_NOTE in EXPORT_NOTE_PROXY
+    assert "机内色温只填旋钮，默认 CAT 是单位阵。" in EXPORT_NOTE_IN_CAMERA
+    assert "graph.xml" in EXPORT_NOTE_FILES
+    assert "04_ODT_Rec709.cube" in EXPORT_NOTE_FILES
+    assert "仅已锁定成对 IDT 片段" in EXPORT_NOTE_LOCKED_ONLY
+    assert EXPORT_NOTE_CCT_PENDING == "待定 / 单位阵（不猜 5600 或 6504）"
+
+    banned = (
+        "DIY BT.709 OETF",
+        "identity / enabled=false",
+        "enabled=false",
+        "Bradford CAT",
+        "stops；",
+        "Bypass WB",
+    )
+    locked = (
+        EXPORT_NOTE_REC709,
+        EXPORT_NOTE_WB_BYPASS,
+        EXPORT_NOTE_WB_ON,
+        EXPORT_NOTE_WB_OFF,
+        EXPORT_NOTE_ODT,
+        EXPORT_NOTE_EXPOSURE,
+        EXPORT_NOTE_TITLE,
+        EXPORT_NOTE_WORKSPACE,
+        EXPORT_NOTE_PROXY,
+        EXPORT_NOTE_IN_CAMERA,
+        EXPORT_NOTE_FILES,
+        EXPORT_NOTE_LOCKED_ONLY,
+    )
+    for note in locked:
+        for token in banned:
+            assert token not in note, token
+        _chengpian_only_honesty(note)
+        assert "完善" not in note
+        assert "精准" not in note
+    assert "identity" not in EXPORT_NOTE_WB_BYPASS
+    assert "identity" not in EXPORT_NOTE_WB_OFF
+    assert "stops" not in EXPORT_NOTE_EXPOSURE
+    assert "{cctLabel}" in EXPORT_NOTE_WB_ON
+    assert "{cct}" not in EXPORT_NOTE_WB_ON.replace("{cctLabel}", "")
+
+    py_on = export_note(include_wb=True, cct=3200, tint=0.25)
+    py_off = export_note(include_wb=False, cct=None, tint=0.0)
+    assert EXPORT_NOTE_REC709 in py_on
+    assert EXPORT_NOTE_WB_BYPASS in py_on
+    assert "WB 节点：开（按色温/绿品校正，3200 K，绿品 0.25）" in py_on
+    assert EXPORT_NOTE_ODT in py_on
+    assert EXPORT_NOTE_EXPOSURE in py_on
+    assert EXPORT_NOTE_TITLE in py_on
+    assert EXPORT_NOTE_WORKSPACE in py_on
+    assert EXPORT_NOTE_PROXY in py_on
+    assert EXPORT_NOTE_IN_CAMERA in py_on
+    assert EXPORT_NOTE_FILES in py_on
+    assert EXPORT_NOTE_LOCKED_ONLY in py_on
+    assert py_on.splitlines()[-1] == "片段："
+    assert "WB 节点：已写出但默认旁路（不改颜色）" in py_off
+    assert "待定 / 单位阵" in py_off
+    for blob in (py_on, py_off):
+        for token in banned:
+            assert token not in blob, token
+        assert "pending / identity" not in blob
+        _chengpian_only_honesty(blob)
+
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    py = (ROOT / "color/resolve_export.py").read_text(encoding="utf-8")
+    note_fn = exporter.split("static func exportNote")[1].split("static func export(")[0]
+    ui_note = _code_without_comments(note_fn)
+    assert f'"{EXPORT_NOTE_REC709}"' in note_fn
+    assert f'"{EXPORT_NOTE_WB_BYPASS}"' in note_fn
+    assert '开（按色温/绿品校正，\\(cctLabel)，绿品 \\(tint)）' in note_fn
+    assert f'"{EXPORT_NOTE_WB_OFF}"' in note_fn
+    assert "WB 节点：" in note_fn
+    assert f'"{EXPORT_NOTE_ODT}"' in note_fn
+    assert f'"{EXPORT_NOTE_EXPOSURE}"' in note_fn
+    assert EXPORT_NOTE_TITLE in note_fn
+    assert EXPORT_NOTE_WORKSPACE in note_fn
+    assert EXPORT_NOTE_PROXY in note_fn
+    assert EXPORT_NOTE_IN_CAMERA in note_fn
+    assert EXPORT_NOTE_FILES in note_fn
+    assert EXPORT_NOTE_LOCKED_ONLY in note_fn
+    assert "片段：" in note_fn
+    assert "待定 / 单位阵" in note_fn
+    assert "pending / identity" not in ui_note
+    for token in banned:
+        assert token not in ui_note, token
+    assert "identity" not in ui_note
+    assert "stops" not in ui_note
+    assert "AP0 Bradford" not in ui_note
+    assert "ACES OT" not in ui_note.replace("ACES2065-1", "")
+    assert 'EXPORT_NOTE_WB_ON = "开（按色温/绿品校正，{cctLabel}，绿品 {tint}）"' in py
+    assert f'EXPORT_NOTE_REC709 = "{EXPORT_NOTE_REC709}"' in py
+    assert f'EXPORT_NOTE_WB_BYPASS = "{EXPORT_NOTE_WB_BYPASS}"' in py
+    assert f'EXPORT_NOTE_WB_OFF = "{EXPORT_NOTE_WB_OFF}"' in py
+    assert f'EXPORT_NOTE_ODT = "{EXPORT_NOTE_ODT}"' in py
+    assert f'EXPORT_NOTE_EXPOSURE = "{EXPORT_NOTE_EXPOSURE}"' in py
+
+    # TITLE / XML / package README / graph unchanged.
+    readme_fn = exporter.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    odt_fn = exporter.split("private static func odtCube")[1].split(
+        "private static func exposureCube"
+    )[0]
+    xml_fn = exporter.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    assert REC709_CUBE_TITLE in odt_fn
+    assert REC709_CUBE_TITLE in py
+    assert REC709_CUBE_COMMENT in py
+    assert "DIY BT.709 OETF preview" in odt_fn
+    assert "Not an ACES Output Transform" in odt_fn
+    assert 'name="ODT_Rec709"' in xml_fn or "ODT_Rec709" in xml_fn
+    assert "bypassable" in xml_fn
+    assert "enabled" in xml_fn
+    assert "DIY BT.709 OETF" in readme_fn
+    assert "identity / enabled=false" in readme_fn or "enabled=false" in readme_fn
+    assert "Bradford" in readme_fn
+    assert "func uniqueImplementedIDTs" in exporter
+    assert "includeWBNode" in exporter
+    assert "matrixCCT = nil" in exporter
