@@ -2832,7 +2832,7 @@ def test_export_note_is_plain_chinese():
     assert f'EXPORT_NOTE_ODT = "{EXPORT_NOTE_ODT}"' in py
     assert f'EXPORT_NOTE_EXPOSURE = "{EXPORT_NOTE_EXPOSURE}"' in py
 
-    # TITLE / XML / package README / graph unchanged.
+    # TITLE / node structure stay. XML idt + user-visible pending/identity are Chinese.
     readme_fn = exporter.split("private static func readme")[1].split(
         "/// Proxy sequence folder"
     )[0]
@@ -2858,3 +2858,19 @@ def test_export_note_is_plain_chinese():
     assert "func uniqueImplementedIDTs" in exporter
     assert "includeWBNode" in exporter
     assert "matrixCCT = nil" in exporter
+    assert 'idt=\\"用户选择成对 IDT\\"' in xml_fn
+    assert 'idt="用户选择成对 IDT"' in py
+    assert "(user picker)" not in xml_fn
+    assert "(user picker)" not in py.split("def format_graph_xml")[1].split(
+        "def format_readme"
+    )[0]
+    assert "待定 / 单位阵" in xml_fn
+    assert "pending / identity" not in xml_fn
+    assert "pending / identity" not in readme_fn
+    wb_fn = exporter.split("private static func wbCube")[1].split(
+        "private static func odtCube"
+    )[0]
+    assert '?? "pending / identity"' in wb_fn
+    assert "完善" not in xml_fn
+    assert "精准" not in xml_fn
+    assert "达芬奇已验证" not in xml_fn

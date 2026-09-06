@@ -758,7 +758,7 @@ def format_graph_xml(
         )
     if not idt_nodes:
         idt_nodes.append(
-            '    <IDT idt="(user picker)" file="" '
+            '    <IDT idt="用户选择成对 IDT" file="" '
             'resolveOutputColorSpace="ACEScct" '
             'resolveOutputGamma="ACEScct"/>'
         )
@@ -822,7 +822,7 @@ def format_graph_xml(
     <File role="dctl">02_Exposure.dctl</File>
   </Node>
   <Node index="3" name="WB" type="Corrector" bypassable="true" enabled="{wb_enabled}" method="{_xml_escape(method)}">
-    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. As-shot CCT/tint fills knobs (UI only); default CAT is identity — do not treat as-shot 5600/6504 as an illuminant (double WB). CAT applies when the user moves knobs or on a grey-card override. Missing CCT/tint is pending / identity (do not guess 5600 or 6504). Bypass this node in Resolve (Color page: disable WB, or DCTL Bypass WB, or skip 03_WB.cube). Remaining graph is IDT → Exposure → ACEScct, no bake.</Description>
+    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. As-shot CCT/tint fills knobs (UI only); default CAT is identity — do not treat as-shot 5600/6504 as an illuminant (double WB). CAT applies when the user moves knobs or on a grey-card override. Missing CCT/tint is 待定 / 单位阵 (do not guess 5600 or 6504). Bypass this node in Resolve (Color page: disable WB, or DCTL Bypass WB, or skip 03_WB.cube). Remaining graph is IDT → Exposure → ACEScct, no bake.</Description>
     {cct_xml}
     <Tint>{tint:.6f}</Tint>
     <WBSource>{_xml_escape(wb_source)}</WBSource>

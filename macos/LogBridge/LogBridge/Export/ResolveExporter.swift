@@ -15,7 +15,7 @@ enum ResolveExporter {
     static let lutSize = 17
 
     private static func cctLabel(_ cct: Double?) -> String {
-        cct.map { "\(Int($0)) K" } ?? "pending / identity"
+        cct.map { "\(Int($0)) K" } ?? "待定 / 单位阵"
     }
 
     static func exportNote(clips: [Clip], includeWBNode: Bool, cct: Double?, tint: Double) -> String {
@@ -447,7 +447,9 @@ enum ResolveExporter {
 
     private static func wbCube(cct: Double?, tint: Double, size: Int, srcCCT: Double? = nil, srcTint: Double = 0) -> String {
         let m = wbRGBMatrix(cct: cct, tint: tint, srcCCT: srcCCT, srcTint: srcTint)
-        return cubeFile(title: "LogBridge WB AP0 CAT \(cctLabel(cct)) tint \(tint) (ACEScct decode→ACES2065-1→encode)", size: size) {
+        // Cube TITLE keeps English pending / identity for compatibility.
+        let titleCCT = cct.map { "\(Int($0)) K" } ?? "pending / identity"
+        return cubeFile(title: "LogBridge WB AP0 CAT \(titleCCT) tint \(tint) (ACEScct decode→ACES2065-1→encode)", size: size) {
             wbInACEScct($0, matrix: m)
         }
     }
@@ -669,7 +671,7 @@ enum ResolveExporter {
         let gain = pow(2.0, exposureStops)
         var idtNodes = ""
         if idts.isEmpty {
-            idtNodes = "    <IDT idt=\"(user picker)\" file=\"\" resolveOutputColorSpace=\"ACEScct\" resolveOutputGamma=\"ACEScct\"/>\n"
+            idtNodes = "    <IDT idt=\"用户选择成对 IDT\" file=\"\" resolveOutputColorSpace=\"ACEScct\" resolveOutputGamma=\"ACEScct\"/>\n"
         } else {
             for idt in idts {
                 let cst = resolveCST(idt)
@@ -691,7 +693,7 @@ enum ResolveExporter {
             <File role="dctl">02_Exposure.dctl</File>
           </Node>
           <Node index="3" name="WB" type="Corrector" bypassable="true" enabled="\(enabled)" method="bradford">
-            <Description>As-shot CCT/tint fills knobs (UI only); default CAT is identity — do not treat as-shot 5600/6504 as an illuminant (double WB). Missing CCT/tint is pending / identity (do not guess 5600 or 6504). Bypass WB = IDT → Exposure → ACEScct, no bake.</Description>
+            <Description>As-shot CCT/tint fills knobs (UI only); default CAT is identity — do not treat as-shot 5600/6504 as an illuminant (double WB). Missing CCT/tint is 待定 / 单位阵 (do not guess 5600 or 6504). Bypass WB = IDT → Exposure → ACEScct, no bake.</Description>
             \(cct == nil ? "<CCT pending=\"true\" source=\"unknown\"/>" : "<CCT>\(String(format: "%.4f", cct!))</CCT>")
             <Tint>\(String(format: "%.6f", tint))</Tint>
             <File role="lut">03_WB.cube</File>
@@ -762,7 +764,7 @@ enum ResolveExporter {
            - `03_WB.cube` — ACEScct wrap of the linear AP0 Bradford/CAT02 3×3 (decode → ACES2065-1 CAT → encode).
            - `03_WB.dctl` — DI-free DCTL: decode ACEScct → AP1→AP0 → AP0 3×3 → encode. **Bypass WB** or disable node 2 = IDT → ACEScct, no bake.
            - `03_WB.cdl` / `03_WB.ccc` — ASC CDL Color Corrector for the same serial slot (slope = CAT × (1,1,1); offset 0; power 1). Prefer the cube/DCTL for the full 3×3; the CDL is the bypassable corrector form.
-           - CCT \(cctLabel(cct)), tint \(tint), method Bradford. As-shot fills knobs (UI only); default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT is pending / identity (do not guess 5600 or 6504). Scene-linear only.
+           - CCT \(cctLabel(cct)), tint \(tint), method Bradford. As-shot fills knobs (UI only); default CAT is identity (do not CAT as-shot 5600/6504 toward D65). Missing CCT is 待定 / 单位阵 (do not guess 5600 or 6504). Scene-linear only.
 
         3. **709 预览** — `04_ODT_Rec709.cube` or CST
            - Optional preview node, off by default. Off = ACEScct deliverable.
