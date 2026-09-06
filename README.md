@@ -43,7 +43,7 @@ python3 scripts/generate_ocio_assets.py
 
 这是 **本机试用包**，不是商店上架。不要去做 App Store 分发、公证（notarization）、付费开发者账号。本机 Run 或 Archive 拷出 `.app` 就够。
 
-**提醒：写出的代理 EXR 是图序列，不是视频。** 整段代理，不是全精度成片。**CI 绿不等于达芬奇已验证。** 真机达芬奇怎么点、看什么算对，见 `ACCEPTANCE.md` 的「真机达芬奇验收」。
+**提醒：写出的代理 EXR 是图序列，不是视频。** 整段代理，不是全精度成片。**CI 绿不等于达芬奇已验证。** 真机达芬奇怎么点、看什么算对，见 `ACCEPTANCE.md` 的「真机达芬奇验收」。缺前置时本轮记「未跑」，见同文件「缺前置时怎么记（不假验）」。
 
 Open in Xcode (macOS). Xcode 15+，macOS 14 deployment target.
 

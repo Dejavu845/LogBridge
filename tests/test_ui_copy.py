@@ -251,6 +251,20 @@ def test_docs_name_resolve_real_machine_checklist():
     assert "Gatekeeper" in acceptance
     assert "xattr" in acceptance
     assert "不要公证" in acceptance
+    # Missing-prereq ledger: skip this round, write 未跑. Not a Resolve pass.
+    assert "缺前置时怎么记（不假验）" in acceptance
+    assert "本轮跳过真机验收，记「未跑」" in acceptance
+    assert "没有能跑的 Mac `.app`" in acceptance
+    assert "本机没有达芬奇 Resolve" in acceptance
+    assert "没有自备混源 Log" in acceptance
+    assert "真机达芬奇验收：未跑（缺：Mac.app / Resolve / 自备片）" in acceptance
+    assert "不进产品 UI" in acceptance
+    assert "有前置仍按原 1–7" in acceptance
+    assert "已实现、未验证" in acceptance
+    assert "缺前置时怎么记（不假验）" in readme
+    assert "未跑" in readme
+    swift = _all_swift()
+    assert "真机达芬奇验收：未跑（缺：Mac.app / Resolve / 自备片）" not in swift
 
 
 def test_trial_quarantine_script_is_local_xattr_only():
