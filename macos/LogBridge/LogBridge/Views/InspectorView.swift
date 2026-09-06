@@ -271,7 +271,7 @@ struct ODTInspector: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("输出")
                 .font(.subheadline.weight(.semibold))
-            Picker("ODT", selection: Binding(
+            Picker("预览输出", selection: Binding(
                 get: { session.graph.odt },
                 set: { session.setODT($0) }
             )) {
@@ -289,7 +289,7 @@ struct ODTInspector: View {
                     .foregroundStyle(.secondary)
             }
             if session.graph.odt.isHDR {
-                Text("ColorSync itur_2100。预览·非成片，未与 709 匹配。")
+                Text("系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
