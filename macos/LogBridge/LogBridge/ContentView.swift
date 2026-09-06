@@ -312,7 +312,7 @@ struct SplitPreview: View {
     }
 }
 
-/// Movie: slider first…last from duration × metadata fps. Cache hit: 只重跑 ODT.
+/// Movie: slider first…last from duration × metadata fps. Cache hit: 只重跑预览输出.
 /// Missing fps/duration: Chinese fail, no fake range. Stills: no slider.
 struct PreviewScrubBar: View {
     @ObservedObject var session: SessionModel
