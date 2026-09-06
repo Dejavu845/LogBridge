@@ -153,12 +153,8 @@ EXPORT_NOTE_FILES = (
     "文件：graph.xml, graph.dot, 01_IDT_*.cube, 02_Exposure.{cube,dctl}, "
     "03_WB.{cube,cdl,ccc,dctl}, 04_ODT_Rec709.cube, README_RESOLVE.md"
 )
-EXPORT_NOTE_LOCKED_ONLY = (
-    "仅已锁定成对 IDT 片段。待选仍列出（先选择成对 IDT / 先选择 Log 与色域）。"
-)
-EXPORT_NOTE_EXPOSURE = (
-    "曝光是独立节点（以档为单位；0 档不写进 IDT/白平衡）。旁路白平衡：关掉白平衡节点。"
-)
+EXPORT_NOTE_LOCKED_ONLY = "仅已锁定成对 IDT 片段。待选仍列出（先选择成对 IDT / 先选择 Log 与色域）。"
+EXPORT_NOTE_EXPOSURE = "曝光是独立节点（以档为单位；0 档不写进 IDT/白平衡）。旁路白平衡：关掉白平衡节点。"
 EXPORT_NOTE_CCT_PENDING = "待定 / 单位阵（不猜 5600 或 6504）"
 
 

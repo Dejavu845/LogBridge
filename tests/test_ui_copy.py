@@ -2751,8 +2751,13 @@ def test_export_note_is_plain_chinese():
     assert EXPORT_NOTE_LOCKED_ONLY in py_on
     assert py_on.splitlines()[-1] == "片段："
     assert "WB 节点：已写出但默认旁路（不改颜色）" in py_off
-    assert "待定 / 单位阵" in py_off
-    for blob in (py_on, py_off):
+    py_pending = export_note(include_wb=True, cct=None, tint=0.0)
+    assert "待定 / 单位阵" in py_pending
+    assert (
+        "WB 节点：开（按色温/绿品校正，待定 / 单位阵（不猜 5600 或 6504），绿品 0.0）"
+        in py_pending
+    )
+    for blob in (py_on, py_off, py_pending):
         for token in banned:
             assert token not in blob, token
         assert "pending / identity" not in blob
@@ -2803,7 +2808,9 @@ def test_export_note_is_plain_chinese():
     )[0]
     assert REC709_CUBE_TITLE in odt_fn
     assert REC709_CUBE_TITLE in py
-    assert REC709_CUBE_COMMENT in py
+    assert "DIY BT.709 OETF preview" in py
+    assert "Not an ACES Output Transform / RRT." in py
+    assert REC709_CUBE_COMMENT.startswith("# 709 预览")
     assert "DIY BT.709 OETF preview" in odt_fn
     assert "Not an ACES Output Transform" in odt_fn
     assert 'name="ODT_Rec709"' in xml_fn or "ODT_Rec709" in xml_fn
