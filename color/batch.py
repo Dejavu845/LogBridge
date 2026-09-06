@@ -1070,13 +1070,13 @@ def progress_text(
     frame: int | None = None,
     frame_total: int | None = None,
 ) -> str:
-    """Chinese write progress. Example: 「写出代理 2/5 · frame 120」."""
+    """Chinese write progress. Example: 「写出代理 2/5 · 第 120 帧」."""
     note = f"{PROGRESS_PREFIX} {clip_index}/{clip_total}"
     if frame is None:
         return note
     if frame_total is not None:
-        return f"{note} · frame {frame}/{frame_total}"
-    return f"{note} · frame {frame}"
+        return f"{note} · 第 {frame} / 共 {frame_total} 帧"
+    return f"{note} · 第 {frame} 帧"
 
 
 def cancelled_status_text(processed: int, skipped: int) -> str:

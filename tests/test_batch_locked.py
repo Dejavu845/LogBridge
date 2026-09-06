@@ -1076,8 +1076,8 @@ def test_progress_and_cancel_copy_is_honest_not_chengpian():
     assert CANCEL_BUTTON == "取消"
     assert CANCELLED_NOTE == "已取消"
     assert PROGRESS_PREFIX == "写出代理"
-    assert progress_text(2, 5, 120) == "写出代理 2/5 · frame 120"
-    assert progress_text(2, 5, 120, 240) == "写出代理 2/5 · frame 120/240"
+    assert progress_text(2, 5, 120) == "写出代理 2/5 · 第 120 帧"
+    assert progress_text(2, 5, 120, 240) == "写出代理 2/5 · 第 120 / 共 240 帧"
     assert progress_text(1, 3) == "写出代理 1/3"
     cancelled = cancelled_status_text(1, 2)
     assert CANCELLED_NOTE in cancelled
@@ -1168,7 +1168,7 @@ def test_cancel_removes_in_progress_folder_keeps_completed(tmp_path: Path):
     assert short_export_path(tmp_path) not in report.processed_status_text
     _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
     assert any(n.startswith("写出代理 1/2") for n in notes)
-    assert any("frame" in n for n in notes)
+    assert any("第" in n and "帧" in n for n in notes)
     clip = _read(CLIP)
     export_body = clip.split("func exportLockedEXR")[1].split("func cancelLockedDeliverables")[0]
     assert "LockedWriteCancel" in export_body
