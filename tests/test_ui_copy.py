@@ -323,8 +323,9 @@ def test_exposure_inspector_and_preview_not_finished_picture():
     assert "不加减 Log 码值" in exposure
     assert INSPECTOR_GAIN_LIVE in exposure
     assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}"' in exposure
+    assert 'String(format: "%+.2f st"' not in exposure
     assert "%+.2f st" not in exposure
-    assert " st" not in exposure
+    assert " st" not in INSPECTOR_EXPOSURE_READOUT
     assert "2^stops" not in exposure
     assert "CAT(user→D65)" not in exposure
     assert "rgb × (2^stops)" not in exposure
@@ -966,8 +967,9 @@ def test_inspector_exposure_wb_help_no_formula_stack():
     assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
     assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
     assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}"' in exposure
+    assert 'String(format: "%+.2f st"' not in exposure
     assert "%+.2f st" not in exposure
-    assert " st" not in exposure
+    assert " st" not in INSPECTOR_EXPOSURE_READOUT
     assert f'Text("{INSPECTOR_WB_HELP}")' in wb
     assert 'Text("Bradford")' in wb
     assert 'Text("CAT02")' in wb
@@ -1027,10 +1029,11 @@ def test_inspector_exposure_readout_unit_dang():
     inspector = _read(INSPECTOR)
     exposure = inspector.split("struct ExposureInspector")[1]
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert " st" not in INSPECTOR_EXPOSURE_READOUT
     assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}"' in exposure
     assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}", session.graph.exposureStops)' in exposure
+    assert 'String(format: "%+.2f st"' not in exposure
     assert "%+.2f st" not in exposure
-    assert " st" not in exposure
     # ⑮ locked help / gain stay; this knife is the readout suffix only.
     assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
     assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
@@ -1994,8 +1997,9 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
     assert INSPECTOR_EXPOSURE_HELP in exposure
     assert INSPECTOR_GAIN_LIVE in exposure
     assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}"' in exposure
+    assert 'String(format: "%+.2f st"' not in exposure
     assert "%+.2f st" not in exposure
-    assert " st" not in exposure
+    assert " st" not in INSPECTOR_EXPOSURE_READOUT
     assert "2^stops" not in exposure
     assert "CAT(user→D65)" not in exposure
     assert "rgb × (2^stops)" not in exposure
