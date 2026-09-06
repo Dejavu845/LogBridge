@@ -71,6 +71,9 @@ ENGINE = SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift"
 GRAPH = SWIFT_ROOT / "LogBridge/LogBridge/Models/NodeGraph.swift"
 NODE_STRIP = SWIFT_ROOT / "LogBridge/LogBridge/Views/NodeStripView.swift"
 
+SETTINGS_PREVIEW_HELP = (
+    "默认 Rec.709（角标预览·非成片）。不是成片，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
+)
 ACES_OT_NOTE_OFF = "导出 ACEScct / EXR"
 ACES_OT_NOTE_REC709 = "DIY 预览·非成片"
 ACES_OT_NOTE_HDR = "ColorSync 预览·非成片，不是 ACES OT"
@@ -394,6 +397,13 @@ def test_user_visible_english_leftovers_are_chinese():
 
     assert "已实现（未验证）" in settings
     assert "implemented (unverified)" not in settings.lower()
+    assert SETTINGS_PREVIEW_HELP in settings
+    assert "预览·非成片" in settings
+    assert "DIY OETF" not in _code_without_comments(settings)
+    assert "DIY" not in _code_without_comments(settings)
+    assert "完善" not in settings
+    assert "精准" not in settings or "不写精准" in settings
+    assert "达芬奇已验证" not in settings
 
     export_fn = clip.split("func exportResolve()")[1]
     assert 'panel.prompt = "导出"' in export_fn
@@ -1908,6 +1918,24 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
 
 def _code_without_comments(src: str) -> str:
     return "\n".join(line.split("//", 1)[0] for line in src.splitlines())
+
+
+def test_settings_preview_help_has_no_diy_oetf():
+    """Settings preview caption: no DIY OETF; 预览·非成片 stays. Picker unchanged."""
+    settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
+    ui = _code_without_comments(settings)
+    assert SETTINGS_PREVIEW_HELP in settings
+    assert "预览·非成片" in settings
+    assert "角标预览·非成片" in settings
+    assert "DIY OETF" not in ui
+    assert "DIY" not in ui
+    assert 'Text("Rec.709 预览·非成片").tag(ODTMode.rec709)' in settings
+    assert 'Text("Rec.2100 HLG 预览·非成片").tag(ODTMode.hlg)' in settings
+    assert 'Text("Rec.2100 PQ 预览·非成片").tag(ODTMode.pq)' in settings
+    assert "完善" not in settings
+    assert "精准" not in settings or "不写精准" in settings
+    assert "达芬奇已验证" not in settings
+    _chengpian_only_honesty(SETTINGS_PREVIEW_HELP)
 
 
 def test_trial_usability_copy_is_locked():
