@@ -172,7 +172,7 @@ Decode policy only. No color-number changes. Do **not** write 全格式已支持
 
 - **Tried:** MOV/MP4 ProRes (422 family + 4444/XQ), H.264, HEVC 8/10-bit (422 depends on the machine). Decode is still **AVAssetReader + Y′CbCr**, matrix-only. No `copyCGImage`. No `AVVideoColorPropertiesKey` Rec.709.
 - **Stills:** TIFF / DPX / EXR via ImageIO.
-- **MXF:** try only if the system recognizes ProRes / AVC / HEVC. **ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入.** Unrecognized MXF is skipped.
+- **MXF:** try only if the system recognizes ProRes / AVC / HEVC. True ARRI: **ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入.** Undecodable / no fourCC: **MXF：系统认不出可解轨道，未导入.** `.ari` / `.arx` stay on the camera-raw refuse line, not the ARRI MXF chip.
 - **Refused (same R3D line):** R3D / BRAW / CRM / X-OCN / N-RAW / ProRes RAW / CinemaDNG / .ari / .arx — **R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR**. Unknown fourcc (e.g. r210) is refused with a separate line, not the R3D copy.
 - Empty camera-private metadata → paired IDT picker (**先选择 Log 与色域**). Do not guess an IDT or 5600 K.
 - D-Log M stays unsupported (IDT scope, not a container claim). Apple Log 2 / LogC3 EI800+AWG3 are implemented (unverified).

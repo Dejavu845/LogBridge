@@ -1258,10 +1258,11 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
     assert short_export_chip("no IDT") == REASON_PICK_PAIRED_IDT
     assert short_export_chip("write produced no file") == WRITE_FAILED_CHIP
     assert preserved_failure_note(DECODE_FAILED_CHIP) == DECODE_FAILED_CHIP
-    from color.formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_UNKNOWN_CODEC
+    from color.formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_MXF_NO_TRACK, NOTE_UNKNOWN_CODEC
 
     assert short_export_chip(NOTE_CAMERA_RAW) == NOTE_CAMERA_RAW
     assert short_export_chip(NOTE_ARRI_MXF) == NOTE_ARRI_MXF
+    assert short_export_chip(NOTE_MXF_NO_TRACK) == NOTE_MXF_NO_TRACK
     assert short_export_chip(NOTE_UNKNOWN_CODEC) == NOTE_UNKNOWN_CODEC
     assert user_facing_failure_note(GENERIC_PARSE_FAILED) == DECODE_FAILED_CHIP
     assert user_facing_failure_note(NOTE_CAMERA_RAW) == NOTE_CAMERA_RAW

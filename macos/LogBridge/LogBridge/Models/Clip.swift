@@ -648,6 +648,7 @@ final class SessionModel: ObservableObject {
             return desc
         }
         if desc == MediaFormat.noteCameraRaw || desc == MediaFormat.noteARRIMxf
+            || desc == MediaFormat.noteMxfNoTrack
             || desc == MediaFormat.noteUnknownCodec {
             return desc
         }
@@ -1112,7 +1113,7 @@ final class SessionModel: ObservableObject {
                 if probe.decision == .tryDecode {
                     // MXF: only keep if the system can open a video track.
                     if MediaFormat.codecFourCC(url: file) == nil {
-                        skipped.append("\(file.lastPathComponent)：\(MediaFormat.noteARRIMxf)")
+                        skipped.append("\(file.lastPathComponent)：\(MediaFormat.noteMxfNoTrack)")
                         continue
                     }
                 }
