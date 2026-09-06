@@ -9,24 +9,44 @@ CLIP = ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift"
 SIDEBAR = ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift"
 
 
+SETTINGS_PREVIEW_HELP = (
+    "默认 Rec.709（角标预览·非成片）。不是成片，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
+)
+
+
 def _read(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
 
+def _code_without_comments(src: str) -> str:
+    return "\n".join(line.split("//", 1)[0] for line in src.splitlines())
+
+
 def test_settings_copy_is_chinese():
     s = _read(SETTINGS)
+    ui = _code_without_comments(s)
     assert "默认预览" in s
     assert "Rec.709 预览·非成片" in s
     assert "Rec.2100 HLG 预览·非成片" in s
     assert "Rec.2100 PQ 预览·非成片" in s
+    assert 'Text("Rec.709 预览·非成片").tag(ODTMode.rec709)' in s
+    assert 'Text("Rec.2100 HLG 预览·非成片").tag(ODTMode.hlg)' in s
+    assert 'Text("Rec.2100 PQ 预览·非成片").tag(ODTMode.pq)' in s
+    assert SETTINGS_PREVIEW_HELP in s
+    assert "预览·非成片" in s
+    assert "角标预览·非成片" in s
+    assert "DIY OETF" not in ui
+    assert "DIY" not in ui
     assert "导入后提示估计白平衡" in s
     assert "未锁 IDT 挡住处理" in s
     assert "不能关" in s
     assert "不猜 5600" in s
     assert "不是校准" in s
+    assert "完善" not in s
     assert "精准" not in s or "不写精准" in s
     assert "一键还原" not in s or "不写" in s
     assert "全自动校准" not in s or "不写" in s
+    assert "达芬奇已验证" not in s
     assert "已实现（未验证）" in s
     assert "implemented (unverified)" not in s.lower()
 
