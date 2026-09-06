@@ -2109,7 +2109,7 @@ def test_locked_success_implies_exr_and_complete_resolve_bundle(tmp_path: Path):
         assert text.strip()
         _assert_chengpian_not_a_deliverable_claim(text)
     readme = (dest / RESOLVE_REQUIRED_README).read_text(encoding="utf-8")
-    assert "709 预览，不是 ACES 输出变换，默认关。预览·非成片。" in readme
+    assert "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。" in readme
     assert "不是 ACES 输出变换" in readme
     assert "Not an ACES Output Transform" not in readme.split(
         "## Graph (serial nodes)", 1

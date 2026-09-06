@@ -226,8 +226,8 @@ def test_export_default_odt_off_acescct_deliverable(tmp_path: Path):
     )
     xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
     assert 'name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="false"' in xml
-    assert "ACEScct deliverable" in xml
-    assert GRAPH_ODT_XML_DESC in xml
+    assert GRAPH_ODT_USER in xml
+    assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
     assert "预览·非成片" in xml
     readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
     assert GRAPH_ODT_USER in readme
@@ -651,7 +651,7 @@ def test_readme_graph_odt_user_copy_is_locked_chinese(tmp_path: Path):
     cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
 
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，默认关。预览·非成片。"
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
     )
     generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True)
     py_graph = _graph_section(generated)
@@ -664,7 +664,8 @@ def test_readme_graph_odt_user_copy_is_locked_chinese(tmp_path: Path):
         assert token not in py_graph
         assert token not in written_graph
 
-    assert GRAPH_ODT_XML_DESC in xml
+    assert GRAPH_ODT_USER in xml
+    assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
     assert 'name="ODT_Rec709" type="LUT_or_CST" bypassable="true"' in xml
     assert 'name="IDT"' in xml
     assert 'name="Exposure"' in xml
@@ -755,7 +756,7 @@ def test_709_cube_labeled_preview_not_aces_ot(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(cube)
     assert REC709_PREVIEW_LABEL in xml
     assert 'type="ACES_OT"' not in xml
-    assert GRAPH_ODT_XML_DESC in xml
+    assert GRAPH_ODT_USER in xml
     assert "预览·非成片" in xml
     assert REC709_PREVIEW_LABEL in readme
     assert GRAPH_ODT_USER in readme

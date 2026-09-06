@@ -2901,7 +2901,7 @@ def test_export_note_is_plain_chinese():
     assert REC709_CUBE_TITLE in odt_fn
     assert REC709_CUBE_TITLE in py
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，默认关。预览·非成片。"
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
     )
     assert REC709_CUBE_COMMENT == f"# {GRAPH_ODT_USER}"
     assert REC709_CUBE_COMMENT.startswith("# 709 预览")
