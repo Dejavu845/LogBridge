@@ -2397,18 +2397,23 @@ def test_mxf_no_track_chip_not_arri():
 def test_cancel_batch_status_english_leftovers_are_chinese():
     """Cancel / batch / export status leftovers stay locked Chinese.
 
-    Reuse 写出失败 · 没有素材. cancelledExportNote / batch summary stay
-    已取消 + buckets + honesty. No new chips, buttons, or success claims.
+    Wrote… → existing 已写出 N 个文件 + 整段代理，不是全精度成片.
+    Export failed: → 写出失败. No clip selected → 没有素材.
+    cancelledExportNote / batch summary stay 已取消 + buckets + honesty.
+    No new chips, buttons, or success claims.
     """
     clip = _read(CLIP)
     content = _read(CONTENT)
     engine = _read(ENGINE)
     preview = _read(PREVIEW)
+    hdr = _read(SWIFT_ROOT / "LogBridge/LogBridge/Color/HDRPreview.swift")
+    inspector = _read(INSPECTOR)
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
     strip = _read(NODE_STRIP)
 
     assert WRITE_FAILED_CHIP == "写出失败"
     assert PREVIEW_STATUS_EMPTY == "没有素材"
+    assert WROTE_FILES_NOTE == "已写出 {n} 个文件"
     assert CANCELLED_NOTE == "已取消"
     assert SKIPPED_BUCKET == "待选跳过"
     assert FAILED_BUCKET == "失败原因"
@@ -2431,24 +2436,30 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     assert f'status: String = "{PREVIEW_STATUS_EMPTY}"' in engine
     assert f'return session.selectedClip?.lockedPairLabel ?? "{PREVIEW_STATUS_EMPTY}"' in strip
 
-    ui_clip = _code_without_comments(clip)
-    ui_content = _code_without_comments(content)
-    ui_engine = _code_without_comments(engine)
-    ui_preview = _code_without_comments(preview)
-    ui_sidebar = _code_without_comments(sidebar)
-    leftover_en = (
-        "Wrote ",
-        "Wrote…",
-        "Wrote...",
-        "Export failed",
-        "Export failed:",
-        "No clip selected",
-        "Cancelled",
-        "canceled",
-    )
-    for chunk in (ui_clip, ui_content, ui_engine, ui_preview, ui_sidebar):
+    resolve_fn = clip.split("func exportResolve()")[1]
+    ui_resolve = _code_without_comments(resolve_fn)
+    assert "已写出 \\(written.count) 个文件" in resolve_fn
+    assert HONEST_PROXY_NOTE in resolve_fn
+    assert "Wrote " not in ui_resolve
+    assert "shortExportChip" in resolve_fn
+    assert "Export failed:" not in ui_resolve
+    _chengpian_only_honesty(resolve_fn.split("note +=")[1].split("self.lastExportNote")[0])
+
+    ui_paths = {
+        "clip": _code_without_comments(clip),
+        "content": _code_without_comments(content),
+        "engine": _code_without_comments(engine),
+        "preview": _code_without_comments(preview),
+        "hdr": _code_without_comments(hdr),
+        "inspector": _code_without_comments(inspector),
+        "sidebar": _code_without_comments(sidebar),
+        "strip": _code_without_comments(strip),
+    }
+    gate_en = ("Wrote ", "Export failed:", "No clip selected")
+    leftover_en = gate_en + ("Wrote…", "Wrote...", "Export failed", "Cancelled", "canceled")
+    for name, chunk in ui_paths.items():
         for token in leftover_en:
-            assert token not in chunk, token
+            assert token not in chunk, f"{name}: {token}"
 
     cancel_note = clip.split("func cancelledExportNote")[1].split(
         "static let bytesPerEXRPixel"
@@ -2520,6 +2531,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     for note in (
         WRITE_FAILED_CHIP,
         PREVIEW_STATUS_EMPTY,
+        WROTE_FILES_NOTE,
         CANCELLED_NOTE,
         SKIPPED_BUCKET,
         FAILED_BUCKET,
