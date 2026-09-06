@@ -1323,9 +1323,11 @@ def test_nodestrip_exposure_detail_unit_dang():
         in ui_strip
     )
 
-    # 验法⑳-2: ban user-facing `%+.2f st` / isolated st on that readout.
+    # 验法⑳-2: ban user-facing `%+.2f st` / isolated st on the node strip.
+    # Identifiers (exposureStops) and comments (strip) are not this ban.
     assert "%+.2f st" not in exposure_detail
     assert "%+.2f st" not in strip
+    assert "%+.2f st" not in ui_strip
     assert 'String(format: "%+.2f st"' not in exposure_detail
     assert 'String(format: "%+.2f st"' not in ui_strip
     assert " st" not in NODE_STRIP_EXPOSURE_READOUT
@@ -1336,6 +1338,12 @@ def test_nodestrip_exposure_detail_unit_dang():
         assert unit == "档"
         assert unit != "st"
         assert "st" not in unit
+    import re
+
+    strip_lits = re.findall(r'"([^"\\]*(?:\\.[^"\\]*)*)"', ui_strip)
+    assert "%+.2f 档" in strip_lits
+    for lit in strip_lits:
+        assert not re.search(r"(?<![A-Za-z])st(?![A-Za-z])", lit), lit
 
     # 验法⑳-3: ⑮–⑲ frozen. Inspector Text("档") stays; do not flip ㉑.
     assert INSPECTOR_EXPOSURE_HELP == (
@@ -1396,7 +1404,7 @@ def test_nodestrip_exposure_detail_unit_dang():
     assert 'return "机内未知"' in detail
     assert "NodeChip(" in strip
 
-    # 验法⑳-5: test_ui_copy locks NodeStrip `%+.2f 档` and bans isolated st (above).
+    # 验法⑳-5: test_ui_copy locks NodeStrip `%+.2f 档` and bans isolated st on the strip.
     assert "完善" not in exposure_detail
     assert "精准" not in exposure_detail
     assert "达芬奇已验证" not in exposure_detail
