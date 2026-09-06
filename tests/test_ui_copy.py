@@ -2769,6 +2769,7 @@ def test_export_note_is_plain_chinese():
         "Bradford CAT",
         "stops；",
         "Bypass WB",
+        "不烘焙白平衡",
     )
     locked = (
         EXPORT_NOTE_REC709,
@@ -2879,13 +2880,17 @@ def test_export_note_is_plain_chinese():
     honesty_fn = readme_fn.split("## Graph (serial nodes)")[0]
     assert EXPORT_NOTE_REC709 in honesty_fn
     assert EXPORT_NOTE_WB_BYPASS in honesty_fn
+    assert EXPORT_NOTE_WB_OFF == "已写出但默认旁路（不改颜色）"
     assert EXPORT_NOTE_WB_OFF in readme_fn
     assert "DIY BT.709 OETF" not in honesty_fn
     assert "identity" not in honesty_fn
     assert "enabled=false" not in honesty_fn
     assert "preview only" not in honesty_fn
     assert "Not an ACES Output Transform" not in honesty_fn
+    assert "不烘焙白平衡" not in honesty_fn
     assert "不烘焙白平衡" not in readme_fn
+    assert "不烘焙白平衡" not in py
+    assert "不烘焙白平衡" not in exporter
     # Graph technical docs keep jargon. Honesty notes do not.
     assert "DIY BT.709 OETF" in readme_fn
     assert "Bradford" in readme_fn

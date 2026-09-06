@@ -402,17 +402,22 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
     assert RESOLVE_README_HONESTY.strip() in readme
     assert EXPORT_NOTE_REC709 in honesty
     assert EXPORT_NOTE_WB_BYPASS in honesty
+    assert EXPORT_NOTE_WB_OFF == "已写出但默认旁路（不改颜色）"
     assert EXPORT_NOTE_WB_OFF in readme
-    assert "不烘焙白平衡" not in readme
     banned_honesty = (
         "DIY BT.709 OETF",
         "identity",
         "enabled=false",
         "preview only",
         "Not an ACES Output Transform",
+        "不烘焙白平衡",
     )
     for token in banned_honesty:
         assert token not in honesty
+        assert token not in RESOLVE_README_HONESTY
+        assert token not in EXPORT_NOTE_WB_OFF
+        assert token not in EXPORT_NOTE_WB_BYPASS
+        assert token not in EXPORT_NOTE_REC709
     assert "机内色温只填旋钮，默认 CAT 是单位阵。" in honesty
     assert "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。" in honesty
     assert "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。" in honesty
@@ -442,6 +447,9 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
     assert EXPORT_NOTE_WB_OFF in readme_fn
     for token in banned_honesty:
         assert token not in swift_honesty
+    assert "不烘焙白平衡" not in readme_fn
+    assert "不烘焙白平衡" not in note_fn
+    assert "不烘焙白平衡" not in readme
     for blob in (note_fn, readme_fn):
         assert "709 预览" in blob
         assert "整段代理，不是全精度成片" in blob
