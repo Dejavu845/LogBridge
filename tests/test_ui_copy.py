@@ -103,6 +103,7 @@ NODE_STRIP_EXPOSURE_DETAIL = "%+.2f 档"
 INSPECTOR_WB_CCT_LABEL = "色温"
 INSPECTOR_EXPOSURE_UNIT_LABEL = "档"
 INSPECTOR_ODT_PICKER_TITLE = "预览输出"
+EXPORT_NOTE_ODT_LOCKED = "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
 INSPECTOR_WB_CAT_PICKER_TITLE = "适应方法"
 INSPECTOR_HDR_PREVIEW_NOTE = (
     "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
@@ -3778,9 +3779,12 @@ def test_export_note_is_plain_chinese():
     assert EXPORT_NOTE_WB_BYPASS == "关闭白平衡时写出旁路（不改颜色），不写进查找表。"
     assert EXPORT_NOTE_WB_ON == "开（按色温/绿品校正，{cctLabel}，绿品 {tint}）"
     assert EXPORT_NOTE_WB_OFF == "已写出但默认旁路（不改颜色）"
+    assert EXPORT_NOTE_ODT == EXPORT_NOTE_ODT_LOCKED
     assert EXPORT_NOTE_ODT == (
-        "ODT：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+        "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
     )
+    assert not EXPORT_NOTE_ODT.startswith("ODT：")
+    assert "ODT：" not in EXPORT_NOTE_ODT
     assert EXPORT_NOTE_EXPOSURE == (
         "曝光是独立节点（以档为单位；0 档不写进 IDT/白平衡）。旁路白平衡：关掉白平衡节点。"
     )
@@ -3819,6 +3823,7 @@ def test_export_note_is_plain_chinese():
         "默认 CAT 是单位阵",
         "相对变换 CAT",
         "绝对 CAT",
+        "ODT：",
     )
     locked = (
         EXPORT_NOTE_REC709,
@@ -3886,6 +3891,8 @@ def test_export_note_is_plain_chinese():
     assert f'"{EXPORT_NOTE_WB_OFF}"' in note_fn
     assert "WB 节点：" in note_fn
     assert f'"{EXPORT_NOTE_ODT}"' in note_fn
+    assert "ODT：" not in ui_note
+    assert "ODT：709 预览" not in note_fn
     assert f'"{EXPORT_NOTE_EXPOSURE}"' in note_fn
     assert EXPORT_NOTE_TITLE in note_fn
     assert EXPORT_NOTE_WORKSPACE in note_fn
@@ -4219,3 +4226,158 @@ def test_readme_resolve_graph_wb_plain_chinese():
     _chengpian_only_honesty(honesty_to)
     _chengpian_only_honesty(graph_wb_to)
     _chengpian_only_honesty(generated)
+
+
+def test_export_note_odt_preview_output_zh():
+    """exportNote ㉖ 验法: ODT： → 预览输出：. Align ㉑. ㉕ honesty/Graph WB frozen. No alg."""
+    from color.resolve_export import (
+        EXPORT_NOTE_IN_CAMERA,
+        EXPORT_NOTE_ODT,
+        GRAPH_ODT_USER,
+        GRAPH_ODT_XML_DESC,
+        GRAPH_WB_SUMMARY,
+        REC709_CUBE_TITLE,
+        export_note,
+    )
+
+    odt_to = "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+    odt_from = "ODT：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+    honesty_to = (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    graph_wb_to = (
+        "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    )
+    graph_wb_swift = (
+        "色温 \\(cctLabel(cct))，绿品 \\(tint)，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    )
+
+    # 验法㉖-1: exportNote ODT 行 一字不差. Align ㉑ Picker("预览输出"). Suffix 不动.
+    assert EXPORT_NOTE_ODT_LOCKED == odt_to
+    assert EXPORT_NOTE_ODT == odt_to
+    assert EXPORT_NOTE_ODT == EXPORT_NOTE_ODT_LOCKED
+    assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
+    assert EXPORT_NOTE_ODT.startswith(f"{INSPECTOR_ODT_PICKER_TITLE}：")
+    assert EXPORT_NOTE_ODT.endswith("709 预览（不是 ACES 输出变换），默认关。预览·非成片。")
+
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    inspector = _read(INSPECTOR)
+    settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
+    engine = _read(ENGINE)
+    py = (ROOT / "color/resolve_export.py").read_text(encoding="utf-8")
+    note_fn = exporter.split("static func exportNote")[1].split("static func export(")[0]
+    ui_note = _code_without_comments(note_fn)
+    readme_fn = exporter.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    xml_fn = exporter.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    odt_fn = exporter.split("private static func odtCube")[1].split(
+        "private static func exposureCube"
+    )[0]
+    honesty_fn = readme_fn.split("## Graph (serial nodes)")[0]
+    graph_fn = readme_fn.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    exposure = inspector.split("struct ExposureInspector")[1]
+    odt_insp = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
+    strip = _read(NODE_STRIP)
+
+    assert f'"{odt_to}"' in note_fn
+    assert f'EXPORT_NOTE_ODT = "{odt_to}"' in py
+    py_on = export_note(include_wb=True, cct=3200, tint=0.25)
+    assert odt_to in py_on
+    assert odt_to in ui_note
+    assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt_insp
+
+    # 验法㉖-2: 禁该用户向行以孤立 ODT： 作主语回流.
+    assert "ODT：" not in EXPORT_NOTE_ODT
+    assert not EXPORT_NOTE_ODT.startswith("ODT：")
+    assert odt_from not in EXPORT_NOTE_ODT
+    assert odt_from not in note_fn
+    assert odt_from not in ui_note
+    assert odt_from not in py
+    assert odt_from not in py_on
+    assert "ODT：" not in ui_note
+    assert '"ODT：' not in note_fn
+    assert 'EXPORT_NOTE_ODT = "ODT：' not in py
+    for line in ui_note.splitlines():
+        stripped = line.strip()
+        if "709 预览（不是 ACES 输出变换），默认关。预览·非成片。" in stripped:
+            assert stripped.lstrip('lines.append("').startswith("预览输出："), stripped
+            assert not stripped.lstrip('lines.append("').startswith("ODT："), stripped
+
+    # 验法㉖-3: ㉕诚实说明/Graph WB 两句一字不动；⑮–㉔ locked copy 不动.
+    assert EXPORT_NOTE_IN_CAMERA == honesty_to
+    assert EXPORT_NOTE_IN_CAMERA == INSPECTOR_WB_HELP
+    assert GRAPH_WB_SUMMARY == graph_wb_to
+    assert honesty_to in note_fn
+    assert honesty_to in honesty_fn
+    assert graph_wb_swift in graph_fn
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert INSPECTOR_WB_CCT_LABEL == "色温"
+    assert INSPECTOR_EXPOSURE_UNIT_LABEL == "档"
+    assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
+    assert INSPECTOR_HDR_PREVIEW_NOTE == (
+        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+    )
+    assert SETTINGS_WB_HELP == (
+        "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+    )
+    assert INSPECTOR_WB_CAT_PICKER_TITLE == "适应方法"
+    assert PREVIEW_STATUS_ODT_CACHE_HIT == "只重跑预览输出"
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert f'Text("{INSPECTOR_EXPOSURE_UNIT_LABEL}")' in exposure
+    assert f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}"' in strip
+    assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt_insp
+    assert f'Text("{SETTINGS_WB_HELP}")' in settings
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}"' in wb
+    assert f'note = "{PREVIEW_STATUS_ODT_CACHE_HIT}"' in engine
+    assert 'Picker("CAT"' not in wb
+    assert 'Picker("ODT"' not in odt_insp
+    assert "只重跑 ODT" not in engine
+    assert "不写入 CAT" not in SETTINGS_WB_HELP
+
+    # 验法㉖-4: TITLE / XML / 节点文件名 / Graph ODT Description / 色管线冻.
+    assert REC709_CUBE_TITLE == (
+        "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+    )
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
+    assert GRAPH_ODT_USER in graph_fn
+    assert GRAPH_ODT_USER in odt_fn
+    assert "04_ODT_Rec709.cube" in exporter
+    assert "04_ODT_Rec709.cube" in py
+    assert 'name="ODT_Rec709"' in xml_fn or "ODT_Rec709" in xml_fn
+    assert "graph.xml" in exporter
+    assert "03_WB.cube" in exporter
+    assert "README_RESOLVE.md" in exporter
+    assert "matrixCCT = nil" in exporter
+    assert "func uniqueImplementedIDTs" in exporter
+    assert "func odtCube" in exporter
+    assert "def odt_from_acescct" in py
+    assert "def odt_cube_bytes" in py
+
+    # 验法㉖-5: test_ui_copy / test_resolve_export lock TO + ban ODT： (above).
+    assert "完善" not in odt_to
+    assert "精准" not in odt_to
+    assert "达芬奇已验证" not in odt_to
+    assert "达芬奇已验证" not in note_fn
+    assert "达芬奇已验证" not in py_on
+    _chengpian_only_honesty(odt_to)
+    _chengpian_only_honesty(py_on)

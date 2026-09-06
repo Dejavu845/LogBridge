@@ -24,6 +24,7 @@ from color.batch import (
 from color.graph import SerialGraph
 from color.resolve_export import (
     EXPORT_NOTE_IN_CAMERA,
+    EXPORT_NOTE_ODT,
     EXPORT_NOTE_REC709,
     EXPORT_NOTE_WB_BYPASS,
     EXPORT_NOTE_WB_OFF,
@@ -36,6 +37,7 @@ from color.resolve_export import (
     RESOLVE_README_HONESTY,
     cdl_slope_offset_power,
     export_locked_resolve_bundle,
+    export_note,
     export_resolve_bundle,
     format_ccc,
     format_cdl,
@@ -1084,4 +1086,86 @@ def test_resolve_package_placeholders_are_locked_chinese(tmp_path: Path):
         assert "精准" not in blob
         assert "达芬奇已验证" not in blob
         _assert_chengpian_not_a_deliverable_claim(blob)
+
+
+EXPORT_NOTE_ODT_LOCKED = "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+EXPORT_NOTE_ODT_FROM = "ODT：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+
+
+def test_export_note_odt_preview_output_zh():
+    """exportNote ㉖: ODT： → 预览输出：. Align ㉑. ㉕ honesty/Graph WB / TITLE / XML stay."""
+    assert EXPORT_NOTE_ODT == EXPORT_NOTE_ODT_LOCKED
+    assert EXPORT_NOTE_ODT == (
+        "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+    )
+    assert EXPORT_NOTE_ODT.startswith("预览输出：")
+    assert EXPORT_NOTE_ODT.endswith("709 预览（不是 ACES 输出变换），默认关。预览·非成片。")
+    assert "ODT：" not in EXPORT_NOTE_ODT
+    assert not EXPORT_NOTE_ODT.startswith("ODT：")
+    assert EXPORT_NOTE_ODT_FROM not in EXPORT_NOTE_ODT
+
+    py_on = export_note(include_wb=True, cct=3200, tint=0.25)
+    py_off = export_note(include_wb=False, cct=None, tint=0.0)
+    assert EXPORT_NOTE_ODT in py_on
+    assert EXPORT_NOTE_ODT in py_off
+    assert EXPORT_NOTE_ODT_FROM not in py_on
+    assert EXPORT_NOTE_ODT_FROM not in py_off
+    for blob in (py_on, py_off):
+        assert "ODT：" not in blob
+        assert "达芬奇已验证" not in blob
+        _assert_chengpian_not_a_deliverable_claim(blob)
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    note_fn = swift.split("static func exportNote")[1].split("static func export(")[0]
+    readme_fn = swift.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    assert f'"{EXPORT_NOTE_ODT}"' in note_fn
+    assert f'EXPORT_NOTE_ODT = "{EXPORT_NOTE_ODT}"' in py
+    assert EXPORT_NOTE_ODT_FROM not in note_fn
+    assert EXPORT_NOTE_ODT_FROM not in py
+    assert "ODT：" not in note_fn
+    assert 'EXPORT_NOTE_ODT = "ODT：' not in py
+
+    # ㉕诚实说明 / Graph WB 一字不动.
+    assert EXPORT_NOTE_IN_CAMERA == (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert EXPORT_NOTE_IN_CAMERA in note_fn
+    assert EXPORT_NOTE_IN_CAMERA in readme_fn
+    assert GRAPH_WB_SUMMARY == GRAPH_WB_SUMMARY_LOCKED
+    assert GRAPH_WB_SWIFT in readme_fn
+
+    # FROZEN: cube TITLE, XML / Graph Descriptions, node filenames.
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
+    assert GRAPH_ODT_USER in _graph_section(readme_fn)
+    assert "04_ODT_Rec709.cube" in note_fn
+    assert "04_ODT_Rec709.cube" in py
+    for name in LOCKED_NODE_FILES:
+        assert name in swift
+        assert name in py
+    for name in LOCKED_BUNDLE_FILES:
+        assert f'"{name}"' in swift
+    assert 'name="ODT_Rec709"' in xml_fn or "ODT_Rec709" in xml_fn
+    assert "default CAT is identity" in xml_fn
+    assert "matrixCCT = nil" in swift
+    assert "def odt_from_acescct" in py
+    assert "def odt_cube_bytes" in py
+    assert "达芬奇已验证" not in note_fn
+    assert "达芬奇已验证" not in EXPORT_NOTE_ODT
+    _assert_chengpian_not_a_deliverable_claim(EXPORT_NOTE_ODT)
+    _assert_chengpian_not_a_deliverable_claim(note_fn)
 
