@@ -92,6 +92,7 @@ INSPECTOR_WB_HELP = (
     "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
 )
 INSPECTOR_GAIN_LIVE = "线性增益 = "
+INSPECTOR_EXPOSURE_READOUT = "%+.2f 档"
 INSPECTOR_HELP_FORMULA_BANNED = (
     "CAT(user→D65)",
     "2^stops",
@@ -321,6 +322,9 @@ def test_exposure_inspector_and_preview_not_finished_picture():
     assert INSPECTOR_EXPOSURE_HELP in exposure
     assert "不加减 Log 码值" in exposure
     assert INSPECTOR_GAIN_LIVE in exposure
+    assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}"' in exposure
+    assert "%+.2f st" not in exposure
+    assert " st" not in exposure
     assert "2^stops" not in exposure
     assert "CAT(user→D65)" not in exposure
     assert "rgb × (2^stops)" not in exposure
@@ -961,6 +965,9 @@ def test_inspector_exposure_wb_help_no_formula_stack():
     )
     assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
     assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}"' in exposure
+    assert "%+.2f st" not in exposure
+    assert " st" not in exposure
     assert f'Text("{INSPECTOR_WB_HELP}")' in wb
     assert 'Text("Bradford")' in wb
     assert 'Text("CAT02")' in wb
@@ -1013,6 +1020,24 @@ def test_inspector_grey_card_estimate_help_locked_chinese():
         assert "精准" not in chunk
         assert "达芬奇已验证" not in chunk
         _chengpian_only_honesty(chunk)
+
+
+def test_inspector_exposure_readout_unit_dang():
+    """Inspector ⑰: exposure readout unit st → 档. Same format specifier."""
+    inspector = _read(INSPECTOR)
+    exposure = inspector.split("struct ExposureInspector")[1]
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}"' in exposure
+    assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}", session.graph.exposureStops)' in exposure
+    assert "%+.2f st" not in exposure
+    assert " st" not in exposure
+    # ⑮ locked help / gain stay; this knife is the readout suffix only.
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert "完善" not in exposure
+    assert "精准" not in exposure
+    assert "达芬奇已验证" not in exposure
+    _chengpian_only_honesty(exposure)
 
 
 def test_idt_bar_always_visible_no_hidden_picker():
@@ -1968,6 +1993,9 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
     exposure = inspector.split("struct ExposureInspector")[1]
     assert INSPECTOR_EXPOSURE_HELP in exposure
     assert INSPECTOR_GAIN_LIVE in exposure
+    assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}"' in exposure
+    assert "%+.2f st" not in exposure
+    assert " st" not in exposure
     assert "2^stops" not in exposure
     assert "CAT(user→D65)" not in exposure
     assert "rgb × (2^stops)" not in exposure
