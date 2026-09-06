@@ -329,7 +329,7 @@ struct ExposureInspector: View {
                         step: 0.05
                     )
                     .controlSize(.small)
-                    Text(String(format: "%+.2f st", session.graph.exposureStops))
+                    Text(String(format: "%+.2f 档", session.graph.exposureStops))
                         .font(.caption.monospacedDigit())
                         .frame(width: 56, alignment: .trailing)
                 }
