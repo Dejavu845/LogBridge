@@ -26,6 +26,9 @@ from color.resolve_export import (
     EXPORT_NOTE_REC709,
     EXPORT_NOTE_WB_BYPASS,
     EXPORT_NOTE_WB_OFF,
+    GRAPH_ODT_USER,
+    GRAPH_ODT_XML_DESC,
+    REC709_CUBE_COMMENT,
     REC709_CUBE_TITLE,
     REC709_PREVIEW_LABEL,
     RESOLVE_README_HONESTY,
@@ -223,10 +226,12 @@ def test_export_default_odt_off_acescct_deliverable(tmp_path: Path):
     )
     xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
     assert 'name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="false"' in xml
-    assert "ACEScct deliverable" in xml
-    assert "preview" in xml.lower()
+    assert GRAPH_ODT_USER in xml
+    assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
+    assert "预览·非成片" in xml
     readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
-    assert "preview only" in readme.lower()
+    assert GRAPH_ODT_USER in readme
+    assert "preview only" not in _graph_section(readme)
     assert "most standard" not in readme.lower()
     names = {p.name for p in written}
     assert "03_WB.dctl" in names
@@ -336,6 +341,17 @@ def _dedent_swift_honesty(readme_fn: str) -> str:
 
 def _honesty_lines(text: str) -> list[str]:
     return [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+
+def _graph_section(text: str) -> str:
+    return text.split("## Graph (serial nodes)", 1)[1].split("## How to bypass", 1)[0]
+
+
+GRAPH_ODT_BANNED = (
+    "DIY BT.709 OETF",
+    "preview only",
+    "Not an ACES Output Transform",
+)
 
 
 def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
@@ -497,12 +513,16 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
     assert "一键还原" not in readme
     assert readme.index("诚实说明") < readme.index("Graph (serial nodes)")
     _assert_chengpian_not_a_deliverable_claim(readme)
-    # Graph / TITLE / XML keep jargon (other knives). Honesty notes do not.
-    assert "DIY BT.709 OETF" in readme
-    assert "Not an ACES Output Transform" in readme
+    graph = _graph_section(readme)
+    assert GRAPH_ODT_USER in graph
+    for token in GRAPH_ODT_BANNED:
+        assert token not in graph
     cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
     assert REC709_PREVIEW_LABEL in cube
-    assert "ACES Output Transform" not in cube.replace("Not an ACES Output Transform", "")
+    assert REC709_CUBE_COMMENT in cube
+    assert "DIY BT.709 OETF" not in cube
+    assert "Not an ACES Output Transform" not in cube
+    assert "ACES Output Transform" not in cube
     assert "ACES OT" not in cube.replace("not ACES OT", "")
     _assert_chengpian_not_a_deliverable_claim(cube)
 
@@ -545,8 +565,10 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
         stripped = blob.replace("CAT(user→D65)·inv(CAT(as→D65))", "")
         assert "CAT(as→D65)" not in stripped
         _assert_chengpian_not_a_deliverable_claim(blob)
-    # Graph technical docs keep jargon. Honesty + exportNote do not.
-    assert "DIY BT.709 OETF" in readme_fn
+    swift_graph = _graph_section(readme_fn)
+    assert GRAPH_ODT_USER in swift_graph
+    for token in GRAPH_ODT_BANNED:
+        assert token not in swift_graph
     ui_note = "\n".join(line.split("//", 1)[0] for line in note_fn.splitlines())
     assert "identity" not in ui_note
     assert "enabled=false" not in ui_note
@@ -618,6 +640,110 @@ def test_readme_resolve_status_line_drops_parallel_english(tmp_path: Path):
     assert "预览·非成片" in py_readme
 
 
+def test_readme_graph_odt_user_copy_is_locked_chinese(tmp_path: Path):
+    """Graph / ODT Description / dot / cube # comment: locked ⑭. TITLE + nodes stay."""
+    export_resolve_bundle(
+        tmp_path, idt_ids=["arri_logc4_awg4"], include_wb=False, lut_size=5
+    )
+    readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
+    xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
+    dot = (tmp_path / "graph.dot").read_text(encoding="utf-8")
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True)
+    py_graph = _graph_section(generated)
+    written_graph = _graph_section(readme)
+    assert GRAPH_ODT_USER in py_graph
+    assert GRAPH_ODT_USER in written_graph
+    assert "709 预览" in written_graph
+    assert "预览·非成片" in written_graph
+    for token in GRAPH_ODT_BANNED:
+        assert token not in py_graph
+        assert token not in written_graph
+
+    assert GRAPH_ODT_USER in xml
+    assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
+    assert 'name="ODT_Rec709" type="LUT_or_CST" bypassable="true"' in xml
+    assert 'name="IDT"' in xml
+    assert 'name="Exposure"' in xml
+    assert 'name="WB"' in xml
+    for token in GRAPH_ODT_BANNED:
+        desc = xml.split("<Node index=\"4\"", 1)[1].split("</Node>", 1)[0]
+        assert token not in desc
+
+    assert GRAPH_ODT_USER in dot
+    odt_label = dot.split("odt  [label=", 1)[1].split("];", 1)[0]
+    for token in GRAPH_ODT_BANNED:
+        assert token not in odt_label
+
+    assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert REC709_CUBE_COMMENT == f"# {GRAPH_ODT_USER}"
+    assert REC709_CUBE_COMMENT in cube
+    for token in GRAPH_ODT_BANNED:
+        assert token not in cube
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    readme_fn = swift.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    py_xml = py.split("def format_graph_xml")[1].split("def format_readme")[0]
+    dot_fn = swift.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    odt_fn = swift.split("private static func odtCube")[1].split(
+        "private static func exposureCube"
+    )[0]
+
+    swift_graph = _graph_section(readme_fn)
+    assert GRAPH_ODT_USER in swift_graph
+    assert "{GRAPH_ODT_USER}" in py_readme
+    assert f'GRAPH_ODT_USER = "{GRAPH_ODT_USER}"' in py
+    assert _graph_section(readme_fn).count(GRAPH_ODT_USER) >= 1
+    for token in GRAPH_ODT_BANNED:
+        assert token not in swift_graph
+        assert token not in _graph_section(py_readme)
+    assert GRAPH_ODT_XML_DESC in xml_fn
+    assert "GRAPH_ODT_XML_DESC" in py_xml or GRAPH_ODT_XML_DESC in py_xml
+    assert GRAPH_ODT_USER in dot_fn
+    assert "GRAPH_ODT_USER" in py_dot or GRAPH_ODT_USER in py_dot
+    assert f'"{REC709_CUBE_COMMENT}"' in odt_fn
+    assert f'GRAPH_ODT_USER = "{GRAPH_ODT_USER}"' in py
+    assert REC709_CUBE_TITLE in odt_fn
+    assert REC709_CUBE_TITLE in py
+    assert LOCKED_REC709_CUBE_TITLE in swift
+    odt_xml_desc = xml_fn.split('name="ODT_Rec709"', 1)[1].split(
+        "<Description>", 1
+    )[1].split("</Description>", 1)[0]
+    comment_assign = py.split("REC709_CUBE_COMMENT =", 1)[1].split(
+        "GRAPH_ODT_XML_DESC", 1
+    )[0]
+    for token in GRAPH_ODT_BANNED:
+        assert token not in odt_fn
+        assert token not in comment_assign
+        assert token not in odt_xml_desc
+    assert "完善" not in written_graph
+    assert "精准" not in written_graph
+    assert "达芬奇已验证" not in written_graph
+    assert "达芬奇已验证" not in xml
+    assert "达芬奇已验证" not in cube
+    _assert_chengpian_not_a_deliverable_claim(written_graph)
+    _assert_chengpian_not_a_deliverable_claim(xml)
+    _assert_chengpian_not_a_deliverable_claim(cube)
+
+
 def test_709_cube_labeled_preview_not_aces_ot(tmp_path: Path):
     export_resolve_bundle(tmp_path, idt_ids=["arri_logc4_awg4"], lut_size=5)
     cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
@@ -625,18 +751,18 @@ def test_709_cube_labeled_preview_not_aces_ot(tmp_path: Path):
     readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
     assert REC709_PREVIEW_LABEL in cube
     assert REC709_CUBE_TITLE in cube
-    assert "ACES Output Transform" not in cube.replace("Not an ACES Output Transform", "")
+    assert "ACES Output Transform" not in cube
     assert "ACES OT" not in cube.replace("not ACES OT", "")
-    assert "成片" not in cube.replace("预览·非成片", "")
+    _assert_chengpian_not_a_deliverable_claim(cube)
     assert REC709_PREVIEW_LABEL in xml
     assert 'type="ACES_OT"' not in xml
-    assert "Not an ACES Output Transform" in xml
+    assert GRAPH_ODT_USER in xml
     assert "预览·非成片" in xml
     assert REC709_PREVIEW_LABEL in readme
-    assert "Not an ACES Output Transform" in readme
+    assert GRAPH_ODT_USER in readme
+    assert "Not an ACES Output Transform" not in _graph_section(readme)
     generated = odt_cube_bytes(size=5)
     assert generated.splitlines()[0] == f'TITLE "{REC709_CUBE_TITLE}"'
-    _assert_chengpian_not_a_deliverable_claim(cube)
     _assert_chengpian_not_a_deliverable_claim(xml)
     _assert_chengpian_not_a_deliverable_claim(readme)
 

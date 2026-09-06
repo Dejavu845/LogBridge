@@ -459,7 +459,7 @@ enum ResolveExporter {
             title: "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)",
             size: size,
             extraComments: [
-                "# 709 预览. 预览·非成片. DIY BT.709 OETF preview. Not an ACES Output Transform / RRT."
+                "# 709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
             ]
         ) {
             odtFromACEScct($0)
@@ -702,7 +702,7 @@ enum ResolveExporter {
             <File role="dctl">03_WB.dctl</File>
           </Node>
           <Node index="4" name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="\(odtOn)">
-            <Description>Rec.709 预览 preview ODT only (BT.709 OETF, no RRT). Not an ACES Output Transform. 预览·非成片. Off = ACEScct deliverable (or ACES2065-1 EXR). Not a finished picture.</Description>
+            <Description>709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。</Description>
             <File role="lut">04_ODT_Rec709.cube</File>
             <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" outputColorSpace="Rec.709" outputGamma="Rec.709"/>
           </Node>
@@ -726,7 +726,7 @@ enum ResolveExporter {
           idt  [label="IDT\\n\(idtLabel)\\n01_IDT_<idt>.cube\\nor ACES IDT / CST → ACEScct"];
           exp  [label="Exposure (zeroable)\\n\(String(format: "%+.2f", exposureStops)) stops\\n02_Exposure.cube / .dctl"];
           wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n\(cctLabel(cct))  tint \(tint)\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,\(wbStyle)", fillcolor="\(wbFill)"];
-          odt  [label="709 预览 (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\nBT.709 OETF, not ACES OT"];
+          odt  [label="709 预览 (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\n709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"];
           timeline [shape=oval, label="Timeline\\nACEScct"];
 
           clip -> idt -> exp -> wb -> odt;
@@ -768,7 +768,7 @@ enum ResolveExporter {
 
         3. **709 预览** — `04_ODT_Rec709.cube` or CST
            - Optional preview node, off by default. Off = ACEScct deliverable.
-           - DIY BT.709 OETF, preview only, no RRT. Not an ACES Output Transform. 预览·非成片.
+           - 709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。
 
         ## How to bypass WB in Resolve
 
