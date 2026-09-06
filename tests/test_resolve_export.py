@@ -227,9 +227,12 @@ def test_export_default_odt_off_acescct_deliverable(tmp_path: Path):
     xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
     assert 'name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="false"' in xml
     assert "ACEScct deliverable" in xml
-    assert "preview" in xml.lower()
+    assert GRAPH_ODT_USER in xml
+    assert "预览·非成片" in xml
+    assert "preview only" not in xml.lower()
     readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
-    assert "preview only" in readme.lower()
+    assert GRAPH_ODT_USER in readme
+    assert "preview only" not in _graph_section(readme)
     assert "most standard" not in readme.lower()
     names = {p.name for p in written}
     assert "03_WB.dctl" in names
@@ -707,7 +710,8 @@ def test_readme_graph_odt_user_copy_is_locked_chinese(tmp_path: Path):
 
     swift_graph = _graph_section(readme_fn)
     assert GRAPH_ODT_USER in swift_graph
-    assert GRAPH_ODT_USER in py_readme
+    assert "{GRAPH_ODT_USER}" in py_readme
+    assert f'GRAPH_ODT_USER = "{GRAPH_ODT_USER}"' in py
     assert _graph_section(readme_fn).count(GRAPH_ODT_USER) >= 1
     for token in GRAPH_ODT_BANNED:
         assert token not in swift_graph
