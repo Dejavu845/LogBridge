@@ -1087,14 +1087,14 @@ def test_inspector_exposure_readout_unit_dang():
     assert f'.help("{PICK_NEUTRAL_HELP}")' in wb
     assert f'.help("{WB_ESTIMATE_HELP}")' in wb
 
-    # 验法⑰-4: slider / exposure algorithm stay; ⑱ CCT→色温 is not this PR.
+    # 验法⑰-4: slider / exposure algorithm stay. ⑱ flips CCT → 色温.
     assert "in: -8...8," in exposure
     assert "step: 0.05" in exposure
     assert "session.setExposureStops($0)" in exposure
     assert "pow(2.0, session.graph.exposureStops)" in exposure
     assert 'Text("档（Stops）")' in exposure
-    assert 'Text("CCT")' in wb
-    assert 'Text("色温")' not in wb
+    assert 'Text("色温")' in wb
+    assert 'Text("CCT")' not in wb
 
     # 验法⑰-5: test_ui_copy locks `%+.2f 档` and bans `%+.2f st` (above).
     assert "完善" not in exposure
