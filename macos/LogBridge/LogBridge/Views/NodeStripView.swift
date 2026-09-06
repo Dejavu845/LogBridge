@@ -39,7 +39,7 @@ struct NodeStripView: View {
             return session.selectedClip?.lockedPairLabel ?? "没有素材"
         case .exposure:
             if session.graph.exposureEnabled {
-                return String(format: "%+.2f st", session.graph.exposureStops)
+                return String(format: "%+.2f 档", session.graph.exposureStops)
             }
             return "已旁路"
         case .wb:
