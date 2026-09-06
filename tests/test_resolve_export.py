@@ -260,6 +260,54 @@ def _dctl_cat_is_identity(text: str, atol: float = 1e-8) -> bool:
     return bool(np.allclose(nums, ident, atol=atol))
 
 
+LOCKED_REC709_CUBE_TITLE = (
+    "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+)
+LOCKED_NODE_FILES = (
+    "graph.xml",
+    "graph.dot",
+    "01_IDT_",
+    "03_WB",
+    "04_ODT_Rec709.cube",
+    "README_RESOLVE.md",
+)
+LOCKED_BUNDLE_FILES = (
+    "README_RESOLVE.md",
+    "graph.xml",
+    "graph.dot",
+    "02_Exposure.cube",
+    "02_Exposure.dctl",
+    "03_WB.cdl",
+    "03_WB.ccc",
+    "03_WB.dctl",
+    "03_WB.cube",
+    "04_ODT_Rec709.cube",
+)
+HONESTY_BANNED = (
+    "DIY BT.709 OETF",
+    "identity / enabled=false",
+    "identity / `enabled=false`",
+    "enabled=false",
+    "preview only",
+    "Not an ACES Output Transform",
+    "不烘焙白平衡",
+    "完善",
+    "精准",
+)
+
+
+def _dedent_swift_honesty(readme_fn: str) -> str:
+    raw = readme_fn.split("## 诚实说明", 1)[1].split("## Graph (serial nodes)", 1)[0]
+    lines = ["## 诚实说明"]
+    for line in raw.splitlines():
+        lines.append(line[8:] if line.startswith("        ") else line)
+    return "\n".join(ln for ln in lines if ln.strip()).strip()
+
+
+def _honesty_lines(text: str) -> list[str]:
+    return [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+
 def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
     cleaned = (
         text.replace("预览·非成片", "")
@@ -404,20 +452,13 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
     assert EXPORT_NOTE_WB_BYPASS in honesty
     assert EXPORT_NOTE_WB_OFF == "已写出但默认旁路（不改颜色）"
     assert EXPORT_NOTE_WB_OFF in readme
-    banned_honesty = (
-        "DIY BT.709 OETF",
-        "identity",
-        "enabled=false",
-        "preview only",
-        "Not an ACES Output Transform",
-        "不烘焙白平衡",
-    )
-    for token in banned_honesty:
+    for token in HONESTY_BANNED:
         assert token not in honesty
         assert token not in RESOLVE_README_HONESTY
         assert token not in EXPORT_NOTE_WB_OFF
         assert token not in EXPORT_NOTE_WB_BYPASS
         assert token not in EXPORT_NOTE_REC709
+    assert "identity" not in honesty
     assert "机内色温只填旋钮，默认 CAT 是单位阵。" in honesty
     assert "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。" in honesty
     assert "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。" in honesty
@@ -441,15 +482,25 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
     )
     note_fn = swift.split("static func exportNote")[1].split("static func export(")[0]
     readme_fn = swift.split("private static func readme")[1].split("/// Proxy sequence folder")[0]
-    swift_honesty = readme_fn.split("## Graph (serial nodes)")[0]
+    swift_honesty = _dedent_swift_honesty(readme_fn)
+    assert _honesty_lines(swift_honesty) == _honesty_lines(RESOLVE_README_HONESTY)
     assert EXPORT_NOTE_REC709 in swift_honesty
     assert EXPORT_NOTE_WB_BYPASS in swift_honesty
     assert EXPORT_NOTE_WB_OFF in readme_fn
-    for token in banned_honesty:
+    for token in HONESTY_BANNED:
         assert token not in swift_honesty
+    assert "identity" not in swift_honesty
     assert "不烘焙白平衡" not in readme_fn
     assert "不烘焙白平衡" not in note_fn
     assert "不烘焙白平衡" not in readme
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
+    assert LOCKED_REC709_CUBE_TITLE in swift
+    for name in LOCKED_NODE_FILES:
+        assert name in readme_fn
+        assert name in readme
+    for name in LOCKED_BUNDLE_FILES:
+        assert f'"{name}"' in swift
     for blob in (note_fn, readme_fn):
         assert "709 预览" in blob
         assert "整段代理，不是全精度成片" in blob
