@@ -682,7 +682,7 @@ def format_dot(
     return f"""digraph LogBridgeResolve {{
   rankdir=LR;
   labelloc="t";
-  label="LogBridge M1 Resolve graph — implemented (unverified)";
+  label="LogBridge M1 Resolve graph — 已实现（未验证）";
   node [shape=box, fontname="Helvetica"];
 
   clip [label="Clip\\ncamera log"];
@@ -856,7 +856,7 @@ def format_readme(
     gain = stops_to_gain(exposure_stops) if exposure_enabled else 1.0
     return f"""# LogBridge Resolve 导出
 
-状态：**已实现（未验证）** / implemented (unverified)。不是相机支持声明。
+状态：**已实现（未验证）**。不是相机支持声明。
 
 {RESOLVE_README_HONESTY}
 ## Graph (serial nodes)

@@ -147,7 +147,10 @@ def test_dot_and_readme_explain_bypass():
     assert "bypass" in readme.lower()
     assert "ACEScct" in readme
     assert "ACES2065-1" in readme
-    assert "implemented (unverified)" in readme
+    assert RESOLVE_README_STATUS in readme
+    assert "implemented (unverified)" not in _readme_status_line(readme)
+    assert RESOLVE_DOT_STATUS_LABEL in dot
+    assert "implemented (unverified)" not in _dot_status_label(dot)
     assert "supported" not in readme.lower()
     assert "一键精准" not in readme
     assert "preview only" in readme.lower() or "preview" in readme.lower()
@@ -283,6 +286,33 @@ LOCKED_BUNDLE_FILES = (
     "03_WB.cube",
     "04_ODT_Rec709.cube",
 )
+RESOLVE_README_STATUS = "状态：**已实现（未验证）**。不是相机支持声明。"
+RESOLVE_README_STATUS_PARALLEL_EN = (
+    "状态：**已实现（未验证）** / implemented (unverified)。不是相机支持声明。"
+)
+RESOLVE_DOT_STATUS_LABEL = "LogBridge M1 Resolve graph — 已实现（未验证）"
+RESOLVE_XML_STATUS_ATTR = 'status="implemented (unverified)"'
+RESOLVE_CUBE_STATUS_COMMENT = (
+    "# LogBridge M1 — implemented (unverified). Not a camera-support claim."
+)
+
+
+def _readme_status_line(text: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("状态："):
+            return stripped
+    raise AssertionError("README_RESOLVE missing 状态： line")
+
+
+def _dot_status_label(text: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("label="):
+            return stripped
+    raise AssertionError("graph.dot missing label= line")
+
+
 HONESTY_BANNED = (
     "DIY BT.709 OETF",
     "identity / enabled=false",
@@ -525,6 +555,69 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
     assert "stops" not in ui_note
 
 
+def test_readme_resolve_status_line_drops_parallel_english(tmp_path: Path):
+    """README_RESOLVE 状态行：只留中文。XML / cube 机读英文可留。"""
+    export_resolve_bundle(
+        tmp_path, idt_ids=["arri_logc4_awg4"], include_wb=False, lut_size=5
+    )
+    readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
+    xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
+    dot = (tmp_path / "graph.dot").read_text(encoding="utf-8")
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+
+    status = _readme_status_line(readme)
+    assert status == RESOLVE_README_STATUS
+    assert "implemented (unverified)" not in status
+    assert RESOLVE_README_STATUS_PARALLEL_EN not in readme
+    assert "未验证" in status
+    assert "预览·非成片" in readme
+    assert "整段代理，不是全精度成片" in readme
+    _assert_chengpian_not_a_deliverable_claim(readme)
+
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True)
+    assert _readme_status_line(generated) == RESOLVE_README_STATUS
+    assert RESOLVE_README_STATUS_PARALLEL_EN not in generated
+
+    assert RESOLVE_DOT_STATUS_LABEL in dot
+    assert "implemented (unverified)" not in _dot_status_label(dot)
+    assert RESOLVE_XML_STATUS_ATTR in xml
+    assert RESOLVE_CUBE_STATUS_COMMENT in cube
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    readme_fn = swift.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    dot_fn = swift.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    py_xml = py.split("def format_graph_xml")[1].split("def format_readme")[0]
+
+    assert RESOLVE_README_STATUS in readme_fn
+    assert RESOLVE_README_STATUS in py_readme
+    assert _readme_status_line(readme_fn) == _readme_status_line(py_readme)
+    assert RESOLVE_README_STATUS_PARALLEL_EN not in readme_fn
+    assert RESOLVE_README_STATUS_PARALLEL_EN not in py_readme
+    assert RESOLVE_DOT_STATUS_LABEL in dot_fn
+    assert RESOLVE_DOT_STATUS_LABEL in py_dot
+    assert RESOLVE_XML_STATUS_ATTR in xml_fn
+    assert RESOLVE_XML_STATUS_ATTR in py_xml
+    assert RESOLVE_CUBE_STATUS_COMMENT in swift
+    assert RESOLVE_CUBE_STATUS_COMMENT in py
+    assert "未验证" in readme_fn
+    assert "未验证" in py_readme
+    assert "预览·非成片" in readme_fn
+    assert "预览·非成片" in py_readme
+
+
 def test_709_cube_labeled_preview_not_aces_ot(tmp_path: Path):
     export_resolve_bundle(tmp_path, idt_ids=["arri_logc4_awg4"], lut_size=5)
     cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
@@ -622,7 +715,9 @@ def test_resolve_package_placeholders_are_locked_chinese(tmp_path: Path):
     assert "none — assign" not in readme
     assert "pending / identity" not in readme
     assert "已实现（未验证）" in readme
-    assert "implemented (unverified)" in readme
+    assert _readme_status_line(readme) == RESOLVE_README_STATUS
+    assert "implemented (unverified)" not in _readme_status_line(readme)
+    assert RESOLVE_README_STATUS_PARALLEL_EN not in readme
     assert "完善" not in readme
     assert "精准" not in readme
     assert "达芬奇已验证" not in readme
