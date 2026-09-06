@@ -1098,13 +1098,15 @@ def test_write_progress_frame_copy_is_chinese():
     assert "frame" not in progress_text(2, 5, 120, 240)
 
     clip = _read(CLIP)
-    fn = clip.split("static func exportProgressText")[1].split("static func cancelledExportNote")[0]
+    fn = clip.split("static func exportProgressText")[1].split("    /// Cancelled batch")[0]
     assert "写出代理 \\(clipIndex)/\\(clipTotal)" in fn
     assert "第 \\(frame) 帧" in fn
     assert "第 \\(frame) / 共 \\(frameTotal) 帧" in fn
     assert "· frame" not in fn
     assert "精准" not in fn
-    assert "成片" not in fn
+    assert "完善" not in fn
+    assert progress_text(2, 5, 120).count("成片") == 0
+    assert progress_text(2, 5, 120, 240).count("成片") == 0
 
 
 def test_lock_lands_on_next_pending():
