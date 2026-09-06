@@ -1473,6 +1473,7 @@ def test_import_skip_summary_is_human_chinese():
         NOTE_ARRI_MXF,
         NOTE_CAMERA_RAW,
         NOTE_MOVIE_ACCEPT,
+        NOTE_MXF_NO_TRACK,
         NOTE_REFUSE_CONTAINER,
         NOTE_STILL_ACCEPT,
         NOTE_UNKNOWN_CODEC,
@@ -1483,6 +1484,7 @@ def test_import_skip_summary_is_human_chinese():
     assert IMPORT_SKIP_HEADER == "未导入 {n} 条："
     assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
     assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
     assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式已支持」。"
     # Accept notes locked Chinese. No ImageIO / AVAssetReader / copyCGImage / Y′CbCr.
@@ -1529,6 +1531,7 @@ def test_import_skip_summary_is_human_chinese():
     assert '可点「估计白平衡」查看估计，确认后才写入。不是校准，不猜 5600。' in import_fn
     assert NOTE_CAMERA_RAW in media
     assert NOTE_ARRI_MXF in media
+    assert NOTE_MXF_NO_TRACK in media
     assert NOTE_UNKNOWN_CODEC in media
     assert NOTE_REFUSE_CONTAINER in media
     assert NOTE_MOVIE_ACCEPT in media
@@ -2039,7 +2042,7 @@ def test_leftover_english_failure_chips_are_chinese():
 
     Existing good Chinese chips are re-locked. Color / write paths untouched.
     """
-    from color.formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_UNKNOWN_CODEC
+    from color.formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_MXF_NO_TRACK, NOTE_UNKNOWN_CODEC
 
     clip = _read(CLIP)
     detector = _read(SWIFT_ROOT / "LogBridge/LogBridge/Detection/ClipDetector.swift")
@@ -2065,6 +2068,7 @@ def test_leftover_english_failure_chips_are_chinese():
     assert PREVIEW_STATUS_HDR_NO_EDR == "屏幕无 EDR，预览被压到 SDR"
     assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
     assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
 
     badge = clip.split("var verificationBadge")[1].split("var sidebarStatusChip")[0]
@@ -2147,7 +2151,13 @@ def test_success_path_english_notes_are_chinese():
     Accept notes are locked plain Chinese — no ImageIO / AVAssetReader /
     copyCGImage / Y′CbCr jargon.
     """
-    from color.formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_MOVIE_ACCEPT, NOTE_STILL_ACCEPT
+    from color.formats import (
+        NOTE_ARRI_MXF,
+        NOTE_CAMERA_RAW,
+        NOTE_MOVIE_ACCEPT,
+        NOTE_MXF_NO_TRACK,
+        NOTE_STILL_ACCEPT,
+    )
 
     clip = _read(CLIP)
     detector = _read(SWIFT_ROOT / "LogBridge/LogBridge/Detection/ClipDetector.swift")
@@ -2187,6 +2197,7 @@ def test_success_path_english_notes_are_chinese():
     assert PREVIEW_STATUS_HDR_NO_EDR == "屏幕无 EDR，预览被压到 SDR"
     assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
     assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
     assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
 
     ui_clip = _code_without_comments(clip)
@@ -2266,3 +2277,86 @@ def test_success_path_english_notes_are_chinese():
         _chengpian_only_honesty(note)
         assert "完善" not in note
         assert "精准" not in note
+
+
+def test_mxf_no_track_chip_not_arri():
+    """Undecodable MXF / no fourCC uses its own chip. True ARRI keeps the old one.
+
+    .ari / .arx stay camera-raw. tryDecode notes do not concatenate noteARRIMxf.
+    Accept notes from #74 stay locked. Other refuse chips unchanged.
+    """
+    from color.formats import (
+        NOTE_ARRI_MXF,
+        NOTE_CAMERA_RAW,
+        NOTE_MOVIE_ACCEPT,
+        NOTE_MXF_NO_TRACK,
+        NOTE_MXF_TRY,
+        NOTE_REFUSE_CONTAINER,
+        NOTE_STILL_ACCEPT,
+        NOTE_UNKNOWN_CODEC,
+        classify,
+    )
+
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
+    assert NOTE_MXF_TRY == "MXF 只试系统认得出的 ProRes / AVC / HEVC。"
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+    assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
+    assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式已支持」。"
+    # #74 accept notes — do not rewrite.
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。不是成片。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
+
+    # True ARRI (codec ari / arx / arri) keeps the old chip.
+    for codec in ("ari", "arx", "arri", "ARRIRAW"):
+        d = classify("A001C001.mxf", codec)
+        assert d.note == NOTE_ARRI_MXF, codec
+        assert d.note != NOTE_MXF_NO_TRACK, codec
+
+    # codecFourCC==nil / no fourCC tryDecode uses the new chip, not noteARRIMxf.
+    none = classify("clip.mxf")
+    assert none.note == NOTE_MXF_NO_TRACK
+    assert NOTE_ARRI_MXF not in none.note
+    assert "ARRI MXF" not in none.note
+
+    # Known MXF tryDecode note must not concatenate the ARRI chip.
+    known = classify("clip.mxf", "apcn")
+    assert known.note == NOTE_MXF_TRY
+    assert NOTE_ARRI_MXF not in known.note
+    assert "ARRI MXF" not in known.note
+
+    # .ari / .arx container refuse stays camera-raw — never ARRI MXF wording.
+    for name in ("clip.ari", "clip.arx"):
+        d = classify(name)
+        assert d.note == NOTE_CAMERA_RAW, name
+        assert "ARRI MXF" not in d.note, name
+
+    # Other refuse chips unchanged.
+    assert classify("clip.r3d").note == NOTE_CAMERA_RAW
+    assert classify("clip.braw").note == NOTE_CAMERA_RAW
+    assert classify("weird.mov", "r210").note == NOTE_UNKNOWN_CODEC
+    assert classify("nope.xyz").note == NOTE_REFUSE_CONTAINER
+    assert classify("ok.mov").note == NOTE_MOVIE_ACCEPT
+
+    clip = _read(CLIP)
+    media = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/MediaFormat.swift")
+    formats_py = (ROOT / "color/formats.py").read_text(encoding="utf-8")
+    import_fn = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    try_skip = import_fn.split("if probe.decision == .tryDecode")[1].split(
+        "let detection = ClipDetector.detect"
+    )[0]
+    assert "noteMxfNoTrack" in try_skip
+    assert "noteARRIMxf" not in try_skip
+    assert NOTE_MXF_NO_TRACK in media
+    assert NOTE_ARRI_MXF in media
+    assert NOTE_MXF_TRY in media
+    assert "+ noteARRIMxf" not in media
+    assert "+ NOTE_ARRI_MXF" not in formats_py
+    assert NOTE_MXF_NO_TRACK in formats_py
+    assert NOTE_STILL_ACCEPT in formats_py
+    assert NOTE_MOVIE_ACCEPT in media
+    assert "noteMxfNoTrack" in clip.split("static func preservedFailureNote")[1]
+    _chengpian_only_honesty(NOTE_MXF_NO_TRACK)
+    _chengpian_only_honesty(NOTE_ARRI_MXF)
+    assert "完善" not in NOTE_MXF_NO_TRACK
+    assert "精准" not in NOTE_MXF_NO_TRACK

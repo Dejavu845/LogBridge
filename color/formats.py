@@ -60,6 +60,8 @@ CAMERA_RAW_MARKERS = (
 
 # Locked refuse copy (沟通).
 NOTE_ARRI_MXF = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+NOTE_MXF_NO_TRACK = "MXF：系统认不出可解轨道，未导入"
+NOTE_MXF_TRY = "MXF 只试系统认得出的 ProRes / AVC / HEVC。"
 NOTE_CAMERA_RAW = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
 NOTE_UNKNOWN_CODEC = "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
 NOTE_REFUSE_CONTAINER = "这个容器不接。不写「全格式已支持」。"
@@ -163,11 +165,20 @@ def classify(path: str | Path, codec: str | None = None) -> FormatDecision:
                 note=NOTE_UNKNOWN_CODEC,
                 kind="mxf",
             )
+        # No fourCC: tryDecode skip chip. Do not concatenate NOTE_ARRI_MXF.
+        if codec_n is None:
+            return FormatDecision(
+                action=TRY,
+                container=ext,
+                codec=codec_n,
+                note=NOTE_MXF_NO_TRACK,
+                kind="mxf",
+            )
         return FormatDecision(
             action=TRY,
             container=ext,
             codec=codec_n,
-            note="MXF 只试系统认得出的 ProRes / AVC / HEVC。" + NOTE_ARRI_MXF,
+            note=NOTE_MXF_TRY,
             kind="mxf",
         )
 

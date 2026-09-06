@@ -53,6 +53,8 @@ enum MediaFormat {
     static let hevcFourCC: Set<String> = ["hvc1", "hev1", "dvhe", "dvh1"]
     /// Locked refuse copy (沟通).
     static let noteARRIMxf = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    static let noteMxfNoTrack = "MXF：系统认不出可解轨道，未导入"
+    static let noteMxfTry = "MXF 只试系统认得出的 ProRes / AVC / HEVC。"
     static let noteCameraRaw = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
     static let noteUnknownCodec = "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
 
@@ -171,12 +173,22 @@ enum MediaFormat {
                     note: noteUnknownCodec
                 )
             }
+            // No fourCC: tryDecode skip chip. Do not concatenate noteARRIMxf.
+            if codecN == nil {
+                return MediaProbe(
+                    decision: .tryDecode,
+                    container: ext,
+                    codec: codecN,
+                    kind: .mxf,
+                    note: noteMxfNoTrack
+                )
+            }
             return MediaProbe(
                 decision: .tryDecode,
                 container: ext,
                 codec: codecN,
                 kind: .mxf,
-                note: "MXF 只试系统认得出的 ProRes / AVC / HEVC。" + noteARRIMxf
+                note: noteMxfTry
             )
         }
         return MediaProbe(

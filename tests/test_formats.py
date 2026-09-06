@@ -11,6 +11,8 @@ from color.formats import (
     NOTE_ARRI_MXF,
     NOTE_CAMERA_RAW,
     NOTE_MOVIE_ACCEPT,
+    NOTE_MXF_NO_TRACK,
+    NOTE_MXF_TRY,
     NOTE_STILL_ACCEPT,
     NOTE_UNKNOWN_CODEC,
     NOTE_REFUSE_CONTAINER,
@@ -102,14 +104,24 @@ def test_arri_mxf_refused():
     d = classify("A001C001.mxf", "ARRIRAW")
     assert d.action == REFUSE
     assert d.note == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    for codec in ("ari", "arx", "arri", "ARRIRAW"):
+        d = classify("A001C001.mxf", codec)
+        assert d.action == REFUSE, codec
+        assert d.note == NOTE_ARRI_MXF, codec
+        assert d.note != NOTE_MXF_NO_TRACK, codec
 
 
 def test_mxf_known_codec_is_try_not_claim():
     d = classify("clip.mxf", "apcn")
     assert d.action == TRY
-    assert "ARRI MXF" in d.note
+    assert d.note == NOTE_MXF_TRY
+    assert NOTE_ARRI_MXF not in d.note
+    assert "ARRI MXF" not in d.note
     d2 = classify("clip.mxf")
     assert d2.action == TRY
+    assert d2.note == NOTE_MXF_NO_TRACK
+    assert NOTE_ARRI_MXF not in d2.note
+    assert "ARRI MXF" not in d2.note
 
 
 NOTE_RAW = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
@@ -125,6 +137,9 @@ def test_refused_containers():
         d = classify(name)
         assert d.action == REFUSE, name
         assert d.note == NOTE_RAW
+        assert d.note == NOTE_CAMERA_RAW
+        assert "ARRI MXF" not in d.note
+        assert NOTE_ARRI_MXF not in d.note
     for name, token in (("clip.avi", "AVI"), ("clip.mkv", "MKV")):
         d = classify(name)
         assert d.action == REFUSE, name
@@ -182,6 +197,10 @@ def test_swift_probe_and_decode_locks():
     detector = _read(DETECTOR)
     assert "enum MediaFormat" in media
     assert "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入" in media
+    assert "MXF：系统认不出可解轨道，未导入" in media
+    assert "MXF 只试系统认得出的 ProRes / AVC / HEVC。" in media
+    assert "+ noteARRIMxf" not in media
+    assert "+ NOTE_ARRI_MXF" not in _read(ROOT / "color/formats.py")
     assert "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR" in media
     assert "aprn" in media
     assert "这个编码不接。能试的是 ProRes / H.264 / HEVC。" in media
@@ -230,6 +249,7 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     assert DECODE_FAILED_CHIP == "解码失败"
     assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
     assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
     assert empty_metadata_note() == "先选择 Log 与色域"
     assert MISSING_YCBCR_TAGS_CHIP == "无法读取片源 Y′CbCr 矩阵/范围，未写出"
@@ -238,6 +258,9 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     assert classify("clip.r3d").note == NOTE_CAMERA_RAW
     assert classify("clip.braw").note == NOTE_CAMERA_RAW
     assert classify("A001C001.mxf", "ARRIRAW").note == NOTE_ARRI_MXF
+    assert classify("clip.mxf").note == NOTE_MXF_NO_TRACK
+    assert classify("clip.ari").note == NOTE_CAMERA_RAW
+    assert classify("clip.arx").note == NOTE_CAMERA_RAW
     assert classify("weird.mov", "r210").note == NOTE_UNKNOWN_CODEC
 
     assert user_facing_failure_note("decode/grade failed") == DECODE_FAILED_CHIP
@@ -246,6 +269,7 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     assert user_facing_failure_note(MISSING_YCBCR_TAGS_CHIP) == MISSING_YCBCR_TAGS_CHIP
     assert user_facing_failure_note(NOTE_CAMERA_RAW) == NOTE_CAMERA_RAW
     assert user_facing_failure_note(NOTE_ARRI_MXF) == NOTE_ARRI_MXF
+    assert user_facing_failure_note(NOTE_MXF_NO_TRACK) == NOTE_MXF_NO_TRACK
     assert user_facing_failure_note(NOTE_UNKNOWN_CODEC) == NOTE_UNKNOWN_CODEC
     assert user_facing_failure_note("读不到元数据，先选择 Log 与色域") == (
         "读不到元数据，先选择 Log 与色域"
@@ -256,6 +280,7 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
 
     assert short_export_chip(NOTE_CAMERA_RAW) == NOTE_CAMERA_RAW
     assert short_export_chip(NOTE_ARRI_MXF) == NOTE_ARRI_MXF
+    assert short_export_chip(NOTE_MXF_NO_TRACK) == NOTE_MXF_NO_TRACK
     assert short_export_chip(NOTE_UNKNOWN_CODEC) == NOTE_UNKNOWN_CODEC
     assert short_export_chip(DECODE_FAILED_CHIP) == DECODE_FAILED_CHIP
     assert short_export_chip(MISSING_YCBCR_TAGS_CHIP) == MISSING_YCBCR_TAGS_CHIP
@@ -297,8 +322,10 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     assert "decodeFailedChip" in clip.split("static func shortExportChip")[1]
     assert "noteCameraRaw" in clip.split("static func preservedFailureNote")[1]
     assert "noteARRIMxf" in clip.split("static func preservedFailureNote")[1]
+    assert "noteMxfNoTrack" in clip.split("static func preservedFailureNote")[1]
     assert NOTE_CAMERA_RAW in media
     assert NOTE_ARRI_MXF in media
+    assert NOTE_MXF_NO_TRACK in media
     assert NOTE_UNKNOWN_CODEC in media
     assert NOTE_CAMERA_RAW in clip or NOTE_CAMERA_RAW in media
     assert "读不到元数据，先选择 Log 与色域" in detector
@@ -320,12 +347,18 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     assert "localizedDescription" not in build
     import_fn = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
     assert "probe.note" in import_fn
+    try_skip = import_fn.split("if probe.decision == .tryDecode")[1].split(
+        "let detection = ClipDetector.detect"
+    )[0]
+    assert "noteMxfNoTrack" in try_skip
+    assert "noteARRIMxf" not in try_skip
     assert NOTE_CAMERA_RAW.split("：")[0] in media
     assert GENERIC_PARSE_FAILED not in import_fn
     assert GENERIC_PARSE_FAILED not in build
 
     for blob in (swift, python):
         assert NOTE_CAMERA_RAW in blob
+        assert NOTE_MXF_NO_TRACK in blob
         assert DECODE_FAILED_CHIP in blob
         assert "读不到元数据" in blob or "先选择 Log 与色域" in blob
         cleaned = blob
@@ -343,10 +376,12 @@ def test_import_skip_summary_header_and_chips():
     assert IMPORT_SKIP_HEADER == "未导入 {n} 条："
     assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
     assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
     assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式已支持」。"
     assert classify("clip.r3d").note == NOTE_CAMERA_RAW
     assert classify("A001.mxf", "ARRIRAW").note == NOTE_ARRI_MXF
+    assert classify("clip.mxf").note == NOTE_MXF_NO_TRACK
     assert classify("weird.mov", "r210").note == NOTE_UNKNOWN_CODEC
     assert classify("nope.xyz").note == NOTE_REFUSE_CONTAINER
 
@@ -368,5 +403,6 @@ def test_import_skip_summary_header_and_chips():
     assert "Self.importSkipSummary(skipped)" in clip
     assert NOTE_CAMERA_RAW in media
     assert NOTE_ARRI_MXF in media
+    assert NOTE_MXF_NO_TRACK in media
     assert NOTE_UNKNOWN_CODEC in media
     assert NOTE_REFUSE_CONTAINER in media

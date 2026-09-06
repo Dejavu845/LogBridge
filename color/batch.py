@@ -92,7 +92,7 @@ import numpy as np
 
 from .as_shot import WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from .exr_write import write_rgb_exr
-from .formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_UNKNOWN_CODEC
+from .formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_MXF_NO_TRACK, NOTE_UNKNOWN_CODEC
 from .graph import SerialGraph
 
 REASON_PICK_LOG_GAMUT = "先选择 Log 与色域"
@@ -547,6 +547,7 @@ def preserved_failure_note(error: str) -> str | None:
         RESOLVE_INCOMPLETE_CHIP,
         NOTE_CAMERA_RAW,
         NOTE_ARRI_MXF,
+        NOTE_MXF_NO_TRACK,
         NOTE_UNKNOWN_CODEC,
         PREVIEW_STATUS_DECODE_FAIL,
         STUB_CHIP,

@@ -798,6 +798,7 @@ final class PreviewEngine: ObservableObject {
             return desc
         }
         if desc == MediaFormat.noteCameraRaw || desc == MediaFormat.noteARRIMxf
+            || desc == MediaFormat.noteMxfNoTrack
             || desc == MediaFormat.noteUnknownCodec {
             return desc
         }
