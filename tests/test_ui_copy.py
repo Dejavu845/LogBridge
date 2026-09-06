@@ -2571,20 +2571,25 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
 def test_disk_estimate_assumption_is_plain_chinese():
     """User-visible dest estimate says 未压缩浮点图. No float32 in the note.
 
-    Byte math (12 / margin) stays. Dev comments may still say float32.
+    Byte math (12 / margin) and panel honesty stay. Dev comments may
+    still say float32.
     """
     from color.batch import (
         BYTES_PER_EXR_PIXEL,
         CONSERVATIVE_FPS,
         DISK_ESTIMATE_ASSUMPTION,
+        HONEST_PROXY_NOTE,
         ProxyDiskEstimate,
         format_proxy_bytes,
     )
 
+    banned = ("float32", "float32 RGB 未压缩")
     assert DISK_ESTIMATE_ASSUMPTION == "未压缩浮点图"
-    assert "float32" not in DISK_ESTIMATE_ASSUMPTION
+    for token in banned:
+        assert token not in DISK_ESTIMATE_ASSUMPTION
     assert BYTES_PER_EXR_PIXEL == 12
     assert int(CONSERVATIVE_FPS) == 24
+    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
 
     known = ProxyDiskEstimate(bytes=2_000_000, used_frame_guess=False, used_pixel_guess=False)
     duration = ProxyDiskEstimate(
@@ -2594,6 +2599,7 @@ def test_disk_estimate_assumption_is_plain_chinese():
         used_duration_fps=True,
     )
     guess = ProxyDiskEstimate(bytes=4_000_000, used_frame_guess=True, used_pixel_guess=False)
+    # Python format: 约 {size}（…）
     assert known.note == f"约 {format_proxy_bytes(known.bytes)}（未压缩浮点图）"
     assert duration.note == (
         f"约 {format_proxy_bytes(duration.bytes)}（未压缩浮点图；帧数按时长×帧率估算）"
@@ -2602,7 +2608,8 @@ def test_disk_estimate_assumption_is_plain_chinese():
         f"约 {format_proxy_bytes(guess.bytes)}（未压缩浮点图；帧数按每秒 24 帧估算）"
     )
     for note in (known.note, duration.note, guess.note):
-        assert "float32" not in note
+        for token in banned:
+            assert token not in note
         assert DISK_ESTIMATE_ASSUMPTION in note
         _chengpian_only_honesty(note)
         assert "完善" not in note
@@ -2613,23 +2620,33 @@ def test_disk_estimate_assumption_is_plain_chinese():
     assert f'static let diskEstimateAssumption = "{DISK_ESTIMATE_ASSUMPTION}"' in clip
     assert f'DISK_ESTIMATE_ASSUMPTION = "{DISK_ESTIMATE_ASSUMPTION}"' in batch
     note_fn = clip.split("var note: String")[1].split("var pickerSuffix")[0]
-    assert "float32" not in _code_without_comments(note_fn)
+    note_ui = _code_without_comments(note_fn)
+    for token in banned:
+        assert token not in note_ui
+    # Swift \(size) templates — exact.
+    assert 'return "约 \\(size)（未压缩浮点图）"' in note_fn
     assert 'return "约 \\(size)（未压缩浮点图；帧数按每秒 24 帧估算）"' in note_fn
     assert 'return "约 \\(size)（未压缩浮点图；帧数按时长×帧率估算）"' in note_fn
-    assert 'return "约 \\(size)（未压缩浮点图）"' in note_fn
     assumption_line = clip.split("static let diskEstimateAssumption")[1].splitlines()[0]
-    assert "float32" not in _code_without_comments(assumption_line)
+    for token in banned:
+        assert token not in _code_without_comments(assumption_line)
     py_assumption = [
         line for line in batch.splitlines() if line.startswith("DISK_ESTIMATE_ASSUMPTION")
     ][0]
-    assert "float32" not in py_assumption
+    for token in banned:
+        assert token not in py_assumption
     py_note = batch.split("def note(self)")[1].split("def format_proxy_bytes")[0]
     py_note_code = "\n".join(
         line.split("#", 1)[0] for line in py_note.splitlines() if '"""' not in line
     )
-    assert "float32" not in py_note_code
+    for token in banned:
+        assert token not in py_note_code
     assert 'f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}）"' in py_note
-    assert "帧数按时长×帧率估算" in py_note
-    assert "帧数按每秒" in py_note
+    assert 'f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}；帧数按时长×帧率估算）"' in py_note
+    assert 'f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}；"' in py_note
+    assert "帧数按每秒 {int(CONSERVATIVE_FPS)} 帧估算" in py_note
+    panel = clip.split("panel.message")[1].split("panel.begin")[0]
+    assert HONEST_PROXY_NOTE in panel
+    assert "float32" not in _code_without_comments(panel)
     assert "bytesPerEXRPixel" in clip
     assert "12" in clip.split("bytesPerEXRPixel")[1].split("conservativeFPS")[0]

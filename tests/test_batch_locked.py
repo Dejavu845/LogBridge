@@ -1452,6 +1452,7 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     assert BYTES_PER_EXR_PIXEL == 12
     assert DISK_ESTIMATE_ASSUMPTION == "未压缩浮点图"
     assert "float32" not in DISK_ESTIMATE_ASSUMPTION
+    assert "float32 RGB 未压缩" not in DISK_ESTIMATE_ASSUMPTION
     assert DISK_SHORT_STATUS == "磁盘空间不足，未写出"
     assert HONEST_PROXY_NOTE in DISK_SHORT_STATUS_TEMPLATE
     _assert_chengpian_not_a_deliverable_claim(DISK_SHORT_STATUS)
@@ -1499,6 +1500,7 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     assert DISK_ESTIMATE_ASSUMPTION in dur_est.note
     assert dur_est.note.endswith("（未压缩浮点图；帧数按时长×帧率估算）")
     assert "float32" not in dur_est.note
+    assert "float32 RGB 未压缩" not in dur_est.note
     _assert_chengpian_not_a_deliverable_claim(dur_est.note)
 
     guessed = BatchClip("guess.mov", idt="sony_slog3_sgamut3")
@@ -1514,9 +1516,11 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     assert str(int(CONSERVATIVE_FPS)) in guess_est.note
     assert guess_est.note.endswith("（未压缩浮点图；帧数按每秒 24 帧估算）")
     assert "float32" not in guess_est.note
+    assert "float32 RGB 未压缩" not in guess_est.note
     _assert_chengpian_not_a_deliverable_claim(guess_est.note)
     assert locked_only.note.endswith("（未压缩浮点图）")
     assert "float32" not in locked_only.note
+    assert "float32 RGB 未压缩" not in locked_only.note
 
     picker = folder_picker_message_with_estimate(locked_only)
     assert FOLDER_PICKER_MESSAGE in picker
@@ -1612,9 +1616,11 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     assert 'static let diskEstimateAssumption = "未压缩浮点图"' in clip
     note_fn = clip.split("var note: String")[1].split("var pickerSuffix")[0]
     assert "float32" not in "\n".join(line.split("//", 1)[0] for line in note_fn.splitlines())
+    assert 'return "约 \\(size)（未压缩浮点图）"' in note_fn
     assert 'return "约 \\(size)（未压缩浮点图；帧数按每秒 24 帧估算）"' in note_fn
     assert 'return "约 \\(size)（未压缩浮点图；帧数按时长×帧率估算）"' in note_fn
-    assert 'return "约 \\(size)（未压缩浮点图）"' in note_fn
+    for token in ("float32", "float32 RGB 未压缩"):
+        assert token not in "\n".join(line.split("//", 1)[0] for line in note_fn.splitlines())
     assert HONEST_PROXY_NOTE in clip.split("func diskShortExportNote")[1]
     assert "bytesPerEXRPixel" in clip
     assert "12" in clip.split("bytesPerEXRPixel")[1].split("conservativeFPS")[0]
