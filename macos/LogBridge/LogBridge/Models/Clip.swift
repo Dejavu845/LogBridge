@@ -118,12 +118,12 @@ struct ProxyDiskEstimate {
     var note: String {
         let size = SessionModel.formatProxyBytes(bytes)
         if usedFrameGuess {
-            return "约 \(size)（float32 RGB 未压缩；帧数按每秒 24 帧估算）"
+            return "约 \(size)（未压缩浮点图；帧数按每秒 24 帧估算）"
         }
         if usedDurationFps {
-            return "约 \(size)（float32 RGB 未压缩；帧数按时长×帧率估算）"
+            return "约 \(size)（未压缩浮点图；帧数按时长×帧率估算）"
         }
-        return "约 \(size)（float32 RGB 未压缩）"
+        return "约 \(size)（未压缩浮点图）"
     }
 
     var pickerSuffix: String { note + "。" }
@@ -529,7 +529,7 @@ final class SessionModel: ObservableObject {
     static let conservativeWidth = 3840
     static let conservativeHeight = 2160
     static let diskShortStatus = "磁盘空间不足，未写出"
-    static let diskEstimateAssumption = "float32 RGB 未压缩"
+    static let diskEstimateAssumption = "未压缩浮点图"
     static let cancelledNote = "已取消"
     static let skippedBucket = "待选跳过"
     static let failedBucket = "失败原因"
