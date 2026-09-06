@@ -738,7 +738,7 @@ enum ResolveExporter {
 
     private static func readme(idts: [IDT], cct: Double?, tint: Double, includeWB: Bool, exposureStops: Double = 0) -> String {
         let idtList = idts.isEmpty ? "(none — assign IDT in Resolve CST)" : idts.map(\.rawValue).joined(separator: ", ")
-        let wbState = includeWB ? "默认开启" : "已写出但默认旁路（identity / enabled=false，不烘焙 CAT）"
+        let wbState = includeWB ? "默认开启" : "已写出但默认旁路（不改颜色）"
         return """
         # LogBridge Resolve 导出
 
@@ -746,8 +746,8 @@ enum ResolveExporter {
 
         ## 诚实说明
 
-        - Rec.709 cube 是 **709 预览**，DIY BT.709 OETF，**不是** ACES OT / RRT，不是成片。preview only. Not an ACES Output Transform.
-        - 关闭白平衡时写出 identity / `enabled=false`，不烘焙 CAT。
+        - Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换，不是成片。
+        - 关闭白平衡时写出旁路（不改颜色），不写进查找表。
         - 主按钮时间线/EXR 是 **整段代理，不是全精度成片**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
         - 机内色温只填旋钮，默认 CAT 是单位阵。用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。
 

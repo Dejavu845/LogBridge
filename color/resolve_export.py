@@ -133,7 +133,7 @@ REC709_CUBE_COMMENT = (
     "# 709 预览. 预览·非成片. DIY BT.709 OETF preview. "
     "Not an ACES Output Transform / RRT."
 )
-# User-visible Resolve exportNote (UI). Package TITLE / XML / README stay as-is.
+# User-visible Resolve exportNote (UI). Package TITLE / XML stay as-is.
 EXPORT_NOTE_TITLE = "LogBridge M1 Resolve 导出（已实现（未验证））"
 EXPORT_NOTE_WORKSPACE = "工作空间：ACEScct 时间线 / ACES2065-1 交换。"
 EXPORT_NOTE_REC709 = "Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换，不是成片。"
@@ -199,11 +199,11 @@ def export_note(
     return "\n".join(lines)
 
 
-# User-facing Resolve package notes. Chinese first. Copy only — no math.
-RESOLVE_README_HONESTY = """## 诚实说明
+# User-facing Resolve package honesty notes. Align exportNote (knife ⑤). Copy only.
+RESOLVE_README_HONESTY = f"""## 诚实说明
 
-- Rec.709 cube 是 **709 预览**，DIY BT.709 OETF，**不是** ACES OT / RRT，不是成片。preview only. Not an ACES Output Transform.
-- 关闭白平衡时写出 identity / `enabled=false`，不烘焙 CAT。
+- {EXPORT_NOTE_REC709}
+- {EXPORT_NOTE_WB_BYPASS}
 - 主按钮时间线/EXR 是 **整段代理，不是全精度成片**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
 - 机内色温只填旋钮，默认 CAT 是单位阵。用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。
 """
@@ -850,7 +850,7 @@ def format_readme(
     wb_state = (
         "默认开启"
         if include_wb
-        else "已写出但默认旁路（identity / enabled=false，不烘焙 CAT）"
+        else EXPORT_NOTE_WB_OFF
     )
     exp_state = "开启" if exposure_enabled else "旁路 / bypassed"
     gain = stops_to_gain(exposure_stops) if exposure_enabled else 1.0
