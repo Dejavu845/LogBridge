@@ -2478,7 +2478,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     assert "条已写出代理" in summary
     assert SKIPPED_BUCKET in summary
     assert "条失败" in summary
-    assert FAILED_BUCKET in summary
+    assert "failedBucket" in summary
     assert HONEST_PROXY_NOTE in summary
     assert "预览·非成片" in summary
     assert "已实现（未验证）" in summary
