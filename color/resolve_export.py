@@ -139,6 +139,21 @@ GRAPH_WB_SUMMARY = (
     "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
     "读不到则为待定/单位阵，不猜 5600 或 6504。"
 )
+# Graph DOT Exposure / WB labels + XML Descriptions (knife ㉗). Copy only.
+GRAPH_DOT_EXP_HEAD = "曝光（可归零）"
+GRAPH_DOT_EXP_FILE = "02_Exposure.cube / .dctl"
+GRAPH_DOT_WB_HEAD = "白平衡（可旁路）"
+# Two ASCII spaces between {cctLabel} and 绿品. No Chinese顿号.
+GRAPH_DOT_WB_LINE = "色温 {cctLabel}  绿品 {tint}"
+GRAPH_DOT_WB_FILE = "03_WB.cube / .cdl / .ccc / .dctl"
+GRAPH_EXP_XML_DESC = (
+    "ACES2065-1 线性按档增益；不加减 Log 码值。独立节点；0 档不写进 IDT/白平衡。"
+)
+GRAPH_WB_XML_DESC = (
+    "机内色温/绿品只填旋钮；默认单位阵（不把机内 5600/6504 当光源去校正）。"
+    "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    "旁路白平衡 = IDT → 曝光 → ACEScct，不烘焙。"
+)
 # User-visible Resolve exportNote (UI). Package TITLE / XML stay as-is.
 EXPORT_NOTE_TITLE = "LogBridge M1 Resolve 导出（已实现（未验证））"
 EXPORT_NOTE_WORKSPACE = "工作空间：ACEScct 时间线 / ACES2065-1 交换。"
@@ -684,7 +699,7 @@ def format_dot(
     wb_fill = "lightgrey" if include_wb else "white"
     exp_style = "solid" if exposure_enabled else "dashed"
     exp_fill = "lightgrey" if exposure_enabled else "white"
-    gain = stops_to_gain(exposure_stops)
+    wb_line = GRAPH_DOT_WB_LINE.format(cctLabel=_cct_label(cct), tint=tint)
     return f"""digraph LogBridgeResolve {{
   rankdir=LR;
   labelloc="t";
@@ -693,8 +708,8 @@ def format_dot(
 
   clip [label="Clip\\ncamera log"];
   idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\nor Resolve CST → ACEScct (ACES workflow)"];
-  exp  [label="Exposure (bypassable/zeroable)\\nACES2065-1 linear gain\\n{exposure_stops:+.2f} stops  gain {gain:.4f}\\n02_Exposure.cube / .dctl", style="filled,{exp_style}", fillcolor="{exp_fill}"];
-  wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n{_cct_label(cct)}  tint {tint}\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,{wb_style}", fillcolor="{wb_fill}"];
+  exp  [label="{GRAPH_DOT_EXP_HEAD}\\n{exposure_stops:+.2f} 档\\n{GRAPH_DOT_EXP_FILE}", style="filled,{exp_style}", fillcolor="{exp_fill}"];
+  wb   [label="{GRAPH_DOT_WB_HEAD}\\n{wb_line}\\n{GRAPH_DOT_WB_FILE}", style="filled,{wb_style}", fillcolor="{wb_fill}"];
   odt  [label="709 预览 (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\n{GRAPH_ODT_USER}"];
   timeline [shape=oval, label="Timeline\\nACEScct"];
 
@@ -817,14 +832,14 @@ def format_graph_xml(
 {idt_block}
   </Node>
   <Node index="2" name="Exposure" type="Gain_1D" bypassable="true" enabled="{exp_on}" stops="{exp_stops:.6f}">
-    <Description>ACES2065-1 linear gain: rgb * (2 ** stops). Not a log-code add. Own bypassable/zeroable node — not baked into IDT or WB when stops=0. On ACEScct timeline: decode → gain → encode.</Description>
+    <Description>{GRAPH_EXP_XML_DESC}</Description>
     <Stops>{exp_stops:.6f}</Stops>
     <Gain>{exp_gain:.10f}</Gain>
     <File role="lut1d">02_Exposure.cube</File>
     <File role="dctl">02_Exposure.dctl</File>
   </Node>
   <Node index="3" name="WB" type="Corrector" bypassable="true" enabled="{wb_enabled}" method="{_xml_escape(method)}">
-    <Description>Linear AP0 Bradford/CAT02 (CCT + tint) in ACES2065-1. Never a CAT on ACEScct-encoded values. As-shot CCT/tint fills knobs (UI only); default CAT is identity — do not treat as-shot 5600/6504 as an illuminant (double WB). CAT applies when the user moves knobs or on a grey-card override. Missing CCT/tint is 待定 / 单位阵 (do not guess 5600 or 6504). Bypass this node in Resolve (Color page: disable WB, or DCTL Bypass WB, or skip 03_WB.cube). Remaining graph is IDT → Exposure → ACEScct, no bake.</Description>
+    <Description>{GRAPH_WB_XML_DESC}</Description>
     {cct_xml}
     <Tint>{tint:.6f}</Tint>
     <WBSource>{_xml_escape(wb_source)}</WBSource>

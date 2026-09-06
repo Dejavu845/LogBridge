@@ -686,14 +686,14 @@ enum ResolveExporter {
             <Description>Camera log to ACEScct via ACES2065-1. No white balance, no exposure.</Description>
         \(idtNodes)  </Node>
           <Node index="2" name="Exposure" type="Gain_1D" bypassable="true" enabled="\(expOn)" stops="\(String(format: "%.6f", exposureStops))">
-            <Description>ACES2065-1 linear gain: rgb * (2 ** stops). Not a log-code add. Own node — not baked into IDT or WB when stops=0.</Description>
+            <Description>ACES2065-1 线性按档增益；不加减 Log 码值。独立节点；0 档不写进 IDT/白平衡。</Description>
             <Stops>\(String(format: "%.6f", exposureStops))</Stops>
             <Gain>\(String(format: "%.10f", gain))</Gain>
             <File role="lut1d">02_Exposure.cube</File>
             <File role="dctl">02_Exposure.dctl</File>
           </Node>
           <Node index="3" name="WB" type="Corrector" bypassable="true" enabled="\(enabled)" method="bradford">
-            <Description>As-shot CCT/tint fills knobs (UI only); default CAT is identity — do not treat as-shot 5600/6504 as an illuminant (double WB). Missing CCT/tint is 待定 / 单位阵 (do not guess 5600 or 6504). Bypass WB = IDT → Exposure → ACEScct, no bake.</Description>
+            <Description>机内色温/绿品只填旋钮；默认单位阵（不把机内 5600/6504 当光源去校正）。读不到则为待定/单位阵，不猜 5600 或 6504。旁路白平衡 = IDT → 曝光 → ACEScct，不烘焙。</Description>
             \(cct == nil ? "<CCT pending=\"true\" source=\"unknown\"/>" : "<CCT>\(String(format: "%.4f", cct!))</CCT>")
             <Tint>\(String(format: "%.6f", tint))</Tint>
             <File role="lut">03_WB.cube</File>
@@ -724,8 +724,8 @@ enum ResolveExporter {
 
           clip [label="Clip\\ncamera log"];
           idt  [label="IDT\\n\(idtLabel)\\n01_IDT_<idt>.cube\\nor ACES IDT / CST → ACEScct"];
-          exp  [label="Exposure (zeroable)\\n\(String(format: "%+.2f", exposureStops)) stops\\n02_Exposure.cube / .dctl"];
-          wb   [label="WB (bypassable)\\nscene-linear Bradford/CAT02\\n\(cctLabel(cct))  tint \(tint)\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,\(wbStyle)", fillcolor="\(wbFill)"];
+          exp  [label="曝光（可归零）\\n\(String(format: "%+.2f", exposureStops)) 档\\n02_Exposure.cube / .dctl"];
+          wb   [label="白平衡（可旁路）\\n色温 \(cctLabel(cct))  绿品 \(tint)\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,\(wbStyle)", fillcolor="\(wbFill)"];
           odt  [label="709 预览 (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\n709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"];
           timeline [shape=oval, label="Timeline\\nACEScct"];
 
