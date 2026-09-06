@@ -29,12 +29,15 @@ from color.resolve_export import (
     EXPORT_NOTE_REC709,
     EXPORT_NOTE_WB_BYPASS,
     EXPORT_NOTE_WB_OFF,
+    GRAPH_DOT_CLIP_LABEL,
     GRAPH_DOT_EXP_FILE,
     GRAPH_DOT_EXP_HEAD,
     GRAPH_DOT_WB_FILE,
     GRAPH_DOT_WB_HEAD,
     GRAPH_DOT_WB_LINE,
+    GRAPH_DOT_WORKING_SPACE,
     GRAPH_EXP_XML_DESC,
+    GRAPH_IDT_XML_DESC,
     GRAPH_ODT_USER,
     GRAPH_ODT_XML_DESC,
     GRAPH_WB_SUMMARY,
@@ -1214,6 +1217,24 @@ GRAPH_WB_XML_DESC_LOCKED = (
 )
 GRAPH_DOT_WB_LINE_LOCKED = "色温 {cctLabel}  绿品 {tint}"
 GRAPH_DOT_WB_SWIFT = "色温 \\(cctLabel(cct))  绿品 \\(tint)"
+GRAPH_DOT_CLIP_LABEL_LOCKED = "素材\\n相机 Log"
+GRAPH_DOT_WORKING_SPACE_LOCKED = "工作空间"
+GRAPH_IDT_XML_DESC_LOCKED = (
+    "相机 Log 经 ACES2065-1 到 ACEScct。不含白平衡、不含曝光。"
+)
+GRAPH_IDT_XML_DESC_FROM = (
+    "Camera log to ACEScct via ACES2065-1. No white balance, no exposure."
+)
+GRAPH_IDT_XML_DESC_FROM_PY_TAIL = (
+    "ACES workflow. Exposure is its own node (not baked into IDT)."
+)
+GRAPH_DOT_CLIP_WS_BANNED = (
+    "Clip\\ncamera log",
+    "camera log",
+    "working space",
+    GRAPH_IDT_XML_DESC_FROM,
+    GRAPH_IDT_XML_DESC_FROM_PY_TAIL,
+)
 
 
 def _dot_node_label(dot: str, node: str) -> str:
@@ -1388,4 +1409,143 @@ def test_graph_dot_xml_exposure_wb_plain_chinese(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(wb_desc)
     _assert_chengpian_not_a_deliverable_claim(exp_label)
     _assert_chengpian_not_a_deliverable_claim(wb_label)
+
+
+def test_graph_dot_xml_clip_working_space_idt_plain_chinese(tmp_path: Path):
+    """graphDOT / XML ㉘: Clip / working space / IDT 人话. ㉗ + TITLE / filenames / 色管 frozen."""
+    assert GRAPH_DOT_CLIP_LABEL == GRAPH_DOT_CLIP_LABEL_LOCKED
+    assert GRAPH_DOT_CLIP_LABEL == "素材\\n相机 Log"
+    assert GRAPH_DOT_WORKING_SPACE == GRAPH_DOT_WORKING_SPACE_LOCKED
+    assert GRAPH_DOT_WORKING_SPACE == "工作空间"
+    assert GRAPH_IDT_XML_DESC == GRAPH_IDT_XML_DESC_LOCKED
+    assert GRAPH_IDT_XML_DESC == (
+        "相机 Log 经 ACES2065-1 到 ACEScct。不含白平衡、不含曝光。"
+    )
+
+    export_resolve_bundle(
+        tmp_path,
+        idt_ids=["arri_logc4_awg4"],
+        include_wb=True,
+        cct=3200.0,
+        tint=0.25,
+        exposure_stops=1.5,
+        lut_size=5,
+    )
+    xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
+    dot = (tmp_path / "graph.dot").read_text(encoding="utf-8")
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    wb_cube = (tmp_path / "03_WB.cube").read_text(encoding="utf-8")
+
+    clip_label = _dot_node_label(dot, "clip")
+    assert clip_label == GRAPH_DOT_CLIP_LABEL_LOCKED
+    assert 'clip [label="素材\\n相机 Log"]' in dot
+    assert 'label="工作空间"' in dot
+    generated_dot = format_dot(
+        ["arri_logc4_awg4"], 3200.0, 0.25, True, exposure_stops=1.5
+    )
+    assert _dot_node_label(generated_dot, "clip") == GRAPH_DOT_CLIP_LABEL
+    assert f'label="{GRAPH_DOT_WORKING_SPACE}"' in generated_dot
+    assert _dot_node_label(generated_dot, "clip") == clip_label
+
+    idt_desc = _xml_node_description(xml, "IDT")
+    assert idt_desc == GRAPH_IDT_XML_DESC_LOCKED
+    generated_xml = format_graph_xml(
+        ["arri_logc4_awg4"], 3200.0, 0.25, include_wb=True
+    )
+    assert _xml_node_description(generated_xml, "IDT") == GRAPH_IDT_XML_DESC
+    assert f"<Description>{GRAPH_IDT_XML_DESC_LOCKED}</Description>" in xml
+    assert f"<Description>{GRAPH_IDT_XML_DESC_LOCKED}</Description>" in generated_xml
+
+    for token in GRAPH_DOT_CLIP_WS_BANNED:
+        assert token not in clip_label, token
+        assert token not in idt_desc, token
+        assert token not in GRAPH_DOT_CLIP_LABEL, token
+        assert token not in GRAPH_DOT_WORKING_SPACE, token
+        assert token not in GRAPH_IDT_XML_DESC, token
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = swift.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    py_xml = py.split("def format_graph_xml")[1].split("def format_readme")[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    wb_fn = swift.split("private static func wbCube")[1].split(
+        "private static func odtCube"
+    )[0]
+
+    assert GRAPH_IDT_XML_DESC in xml_fn
+    assert "{GRAPH_IDT_XML_DESC}" in py_xml
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert "GRAPH_DOT_CLIP_LABEL" in py_dot
+    assert "GRAPH_DOT_WORKING_SPACE" in py_dot
+    assert r'GRAPH_DOT_CLIP_LABEL = "素材\\n相机 Log"' in py
+    assert f'GRAPH_DOT_WORKING_SPACE = "{GRAPH_DOT_WORKING_SPACE_LOCKED}"' in py
+    assert GRAPH_IDT_XML_DESC_LOCKED in py
+
+    for token in GRAPH_DOT_CLIP_WS_BANNED:
+        assert token not in clip_label, token
+        assert token not in idt_desc, token
+        assert token not in xml_fn, token
+        assert token not in _xml_node_description(generated_xml, "IDT"), token
+    assert "camera log" not in dot_fn
+    assert "working space" not in dot_fn
+    assert "camera log" not in py_dot
+    assert "working space" not in py_dot
+    assert GRAPH_IDT_XML_DESC_FROM not in xml_fn
+    assert GRAPH_IDT_XML_DESC_FROM not in py_xml
+    assert GRAPH_IDT_XML_DESC_FROM_PY_TAIL not in py_xml
+    assert GRAPH_IDT_XML_DESC_FROM not in xml
+    assert GRAPH_IDT_XML_DESC_FROM_PY_TAIL not in xml
+    assert r"Clip\\ncamera log" not in dot_fn
+    assert "Clip\\ncamera log" not in dot
+    assert "Clip\\ncamera log" not in generated_dot
+
+    # ㉗ four locked DOT/XML strings 一字不动.
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == GRAPH_DOT_WB_LINE_LOCKED
+    assert GRAPH_EXP_XML_DESC == GRAPH_EXP_XML_DESC_LOCKED
+    assert GRAPH_WB_XML_DESC == GRAPH_WB_XML_DESC_LOCKED
+    assert GRAPH_EXP_XML_DESC in xml_fn
+    assert GRAPH_WB_XML_DESC in xml_fn
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert GRAPH_DOT_WB_SWIFT in dot_fn
+    assert _dot_node_label(dot, "exp") == (
+        "曝光（可归零）\\n+1.50 档\\n02_Exposure.cube / .dctl"
+    )
+    assert _xml_node_description(xml, "Exposure") == GRAPH_EXP_XML_DESC_LOCKED
+    assert _xml_node_description(xml, "WB") == GRAPH_WB_XML_DESC_LOCKED
+
+    # FROZEN: cube TITLE (incl. pending/identity), filenames, 色管, stops= attrs.
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
+    assert LOCKED_REC709_CUBE_TITLE in swift
+    assert wb_cube.splitlines()[0].startswith(f'TITLE "{WB_CUBE_TITLE_HEAD}')
+    assert '?? "pending / identity"' in wb_fn
+    assert 'name="Exposure" type="Gain_1D" bypassable="true"' in xml
+    assert 'name="WB" type="Corrector" bypassable="true"' in xml
+    assert 'name="IDT" type="LUT_or_CST" bypassable="false"' in xml
+    assert 'stops="1.500000"' in xml
+    for name in LOCKED_NODE_FILES:
+        assert name in swift
+        assert name in py
+    assert "matrixCCT = nil" in swift
+    assert "white_balance_matrix" in py
+    assert "def apply_exposure" in (root / "color/exposure.py").read_text(encoding="utf-8")
+    assert "达芬奇已验证" not in clip_label
+    assert "达芬奇已验证" not in idt_desc
+    assert "达芬奇已验证" not in GRAPH_IDT_XML_DESC
+    _assert_chengpian_not_a_deliverable_claim(clip_label)
+    _assert_chengpian_not_a_deliverable_claim(idt_desc)
+    _assert_chengpian_not_a_deliverable_claim(GRAPH_IDT_XML_DESC)
 
