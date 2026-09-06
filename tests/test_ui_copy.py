@@ -5,12 +5,16 @@ from pathlib import Path
 from color.batch import (
     ADVANCED_DISCLOSURE_HELP,
     ADVANCED_EXPORT_HELP,
+    BATCH_SUMMARY_TEMPLATE,
+    CANCELLED_NOTE,
+    CANCELLED_STATUS_TEMPLATE,
     DECODE_FAILED_CHIP,
     EMPTY_RGB_CHIP,
     EMPTY_STATE_STEP_1,
     EMPTY_STATE_STEP_2,
     EMPTY_STATE_STEP_3,
     EMPTY_STATE_STEPS,
+    FAILED_BUCKET,
     FOLDER_PICKER_MESSAGE_UI,
     FRAME_MISMATCH_CHIP,
     HONEST_PROXY_NOTE,
@@ -35,7 +39,10 @@ from color.batch import (
     PROCESS_DELIVERABLE_NOTE_UI,
     PROGRESS_PREFIX,
     PROGRESS_STATUS_HELP,
+    WRITE_FAILED_CHIP,
     progress_text,
+    batch_summary_text,
+    cancelled_status_text,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
     RESOLVE_INCOMPLETE_CHIP,
@@ -2385,3 +2392,143 @@ def test_mxf_no_track_chip_not_arri():
     _chengpian_only_honesty(skip_note)
     assert "完善" not in NOTE_MXF_NO_TRACK
     assert "精准" not in NOTE_MXF_NO_TRACK
+
+
+def test_cancel_batch_status_english_leftovers_are_chinese():
+    """Cancel / batch / export status leftovers stay locked Chinese.
+
+    Reuse 写出失败 · 没有素材. cancelledExportNote / batch summary stay
+    已取消 + buckets + honesty. No new chips, buttons, or success claims.
+    """
+    clip = _read(CLIP)
+    content = _read(CONTENT)
+    engine = _read(ENGINE)
+    preview = _read(PREVIEW)
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    strip = _read(NODE_STRIP)
+
+    assert WRITE_FAILED_CHIP == "写出失败"
+    assert PREVIEW_STATUS_EMPTY == "没有素材"
+    assert CANCELLED_NOTE == "已取消"
+    assert SKIPPED_BUCKET == "待选跳过"
+    assert FAILED_BUCKET == "失败原因"
+    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
+    assert BATCH_SUMMARY_TEMPLATE == (
+        "{wrote} 条已写出代理 / {skipped} 条待选跳过 / {failed} 条失败"
+    )
+    assert CANCELLED_STATUS_TEMPLATE == (
+        "处理已锁定片段 — 已取消。"
+        "{processed} 条已处理 / {skipped} 条已跳过"
+        "（先选择 Log 与色域 / 先选择成对 IDT）。"
+        "整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+    )
+    assert f'static let writeFailedChip = "{WRITE_FAILED_CHIP}"' in clip
+    assert f'static let cancelledNote = "{CANCELLED_NOTE}"' in clip
+    assert f'static let skippedBucket = "{SKIPPED_BUCKET}"' in clip
+    assert f'static let failedBucket = "{FAILED_BUCKET}"' in clip
+    assert 'return "没有素材"' in clip.split("var processSelectedBlockedReason")[1]
+    assert f'status = "{PREVIEW_STATUS_EMPTY}"' in engine
+    assert f'status: String = "{PREVIEW_STATUS_EMPTY}"' in engine
+    assert f'return session.selectedClip?.lockedPairLabel ?? "{PREVIEW_STATUS_EMPTY}"' in strip
+
+    ui_clip = _code_without_comments(clip)
+    ui_content = _code_without_comments(content)
+    ui_engine = _code_without_comments(engine)
+    ui_preview = _code_without_comments(preview)
+    ui_sidebar = _code_without_comments(sidebar)
+    leftover_en = (
+        "Wrote ",
+        "Wrote…",
+        "Wrote...",
+        "Export failed",
+        "Export failed:",
+        "No clip selected",
+        "Cancelled",
+        "canceled",
+    )
+    for chunk in (ui_clip, ui_content, ui_engine, ui_preview, ui_sidebar):
+        for token in leftover_en:
+            assert token not in chunk, token
+
+    cancel_note = clip.split("func cancelledExportNote")[1].split(
+        "static let bytesPerEXRPixel"
+    )[0]
+    ui_cancel = _code_without_comments(cancel_note)
+    assert CANCELLED_NOTE in cancel_note
+    assert HONEST_PROXY_NOTE in cancel_note
+    assert "条已处理" in cancel_note
+    assert "条已跳过" in cancel_note
+    assert REASON_PICK_LOG_GAMUT in cancel_note
+    assert REASON_PICK_PAIRED_IDT in cancel_note
+    assert "预览·非成片" in cancel_note
+    assert "已实现（未验证）" in cancel_note
+    assert "Cancelled" not in ui_cancel
+    assert "canceled" not in ui_cancel
+    py_cancel = cancelled_status_text(1, 2)
+    assert py_cancel == CANCELLED_STATUS_TEMPLATE.format(processed=1, skipped=2)
+    assert CANCELLED_NOTE in py_cancel
+    assert HONEST_PROXY_NOTE in py_cancel
+    assert "1 条已处理" in py_cancel
+    assert "2 条已跳过" in py_cancel
+
+    summary = clip.split("static func batchSummaryText")[1].split(
+        "func exportLockedEXR"
+    )[0]
+    ui_summary = _code_without_comments(summary)
+    assert "条已写出代理" in summary
+    assert SKIPPED_BUCKET in summary
+    assert "条失败" in summary
+    assert FAILED_BUCKET in summary
+    assert HONEST_PROXY_NOTE in summary
+    assert "预览·非成片" in summary
+    assert "已实现（未验证）" in summary
+    assert "Cancelled" not in ui_summary
+    assert "canceled" not in ui_summary
+    write_body = clip.split("func writeLockedDeliverables")[1].split(
+        "func exportLockedEXR"
+    )[0]
+    assert "Self.cancelledNote" in write_body
+    assert "Self.batchSummaryText" in write_body
+    py_summary = batch_summary_text(1, 1, 1, [CANCELLED_NOTE])
+    assert BATCH_SUMMARY_TEMPLATE.format(wrote=1, skipped=1, failed=1) in py_summary
+    assert CANCELLED_NOTE in py_summary
+    assert FAILED_BUCKET in py_summary
+    assert HONEST_PROXY_NOTE in py_summary
+
+    assert short_export_chip("write produced no file") == WRITE_FAILED_CHIP
+    assert short_export_chip(WRITE_FAILED_CHIP) == WRITE_FAILED_CHIP
+    chip_fn = clip.split("static func shortExportChip")[1].split(
+        "static func preservedFailureNote"
+    )[0]
+    assert "return writeFailedChip" in chip_fn
+    blocked = clip.split("var processSelectedBlockedReason")[1].split(
+        "func processLockedClips"
+    )[0]
+    assert 'return "没有素材"' in blocked
+    assert "No clip selected" not in blocked
+
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    status_bar = content.split("struct StatusBar")[1]
+    assert bar.count("Button(") == 1
+    assert "取消" in bar
+    assert "lastExportNote" in bar
+    assert "showsBatchSummary" in bar
+    assert "Export failed" not in bar
+    assert "Export failed" not in status_bar
+    assert "No clip selected" not in status_bar
+
+    for note in (
+        WRITE_FAILED_CHIP,
+        PREVIEW_STATUS_EMPTY,
+        CANCELLED_NOTE,
+        SKIPPED_BUCKET,
+        FAILED_BUCKET,
+        HONEST_PROXY_NOTE,
+        BATCH_SUMMARY_TEMPLATE,
+        CANCELLED_STATUS_TEMPLATE,
+        py_cancel,
+        py_summary,
+    ):
+        _chengpian_only_honesty(note)
+        assert "完善" not in note
+        assert "精准" not in note
