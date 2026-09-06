@@ -494,3 +494,131 @@ def test_resolve_copy_has_no_precision_or_chengpian_claims(tmp_path: Path):
     )
     _assert_chengpian_not_a_deliverable_claim(export_fn)
 
+
+RESOLVE_IDT_PLACEHOLDER = 'idt="用户选择成对 IDT"'
+RESOLVE_CCT_PENDING_LABEL = "待定 / 单位阵"
+WB_CUBE_TITLE_HEAD = "LogBridge WB AP0 CAT"
+LOCKED_NODE_NAMES = (
+    'name="IDT"',
+    'name="Exposure"',
+    'name="WB"',
+    'name="ODT_Rec709"',
+)
+
+
+def test_resolve_package_placeholders_are_locked_chinese(tmp_path: Path):
+    """XML/README user copy: 用户选择成对 IDT + 待定/单位阵. TITLE/nodes stay."""
+    xml = format_graph_xml([], None, 0.0, include_wb=False)
+    assert '<?xml version="1.0" encoding="UTF-8"?>' in xml
+    assert RESOLVE_IDT_PLACEHOLDER in xml
+    assert "(user picker)" not in xml
+    assert "pending / identity" not in xml
+    assert RESOLVE_CCT_PENDING_LABEL in xml
+    for name in LOCKED_NODE_NAMES:
+        assert name in xml
+    assert 'type="LUT_or_CST"' in xml
+    assert 'type="Corrector"' in xml
+    assert 'bypassable="false"' in xml
+    assert 'bypassable="true"' in xml
+    assert 'name="WB" type="Corrector" bypassable="true" enabled="false"' in xml
+    assert "完善" not in xml
+    assert "精准" not in xml
+    assert "达芬奇已验证" not in xml
+    assert "implemented (unverified)" in xml
+    _assert_chengpian_not_a_deliverable_claim(xml)
+
+    empty = tmp_path / "empty"
+    export_resolve_bundle(empty, idt_ids=[], lut_size=5, include_wb=False, cct=None)
+    raw = (empty / "graph.xml").read_bytes()
+    assert raw.startswith(b'<?xml version="1.0" encoding="UTF-8"?>')
+    assert "用户选择成对 IDT".encode("utf-8") in raw
+    written_xml = raw.decode("utf-8")
+    assert RESOLVE_IDT_PLACEHOLDER in written_xml
+    assert "(user picker)" not in written_xml
+    assert "pending / identity" not in written_xml
+    readme = (empty / "README_RESOLVE.md").read_text(encoding="utf-8")
+    assert "pending / identity" not in readme
+    assert "已实现（未验证）" in readme
+    assert "完善" not in readme
+    assert "精准" not in readme
+    assert "达芬奇已验证" not in readme
+    _assert_chengpian_not_a_deliverable_claim(readme)
+    dot = (empty / "graph.dot").read_text(encoding="utf-8")
+    assert "pending / identity" not in dot
+    assert "(user picker)" not in dot
+
+    cube = wb_cube_bytes(None, 0.0, size=5)
+    title = cube.splitlines()[0]
+    assert title.startswith(f'TITLE "{WB_CUBE_TITLE_HEAD}')
+    assert "ACEScct decode→ACES2065-1→encode" in title
+    # Python TITLE keeps English as-shot unknown (not the user-visible pending phrase).
+    assert "as-shot unknown" in title
+
+    locked = tmp_path / "locked"
+    export_resolve_bundle(locked, idt_ids=["arri_logc4_awg4"], lut_size=5)
+    pkg_xml = (locked / "graph.xml").read_text(encoding="utf-8")
+    assert 'name="IDT" type="LUT_or_CST" bypassable="false"' in pkg_xml
+    assert 'name="Exposure" type="Gain_1D" bypassable="true"' in pkg_xml
+    assert 'name="WB" type="Corrector" bypassable="true"' in pkg_xml
+    assert 'name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="false"' in pkg_xml
+    assert "(user picker)" not in pkg_xml
+    assert RESOLVE_IDT_PLACEHOLDER not in pkg_xml
+    cube709 = (locked / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    assert cube709.splitlines()[0] == f'TITLE "{REC709_CUBE_TITLE}"'
+    wb = (locked / "03_WB.cube").read_text(encoding="utf-8")
+    assert wb.splitlines()[0].startswith(f'TITLE "{WB_CUBE_TITLE_HEAD}')
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    readme_fn = swift.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    dot_fn = swift.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    cct_fn = swift.split("private static func cctLabel")[1].split(
+        "static func exportNote"
+    )[0]
+    wb_fn = swift.split("private static func wbCube")[1].split(
+        "private static func odtCube"
+    )[0]
+    py_xml = py.split("def format_graph_xml")[1].split("def format_readme")[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+
+    assert 'idt=\\"用户选择成对 IDT\\"' in xml_fn
+    assert RESOLVE_IDT_PLACEHOLDER in py_xml
+    assert "(user picker)" not in xml_fn
+    assert "(user picker)" not in py_xml
+    assert f'?? "{RESOLVE_CCT_PENDING_LABEL}"' in cct_fn
+    assert "pending / identity" not in cct_fn
+    assert RESOLVE_CCT_PENDING_LABEL in xml_fn
+    assert RESOLVE_CCT_PENDING_LABEL in readme_fn
+    assert "pending / identity" not in xml_fn
+    assert "pending / identity" not in readme_fn
+    assert "pending / identity" not in dot_fn
+    assert "pending / identity" not in py_xml
+    assert "pending / identity" not in py_readme
+    # Cube TITLE may keep English pending / identity.
+    assert '?? "pending / identity"' in wb_fn
+    assert WB_CUBE_TITLE_HEAD in wb_fn
+    for name in LOCKED_NODE_NAMES:
+        assert name in xml_fn
+        assert name in py_xml or (name == 'name="ODT_Rec709"' and "odt_name" in py_xml)
+    assert 'name="IDT"' in py_xml
+    assert 'name="Exposure"' in py_xml
+    assert 'name="WB"' in py_xml
+    assert "includeWBNode" in swift
+    assert "matrixCCT = nil" in swift
+    assert "white_balance_matrix" in py
+    for blob in (xml_fn, readme_fn, py_xml, py_readme, written_xml, readme):
+        assert "完善" not in blob
+        assert "精准" not in blob
+        assert "达芬奇已验证" not in blob
+        _assert_chengpian_not_a_deliverable_claim(blob)
+
