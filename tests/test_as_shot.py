@@ -165,7 +165,7 @@ def test_resolve_wb_stays_bypassable_with_as_shot(tmp_path):
     assert 'name="WB"' in xml
     assert 'bypassable="true"' in xml
     assert "<CCT>3200.0000</CCT>" in xml
-    assert "do not guess 5600 or 6504" in xml
+    assert "不猜 5600 或 6504" in xml
     g.set_enabled(3, False)
     log = _logc4_chroma()
     np.testing.assert_allclose(g.apply(log), apply_idt(log, "arri_logc4_awg4"), atol=1e-12)
@@ -183,7 +183,7 @@ def test_pending_export_does_not_write_guessed_cct(tmp_path):
     g = SerialGraph.from_as_shot(UNKNOWN_AS_SHOT, idt_id="arri_logc4_awg4")
     xml = format_graph_xml(["arri_logc4_awg4"], None, 0.0, include_wb=False, graph=g)
     assert 'pending="true"' in xml
-    assert "5600" not in xml or "do not guess 5600" in xml
+    assert "不猜 5600 或 6504" in xml
     # Must not emit a guessed CCT element.
     assert "<CCT>5600" not in xml
     assert "<CCT>6504" not in xml

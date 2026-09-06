@@ -130,7 +130,7 @@ def test_export_exposure_is_own_node_not_baked(tmp_path: Path):
     assert "02_Exposure.dctl" in names
     xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
     assert 'name="Exposure" type="Gain_1D" bypassable="true"' in xml
-    assert "not baked into IDT or WB" in xml
+    assert "0 档不写进 IDT/白平衡" in xml
     assert "02_Exposure.cube" in xml
     idt = (tmp_path / "01_IDT_arri_logc4_awg4.cube").read_text(encoding="utf-8")
     assert "no WB" in idt
