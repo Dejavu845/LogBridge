@@ -62,9 +62,12 @@ CAMERA_RAW_MARKERS = (
 NOTE_ARRI_MXF = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
 NOTE_CAMERA_RAW = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
 NOTE_UNKNOWN_CODEC = "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
+NOTE_REFUSE_CONTAINER = "这个容器不接。不写「全格式已支持」。"
 # Accept notes (already Chinese; API names kept). Success-path lock.
 NOTE_STILL_ACCEPT = "静帧 {ext} 走 ImageIO。不是成片。"
 NOTE_MOVIE_ACCEPT = "MOV/MP4：ProRes / H.264 / HEVC 走 AVAssetReader Y′CbCr。不走 copyCGImage。"
+# Multi-file import skip summary. Per-file refuse chips stay as-is.
+IMPORT_SKIP_HEADER = "未导入 {n} 条："
 
 # Folder expand lists these so a refuse note can fire. Not a support claim.
 EXPAND_EXTENSIONS = (
@@ -172,7 +175,7 @@ def classify(path: str | Path, codec: str | None = None) -> FormatDecision:
         action=REFUSE,
         container=ext or "unknown",
         codec=codec_n,
-        note="这个容器不接。不写「全格式已支持」。",
+        note=NOTE_REFUSE_CONTAINER,
         kind="refuse",
     )
 
@@ -210,3 +213,10 @@ def _refuse_note(ext: str) -> str:
 def empty_metadata_note() -> str:
     """No camera-private metadata → paired IDT picker. Do not guess."""
     return "先选择 Log 与色域"
+
+
+def import_skip_summary(lines: list[str]) -> str:
+    """User-visible multi-file skip note. Header when more than one skip."""
+    if len(lines) > 1:
+        return IMPORT_SKIP_HEADER.format(n=len(lines)) + "\n" + "\n".join(lines)
+    return "\n".join(lines)

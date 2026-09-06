@@ -13,6 +13,9 @@ from color.formats import (
     NOTE_MOVIE_ACCEPT,
     NOTE_STILL_ACCEPT,
     NOTE_UNKNOWN_CODEC,
+    NOTE_REFUSE_CONTAINER,
+    IMPORT_SKIP_HEADER,
+    import_skip_summary,
 )
 from color.batch import (
     DECODE_FAILED_CHIP,
@@ -320,3 +323,37 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
         ):
             cleaned = cleaned.replace(tok, "")
         assert f'"{GENERIC_PARSE_FAILED}"' not in cleaned
+
+
+def test_import_skip_summary_header_and_chips():
+    """Mixed r3d / rejects: lastImportNote starts with 未导入 N 条：. Chips stay."""
+    assert IMPORT_SKIP_HEADER == "未导入 {n} 条："
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
+    assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式已支持」。"
+    assert classify("clip.r3d").note == NOTE_CAMERA_RAW
+    assert classify("A001.mxf", "ARRIRAW").note == NOTE_ARRI_MXF
+    assert classify("weird.mov", "r210").note == NOTE_UNKNOWN_CODEC
+    assert classify("nope.xyz").note == NOTE_REFUSE_CONTAINER
+
+    lines = [
+        f"clip.r3d：{NOTE_CAMERA_RAW}",
+        f"A001.mxf：{NOTE_ARRI_MXF}",
+        f"weird.mov：{NOTE_UNKNOWN_CODEC}",
+        f"nope.xyz：{NOTE_REFUSE_CONTAINER}",
+    ]
+    note = import_skip_summary(lines)
+    assert note.startswith("未导入 4 条：")
+    assert note.splitlines()[0] == "未导入 4 条："
+    assert note.splitlines()[1:] == lines
+
+    clip = _read(CLIP)
+    media = _read(MEDIA)
+    assert "static func importSkipSummary" in clip
+    assert "未导入 \\(skipped.count) 条：" in clip
+    assert "Self.importSkipSummary(skipped)" in clip
+    assert NOTE_CAMERA_RAW in media
+    assert NOTE_ARRI_MXF in media
+    assert NOTE_UNKNOWN_CODEC in media
+    assert NOTE_REFUSE_CONTAINER in media

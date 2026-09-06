@@ -1088,6 +1088,14 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// Multi-file refuse list. Header when more than one skip. Per-file chips unchanged.
+    static func importSkipSummary(_ skipped: [String]) -> String {
+        guard skipped.count > 1 else {
+            return skipped.joined(separator: "\n")
+        }
+        return "未导入 \(skipped.count) 条：\n" + skipped.joined(separator: "\n")
+    }
+
     func importURL(_ url: URL) {
         // Keep the security scope for the session so preview decode can reopen the URL.
         _ = url.startAccessingSecurityScopedResource()
@@ -1144,7 +1152,7 @@ final class SessionModel: ObservableObject {
                     self.applyClipWBToGraph(first)
                 }
                 if !skipped.isEmpty {
-                    self.lastImportNote = skipped.joined(separator: "\n")
+                    self.lastImportNote = Self.importSkipSummary(skipped)
                 }
                 if self.settings.promptEstimateWBOnImport {
                     let locked = built.contains { $0.hasLockedPair }
