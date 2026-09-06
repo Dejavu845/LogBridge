@@ -102,7 +102,17 @@ IDT_PAIR_HELP = (
     "C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。"
     "Venice 对仅在检测到时出现。"
 )
-PICK_NEUTRAL_HELP = "点灰卡：IDT 后 ACES2065-1 (AP0) 线性取样，覆盖元数据。写入现有 CAT。"
+PICK_NEUTRAL_HELP = "点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。"
+WB_ESTIMATE_HELP = (
+    "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
+)
+INSPECTOR_GREY_WB_HELP_BANNED = (
+    "float32",
+    "ACES2065-1 (AP0)",
+    "SoG p=6",
+    "写入现有 CAT",
+    "2^stops",
+)
 SOURCE_LABEL_METADATA = "元数据"
 SOURCE_LABEL_FILENAME = "文件名"
 SOURCE_LABEL_MODEL = "机型"
@@ -343,13 +353,17 @@ def test_as_shot_wb_copy_and_no_5600_guess():
     inspector = _read(INSPECTOR)
     assert "机内" in inspector
     assert "机内 as-shot" not in inspector
-    assert "点灰卡：IDT 后 ACES2065-1 (AP0)" in inspector
+    assert PICK_NEUTRAL_HELP in inspector
+    assert WB_ESTIMATE_HELP in inspector
     assert "Pick neutral" not in inspector
     assert "5600" in inspector  # named so we can say we do not guess it
     assert "6504" in inspector
     assert "不猜 5600" in inspector
-    assert "ACES2065-1 (AP0)" in inspector
-    assert "IDT 后" in inspector
+    assert "不是校准" in inspector
+    assert "ACES2065-1 (AP0)" not in inspector
+    assert "写入现有 CAT" not in inspector
+    assert "SoG p=6" not in inspector
+    assert "IDT 之后" in inspector
     assert "已实现（未验证）" in inspector
     assert "CAT(user→D65)" not in inspector
     assert "单位阵" in inspector
@@ -960,6 +974,41 @@ def test_inspector_exposure_wb_help_no_formula_stack():
         assert token not in ui, token
 
     for chunk in (exposure, wb, INSPECTOR_EXPOSURE_HELP, INSPECTOR_WB_HELP):
+        assert "完善" not in chunk
+        assert "精准" not in chunk
+        assert "达芬奇已验证" not in chunk
+        _chengpian_only_honesty(chunk)
+
+
+def test_inspector_grey_card_estimate_help_locked_chinese():
+    """Inspector ⑯: 点灰卡 / 白平衡（估计） .help locked Chinese. No jargon."""
+    inspector = _read(INSPECTOR)
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    helps = _help_literals(wb)
+
+    assert PICK_NEUTRAL_HELP == (
+        "点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。"
+    )
+    assert WB_ESTIMATE_HELP == (
+        "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
+    )
+    assert f'.help("{PICK_NEUTRAL_HELP}")' in wb
+    assert f'.help("{WB_ESTIMATE_HELP}")' in wb
+    assert PICK_NEUTRAL_HELP in helps
+    assert WB_ESTIMATE_HELP in helps
+    assert "不猜 5600" in WB_ESTIMATE_HELP
+    assert "不是校准" in PICK_NEUTRAL_HELP
+    assert "不是校准" in WB_ESTIMATE_HELP
+    assert "不猜 5600" in wb
+    assert "不是校准" in wb
+
+    for token in INSPECTOR_GREY_WB_HELP_BANNED:
+        assert token not in PICK_NEUTRAL_HELP, token
+        assert token not in WB_ESTIMATE_HELP, token
+        for help_text in helps:
+            assert token not in help_text, token
+
+    for chunk in (wb, PICK_NEUTRAL_HELP, WB_ESTIMATE_HELP):
         assert "完善" not in chunk
         assert "精准" not in chunk
         assert "达芬奇已验证" not in chunk
@@ -1931,6 +1980,7 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
 
     assert f'.help("{IDT_PAIR_HELP}")' in inspector
     assert f'.help("{PICK_NEUTRAL_HELP}")' in inspector
+    assert f'.help("{WB_ESTIMATE_HELP}")' in inspector
     assert "Pick neutral" not in inspector
     assert "Venice pair only if detected" not in inspector
     assert "8-bit thumbnail is not a deliverable" not in inspector
@@ -1976,6 +2026,8 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
         assert "8-bit thumbnail is not a deliverable" not in help_text
         assert "Venice pair only if detected" not in help_text
         assert "精准" not in help_text
+        for token in INSPECTOR_GREY_WB_HELP_BANNED:
+            assert token not in help_text, token
         _chengpian_only_honesty(help_text)
 
 
