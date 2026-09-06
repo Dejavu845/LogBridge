@@ -463,6 +463,17 @@ def _help_literals(src: str) -> list[str]:
     return lits
 
 
+def _plus_2f_format_literals(src: str) -> list[str]:
+    """`String(format: "%+.2f …")` literals — Inspector exposure live readout."""
+    import re
+
+    found: list[str] = []
+    for line in src.splitlines():
+        code = line.split("//", 1)[0]
+        found.extend(re.findall(r'String\(format: "(%\+\.2f[^"]*)"', code))
+    return found
+
+
 def _chengpian_only_honesty(text: str) -> None:
     stripped = (
         text.replace("不是全精度成片", "")
@@ -1025,18 +1036,64 @@ def test_inspector_grey_card_estimate_help_locked_chinese():
 
 
 def test_inspector_exposure_readout_unit_dang():
-    """Inspector ⑰: exposure readout unit st → 档. Same format specifier."""
+    """Inspector ⑰ 验法: readout st → 档. ⑮/⑯ frozen. No slider/alg/⑱."""
     inspector = _read(INSPECTOR)
     exposure = inspector.split("struct ExposureInspector")[1]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+
+    # 验法⑰-1: format 一字不差. Specifier stays %+.2f; unit suffix only.
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
-    assert " st" not in INSPECTOR_EXPOSURE_READOUT
-    assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}"' in exposure
+    fmts = _plus_2f_format_literals(exposure)
+    assert fmts == ["%+.2f 档"]
+    assert (
+        'Text(String(format: "%+.2f 档", session.graph.exposureStops))'
+        in exposure
+    )
     assert f'String(format: "{INSPECTOR_EXPOSURE_READOUT}", session.graph.exposureStops)' in exposure
-    assert 'String(format: "%+.2f st"' not in exposure
+
+    # 验法⑰-2: ban user-facing `%+.2f st` / isolated st on that readout.
     assert "%+.2f st" not in exposure
-    # ⑮ locked help / gain stay; this knife is the readout suffix only.
+    assert 'String(format: "%+.2f st"' not in exposure
+    assert " st" not in INSPECTOR_EXPOSURE_READOUT
+    suffixes = [fmt[len("%+.2f") :] for fmt in fmts]
+    assert suffixes == [" 档"]
+    for suffix in suffixes:
+        unit = suffix.strip()
+        assert unit == "档"
+        assert unit != "st"
+        assert "st" not in unit
+
+    # 验法⑰-3: ⑮ three help sentences + ⑯ two .help strings 一字不差.
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_WB_HELP == (
+        "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
     assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
     assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert f'Text("{INSPECTOR_WB_HELP}")' in wb
+    assert PICK_NEUTRAL_HELP == (
+        "点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。"
+    )
+    assert WB_ESTIMATE_HELP == (
+        "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
+    )
+    assert f'.help("{PICK_NEUTRAL_HELP}")' in wb
+    assert f'.help("{WB_ESTIMATE_HELP}")' in wb
+
+    # 验法⑰-4: slider / exposure algorithm stay; ⑱ CCT→色温 is not this PR.
+    assert "in: -8...8," in exposure
+    assert "step: 0.05" in exposure
+    assert "session.setExposureStops($0)" in exposure
+    assert "pow(2.0, session.graph.exposureStops)" in exposure
+    assert 'Text("档（Stops）")' in exposure
+    assert 'Text("CCT")' in wb
+    assert 'Text("色温")' not in wb
+
+    # 验法⑰-5: test_ui_copy locks `%+.2f 档` and bans `%+.2f st` (above).
     assert "完善" not in exposure
     assert "精准" not in exposure
     assert "达芬奇已验证" not in exposure
