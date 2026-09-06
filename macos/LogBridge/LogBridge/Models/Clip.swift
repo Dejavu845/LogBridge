@@ -504,14 +504,14 @@ final class SessionModel: ObservableObject {
         return true
     }
 
-    /// 「写出代理 2/5 · frame 120」. Frame total omitted when unknown.
+    /// 「写出代理 2/5 · 第 120 帧」. Frame total omitted when unknown.
     static func exportProgressText(clipIndex: Int, clipTotal: Int, frame: Int? = nil, frameTotal: Int? = nil) -> String {
         var note = "写出代理 \(clipIndex)/\(clipTotal)"
         if let frame {
             if let frameTotal {
-                note += " · frame \(frame)/\(frameTotal)"
+                note += " · 第 \(frame) / 共 \(frameTotal) 帧"
             } else {
-                note += " · frame \(frame)"
+                note += " · 第 \(frame) 帧"
             }
         }
         return note

@@ -33,7 +33,9 @@ from color.batch import (
     PROCESS_BUTTON,
     PROCESS_BUTTON_HELP_UI,
     PROCESS_DELIVERABLE_NOTE_UI,
+    PROGRESS_PREFIX,
     PROGRESS_STATUS_HELP,
+    progress_text,
     REASON_PICK_LOG_GAMUT,
     REASON_PICK_PAIRED_IDT,
     RESOLVE_INCOMPLETE_CHIP,
@@ -1084,6 +1086,25 @@ def test_write_progress_on_preview_inspector_locks():
     assert center.index("SplitPreview") < center.index("PairedIDTBar")
     assert "整段代理，不是全精度成片" in content
     assert "预览·非成片" in _all_swift()
+
+
+def test_write_progress_frame_copy_is_chinese():
+    """写出代理 i/N stays. frame k → 第 k 帧; frame k/m → 第 k / 共 m 帧."""
+    assert PROGRESS_PREFIX == "写出代理"
+    assert progress_text(2, 5, 120) == "写出代理 2/5 · 第 120 帧"
+    assert progress_text(2, 5, 120, 240) == "写出代理 2/5 · 第 120 / 共 240 帧"
+    assert progress_text(1, 3) == "写出代理 1/3"
+    assert "frame" not in progress_text(2, 5, 120)
+    assert "frame" not in progress_text(2, 5, 120, 240)
+
+    clip = _read(CLIP)
+    fn = clip.split("static func exportProgressText")[1].split("static func cancelledExportNote")[0]
+    assert "写出代理 \\(clipIndex)/\\(clipTotal)" in fn
+    assert "第 \\(frame) 帧" in fn
+    assert "第 \\(frame) / 共 \\(frameTotal) 帧" in fn
+    assert "· frame" not in fn
+    assert "精准" not in fn
+    assert "成片" not in fn
 
 
 def test_lock_lands_on_next_pending():
