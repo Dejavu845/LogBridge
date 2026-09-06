@@ -160,6 +160,10 @@ GRAPH_DOT_WORKING_SPACE = "工作空间"
 GRAPH_IDT_XML_DESC = (
     "相机 Log 经 ACES2065-1 到 ACEScct。不含白平衡、不含曝光。"
 )
+# Graph DOT idt third line / odt first line / timeline (knife ㉙). Copy only.
+GRAPH_DOT_IDT_THIRD = "或 ACES IDT / CST → ACEScct"
+GRAPH_DOT_ODT_HEAD = "709 预览（后续节点）"
+GRAPH_DOT_TIMELINE_LABEL = "时间线\\nACEScct"
 # User-visible Resolve exportNote (UI). Package TITLE / XML stay as-is.
 EXPORT_NOTE_TITLE = "LogBridge M1 Resolve 导出（已实现（未验证））"
 EXPORT_NOTE_WORKSPACE = "工作空间：ACEScct 时间线 / ACES2065-1 交换。"
@@ -713,11 +717,11 @@ def format_dot(
   node [shape=box, fontname="Helvetica"];
 
   clip [label="{GRAPH_DOT_CLIP_LABEL}"];
-  idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\nor Resolve CST → ACEScct (ACES workflow)"];
+  idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\n{GRAPH_DOT_IDT_THIRD}"];
   exp  [label="{GRAPH_DOT_EXP_HEAD}\\n{exposure_stops:+.2f} 档\\n{GRAPH_DOT_EXP_FILE}", style="filled,{exp_style}", fillcolor="{exp_fill}"];
   wb   [label="{GRAPH_DOT_WB_HEAD}\\n{wb_line}\\n{GRAPH_DOT_WB_FILE}", style="filled,{wb_style}", fillcolor="{wb_fill}"];
-  odt  [label="709 预览 (later node)\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\n{GRAPH_ODT_USER}"];
-  timeline [shape=oval, label="Timeline\\nACEScct"];
+  odt  [label="{GRAPH_DOT_ODT_HEAD}\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\n{GRAPH_ODT_USER}"];
+  timeline [shape=oval, label="{GRAPH_DOT_TIMELINE_LABEL}"];
 
   clip -> idt -> exp -> wb -> odt;
   idt -> timeline [style=dashed, label="{GRAPH_DOT_WORKING_SPACE}"];
