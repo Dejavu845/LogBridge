@@ -477,6 +477,17 @@ def _plus_2f_format_literals(src: str) -> list[str]:
     return found
 
 
+def _text_literals(src: str) -> list[str]:
+    """Quoted strings passed to SwiftUI `Text("...")` (user-facing labels)."""
+    import re
+
+    found: list[str] = []
+    for line in src.splitlines():
+        code = line.split("//", 1)[0]
+        found.extend(re.findall(r'\bText\("([^"]*)"\)', code))
+    return found
+
+
 def _chengpian_only_honesty(text: str) -> None:
     stripped = (
         text.replace("不是全精度成片", "")
@@ -1104,28 +1115,34 @@ def test_inspector_exposure_readout_unit_dang():
 
 
 def test_inspector_wb_cct_label_sewen():
-    """Inspector ⑱: user-facing CCT label → 色温. Identifiers / K / ⑮⑯⑰ stay."""
+    """Inspector ⑱ 验法: Text("CCT") → Text("色温"). ⑮/⑯/⑰ frozen. No alg."""
     inspector = _read(INSPECTOR)
     exposure = inspector.split("struct ExposureInspector")[1]
     wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    ui_wb = _code_without_comments(wb)
+    ui_inspector = _code_without_comments(inspector)
+    wb_labels = _text_literals(wb)
+    inspector_labels = _text_literals(inspector)
 
-    # Lock user-facing 色温.
+    # 验法⑱-1: only user-visible label Text("CCT") → Text("色温").
     assert INSPECTOR_WB_CCT_LABEL == "色温"
     assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
-    assert 'Text("色温")' in wb
+    assert 'Text("色温")' in ui_wb
+    assert wb_labels.count("色温") == 1
+    assert (
+        'Text("色温")\n'
+        "                        .font(.caption)\n"
+        "                        .frame(width: 36, alignment: .leading)"
+    ) in wb
 
-    # Ban user-facing label CCT (not code identifiers).
-    assert 'Text("CCT")' not in wb
-    assert "wbCCT" in wb
-    assert "autoWBCCT" in wb
-    assert "wbCCTDisplay" in wb
-    assert "session.setWBParams(cct: $0)" in wb
+    # 验法⑱-2: ban user-facing Text("CCT") recirculation (not identifiers).
+    assert "CCT" not in wb_labels
+    assert "CCT" not in inspector_labels
+    assert 'Text("CCT")' not in ui_wb
+    assert 'Text("CCT")' not in ui_inspector
+    assert 'Text("CCT")' not in _code_without_comments(_all_swift())
 
-    # Kelvin readout K stays.
-    assert '"\\(Int($0)) K"' in wb
-    assert "机内未知" in wb
-
-    # ⑮ three help sentences + ⑯ two .help + ⑰ readout 一字不差.
+    # 验法⑱-3: ⑮ three helps / ⑯ two .helps / ⑰ %+ .2f 档 一字不差.
     assert INSPECTOR_EXPOSURE_HELP == (
         "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
     )
@@ -1143,23 +1160,39 @@ def test_inspector_wb_cct_label_sewen():
     assert WB_ESTIMATE_HELP == (
         "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
     )
+    assert _help_literals(wb) == [PICK_NEUTRAL_HELP, WB_ESTIMATE_HELP]
     assert f'.help("{PICK_NEUTRAL_HELP}")' in wb
     assert f'.help("{WB_ESTIMATE_HELP}")' in wb
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert _plus_2f_format_literals(exposure) == ["%+.2f 档"]
     assert (
-        f'String(format: "{INSPECTOR_EXPOSURE_READOUT}", session.graph.exposureStops)'
+        'Text(String(format: "%+.2f 档", session.graph.exposureStops))'
         in exposure
     )
     assert "%+.2f st" not in exposure
 
-    # Sliders / CAT stay.
+    # 验法⑱-4: identifiers / XML / algorithms may keep CCT. No color /
+    # slider / grey-card real test — copy lock only.
+    assert "wbCCT" in wb
+    assert "autoWBCCT" in wb
+    assert "wbCCTDisplay" in wb
+    assert "session.setWBParams(cct: $0)" in wb
+    assert '"\\(Int($0)) K"' in wb
+    assert "机内未知" in wb
     assert "in: 2000...10000," in wb
     assert "step: 10" in wb
     assert 'Text("绿品")' in wb
     assert 'Picker("CAT"' in wb
     assert 'Text("Bradford")' in wb
     assert 'Text("CAT02")' in wb
+    assert "white_balance_matrix" not in wb
+    assert "catMatrix" not in wb
+    assert "proposeAutoWB" in wb
+    # Grey-card / estimate stay buttons + .help; this knife is not a real test.
+    assert "点灰卡" in wb
+    assert "pickingNeutral" in wb
 
+    # 验法⑱-5: test_ui_copy locks Text("色温") and bans Text("CCT") (above).
     assert "完善" not in wb
     assert "精准" not in wb
     assert "达芬奇已验证" not in wb
