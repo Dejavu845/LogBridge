@@ -96,6 +96,10 @@ INSPECTOR_EXPOSURE_READOUT = "%+.2f 档"
 NODE_STRIP_EXPOSURE_DETAIL = "%+.2f 档"
 INSPECTOR_WB_CCT_LABEL = "色温"
 INSPECTOR_EXPOSURE_UNIT_LABEL = "档"
+INSPECTOR_ODT_PICKER_TITLE = "预览输出"
+INSPECTOR_HDR_PREVIEW_NOTE = (
+    "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+)
 INSPECTOR_HELP_FORMULA_BANNED = (
     "CAT(user→D65)",
     "2^stops",
@@ -492,6 +496,17 @@ def _text_literals(src: str) -> list[str]:
     for line in src.splitlines():
         code = line.split("//", 1)[0]
         found.extend(re.findall(r'\bText\("([^"]*)"\)', code))
+    return found
+
+
+def _picker_literals(src: str) -> list[str]:
+    """Quoted strings passed to SwiftUI `Picker("...")` (user-facing titles)."""
+    import re
+
+    found: list[str] = []
+    for line in src.splitlines():
+        code = line.split("//", 1)[0]
+        found.extend(re.findall(r'\bPicker\("([^"]*)"', code))
     return found
 
 
@@ -1397,6 +1412,134 @@ def test_node_strip_exposure_detail_unit_dang():
     assert "精准" not in strip
     assert "达芬奇已验证" not in strip
     _chengpian_only_honesty(strip)
+
+
+def test_odt_inspector_preview_output_zh():
+    """ODTInspector ㉑ 验法: Picker("ODT") → 预览输出; HDR help 去 ColorSync itur_2100. ⑮–⑳ frozen. No alg."""
+    inspector = _read(INSPECTOR)
+    graph = _read(GRAPH)
+    exposure = inspector.split("struct ExposureInspector")[1]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    odt = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
+    strip = _read(NODE_STRIP)
+    detail = strip.split("private func chipDetail")[1].split("private struct NodeConnector")[0]
+    ui_odt = _code_without_comments(odt)
+    ui_inspector = _code_without_comments(inspector)
+    ui_swift = _code_without_comments(_all_swift())
+    odt_labels = _text_literals(odt)
+    odt_mode = graph.split("enum ODTMode")[1].split("enum WBSource")[0]
+    titles = odt_mode.split("var title: String")[1].split("var isPreviewOnly")[0]
+    note = odt_mode.split("var acesOTNote: String")[1]
+
+    # 验法㉑-1: picker title + HDR help 一字不差.
+    assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
+    assert INSPECTOR_HDR_PREVIEW_NOTE == (
+        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+    )
+    assert _picker_literals(odt) == [INSPECTOR_ODT_PICKER_TITLE]
+    assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt
+    assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}", selection: Binding(' in odt
+    assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt
+    assert INSPECTOR_HDR_PREVIEW_NOTE in odt_labels
+    assert odt_labels.count(INSPECTOR_HDR_PREVIEW_NOTE) == 1
+    assert "session.graph.odt.isHDR" in odt
+
+    # 验法㉑-2: ban user-facing Picker("ODT") and ColorSync itur_2100.
+    assert "ODT" not in _picker_literals(odt)
+    assert "ODT" not in _picker_literals(inspector)
+    assert "ODT" not in _picker_literals(ui_swift)
+    assert 'Picker("ODT")' not in ui_odt
+    assert 'Picker("ODT"' not in ui_odt
+    assert 'Picker("ODT")' not in ui_inspector
+    assert 'Picker("ODT"' not in ui_inspector
+    assert 'Picker("ODT")' not in ui_swift
+    assert 'Picker("ODT"' not in ui_swift
+    assert "ColorSync itur_2100" not in ui_odt
+    assert "ColorSync itur_2100" not in ui_inspector
+    assert "itur_2100" not in ui_odt
+    assert "itur_2100" not in odt_labels
+    assert "itur_2100" not in _text_literals(inspector)
+    assert "itur_2100" not in _picker_literals(inspector)
+    assert "ColorSync itur_2100。预览·非成片，未与 709 匹配。" not in odt
+
+    # 验法㉑-3: ⑮–⑳ frozen. Keep Rec.709 / acesOTNote / mode.title.
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_WB_HELP == (
+        "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert f'Text("{INSPECTOR_WB_HELP}")' in wb
+    assert PICK_NEUTRAL_HELP == (
+        "点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。"
+    )
+    assert WB_ESTIMATE_HELP == (
+        "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
+    )
+    assert _help_literals(wb) == [PICK_NEUTRAL_HELP, WB_ESTIMATE_HELP]
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert _plus_2f_format_literals(exposure) == ["%+.2f 档"]
+    assert (
+        'Text(String(format: "%+.2f 档", session.graph.exposureStops))'
+        in exposure
+    )
+    assert INSPECTOR_WB_CCT_LABEL == "色温"
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert INSPECTOR_EXPOSURE_UNIT_LABEL == "档"
+    assert f'Text("{INSPECTOR_EXPOSURE_UNIT_LABEL}")' in exposure
+    assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
+    assert _plus_2f_format_literals(strip) == ["%+.2f 档"]
+    assert (
+        f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}", session.graph.exposureStops)'
+        in detail
+    )
+    assert INSPECTOR_REC709_NOTE == "Rec.709 只是预览，不是成片"
+    assert f'Text("{INSPECTOR_REC709_NOTE}")' in odt
+    assert INSPECTOR_EXPORT_NOTE == "导出 ACEScct / EXR，709 / HLG / PQ 窗是预览·非成片"
+    assert f'Text("{INSPECTOR_EXPORT_NOTE}")' in odt
+    assert ACES_OT_NOTE_OFF == "导出 ACEScct / EXR"
+    assert ACES_OT_NOTE_REC709 == "DIY 预览·非成片"
+    assert ACES_OT_NOTE_HDR == "ColorSync 预览·非成片，不是 ACES OT"
+    assert f'return "{ACES_OT_NOTE_OFF}"' in note
+    assert f'return "{ACES_OT_NOTE_REC709}"' in note
+    assert f'return "{ACES_OT_NOTE_HDR}"' in note
+    assert "acesOTNote" in odt
+    assert 'Text(session.graph.odt.acesOTNote)' in odt
+    assert 'return "关（ACEScct）"' in titles
+    assert 'return "Rec.709 预览"' in titles
+    assert 'return "Rec.2100 HLG"' in titles
+    assert 'return "Rec.2100 PQ"' in titles
+    assert "Text(mode.title)" in odt
+
+    # 验法㉑-4: ODT enum / algorithm / ColorSync pipeline stay. Not ㉒.
+    hdr = _read(SWIFT_ROOT / "LogBridge/LogBridge/Color/HDRPreview.swift")
+    assert 'case off = "off"' in graph
+    assert 'case rec709 = "rec709"' in graph
+    assert 'case hlg = "hlg"' in graph
+    assert 'case pq = "pq"' in graph
+    assert "session.setODT($0)" in odt
+    assert "session.graph.odt" in odt
+    assert "ForEach(ODTMode.allCases)" in odt
+    assert "CGColorSpace.itur_2100_HLG" in hdr
+    assert "CGColorSpace.itur_2100_PQ" in hdr
+    assert "itur_2100_HLG" in hdr
+    assert "itur_2100_PQ" in hdr
+    assert "session.graph.odt.title" in detail
+    assert 'Picker("CAT"' in wb
+    assert 'Text("Bradford")' in wb
+    assert 'Text("CAT02")' in wb
+
+    # 验法㉑-5: test_ui_copy locks both strings + bans (above).
+    assert "完善" not in odt
+    assert "精准" not in odt
+    assert "达芬奇已验证" not in odt
+    _chengpian_only_honesty(INSPECTOR_ODT_PICKER_TITLE)
+    _chengpian_only_honesty(INSPECTOR_HDR_PREVIEW_NOTE)
+    _chengpian_only_honesty(odt)
 
 
 def test_idt_bar_always_visible_no_hidden_picker():
@@ -2340,7 +2483,11 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
     assert f'Text("{INSPECTOR_REC709_NOTE}")' in odt
     assert f'Text("{INSPECTOR_EXPORT_NOTE}")' in odt
     assert 'Text("工作空间：\\(session.graph.workingSpace.rawValue)")' in odt
-    assert "ColorSync itur_2100。预览·非成片，未与 709 匹配。" in odt
+    assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt
+    assert INSPECTOR_HDR_PREVIEW_NOTE in odt
+    assert 'Picker("预览输出"' in odt
+    assert 'Picker("ODT"' not in odt
+    assert "ColorSync itur_2100" not in odt
     assert "acesOTNote" in odt
     assert "Working space:" not in odt
     assert "Rec.709 is preview only" not in odt
