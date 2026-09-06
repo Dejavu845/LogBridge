@@ -48,6 +48,18 @@ Default language is **ACEScct** / **ACES2065-1**. Rec.709 is preview only. Rec.2
 - **CI 绿不等于达芬奇已验证。**
 - 不写精准。不写 ACES OT 已验。不要把 709 预览当成输出。
 
+### 缺前置时怎么记（不假验）
+
+缺下面任一项 → **本轮跳过真机验收，记「未跑」**，不得写成已验/已通过：
+- 没有能跑的 Mac `.app`（见「本机试用」）
+- 本机没有达芬奇 Resolve
+- 没有自备混源 Log（仓库不带厂商样片）
+
+记账模板（周记/进度，不进产品 UI）：
+`真机达芬奇验收：未跑（缺：Mac.app / Resolve / 自备片）。CI 绿不等于达芬奇已验证。整段代理，不是全精度成片。`
+
+有前置仍按原 1–7；过了仍「已实现、未验证」。
+
 ## Golden grey-card samples (per log)
 
 Shoot or obtain a grey card (18% reflectance) in each encoding, exposed to the manufacturer’s documented mid-grey code value. Decode with `color/` and confirm ACES scene-linear RGB ≈ 0.18, 0.18, 0.18 after IDT.
