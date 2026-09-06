@@ -154,6 +154,12 @@ GRAPH_WB_XML_DESC = (
     "读不到则为待定/单位阵，不猜 5600 或 6504。"
     "旁路白平衡 = IDT → 曝光 → ACEScct，不烘焙。"
 )
+# Graph DOT clip / working-space edge + XML IDT Description (knife ㉘). Copy only.
+GRAPH_DOT_CLIP_LABEL = "素材\\n相机 Log"
+GRAPH_DOT_WORKING_SPACE = "工作空间"
+GRAPH_IDT_XML_DESC = (
+    "相机 Log 经 ACES2065-1 到 ACEScct。不含白平衡、不含曝光。"
+)
 # User-visible Resolve exportNote (UI). Package TITLE / XML stay as-is.
 EXPORT_NOTE_TITLE = "LogBridge M1 Resolve 导出（已实现（未验证））"
 EXPORT_NOTE_WORKSPACE = "工作空间：ACEScct 时间线 / ACES2065-1 交换。"
@@ -706,7 +712,7 @@ def format_dot(
   label="LogBridge M1 Resolve graph — 已实现（未验证）";
   node [shape=box, fontname="Helvetica"];
 
-  clip [label="Clip\\ncamera log"];
+  clip [label="{GRAPH_DOT_CLIP_LABEL}"];
   idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\nor Resolve CST → ACEScct (ACES workflow)"];
   exp  [label="{GRAPH_DOT_EXP_HEAD}\\n{exposure_stops:+.2f} 档\\n{GRAPH_DOT_EXP_FILE}", style="filled,{exp_style}", fillcolor="{exp_fill}"];
   wb   [label="{GRAPH_DOT_WB_HEAD}\\n{wb_line}\\n{GRAPH_DOT_WB_FILE}", style="filled,{wb_style}", fillcolor="{wb_fill}"];
@@ -714,7 +720,7 @@ def format_dot(
   timeline [shape=oval, label="Timeline\\nACEScct"];
 
   clip -> idt -> exp -> wb -> odt;
-  idt -> timeline [style=dashed, label="working space"];
+  idt -> timeline [style=dashed, label="{GRAPH_DOT_WORKING_SPACE}"];
 }}
 """
 
@@ -828,7 +834,7 @@ def format_graph_xml(
 <LogBridgeResolveGraph version="1" status="implemented (unverified)">
   <WorkingSpace gamut="AP0" encoding="ACEScct" white="ACES" scene_linear="ACES2065-1"/>
   <Node index="1" name="IDT" type="LUT_or_CST" bypassable="false">
-    <Description>Camera log to ACEScct via ACES2065-1. No white balance, no exposure. ACES workflow. Exposure is its own node (not baked into IDT).</Description>
+    <Description>{GRAPH_IDT_XML_DESC}</Description>
 {idt_block}
   </Node>
   <Node index="2" name="Exposure" type="Gain_1D" bypassable="true" enabled="{exp_on}" stops="{exp_stops:.6f}">

@@ -683,7 +683,7 @@ enum ResolveExporter {
         <LogBridgeResolveGraph version="1" status="implemented (unverified)">
           <WorkingSpace gamut="AP0" encoding="ACEScct" white="ACES" interchange="ACES2065-1"/>
           <Node index="1" name="IDT" type="LUT_or_CST" bypassable="false">
-            <Description>Camera log to ACEScct via ACES2065-1. No white balance, no exposure.</Description>
+            <Description>相机 Log 经 ACES2065-1 到 ACEScct。不含白平衡、不含曝光。</Description>
         \(idtNodes)  </Node>
           <Node index="2" name="Exposure" type="Gain_1D" bypassable="true" enabled="\(expOn)" stops="\(String(format: "%.6f", exposureStops))">
             <Description>ACES2065-1 线性按档增益；不加减 Log 码值。独立节点；0 档不写进 IDT/白平衡。</Description>
@@ -722,7 +722,7 @@ enum ResolveExporter {
           label="LogBridge M1 Resolve graph — 已实现（未验证）";
           node [shape=box, fontname="Helvetica"];
 
-          clip [label="Clip\\ncamera log"];
+          clip [label="素材\\n相机 Log"];
           idt  [label="IDT\\n\(idtLabel)\\n01_IDT_<idt>.cube\\nor ACES IDT / CST → ACEScct"];
           exp  [label="曝光（可归零）\\n\(String(format: "%+.2f", exposureStops)) 档\\n02_Exposure.cube / .dctl"];
           wb   [label="白平衡（可旁路）\\n色温 \(cctLabel(cct))  绿品 \(tint)\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,\(wbStyle)", fillcolor="\(wbFill)"];
@@ -730,7 +730,7 @@ enum ResolveExporter {
           timeline [shape=oval, label="Timeline\\nACEScct"];
 
           clip -> idt -> exp -> wb -> odt;
-          idt -> timeline [style=dashed, label="working space"];
+          idt -> timeline [style=dashed, label="工作空间"];
         }
 
         """

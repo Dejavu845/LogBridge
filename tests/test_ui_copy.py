@@ -4594,3 +4594,213 @@ def test_graph_dot_xml_exposure_wb_zh():
     _chengpian_only_honesty(exp_xml_to)
     _chengpian_only_honesty(wb_xml_to)
     _chengpian_only_honesty(GRAPH_DOT_WB_LINE)
+
+
+def test_graph_dot_xml_clip_working_space_idt_zh():
+    """graphDOT / XML ㉘ 验法: Clip / working space / IDT 人话. ㉗ frozen. No alg."""
+    from color.resolve_export import (
+        EXPORT_NOTE_IN_CAMERA,
+        EXPORT_NOTE_ODT,
+        GRAPH_DOT_CLIP_LABEL,
+        GRAPH_DOT_EXP_FILE,
+        GRAPH_DOT_EXP_HEAD,
+        GRAPH_DOT_WB_FILE,
+        GRAPH_DOT_WB_HEAD,
+        GRAPH_DOT_WB_LINE,
+        GRAPH_DOT_WORKING_SPACE,
+        GRAPH_EXP_XML_DESC,
+        GRAPH_IDT_XML_DESC,
+        GRAPH_ODT_USER,
+        GRAPH_WB_SUMMARY,
+        GRAPH_WB_XML_DESC,
+        REC709_CUBE_TITLE,
+        format_dot,
+        format_graph_xml,
+    )
+
+    clip_to = "素材\\n相机 Log"
+    ws_to = "工作空间"
+    idt_xml_to = "相机 Log 经 ACES2065-1 到 ACEScct。不含白平衡、不含曝光。"
+    idt_xml_from = (
+        "Camera log to ACEScct via ACES2065-1. No white balance, no exposure."
+    )
+    idt_xml_from_py_tail = (
+        "ACES workflow. Exposure is its own node (not baked into IDT)."
+    )
+    exp_xml_to = (
+        "ACES2065-1 线性按档增益；不加减 Log 码值。独立节点；0 档不写进 IDT/白平衡。"
+    )
+    wb_xml_to = (
+        "机内色温/绿品只填旋钮；默认单位阵（不把机内 5600/6504 当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+        "旁路白平衡 = IDT → 曝光 → ACEScct，不烘焙。"
+    )
+    honesty_to = (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    graph_wb_to = (
+        "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    )
+    banned = (
+        "Clip\\ncamera log",
+        "camera log",
+        "working space",
+        idt_xml_from,
+        idt_xml_from_py_tail,
+    )
+
+    # 验法㉘-1: three TO strings 一字不差. Swift↔Py 一致.
+    assert GRAPH_DOT_CLIP_LABEL == clip_to
+    assert GRAPH_DOT_WORKING_SPACE == ws_to
+    assert GRAPH_IDT_XML_DESC == idt_xml_to
+
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    inspector = _read(INSPECTOR)
+    settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
+    engine = _read(ENGINE)
+    py = (ROOT / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = exporter.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = exporter.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    note_fn = exporter.split("static func exportNote")[1].split("static func export(")[0]
+    readme_fn = exporter.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    honesty_fn = readme_fn.split("## Graph (serial nodes)")[0]
+    graph_fn = readme_fn.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    exposure = inspector.split("struct ExposureInspector")[1]
+    odt_insp = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
+    strip = _read(NODE_STRIP)
+    wb_fn = exporter.split("private static func wbCube")[1].split(
+        "private static func odtCube"
+    )[0]
+
+    assert idt_xml_to in xml_fn
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert r'GRAPH_DOT_CLIP_LABEL = "素材\\n相机 Log"' in py
+    assert f'GRAPH_DOT_WORKING_SPACE = "{ws_to}"' in py
+    assert idt_xml_to in py
+    dot = format_dot(["arri_logc4_awg4"], 3200.0, 0.25, True, exposure_stops=1.5)
+    xml = format_graph_xml(["arri_logc4_awg4"], 3200.0, 0.25, include_wb=True)
+    assert f'clip [label="{clip_to}"]' in dot
+    assert f'label="{ws_to}"' in dot
+    assert f"<Description>{idt_xml_to}</Description>" in xml
+
+    # 验法㉘-2: bans on surfaces touched.
+    clip_label = dot.split('clip [label="', 1)[1].split('"', 1)[0]
+    idt_desc = xml.split('name="IDT"', 1)[1].split("<Description>", 1)[1].split(
+        "</Description>", 1
+    )[0]
+    for token in banned:
+        assert token not in clip_label, token
+        assert token not in idt_desc, token
+        assert token not in GRAPH_DOT_CLIP_LABEL, token
+        assert token not in GRAPH_DOT_WORKING_SPACE, token
+        assert token not in GRAPH_IDT_XML_DESC, token
+        assert token not in xml_fn, token
+    assert "camera log" not in dot_fn
+    assert "working space" not in dot_fn
+    assert "camera log" not in clip_label
+    assert "working space" not in dot.split("idt -> timeline", 1)[1].split("}", 1)[0]
+    assert idt_xml_from not in xml
+    assert idt_xml_from_py_tail not in xml
+    assert idt_xml_from not in py.split("def format_graph_xml")[1].split(
+        "def format_readme"
+    )[0]
+    assert idt_xml_from_py_tail not in py.split("def format_graph_xml")[1].split(
+        "def format_readme"
+    )[0]
+
+    # 验法㉘-3: ㉗ four locked DOT/XML strings 一字不动; ⑮–㉖ stay.
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == "色温 {cctLabel}  绿品 {tint}"
+    assert GRAPH_DOT_WB_FILE == "03_WB.cube / .cdl / .ccc / .dctl"
+    assert GRAPH_EXP_XML_DESC == exp_xml_to
+    assert GRAPH_WB_XML_DESC == wb_xml_to
+    assert exp_xml_to in xml_fn
+    assert wb_xml_to in xml_fn
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert "色温 \\(cctLabel(cct))  绿品 \\(tint)" in dot_fn
+    assert EXPORT_NOTE_ODT == EXPORT_NOTE_ODT_LOCKED
+    assert EXPORT_NOTE_IN_CAMERA == honesty_to
+    assert EXPORT_NOTE_IN_CAMERA == INSPECTOR_WB_HELP
+    assert GRAPH_WB_SUMMARY == graph_wb_to
+    assert honesty_to in note_fn
+    assert honesty_to in honesty_fn
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert INSPECTOR_WB_CCT_LABEL == "色温"
+    assert INSPECTOR_EXPOSURE_UNIT_LABEL == "档"
+    assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
+    assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
+    assert INSPECTOR_HDR_PREVIEW_NOTE == (
+        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+    )
+    assert SETTINGS_WB_HELP == (
+        "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+    )
+    assert INSPECTOR_WB_CAT_PICKER_TITLE == "适应方法"
+    assert PREVIEW_STATUS_ODT_CACHE_HIT == "只重跑预览输出"
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert f'Text("{INSPECTOR_EXPOSURE_UNIT_LABEL}")' in exposure
+    assert f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}"' in strip
+    assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt_insp
+    assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt_insp
+    assert f'Text("{SETTINGS_WB_HELP}")' in settings
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}"' in wb
+    assert f'note = "{PREVIEW_STATUS_ODT_CACHE_HIT}"' in engine
+    assert f'"{EXPORT_NOTE_ODT_LOCKED}"' in note_fn
+
+    # 验法㉘-4: cube TITLE / filenames / 色管 / ㉗ XML 冻.
+    assert REC709_CUBE_TITLE == (
+        "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+    )
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert '?? "pending / identity"' in wb_fn
+    assert 'name="Exposure"' in xml_fn
+    assert 'name="WB"' in xml_fn
+    assert 'name="IDT"' in xml_fn
+    assert "02_Exposure.cube" in exporter
+    assert "03_WB.cube" in exporter
+    assert "04_ODT_Rec709.cube" in exporter
+    assert "graph.dot" in exporter
+    assert "matrixCCT = nil" in exporter
+    assert "func uniqueImplementedIDTs" in exporter
+    assert "def format_dot" in py
+    assert "def format_graph_xml" in py
+
+    # 验法㉘-5: test_ui_copy / test_resolve_export lock three TO + bans (above).
+    assert "完善" not in clip_to
+    assert "精准" not in clip_to
+    assert "完善" not in ws_to
+    assert "精准" not in ws_to
+    assert "完善" not in idt_xml_to
+    assert "精准" not in idt_xml_to
+    assert "达芬奇已验证" not in clip_to
+    assert "达芬奇已验证" not in ws_to
+    assert "达芬奇已验证" not in idt_xml_to
+    assert "达芬奇已验证" not in dot_fn
+    assert "达芬奇已验证" not in xml_fn
+    _chengpian_only_honesty(clip_to)
+    _chengpian_only_honesty(ws_to)
+    _chengpian_only_honesty(idt_xml_to)
