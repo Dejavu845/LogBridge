@@ -84,6 +84,19 @@ WB_CHIP_UNKNOWN = "机内未知"
 WB_CHIP_ESTIMATE_PENDING = "估计确认才写"
 INSPECTOR_REC709_NOTE = "Rec.709 只是预览，不是成片"
 INSPECTOR_EXPORT_NOTE = "导出 ACEScct / EXR，709 / HLG / PQ 窗是预览·非成片"
+INSPECTOR_EXPOSURE_HELP = (
+    "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+)
+INSPECTOR_WB_HELP = (
+    "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+    "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+)
+INSPECTOR_GAIN_LIVE = "线性增益 = "
+INSPECTOR_HELP_FORMULA_BANNED = (
+    "CAT(user→D65)",
+    "2^stops",
+    "rgb × (2^stops)",
+)
 IDT_PAIR_HELP = (
     "S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。"
     "C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。"
@@ -292,10 +305,15 @@ def test_trial_quarantine_script_is_local_xattr_only():
 
 def test_exposure_inspector_and_preview_not_finished_picture():
     inspector = _read(INSPECTOR)
+    exposure = inspector.split("struct ExposureInspector")[1]
     assert "ExposureInspector" in inspector
     assert "Stops" in inspector
-    assert "2^stops" in inspector or "2 ** stops" in inspector or "rgb × (2^stops)" in inspector
-    assert "不加不减 Log 码值" in inspector
+    assert INSPECTOR_EXPOSURE_HELP in exposure
+    assert "不加减 Log 码值" in exposure
+    assert INSPECTOR_GAIN_LIVE in exposure
+    assert "2^stops" not in exposure
+    assert "CAT(user→D65)" not in exposure
+    assert "rgb × (2^stops)" not in exposure
     assert "Do not add/subtract Log code values" not in inspector
     swift = _all_swift()
     assert "case exposure" in swift or "case .exposure" in swift
@@ -333,8 +351,10 @@ def test_as_shot_wb_copy_and_no_5600_guess():
     assert "ACES2065-1 (AP0)" in inspector
     assert "IDT 后" in inspector
     assert "已实现（未验证）" in inspector
-    assert "CAT(user→D65)·inv(CAT(as→D65))" in inspector
+    assert "CAT(user→D65)" not in inspector
     assert "单位阵" in inspector
+    assert "不猜 5600" in inspector
+    assert "预览·非成片" in inspector
     assert "3200→5600 变暖" in inspector
     swift = _all_swift()
     assert "pickNeutral" in swift or "Pick neutral" in swift
@@ -388,9 +408,10 @@ def test_user_visible_english_leftovers_are_chinese():
     wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
     assert 'Text("绿品")' in wb
     assert 'Text("Tint")' not in wb
-    assert "机内色温只填旋钮，默认 CAT 是单位阵。" in wb
-    assert "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。" in wb
-    assert "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。" in wb
+    assert INSPECTOR_WB_HELP in wb
+    assert "机内色温只填旋钮，默认是单位阵。" in wb
+    assert "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。" in wb
+    assert "CAT(user→D65)" not in wb
     assert "As-shot CCT/tint fills these knobs" not in wb
     assert "do not guess 5600 or 6504" not in wb.lower()
     assert "implemented (unverified)" not in wb.lower()
@@ -892,19 +913,57 @@ def test_inspector_cat_three_sentences_review_lock():
     """As-shot default is 单位阵. Relative CAT only on user move. No 机内白转到 D65."""
     inspector = _read(INSPECTOR)
     wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
-    assert "机内色温只填旋钮，默认 CAT 是单位阵。" in wb
-    assert "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。" in wb
-    assert "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。" in wb
+    assert "机内色温只填旋钮，默认是单位阵。" in wb
+    assert INSPECTOR_WB_HELP in wb
+    assert "只有你改色温才做相对校正" in wb
+    assert "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。" in wb
     assert "单位阵" in wb
-    assert "CAT(user→D65)·inv(CAT(as→D65))" in wb
+    assert "不猜 5600" in wb
+    assert "CAT(user→D65)" not in wb
+    assert "2^stops" not in wb
+    assert "rgb × (2^stops)" not in wb
     assert "3200→5600 变暖" in wb
-    stripped = wb.replace("CAT(user→D65)·inv(CAT(as→D65))", "")
-    assert "CAT(as→D65)" not in stripped
+    assert "CAT(as→D65)" not in wb
     assert "机内白转到 D65" not in wb
     clip = _read(CLIP)
     assert "已写出代理" in clip
     assert "待选跳过" in clip
     assert "失败原因" in clip
+
+
+def test_inspector_exposure_wb_help_no_formula_stack():
+    """Inspector ⑮: locked exposure / gain / WB copy. No formula stacks."""
+    inspector = _read(INSPECTOR)
+    ui = _code_without_comments(inspector)
+    exposure = inspector.split("struct ExposureInspector")[1]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_WB_HELP == (
+        "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert f'Text("{INSPECTOR_WB_HELP}")' in wb
+    assert 'Text("Bradford")' in wb
+    assert 'Text("CAT02")' in wb
+    assert "单位阵" in wb
+    assert "不猜 5600" in wb
+    assert "预览·非成片" in exposure
+
+    for token in INSPECTOR_HELP_FORMULA_BANNED:
+        assert token not in exposure, token
+        assert token not in wb, token
+        assert token not in ui, token
+
+    for chunk in (exposure, wb, INSPECTOR_EXPOSURE_HELP, INSPECTOR_WB_HELP):
+        assert "完善" not in chunk
+        assert "精准" not in chunk
+        assert "达芬奇已验证" not in chunk
+        _chengpian_only_honesty(chunk)
 
 
 def test_idt_bar_always_visible_no_hidden_picker():
@@ -1858,9 +1917,13 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
     _chengpian_only_honesty(odt)
 
     exposure = inspector.split("struct ExposureInspector")[1]
-    assert "线性增益 2^stops" in exposure
+    assert INSPECTOR_EXPOSURE_HELP in exposure
+    assert INSPECTOR_GAIN_LIVE in exposure
+    assert "2^stops" not in exposure
+    assert "CAT(user→D65)" not in exposure
+    assert "rgb × (2^stops)" not in exposure
     assert "Linear gain" not in exposure
-    assert "不加不减 Log 码值" in exposure
+    assert "不加减 Log 码值" in exposure
     assert "User-facing unit is stops" not in exposure
     assert "not a finished" not in exposure.lower()
     assert "精准" not in exposure

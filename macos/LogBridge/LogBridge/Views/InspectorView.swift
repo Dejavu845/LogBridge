@@ -203,7 +203,7 @@ struct WBInspector: View {
                 .controlSize(.small)
                 .frame(maxWidth: 200)
             }
-            Text("机内色温只填旋钮，默认 CAT 是单位阵。用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。")
+            Text("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -333,11 +333,11 @@ struct ExposureInspector: View {
                         .font(.caption.monospacedDigit())
                         .frame(width: 56, alignment: .trailing)
                 }
-                Text(String(format: "线性增益 2^stops = %.4f", pow(2.0, session.graph.exposureStops)))
+                Text(String(format: "线性增益 = %.4f", pow(2.0, session.graph.exposureStops)))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
             }
-            Text("单位是档。IDT 后 ACES2065-1 线性：rgb × (2^stops)。不加不减 Log 码值。预览缓存存 IDT 后线性；曝光在 WB 前线性作用。")
+            Text("单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .lineLimit(2)
