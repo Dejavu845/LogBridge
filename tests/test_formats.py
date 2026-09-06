@@ -38,9 +38,16 @@ def _read(p: Path) -> str:
 
 
 def test_mov_mp4_prores_h264_hevc_accept():
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
+    assert "AVAssetReader" not in NOTE_MOVIE_ACCEPT
+    assert "copyCGImage" not in NOTE_MOVIE_ACCEPT
+    assert "Y′CbCr" not in NOTE_MOVIE_ACCEPT
+    # Swift ↔ Python same user-visible literal.
+    assert f'note: "{NOTE_MOVIE_ACCEPT}"' in _read(MEDIA)
     assert classify("A.mov").action == ACCEPT
     assert classify("A.mov").note == NOTE_MOVIE_ACCEPT
     assert classify("A.mp4", "avc1").action == ACCEPT
+    assert classify("A.mp4", "avc1").note == NOTE_MOVIE_ACCEPT
     assert classify("A.m4v", "hvc1").action == ACCEPT
     assert classify("A.mov", "apch").action == ACCEPT
     assert classify("A.mov", "ap4x").action == ACCEPT
@@ -48,12 +55,17 @@ def test_mov_mp4_prores_h264_hevc_accept():
 
 
 def test_stills_tiff_dpx_exr_accept():
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。不是成片。"
+    assert "ImageIO" not in NOTE_STILL_ACCEPT
+    assert "不是成片" in NOTE_STILL_ACCEPT
+    assert "静帧 \\(ext.uppercased()) 按图片导入。不是成片。" in _read(MEDIA)
     for name in ("plate.tif", "plate.tiff", "plate.dpx", "plate.exr"):
         d = classify(name)
         assert d.action == ACCEPT
         assert d.kind == "still"
         assert "按图片导入" in d.note
         assert "ImageIO" not in d.note
+        assert "不是成片" in d.note
         assert d.note == NOTE_STILL_ACCEPT.format(ext=name.rsplit(".", 1)[-1].upper())
 
 

@@ -1488,6 +1488,9 @@ def test_import_skip_summary_is_human_chinese():
     # Accept notes locked Chinese. No ImageIO / AVAssetReader / copyCGImage / Y′CbCr.
     assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。不是成片。"
     assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
+    for jargon in ("AVAssetReader", "ImageIO", "copyCGImage", "Y′CbCr", "Y'CbCr", "YpCbCr"):
+        assert jargon not in NOTE_STILL_ACCEPT
+        assert jargon not in NOTE_MOVIE_ACCEPT
 
     rejects = [
         ("A.r3d", classify("A.r3d")),
