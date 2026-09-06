@@ -154,7 +154,7 @@ EXPORT_NOTE_IN_CAMERA = (
 )
 EXPORT_NOTE_WB_ON = "开（按色温/绿品校正，{cctLabel}，绿品 {tint}）"
 EXPORT_NOTE_WB_OFF = "已写出但默认旁路（不改颜色）"
-EXPORT_NOTE_ODT = "ODT：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+EXPORT_NOTE_ODT = "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
 EXPORT_NOTE_FILES = (
     "文件：graph.xml, graph.dot, 01_IDT_*.cube, 02_Exposure.{cube,dctl}, "
     "03_WB.{cube,cdl,ccc,dctl}, 04_ODT_Rec709.cube, README_RESOLVE.md"

@@ -28,7 +28,7 @@ enum ResolveExporter {
         lines.append("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。")
         let cctLabel = cct.map { "\(Int($0)) K" } ?? "待定 / 单位阵（不猜 5600 或 6504）"
         lines.append("WB 节点：\(includeWBNode ? "开（按色温/绿品校正，\(cctLabel)，绿品 \(tint)）" : "已写出但默认旁路（不改颜色）")")
-        lines.append("ODT：709 预览（不是 ACES 输出变换），默认关。预览·非成片。")
+        lines.append("预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。")
         lines.append("文件：graph.xml, graph.dot, 01_IDT_*.cube, 02_Exposure.{cube,dctl}, 03_WB.{cube,cdl,ccc,dctl}, 04_ODT_Rec709.cube, README_RESOLVE.md")
         lines.append("仅已锁定成对 IDT 片段。待选仍列出（先选择成对 IDT / 先选择 Log 与色域）。")
         lines.append("曝光是独立节点（以档为单位；0 档不写进 IDT/白平衡）。旁路白平衡：关掉白平衡节点。")
