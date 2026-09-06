@@ -2110,7 +2110,7 @@ def test_locked_success_implies_exr_and_complete_resolve_bundle(tmp_path: Path):
         _assert_chengpian_not_a_deliverable_claim(text)
     readme = (dest / RESOLVE_REQUIRED_README).read_text(encoding="utf-8")
     assert "Not an ACES Output Transform" in readme
-    assert "不是** ACES OT / RRT" in readme or "不是 ACES OT" in readme
+    assert "不是 ACES 输出变换" in readme or "不是 ACES OT" in readme
     assert "不是全精度成片" in readme
     chips = sidebar_export_chips([locked, pending], report)
     assert chips["locked.mov"] == WRITTEN_CHIP

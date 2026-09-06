@@ -2730,6 +2730,7 @@ def test_export_note_is_plain_chinese():
         EXPORT_NOTE_WORKSPACE,
         REC709_CUBE_COMMENT,
         REC709_CUBE_TITLE,
+        RESOLVE_README_HONESTY,
         export_note,
     )
 
@@ -2769,6 +2770,7 @@ def test_export_note_is_plain_chinese():
         "Bradford CAT",
         "stops；",
         "Bypass WB",
+        "不烘焙白平衡",
     )
     locked = (
         EXPORT_NOTE_REC709,
@@ -2876,8 +2878,48 @@ def test_export_note_is_plain_chinese():
     assert 'name="ODT_Rec709"' in xml_fn or "ODT_Rec709" in xml_fn
     assert "bypassable" in xml_fn
     assert "enabled" in xml_fn
+    honesty_fn = readme_fn.split("## Graph (serial nodes)")[0]
+    raw = readme_fn.split("## 诚实说明", 1)[1].split("## Graph (serial nodes)", 1)[0]
+    swift_honesty_lines = ["## 诚实说明"] + [
+        (line[8:] if line.startswith("        ") else line).strip()
+        for line in raw.splitlines()
+        if line.strip()
+    ]
+    py_honesty_lines = [
+        ln.strip() for ln in RESOLVE_README_HONESTY.splitlines() if ln.strip()
+    ]
+    assert swift_honesty_lines == py_honesty_lines
+    assert EXPORT_NOTE_REC709 in honesty_fn
+    assert EXPORT_NOTE_WB_BYPASS in honesty_fn
+    assert EXPORT_NOTE_WB_OFF == "已写出但默认旁路（不改颜色）"
+    assert EXPORT_NOTE_WB_OFF in readme_fn
+    assert "DIY BT.709 OETF" not in honesty_fn
+    assert "identity / enabled=false" not in honesty_fn
+    assert "identity" not in honesty_fn
+    assert "enabled=false" not in honesty_fn
+    assert "preview only" not in honesty_fn
+    assert "Not an ACES Output Transform" not in honesty_fn
+    assert "不烘焙白平衡" not in honesty_fn
+    assert "不烘焙白平衡" not in readme_fn
+    assert "不烘焙白平衡" not in py
+    assert "不烘焙白平衡" not in exporter
+    assert REC709_CUBE_TITLE == (
+        "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+    )
+    for name in (
+        "graph.xml",
+        "graph.dot",
+        "01_IDT_",
+        "03_WB",
+        "04_ODT_Rec709.cube",
+        "README_RESOLVE.md",
+        "02_Exposure.cube",
+        "02_Exposure.dctl",
+    ):
+        assert name in exporter
+        assert name in py
+    # Graph technical docs keep jargon. Honesty notes do not.
     assert "DIY BT.709 OETF" in readme_fn
-    assert "identity / enabled=false" in readme_fn or "enabled=false" in readme_fn
     assert "Bradford" in readme_fn
     assert "func uniqueImplementedIDTs" in exporter
     assert "includeWBNode" in exporter

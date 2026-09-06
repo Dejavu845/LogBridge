@@ -23,6 +23,9 @@ from color.batch import (
 )
 from color.graph import SerialGraph
 from color.resolve_export import (
+    EXPORT_NOTE_REC709,
+    EXPORT_NOTE_WB_BYPASS,
+    EXPORT_NOTE_WB_OFF,
     REC709_CUBE_TITLE,
     REC709_PREVIEW_LABEL,
     RESOLVE_README_HONESTY,
@@ -257,6 +260,54 @@ def _dctl_cat_is_identity(text: str, atol: float = 1e-8) -> bool:
     return bool(np.allclose(nums, ident, atol=atol))
 
 
+LOCKED_REC709_CUBE_TITLE = (
+    "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+)
+LOCKED_NODE_FILES = (
+    "graph.xml",
+    "graph.dot",
+    "01_IDT_",
+    "03_WB",
+    "04_ODT_Rec709.cube",
+    "README_RESOLVE.md",
+)
+LOCKED_BUNDLE_FILES = (
+    "README_RESOLVE.md",
+    "graph.xml",
+    "graph.dot",
+    "02_Exposure.cube",
+    "02_Exposure.dctl",
+    "03_WB.cdl",
+    "03_WB.ccc",
+    "03_WB.dctl",
+    "03_WB.cube",
+    "04_ODT_Rec709.cube",
+)
+HONESTY_BANNED = (
+    "DIY BT.709 OETF",
+    "identity / enabled=false",
+    "identity / `enabled=false`",
+    "enabled=false",
+    "preview only",
+    "Not an ACES Output Transform",
+    "不烘焙白平衡",
+    "完善",
+    "精准",
+)
+
+
+def _dedent_swift_honesty(readme_fn: str) -> str:
+    raw = readme_fn.split("## 诚实说明", 1)[1].split("## Graph (serial nodes)", 1)[0]
+    lines = ["## 诚实说明"]
+    for line in raw.splitlines():
+        lines.append(line[8:] if line.startswith("        ") else line)
+    return "\n".join(ln for ln in lines if ln.strip()).strip()
+
+
+def _honesty_lines(text: str) -> list[str]:
+    return [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+
 def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
     cleaned = (
         text.replace("预览·非成片", "")
@@ -391,22 +442,33 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
         tmp_path, idt_ids=["arri_logc4_awg4"], include_wb=False, lut_size=5
     )
     readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
-    assert "709 预览" in readme
-    assert "整段代理，不是全精度成片" in readme
+    honesty = readme.split("## Graph (serial nodes)")[0]
+    assert "709 预览" in honesty
+    assert "整段代理，不是全精度成片" in honesty
+    assert "_proxy" in honesty
     assert "已实现（未验证）" in readme
     assert RESOLVE_README_HONESTY.strip() in readme
-    assert "identity / `enabled=false`" in readme
-    assert "不烘焙 CAT" in readme
-    assert "机内色温只填旋钮，默认 CAT 是单位阵。" in readme
-    assert "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。" in readme
-    assert "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。" in readme
+    assert EXPORT_NOTE_REC709 in honesty
+    assert EXPORT_NOTE_WB_BYPASS in honesty
+    assert EXPORT_NOTE_WB_OFF == "已写出但默认旁路（不改颜色）"
+    assert EXPORT_NOTE_WB_OFF in readme
+    for token in HONESTY_BANNED:
+        assert token not in honesty
+        assert token not in RESOLVE_README_HONESTY
+        assert token not in EXPORT_NOTE_WB_OFF
+        assert token not in EXPORT_NOTE_WB_BYPASS
+        assert token not in EXPORT_NOTE_REC709
+    assert "identity" not in honesty
+    assert "机内色温只填旋钮，默认 CAT 是单位阵。" in honesty
+    assert "用户改色温才做相对变换 CAT(user→D65)·inv(CAT(as→D65))，3200→5600 变暖。" in honesty
+    assert "灰卡是绝对 CAT；读不到就保持单位阵，不猜 5600。" in honesty
     assert "机内白转到 D65" not in readme
     assert "精准" not in readme
     assert "一键还原" not in readme
     assert readme.index("诚实说明") < readme.index("Graph (serial nodes)")
     _assert_chengpian_not_a_deliverable_claim(readme)
+    # Graph / TITLE / XML keep jargon (other knives). Honesty notes do not.
     assert "DIY BT.709 OETF" in readme
-    assert "不是** ACES OT / RRT" in readme
     assert "Not an ACES Output Transform" in readme
     cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
     assert REC709_PREVIEW_LABEL in cube
@@ -420,6 +482,25 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
     )
     note_fn = swift.split("static func exportNote")[1].split("static func export(")[0]
     readme_fn = swift.split("private static func readme")[1].split("/// Proxy sequence folder")[0]
+    swift_honesty = _dedent_swift_honesty(readme_fn)
+    assert _honesty_lines(swift_honesty) == _honesty_lines(RESOLVE_README_HONESTY)
+    assert EXPORT_NOTE_REC709 in swift_honesty
+    assert EXPORT_NOTE_WB_BYPASS in swift_honesty
+    assert EXPORT_NOTE_WB_OFF in readme_fn
+    for token in HONESTY_BANNED:
+        assert token not in swift_honesty
+    assert "identity" not in swift_honesty
+    assert "不烘焙白平衡" not in readme_fn
+    assert "不烘焙白平衡" not in note_fn
+    assert "不烘焙白平衡" not in readme
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
+    assert LOCKED_REC709_CUBE_TITLE in swift
+    for name in LOCKED_NODE_FILES:
+        assert name in readme_fn
+        assert name in readme
+    for name in LOCKED_BUNDLE_FILES:
+        assert f'"{name}"' in swift
     for blob in (note_fn, readme_fn):
         assert "709 预览" in blob
         assert "整段代理，不是全精度成片" in blob
@@ -434,8 +515,7 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
         stripped = blob.replace("CAT(user→D65)·inv(CAT(as→D65))", "")
         assert "CAT(as→D65)" not in stripped
         _assert_chengpian_not_a_deliverable_claim(blob)
-    # Package README keeps jargon. User-visible exportNote does not.
-    assert "identity" in readme_fn and "enabled=false" in readme_fn
+    # Graph technical docs keep jargon. Honesty + exportNote do not.
     assert "DIY BT.709 OETF" in readme_fn
     ui_note = "\n".join(line.split("//", 1)[0] for line in note_fn.splitlines())
     assert "identity" not in ui_note
