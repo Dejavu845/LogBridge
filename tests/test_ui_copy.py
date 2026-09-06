@@ -74,6 +74,13 @@ NODE_STRIP = SWIFT_ROOT / "LogBridge/LogBridge/Views/NodeStripView.swift"
 SETTINGS_PREVIEW_HELP = (
     "默认 Rec.709（角标预览·非成片）。不是成片，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
 )
+SETTINGS_WB_HELP = (
+    "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+)
+SETTINGS_WB_HELP_BANNED = (
+    "不写入 CAT",
+    "CAT",
+)
 ACES_OT_NOTE_OFF = "导出 ACEScct / EXR"
 ACES_OT_NOTE_REC709 = "DIY 预览·非成片"
 ACES_OT_NOTE_HDR = "ColorSync 预览·非成片，不是 ACES OT"
@@ -452,6 +459,7 @@ def test_user_visible_english_leftovers_are_chinese():
     assert "已实现（未验证）" in settings
     assert "implemented (unverified)" not in settings.lower()
     assert SETTINGS_PREVIEW_HELP in settings
+    assert SETTINGS_WB_HELP in settings
     assert "预览·非成片" in settings
     assert "DIY OETF" not in _code_without_comments(settings)
     assert "DIY" not in _code_without_comments(settings)
@@ -508,6 +516,13 @@ def _picker_literals(src: str) -> list[str]:
         code = line.split("//", 1)[0]
         found.extend(re.findall(r'\bPicker\("([^"]*)"', code))
     return found
+
+
+def _has_isolated_cat(text: str) -> bool:
+    """User-facing isolated CAT (not CAT02 / identifiers)."""
+    import re
+
+    return bool(re.search(r"(?<![A-Za-z0-9_])CAT(?![A-Za-z0-9_])", text))
 
 
 def _chengpian_only_honesty(text: str) -> None:
@@ -1540,6 +1555,142 @@ def test_odt_inspector_preview_output_zh():
     _chengpian_only_honesty(INSPECTOR_ODT_PICKER_TITLE)
     _chengpian_only_honesty(INSPECTOR_HDR_PREVIEW_NOTE)
     _chengpian_only_honesty(odt)
+
+
+def test_settings_wb_help_no_cat_jargon():
+    """Settings ㉒ 验法: WB help 去「不写入 CAT」. ⑮–㉑ frozen. No toggle/alg."""
+    settings_path = SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift"
+    settings = _read(settings_path)
+    inspector = _read(INSPECTOR)
+    graph = _read(GRAPH)
+    exposure = inspector.split("struct ExposureInspector")[1]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    odt = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
+    strip = _read(NODE_STRIP)
+    detail = strip.split("private func chipDetail")[1].split("private struct NodeConnector")[0]
+    ui_settings = _code_without_comments(settings)
+    settings_labels = _text_literals(settings)
+    app = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/AppSettings.swift")
+    odt_mode = graph.split("enum ODTMode")[1].split("enum WBSource")[0]
+    titles = odt_mode.split("var title: String")[1].split("var isPreviewOnly")[0]
+    note = odt_mode.split("var acesOTNote: String")[1]
+
+    # 验法㉒-1: Settings WB help 一字不差.
+    assert SETTINGS_WB_HELP == (
+        "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+    )
+    assert f'Text("{SETTINGS_WB_HELP}")' in settings
+    assert SETTINGS_WB_HELP in settings_labels
+    assert settings_labels.count(SETTINGS_WB_HELP) == 1
+    assert 'Toggle("导入后提示估计白平衡", isOn: $settings.promptEstimateWBOnImport)' in settings
+
+    # 验法㉒-2: ban user-facing isolated CAT; 旧句「不写入 CAT」不得回流该句.
+    old_help = (
+        "默认关。打开后只提示「白平衡（估计）」，不写入 CAT，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+    )
+    assert old_help not in settings
+    assert old_help not in SETTINGS_WB_HELP
+    assert "不写入 CAT" not in SETTINGS_WB_HELP
+    assert "不写入 CAT" not in ui_settings
+    assert "CAT" not in SETTINGS_WB_HELP
+    assert not _has_isolated_cat(SETTINGS_WB_HELP)
+    assert not _has_isolated_cat(ui_settings)
+    for label in settings_labels:
+        assert "不写入 CAT" not in label
+        assert not _has_isolated_cat(label), label
+    for token in SETTINGS_WB_HELP_BANNED:
+        assert token not in SETTINGS_WB_HELP, token
+    assert "不会自动写入白平衡" in SETTINGS_WB_HELP
+
+    # 验法㉒-3: ⑮–㉑ frozen. Settings preview help stays.
+    assert SETTINGS_PREVIEW_HELP == (
+        "默认 Rec.709（角标预览·非成片）。不是成片，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
+    )
+    assert SETTINGS_PREVIEW_HELP in settings
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_WB_HELP == (
+        "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'String(format: "{INSPECTOR_GAIN_LIVE}%.4f"' in exposure
+    assert f'Text("{INSPECTOR_WB_HELP}")' in wb
+    assert PICK_NEUTRAL_HELP == (
+        "点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。"
+    )
+    assert WB_ESTIMATE_HELP == (
+        "白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。"
+    )
+    # ⑯ 估计 .help 不动
+    assert f'.help("{PICK_NEUTRAL_HELP}")' in wb
+    assert f'.help("{WB_ESTIMATE_HELP}")' in wb
+    assert _help_literals(wb) == [PICK_NEUTRAL_HELP, WB_ESTIMATE_HELP]
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert _plus_2f_format_literals(exposure) == ["%+.2f 档"]
+    assert (
+        'Text(String(format: "%+.2f 档", session.graph.exposureStops))'
+        in exposure
+    )
+    assert INSPECTOR_WB_CCT_LABEL == "色温"
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert INSPECTOR_EXPOSURE_UNIT_LABEL == "档"
+    assert f'Text("{INSPECTOR_EXPOSURE_UNIT_LABEL}")' in exposure
+    assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
+    assert _plus_2f_format_literals(strip) == ["%+.2f 档"]
+    assert (
+        f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}", session.graph.exposureStops)'
+        in detail
+    )
+    assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
+    assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt
+    assert INSPECTOR_HDR_PREVIEW_NOTE == (
+        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+    )
+    assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt
+    assert INSPECTOR_REC709_NOTE == "Rec.709 只是预览，不是成片"
+    assert f'Text("{INSPECTOR_REC709_NOTE}")' in odt
+    assert INSPECTOR_EXPORT_NOTE == "导出 ACEScct / EXR，709 / HLG / PQ 窗是预览·非成片"
+    assert f'Text("{INSPECTOR_EXPORT_NOTE}")' in odt
+    assert ACES_OT_NOTE_OFF == "导出 ACEScct / EXR"
+    assert ACES_OT_NOTE_REC709 == "DIY 预览·非成片"
+    assert ACES_OT_NOTE_HDR == "ColorSync 预览·非成片，不是 ACES OT"
+    assert f'return "{ACES_OT_NOTE_OFF}"' in note
+    assert f'return "{ACES_OT_NOTE_REC709}"' in note
+    assert f'return "{ACES_OT_NOTE_HDR}"' in note
+    assert 'return "关（ACEScct）"' in titles
+    assert 'return "Rec.709 预览"' in titles
+    assert 'return "Rec.2100 HLG"' in titles
+    assert 'return "Rec.2100 PQ"' in titles
+
+    # 验法㉒-4: toggle / estimate algorithm / 灰卡真测 / color pipeline stay. Not ㉓.
+    assert "promptEstimateWBOnImport" in settings
+    assert "promptEstimateWBOnImport" in app
+    assert "blockUnlockedIDT" in settings
+    assert 'Toggle("导入后提示估计白平衡", isOn: $settings.promptEstimateWBOnImport)' in settings
+    assert 'Button("点灰卡")' in wb or "点灰卡" in wb
+    assert "pickingNeutral" in wb
+    assert "confirmAutoWB" in inspector
+    assert "估计白平衡" in inspector
+    assert 'Picker("CAT"' in wb
+    assert 'Text("Bradford")' in wb
+    assert 'Text("CAT02")' in wb
+    assert "session.setODT($0)" in odt
+    assert "session.graph.odt" in odt
+    grey_golden = (ROOT / "tests/test_grey_card_golden.py").read_text(encoding="utf-8")
+    auto_wb = (ROOT / "tests/test_auto_wb.py").read_text(encoding="utf-8")
+    assert "def test_grey_card_golden_slot" in grey_golden
+    assert "没有样片就 skip" in grey_golden
+    assert "def test_grey_card_overrides_estimate" in auto_wb
+
+    # 验法㉒-5: test_ui_copy locks new sentence + bans (above).
+    assert "完善" not in settings
+    assert "精准" not in settings or "不写精准" in settings
+    assert "达芬奇已验证" not in settings
+    _chengpian_only_honesty(SETTINGS_WB_HELP)
+    _chengpian_only_honesty(settings)
 
 
 def test_idt_bar_always_visible_no_hidden_picker():

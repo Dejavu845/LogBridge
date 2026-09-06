@@ -1,5 +1,6 @@
 """Chinese settings page. No color numbers. No 精准 / 一键还原 / 全自动校准."""
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +12,9 @@ SIDEBAR = ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift"
 
 SETTINGS_PREVIEW_HELP = (
     "默认 Rec.709（角标预览·非成片）。不是成片，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
+)
+SETTINGS_WB_HELP = (
+    "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
 )
 
 
@@ -38,6 +42,8 @@ def test_settings_copy_is_chinese():
     assert "DIY OETF" not in ui
     assert "DIY" not in ui
     assert "导入后提示估计白平衡" in s
+    assert SETTINGS_WB_HELP in s
+    assert f'Text("{SETTINGS_WB_HELP}")' in s
     assert "未锁 IDT 挡住处理" in s
     assert "不能关" in s
     assert "不猜 5600" in s
@@ -77,3 +83,33 @@ def test_settings_button_and_block_cannot_disable():
     assert "canProcess" in clip
     assert "hasLockedPair" in clip
     assert "先选择 Log 与色域" in clip
+
+
+def test_settings_wb_help_no_cat_jargon():
+    """Settings ㉒: lock WB help 一字不差; ban isolated CAT / 不写入 CAT."""
+    s = _read(SETTINGS)
+    ui = _code_without_comments(s)
+    isolated_cat = re.compile(r"(?<![A-Za-z0-9_])CAT(?![A-Za-z0-9_])")
+    old_help = (
+        "默认关。打开后只提示「白平衡（估计）」，不写入 CAT，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+    )
+
+    assert SETTINGS_WB_HELP == (
+        "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+    )
+    assert f'Text("{SETTINGS_WB_HELP}")' in s
+    assert SETTINGS_WB_HELP in s
+    assert SETTINGS_WB_HELP in ui
+    assert old_help not in s
+    assert old_help not in SETTINGS_WB_HELP
+    assert "不写入 CAT" not in SETTINGS_WB_HELP
+    assert "不写入 CAT" not in ui
+    assert "CAT" not in SETTINGS_WB_HELP
+    assert isolated_cat.search(SETTINGS_WB_HELP) is None
+    assert isolated_cat.search(ui) is None
+    assert 'Toggle("导入后提示估计白平衡", isOn: $settings.promptEstimateWBOnImport)' in s
+    assert SETTINGS_PREVIEW_HELP in s
+    assert "达芬奇已验证" not in s
+    assert "达芬奇已验证" not in SETTINGS_WB_HELP
+    assert "完善" not in SETTINGS_WB_HELP
+    assert "精准" not in SETTINGS_WB_HELP
