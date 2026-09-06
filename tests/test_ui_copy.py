@@ -2397,10 +2397,15 @@ def test_mxf_no_track_chip_not_arri():
 def test_cancel_batch_status_english_leftovers_are_chinese():
     """Cancel / batch / export status leftovers stay locked Chinese.
 
-    Wrote… → existing 已写出 N 个文件 + 整段代理，不是全精度成片.
-    Export failed: → 写出失败. No clip selected → 没有素材.
+    Scan user strings only: Clip / ContentView / PreviewEngine /
+    ResolveExporter.exportNote. Leave comments, XML attrs, cube TITLE,
+    implemented (unverified) alone.
+
+    Wrote N files… / Wrote  → #70 已写出 N 个文件。…整段代理，不是全精度成片.
+    Export failed: / Export failed → 写出失败.
+    No clip selected → 没有素材.
+    exportNote CCT fallback → 待定 / 单位阵 (not pending / identity).
     cancelledExportNote / batch summary stay 已取消 + buckets + honesty.
-    No new chips, buttons, or success claims.
     """
     clip = _read(CLIP)
     content = _read(CONTENT)
@@ -2410,6 +2415,8 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     inspector = _read(INSPECTOR)
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
     strip = _read(NODE_STRIP)
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    note_fn = exporter.split("static func exportNote")[1].split("static func export(")[0]
 
     assert WRITE_FAILED_CHIP == "写出失败"
     assert PREVIEW_STATUS_EMPTY == "没有素材"
@@ -2441,22 +2448,37 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     assert "已写出 \\(written.count) 个文件" in resolve_fn
     assert HONEST_PROXY_NOTE in resolve_fn
     assert "Wrote " not in ui_resolve
+    assert "Wrote N files" not in ui_resolve
     assert "shortExportChip" in resolve_fn
     assert "Export failed:" not in ui_resolve
     _chengpian_only_honesty(resolve_fn.split("note +=")[1].split("self.lastExportNote")[0])
+
+    ui_note = _code_without_comments(note_fn)
+    assert "待定 / 单位阵" in note_fn
+    assert "pending / identity" not in ui_note
+    assert HONEST_PROXY_NOTE in note_fn
+    assert "绿品" in note_fn
+    _chengpian_only_honesty(ui_note)
 
     ui_paths = {
         "clip": _code_without_comments(clip),
         "content": _code_without_comments(content),
         "engine": _code_without_comments(engine),
+        "exportNote": ui_note,
         "preview": _code_without_comments(preview),
         "hdr": _code_without_comments(hdr),
         "inspector": _code_without_comments(inspector),
         "sidebar": _code_without_comments(sidebar),
         "strip": _code_without_comments(strip),
     }
-    gate_en = ("Wrote ", "Export failed:", "No clip selected")
-    leftover_en = gate_en + ("Wrote…", "Wrote...", "Export failed", "Cancelled", "canceled")
+    gate_en = (
+        "Wrote ",
+        "Wrote N files",
+        "Export failed:",
+        "Export failed",
+        "No clip selected",
+    )
+    leftover_en = gate_en + ("Wrote…", "Wrote...", "Cancelled", "canceled")
     for name, chunk in ui_paths.items():
         for token in leftover_en:
             assert token not in chunk, f"{name}: {token}"
