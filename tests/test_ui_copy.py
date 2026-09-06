@@ -2687,6 +2687,30 @@ def test_disk_estimate_assumption_is_plain_chinese():
     assert "bytesPerEXRPixel" in clip
     assert "12" in clip.split("bytesPerEXRPixel")[1].split("conservativeFPS")[0]
 
+    # 验法⑨: user-facing README/ACCEPTANCE dest-disk estimate sentences.
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    estimate_lines = []
+    for blob in (readme, acceptance):
+        for line in blob.splitlines():
+            if "estimate dest disk" in line or "Dest disk is estimated" in line:
+                estimate_lines.append(line)
+    assert len(estimate_lines) == 3
+    for line in estimate_lines:
+        assert DISK_ESTIMATE_ASSUMPTION in line
+        assert "未压缩浮点图" in line
+        assert "float32" not in line
+        assert "float32 RGB 未压缩" not in line
+        assert "完善" not in line
+        assert "精准" not in line
+    assert "12 bytes" in readme
+    assert "12-byte" in acceptance
+    assert "24 fps × 60 s" in readme
+    assert "24 fps × 60 s" in acceptance
+    assert "uncompressed float32 RGB" not in readme
+    assert "float32 RGB uncompressed" not in readme
+    assert "12-byte uncompressed float32 RGB" not in acceptance
+
 
 def test_export_note_is_plain_chinese():
     """User-visible exportNote locks. TITLE / XML / graph / color stay."""

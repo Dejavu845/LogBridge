@@ -1639,7 +1639,19 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
     assert DISK_SHORT_STATUS in readme
     assert DISK_SHORT_STATUS in acceptance
-    assert DISK_ESTIMATE_ASSUMPTION in readme or "float32 RGB" in readme
+    assert DISK_ESTIMATE_ASSUMPTION in readme
+    assert DISK_ESTIMATE_ASSUMPTION in acceptance
+    for blob in (readme, acceptance):
+        for line in blob.splitlines():
+            if "estimate dest disk" in line or "Dest disk is estimated" in line:
+                assert DISK_ESTIMATE_ASSUMPTION in line
+                assert "float32" not in line
+                assert "完善" not in line
+                assert "精准" not in line
+    assert "12 bytes" in readme
+    assert "12-byte" in acceptance
+    assert "24 fps × 60 s" in readme
+    assert "24 fps × 60 s" in acceptance
     _assert_chengpian_not_a_deliverable_claim(write_body)
     _assert_chengpian_not_a_deliverable_claim(clip.split("func diskShortExportNote")[1].split("static let wroteProxyChip")[0])
     _assert_chengpian_not_a_deliverable_claim(readme)
