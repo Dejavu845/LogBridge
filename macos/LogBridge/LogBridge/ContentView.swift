@@ -351,7 +351,7 @@ struct PreviewScrubBar: View {
 }
 
 /// One Chinese line on the preview: write progress, or selected 待选 / 失败 / 已写出代理.
-/// Mid-write wording stays 「写出代理 i/N · frame k」. No cancel / process / retry button here.
+/// Mid-write wording stays 「写出代理 i/N · 第 k 帧」 (「第 k / 共 m 帧」 when total known). No cancel / process / retry button here.
 struct WriteProgressLine: View {
     let text: String
 

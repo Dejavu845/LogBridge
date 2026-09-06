@@ -1129,6 +1129,28 @@ def test_write_progress_frame_copy_is_chinese():
     assert progress_text(2, 5, 120).count("成片") == 0
     assert progress_text(2, 5, 120, 240).count("成片") == 0
 
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    content = _read(CONTENT)
+    batch = (ROOT / "color" / "batch.py").read_text(encoding="utf-8")
+    # 验法⑦: user-facing docs/comments — no frame k / frame \(k). Filenames stay.
+    for blob in (readme, acceptance, batch, content):
+        assert "frame k" not in blob
+        assert "frame \\(k)" not in blob
+        assert " · frame " not in blob
+        for part in blob.split("写出代理 i/N")[1:]:
+            line = part.split("\n")[0]
+            assert "完善" not in line
+            assert "精准" not in line
+            assert "frame k" not in line
+    assert "写出代理 i/N · 第 k 帧" in readme
+    assert "写出代理 i/N · 第 k 帧" in acceptance
+    assert "第 k / 共 m 帧" in acceptance
+    assert "写出代理 i/N · 第 k 帧" in content
+    assert "写出代理 i/N · 第 k 帧" in batch
+    assert "frame \\(k)" not in fn
+    assert "frame k" not in fn
+
 
 def test_lock_lands_on_next_pending():
     """Lock selected pending IDT selects next pending (wrap). Mid-write stays. No auto-lock."""

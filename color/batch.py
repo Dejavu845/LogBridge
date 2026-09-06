@@ -30,7 +30,7 @@ the 8-bit preview buffer. Preview/scrub may stay 8-bit-first.
 with a per-clip error — not a preview refresh. Pending clips in the same
 bin do not block.
 
-While writing, progress is 「写出代理 i/N · frame k」 (k/total when known).
+While writing, progress is 「写出代理 i/N · 第 k 帧」 (「第 k / 共 m 帧」 when total known).
 Cancel becomes the same primary button. The in-progress ``_proxy`` folder
 is removed so a half sequence is not a finished deliverable; completed
 clips stay. Cancelled status says 已取消 and still 整段代理，不是全精度成片.
