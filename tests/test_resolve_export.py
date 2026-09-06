@@ -577,6 +577,7 @@ def test_resolve_copy_has_no_precision_or_chengpian_claims(tmp_path: Path):
 
 RESOLVE_IDT_PLACEHOLDER = 'idt="用户选择成对 IDT"'
 RESOLVE_CCT_PENDING_LABEL = "待定 / 单位阵"
+RESOLVE_README_EMPTY_IDT = "（无 — 请在达芬奇 CST 里指定 IDT）"
 WB_CUBE_TITLE_HEAD = "LogBridge WB AP0 CAT"
 LOCKED_NODE_NAMES = (
     'name="IDT"',
@@ -587,7 +588,7 @@ LOCKED_NODE_NAMES = (
 
 
 def test_resolve_package_placeholders_are_locked_chinese(tmp_path: Path):
-    """XML/README user copy: 用户选择成对 IDT + 待定/单位阵. TITLE/nodes stay."""
+    """XML/README user copy: 用户选择成对 IDT + 待定/单位阵 + 空 IDT 人话. TITLE/nodes stay."""
     xml = format_graph_xml([], None, 0.0, include_wb=False)
     assert '<?xml version="1.0" encoding="UTF-8"?>' in xml
     assert RESOLVE_IDT_PLACEHOLDER in xml
@@ -617,12 +618,22 @@ def test_resolve_package_placeholders_are_locked_chinese(tmp_path: Path):
     assert "(user picker)" not in written_xml
     assert "pending / identity" not in written_xml
     readme = (empty / "README_RESOLVE.md").read_text(encoding="utf-8")
+    assert RESOLVE_README_EMPTY_IDT in readme
+    assert "none — assign" not in readme
     assert "pending / identity" not in readme
     assert "已实现（未验证）" in readme
+    assert "implemented (unverified)" in readme
     assert "完善" not in readme
     assert "精准" not in readme
     assert "达芬奇已验证" not in readme
     _assert_chengpian_not_a_deliverable_claim(readme)
+    empty_readme = format_readme([], None, 0.0, False)
+    assert RESOLVE_README_EMPTY_IDT in empty_readme
+    assert "none — assign" not in empty_readme
+    filled_readme = format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True)
+    assert RESOLVE_README_EMPTY_IDT not in filled_readme
+    assert "arri_logc4_awg4" in filled_readme
+    assert "none — assign" not in filled_readme
     dot = (empty / "graph.dot").read_text(encoding="utf-8")
     assert "pending / identity" not in dot
     assert "(user picker)" not in dot
@@ -679,6 +690,17 @@ def test_resolve_package_placeholders_are_locked_chinese(tmp_path: Path):
     assert "pending / identity" not in cct_fn
     assert RESOLVE_CCT_PENDING_LABEL in xml_fn
     assert RESOLVE_CCT_PENDING_LABEL in readme_fn
+    assert RESOLVE_README_EMPTY_IDT in readme_fn
+    assert RESOLVE_README_EMPTY_IDT in py_readme
+    assert RESOLVE_README_EMPTY_IDT not in xml_fn
+    assert RESOLVE_README_EMPTY_IDT not in py_xml
+    assert RESOLVE_README_EMPTY_IDT not in written_xml
+    assert RESOLVE_README_EMPTY_IDT not in cube
+    assert RESOLVE_README_EMPTY_IDT not in cube709
+    assert "none — assign" not in readme_fn
+    assert "none — assign" not in py_readme
+    assert "none — assign" not in xml_fn
+    assert "none — assign" not in py_xml
     assert "pending / identity" not in xml_fn
     assert "pending / identity" not in readme_fn
     assert "pending / identity" not in dot_fn

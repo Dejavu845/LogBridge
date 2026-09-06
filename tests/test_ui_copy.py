@@ -2961,6 +2961,14 @@ def test_export_note_is_plain_chinese():
     assert "待定 / 单位阵" in xml_fn
     assert "pending / identity" not in xml_fn
     assert "pending / identity" not in readme_fn
+    assert "（无 — 请在达芬奇 CST 里指定 IDT）" in readme_fn
+    assert "（无 — 请在达芬奇 CST 里指定 IDT）" in py.split("def format_readme")[1].split(
+        "def export_resolve_bundle"
+    )[0]
+    assert "none — assign" not in readme_fn
+    assert "none — assign" not in py.split("def format_readme")[1].split(
+        "def export_resolve_bundle"
+    )[0]
     wb_fn = exporter.split("private static func wbCube")[1].split(
         "private static func odtCube"
     )[0]

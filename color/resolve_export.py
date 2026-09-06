@@ -846,7 +846,7 @@ def format_readme(
     exposure_stops: float = 0.0,
     exposure_enabled: bool = True,
 ) -> str:
-    idt_list = ", ".join(idt_ids) if idt_ids else "(none — assign IDT in Resolve CST)"
+    idt_list = ", ".join(idt_ids) if idt_ids else "（无 — 请在达芬奇 CST 里指定 IDT）"
     wb_state = (
         "默认开启"
         if include_wb
