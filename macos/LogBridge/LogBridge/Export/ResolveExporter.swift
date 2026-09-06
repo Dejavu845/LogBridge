@@ -737,7 +737,7 @@ enum ResolveExporter {
     }
 
     private static func readme(idts: [IDT], cct: Double?, tint: Double, includeWB: Bool, exposureStops: Double = 0) -> String {
-        let idtList = idts.isEmpty ? "(none — assign IDT in Resolve CST)" : idts.map(\.rawValue).joined(separator: ", ")
+        let idtList = idts.isEmpty ? "（无 — 请在达芬奇 CST 里指定 IDT）" : idts.map(\.rawValue).joined(separator: ", ")
         let wbState = includeWB ? "默认开启" : "已写出但默认旁路（不改颜色）"
         return """
         # LogBridge Resolve 导出
