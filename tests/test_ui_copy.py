@@ -3765,6 +3765,7 @@ def test_export_note_is_plain_chinese():
         EXPORT_NOTE_WORKSPACE,
         GRAPH_ODT_USER,
         GRAPH_ODT_XML_DESC,
+        GRAPH_WB_SUMMARY,
         REC709_CUBE_COMMENT,
         REC709_CUBE_TITLE,
         RESOLVE_README_HONESTY,
@@ -3794,7 +3795,12 @@ def test_export_note_is_plain_chinese():
     assert "_proxy" in EXPORT_NOTE_PROXY
     assert "已实现（未验证）" in EXPORT_NOTE_TITLE
     assert HONEST_PROXY_NOTE in EXPORT_NOTE_PROXY
-    assert "机内色温只填旋钮，默认 CAT 是单位阵。" in EXPORT_NOTE_IN_CAMERA
+    assert EXPORT_NOTE_IN_CAMERA == (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    assert EXPORT_NOTE_IN_CAMERA == INSPECTOR_WB_HELP
     assert "graph.xml" in EXPORT_NOTE_FILES
     assert "04_ODT_Rec709.cube" in EXPORT_NOTE_FILES
     assert "仅已锁定成对 IDT 片段" in EXPORT_NOTE_LOCKED_ONLY
@@ -3808,6 +3814,11 @@ def test_export_note_is_plain_chinese():
         "stops；",
         "Bypass WB",
         "不烘焙白平衡",
+        "CAT(user→D65)",
+        "CAT(user→D65)·inv(CAT(as→D65))",
+        "默认 CAT 是单位阵",
+        "相对变换 CAT",
+        "绝对 CAT",
     )
     locked = (
         EXPORT_NOTE_REC709,
@@ -3831,6 +3842,9 @@ def test_export_note_is_plain_chinese():
         assert "精准" not in note
     assert "identity" not in EXPORT_NOTE_WB_BYPASS
     assert "identity" not in EXPORT_NOTE_WB_OFF
+    assert "identity" not in EXPORT_NOTE_IN_CAMERA
+    assert "CAT(user→D65)" not in EXPORT_NOTE_IN_CAMERA
+    assert "默认 CAT" not in EXPORT_NOTE_IN_CAMERA
     assert "stops" not in EXPORT_NOTE_EXPOSURE
     assert "{cctLabel}" in EXPORT_NOTE_WB_ON
     assert "{cct}" not in EXPORT_NOTE_WB_ON.replace("{cctLabel}", "")
@@ -3971,6 +3985,38 @@ def test_export_note_is_plain_chinese():
     assert GRAPH_ODT_USER in py_graph or f"{{GRAPH_ODT_USER}}" in py_graph
     assert "预览·非成片" in graph_fn
     assert "预览·非成片" in py_graph
+    assert GRAPH_WB_SUMMARY == (
+        "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    )
+    assert (
+        "色温 \\(cctLabel(cct))，绿品 \\(tint)，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    ) in graph_fn
+    assert "{wb_summary}" in py_graph
+    assert "GRAPH_WB_SUMMARY.format" in py_readme
+    wb_swift = [
+        line.strip().lstrip("- ").strip()
+        for line in graph_fn.splitlines()
+        if "机内只填旋钮" in line and "方法 Bradford" in line
+    ]
+    assert wb_swift == [
+        "色温 \\(cctLabel(cct))，绿品 \\(tint)，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    ]
+    for token in (
+        "identity",
+        "CAT(user→D65)",
+        "As-shot fills knobs",
+        "default CAT is identity",
+        "Scene-linear only",
+    ):
+        assert token not in wb_swift[0], token
+    assert not wb_swift[0].startswith("CCT")
+    assert "CCT" not in wb_swift[0].replace("ACEScct", "")
     for token in ("DIY BT.709 OETF", "preview only", "Not an ACES Output Transform"):
         assert token not in graph_fn
         assert token not in py_graph
@@ -4018,3 +4064,158 @@ def test_export_note_is_plain_chinese():
     assert "完善" not in xml_fn
     assert "精准" not in xml_fn
     assert "达芬奇已验证" not in xml_fn
+
+
+def test_readme_resolve_graph_wb_plain_chinese():
+    """README_RESOLVE ㉕ 验法: honesty / Graph WB 人话. Align ⑮. ⑮–㉔ frozen."""
+    from color.resolve_export import (
+        EXPORT_NOTE_IN_CAMERA,
+        GRAPH_WB_SUMMARY,
+        REC709_CUBE_TITLE,
+        RESOLVE_README_HONESTY,
+        format_readme,
+    )
+
+    honesty_to = (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    graph_wb_to = (
+        "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    )
+    graph_wb_swift = (
+        "色温 \\(cctLabel(cct))，绿品 \\(tint)，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    )
+    honesty_banned = (
+        "identity",
+        "CAT(user→D65)",
+        "CAT(user→D65)·inv(CAT(as→D65))",
+        "默认 CAT 是单位阵",
+        "相对变换 CAT",
+        "绝对 CAT",
+    )
+    graph_wb_banned = (
+        "identity",
+        "CAT(user→D65)",
+        "As-shot fills knobs",
+        "default CAT is identity",
+        "Scene-linear only",
+    )
+
+    # 验法㉕-1: both TO strings 一字不差. Align Inspector ⑮.
+    assert EXPORT_NOTE_IN_CAMERA == honesty_to
+    assert EXPORT_NOTE_IN_CAMERA == INSPECTOR_WB_HELP
+    assert GRAPH_WB_SUMMARY == graph_wb_to
+
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    inspector = _read(INSPECTOR)
+    settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
+    engine = _read(ENGINE)
+    py = (ROOT / "color/resolve_export.py").read_text(encoding="utf-8")
+    note_fn = exporter.split("static func exportNote")[1].split("static func export(")[0]
+    readme_fn = exporter.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    xml_fn = exporter.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    honesty_fn = readme_fn.split("## Graph (serial nodes)")[0]
+    graph_fn = readme_fn.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    exposure = inspector.split("struct ExposureInspector")[1]
+    odt_insp = inspector.split("struct ODTInspector")[1].split("struct ExposureInspector")[0]
+    strip = _read(NODE_STRIP)
+
+    assert f'Text("{INSPECTOR_WB_HELP}")' in wb
+    assert honesty_to in note_fn
+    assert honesty_to in readme_fn
+    assert honesty_to in RESOLVE_README_HONESTY
+    assert graph_wb_swift in graph_fn
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
+    assert honesty_to in generated
+    assert (
+        "色温 3200 K，绿品 0.25，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    ) in generated
+
+    # 验法㉕-2: bans on surfaces touched.
+    for token in honesty_banned:
+        assert token not in EXPORT_NOTE_IN_CAMERA, token
+        assert token not in honesty_fn, token
+        assert token not in _code_without_comments(note_fn), token
+    for token in graph_wb_banned:
+        assert token not in GRAPH_WB_SUMMARY, token
+        assert token not in graph_wb_swift, token
+    assert not GRAPH_WB_SUMMARY.startswith("CCT")
+    assert not graph_wb_swift.startswith("CCT")
+    assert "CCT" not in GRAPH_WB_SUMMARY.replace("ACEScct", "")
+    assert "CCT" not in graph_wb_swift.replace("ACEScct", "")
+
+    # 验法㉕-3: ⑮–㉔ locked copy 一字不动.
+    assert INSPECTOR_EXPOSURE_HELP == (
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    )
+    assert INSPECTOR_GAIN_LIVE == "线性增益 = "
+    assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
+    assert INSPECTOR_WB_CCT_LABEL == "色温"
+    assert INSPECTOR_EXPOSURE_UNIT_LABEL == "档"
+    assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
+    assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
+    assert INSPECTOR_HDR_PREVIEW_NOTE == (
+        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+    )
+    assert SETTINGS_WB_HELP == (
+        "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
+    )
+    assert INSPECTOR_WB_CAT_PICKER_TITLE == "适应方法"
+    assert PREVIEW_STATUS_ODT_CACHE_HIT == "只重跑预览输出"
+    assert f'Text("{INSPECTOR_EXPOSURE_HELP}")' in exposure
+    assert f'Text("{INSPECTOR_WB_CCT_LABEL}")' in wb
+    assert f'Text("{INSPECTOR_EXPOSURE_UNIT_LABEL}")' in exposure
+    assert f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}"' in strip
+    assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt_insp
+    assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt_insp
+    assert f'Text("{SETTINGS_WB_HELP}")' in settings
+    assert f'Picker("{INSPECTOR_WB_CAT_PICKER_TITLE}"' in wb
+    assert f'note = "{PREVIEW_STATUS_ODT_CACHE_HIT}"' in engine
+    assert 'Picker("CAT"' not in wb
+    assert 'Picker("ODT"' not in odt_insp
+    assert "只重跑 ODT" not in engine
+    assert "不写入 CAT" not in SETTINGS_WB_HELP
+
+    # 验法㉕-4: cube TITLE / XML / node filenames / color pipeline stay.
+    assert REC709_CUBE_TITLE == (
+        "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+    )
+    assert "default CAT is identity" in xml_fn
+    assert 'name="WB"' in xml_fn
+    assert "graph.xml" in exporter
+    assert "03_WB.cube" in exporter
+    assert "04_ODT_Rec709.cube" in exporter
+    assert "README_RESOLVE.md" in exporter
+    assert "matrixCCT = nil" in exporter
+    assert "func uniqueImplementedIDTs" in exporter
+    assert "未验证" in honesty_fn
+    assert "预览·非成片" in graph_fn
+    assert "已实现（未验证）" in note_fn
+
+    # 验法㉕-5: test_ui_copy / test_resolve_export lock both TO + bans (above).
+    assert "完善" not in honesty_to
+    assert "精准" not in honesty_to
+    assert "完善" not in graph_wb_to
+    assert "精准" not in graph_wb_to
+    assert "达芬奇已验证" not in honesty_to
+    assert "达芬奇已验证" not in graph_wb_to
+    assert "达芬奇已验证" not in honesty_fn
+    assert "达芬奇已验证" not in graph_fn
+    _chengpian_only_honesty(honesty_to)
+    _chengpian_only_honesty(graph_wb_to)
+    _chengpian_only_honesty(generated)
