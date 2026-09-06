@@ -63,9 +63,9 @@ NOTE_ARRI_MXF = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
 NOTE_CAMERA_RAW = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
 NOTE_UNKNOWN_CODEC = "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
 NOTE_REFUSE_CONTAINER = "这个容器不接。不写「全格式已支持」。"
-# Accept notes (already Chinese; API names kept). Success-path lock.
-NOTE_STILL_ACCEPT = "静帧 {ext} 走 ImageIO。不是成片。"
-NOTE_MOVIE_ACCEPT = "MOV/MP4：ProRes / H.264 / HEVC 走 AVAssetReader Y′CbCr。不走 copyCGImage。"
+# Accept notes (locked Chinese; no API / Y′CbCr jargon).
+NOTE_STILL_ACCEPT = "静帧 {ext} 按图片导入。不是成片。"
+NOTE_MOVIE_ACCEPT = "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
 # Multi-file import skip summary. Per-file refuse chips stay as-is.
 IMPORT_SKIP_HEADER = "未导入 {n} 条："
 

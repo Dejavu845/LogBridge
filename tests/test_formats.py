@@ -52,7 +52,8 @@ def test_stills_tiff_dpx_exr_accept():
         d = classify(name)
         assert d.action == ACCEPT
         assert d.kind == "still"
-        assert "ImageIO" in d.note
+        assert "按图片导入" in d.note
+        assert "ImageIO" not in d.note
         assert d.note == NOTE_STILL_ACCEPT.format(ext=name.rsplit(".", 1)[-1].upper())
 
 

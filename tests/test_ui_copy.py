@@ -1485,11 +1485,9 @@ def test_import_skip_summary_is_human_chinese():
     assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
     assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式已支持」。"
-    # Accept notes already Chinese (API names kept). Not rewritten.
-    assert NOTE_STILL_ACCEPT == "静帧 {ext} 走 ImageIO。不是成片。"
-    assert NOTE_MOVIE_ACCEPT == (
-        "MOV/MP4：ProRes / H.264 / HEVC 走 AVAssetReader Y′CbCr。不走 copyCGImage。"
-    )
+    # Accept notes locked Chinese. No ImageIO / AVAssetReader / copyCGImage / Y′CbCr.
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。不是成片。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
 
     rejects = [
         ("A.r3d", classify("A.r3d")),
@@ -1531,7 +1529,7 @@ def test_import_skip_summary_is_human_chinese():
     assert NOTE_UNKNOWN_CODEC in media
     assert NOTE_REFUSE_CONTAINER in media
     assert NOTE_MOVIE_ACCEPT in media
-    assert "走 ImageIO。不是成片。" in media
+    assert "按图片导入。不是成片。" in media
 
     # Cancel-write: no leftover user-visible English. Scope stays import summary.
     cancel_note = clip.split("func cancelledExportNote")[1].split("static let bytesPerEXRPixel")[0]
@@ -2143,7 +2141,8 @@ def test_success_path_english_notes_are_chinese():
     """Success / accept / export-done leftovers stay locked Chinese.
 
     Failure chips from #69/#67/#68 are re-locked, not rewritten.
-    ImageIO / copyCGImage accept notes stay the existing Chinese + API names.
+    Accept notes are locked plain Chinese — no ImageIO / AVAssetReader /
+    copyCGImage / Y′CbCr jargon.
     """
     from color.formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_MOVIE_ACCEPT, NOTE_STILL_ACCEPT
 
@@ -2162,10 +2161,11 @@ def test_success_path_english_notes_are_chinese():
     assert NOTE_FILENAME_APPLE_LOG2 == "文件名 Apple Log 2 + Apple Wide Gamut"
     assert NOTE_MODEL_HINT == "机型提示"
     assert NOTE_META_RED_RMD == "元数据 RED RMD"
-    assert NOTE_STILL_ACCEPT == "静帧 {ext} 走 ImageIO。不是成片。"
-    assert NOTE_MOVIE_ACCEPT == (
-        "MOV/MP4：ProRes / H.264 / HEVC 走 AVAssetReader Y′CbCr。不走 copyCGImage。"
-    )
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。不是成片。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
+    for jargon in ("AVAssetReader", "ImageIO", "copyCGImage", "Y′CbCr", "Y'CbCr", "YpCbCr"):
+        assert jargon not in NOTE_STILL_ACCEPT
+        assert jargon not in NOTE_MOVIE_ACCEPT
 
     # Existing Chinese failure chips stay locked.
     assert STUB_CHIP == "未实现"
@@ -2223,10 +2223,17 @@ def test_success_path_english_notes_are_chinese():
         assert token not in ui_clip, token
 
     assert NOTE_STILL_ACCEPT.split("{ext}")[0] in media
-    assert "走 ImageIO。不是成片。" in media
+    assert "按图片导入。不是成片。" in media
+    assert '静帧 \\(ext.uppercased()) 按图片导入。不是成片。' in media
     assert NOTE_MOVIE_ACCEPT in media
     assert NOTE_STILL_ACCEPT in formats_py
     assert NOTE_MOVIE_ACCEPT in formats_py
+    assert "走 ImageIO" not in media
+    assert "走 AVAssetReader" not in media
+    assert "不走 copyCGImage" not in media
+    assert "走 ImageIO" not in formats_py
+    assert "走 AVAssetReader" not in formats_py
+    assert "不走 copyCGImage" not in formats_py
 
     note_fn = exporter.split("static func exportNote")[1].split("static func export(")[0]
     assert "待定 / 单位阵" in note_fn
