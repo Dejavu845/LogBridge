@@ -719,7 +719,7 @@ enum ResolveExporter {
         digraph LogBridgeResolve {
           rankdir=LR;
           labelloc="t";
-          label="LogBridge M1 Resolve graph — implemented (unverified)";
+          label="LogBridge M1 Resolve graph — 已实现（未验证）";
           node [shape=box, fontname="Helvetica"];
 
           clip [label="Clip\\ncamera log"];
@@ -742,7 +742,7 @@ enum ResolveExporter {
         return """
         # LogBridge Resolve 导出
 
-        状态：**已实现（未验证）** / implemented (unverified)。不是相机支持声明。
+        状态：**已实现（未验证）**。不是相机支持声明。
 
         ## 诚实说明
 

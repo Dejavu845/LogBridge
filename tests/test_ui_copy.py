@@ -2969,6 +2969,18 @@ def test_export_note_is_plain_chinese():
     assert "none — assign" not in py.split("def format_readme")[1].split(
         "def export_resolve_bundle"
     )[0]
+    assert "状态：**已实现（未验证）**。不是相机支持声明。" in readme_fn
+    assert "状态：**已实现（未验证）**。不是相机支持声明。" in py.split(
+        "def format_readme"
+    )[1].split("def export_resolve_bundle")[0]
+    assert (
+        "状态：**已实现（未验证）** / implemented (unverified)。不是相机支持声明。"
+        not in readme_fn
+    )
+    assert (
+        "状态：**已实现（未验证）** / implemented (unverified)。不是相机支持声明。"
+        not in py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    )
     wb_fn = exporter.split("private static func wbCube")[1].split(
         "private static func odtCube"
     )[0]
