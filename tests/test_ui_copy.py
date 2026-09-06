@@ -1129,6 +1129,20 @@ def test_write_progress_frame_copy_is_chinese():
     assert progress_text(2, 5, 120).count("成片") == 0
     assert progress_text(2, 5, 120, 240).count("成片") == 0
 
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
+    assert " · frame " not in readme
+    assert " · frame " not in acceptance
+    assert "写出代理 i/N · 第 k 帧" in readme
+    assert "写出代理 i/N · 第 k 帧" in acceptance
+    assert "第 k / 共 m 帧" in acceptance
+    content = _read(CONTENT)
+    batch = (ROOT / "color" / "batch.py").read_text(encoding="utf-8")
+    assert "写出代理 i/N · 第 k 帧" in content
+    assert " · frame " not in content
+    assert "写出代理 i/N · 第 k 帧" in batch
+    assert " · frame " not in batch
+
 
 def test_lock_lands_on_next_pending():
     """Lock selected pending IDT selects next pending (wrap). Mid-write stays. No auto-lock."""
