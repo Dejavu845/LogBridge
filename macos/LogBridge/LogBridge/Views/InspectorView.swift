@@ -139,12 +139,12 @@ struct WBInspector: View {
                     session.pickingNeutral.toggle()
                 }
                 .controlSize(.small)
-                .help("点灰卡：IDT 后 ACES2065-1 (AP0) 线性取样，覆盖元数据。写入现有 CAT。")
+                .help("点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。")
                 Button("估计白平衡") {
                     session.proposeAutoWB()
                 }
                 .controlSize(.small)
-                .help("白平衡（估计）：IDT 后 ACEScg SoG p=6。不写 CAT。把握不够就空着。")
+                .help("白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。")
             }
             if session.graph.autoWBCCT != nil {
                 HStack(spacing: 6) {
