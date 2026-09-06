@@ -317,7 +317,7 @@ struct ExposureInspector: View {
             .controlSize(.small)
             if session.graph.exposureEnabled {
                 HStack(spacing: 6) {
-                    Text("档（Stops）")
+                    Text("档")
                         .font(.caption)
                         .frame(width: 56, alignment: .leading)
                     Slider(
