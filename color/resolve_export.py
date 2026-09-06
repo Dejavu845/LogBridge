@@ -720,7 +720,7 @@ def format_dot(
   idt  [label="IDT\\n{idt_label}\\n01_IDT_<idt>.cube\\n{GRAPH_DOT_IDT_THIRD}"];
   exp  [label="{GRAPH_DOT_EXP_HEAD}\\n{exposure_stops:+.2f} 档\\n{GRAPH_DOT_EXP_FILE}", style="filled,{exp_style}", fillcolor="{exp_fill}"];
   wb   [label="{GRAPH_DOT_WB_HEAD}\\n{wb_line}\\n{GRAPH_DOT_WB_FILE}", style="filled,{wb_style}", fillcolor="{wb_fill}"];
-  odt  [label="{GRAPH_DOT_ODT_HEAD}\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\n{GRAPH_ODT_USER}"];
+  odt  [label="{GRAPH_DOT_ODT_HEAD}\\n04_ODT_Rec709.cube\\n或 CST ACEScct → Rec.709\\n{GRAPH_ODT_USER}"];
   timeline [shape=oval, label="{GRAPH_DOT_TIMELINE_LABEL}"];
 
   clip -> idt -> exp -> wb -> odt;

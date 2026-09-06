@@ -1253,6 +1253,8 @@ GRAPH_DOT_IDT_ODT_TL_BANNED = (
     GRAPH_DOT_TIMELINE_FROM,
     'label="Timeline',
 )
+GRAPH_DOT_ODT_CST_LOCKED = "或 CST ACEScct → Rec.709"
+GRAPH_DOT_ODT_CST_FROM = "or CST ACEScct → Rec.709"
 
 
 def _dot_node_label(dot: str, node: str) -> str:
@@ -1599,7 +1601,7 @@ def test_graph_dot_idt_odt_timeline_plain_chinese(tmp_path: Path):
     assert idt_lines[3] == GRAPH_DOT_IDT_THIRD_LOCKED
     assert odt_lines[0] == GRAPH_DOT_ODT_HEAD_LOCKED
     assert odt_lines[1] == "04_ODT_Rec709.cube"
-    assert odt_lines[2] == "or CST ACEScct → Rec.709"
+    assert odt_lines[2] == GRAPH_DOT_ODT_CST_LOCKED
     assert odt_lines[3] == GRAPH_ODT_USER
     assert timeline_label == GRAPH_DOT_TIMELINE_LABEL_LOCKED
     generated_dot = format_dot(
@@ -1651,8 +1653,8 @@ def test_graph_dot_idt_odt_timeline_plain_chinese(tmp_path: Path):
     assert f'GRAPH_DOT_IDT_THIRD = "{GRAPH_DOT_IDT_THIRD_LOCKED}"' in py
     assert f'GRAPH_DOT_ODT_HEAD = "{GRAPH_DOT_ODT_HEAD_LOCKED}"' in py
     assert r'GRAPH_DOT_TIMELINE_LABEL = "时间线\\nACEScct"' in py
-    assert "or CST ACEScct → Rec.709" in dot_fn
-    assert "or CST ACEScct → Rec.709" in py_dot
+    assert GRAPH_DOT_ODT_CST_LOCKED in dot_fn
+    assert GRAPH_DOT_ODT_CST_LOCKED in py_dot
 
     for token in GRAPH_DOT_IDT_ODT_TL_BANNED:
         assert token not in idt_lines[3], token
@@ -1727,4 +1729,133 @@ def test_graph_dot_idt_odt_timeline_plain_chinese(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(idt_lines[3])
     _assert_chengpian_not_a_deliverable_claim(odt_lines[0])
     _assert_chengpian_not_a_deliverable_claim(timeline_label)
+
+
+def test_graph_dot_odt_cst_plain_chinese(tmp_path: Path):
+    """graphDOT ㉚: odt CST 人话. ㉗+㉘+㉙ + TITLE / XML Desc / 色管 frozen."""
+    assert GRAPH_DOT_ODT_CST_LOCKED == "或 CST ACEScct → Rec.709"
+    assert GRAPH_DOT_ODT_CST_FROM == "or CST ACEScct → Rec.709"
+
+    export_resolve_bundle(
+        tmp_path,
+        idt_ids=["arri_logc4_awg4"],
+        include_wb=True,
+        cct=3200.0,
+        tint=0.25,
+        exposure_stops=1.5,
+        lut_size=5,
+    )
+    xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
+    dot = (tmp_path / "graph.dot").read_text(encoding="utf-8")
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    wb_cube = (tmp_path / "03_WB.cube").read_text(encoding="utf-8")
+
+    odt_label = _dot_node_label(dot, "odt")
+    odt_lines = odt_label.split("\\n")
+    assert odt_lines[0] == GRAPH_DOT_ODT_HEAD_LOCKED
+    assert odt_lines[1] == "04_ODT_Rec709.cube"
+    assert odt_lines[2] == GRAPH_DOT_ODT_CST_LOCKED
+    assert odt_lines[3] == GRAPH_ODT_USER
+    generated_dot = format_dot(
+        ["arri_logc4_awg4"], 3200.0, 0.25, True, exposure_stops=1.5
+    )
+    assert _dot_node_label(generated_dot, "odt").split("\\n")[2] == GRAPH_DOT_ODT_CST_LOCKED
+    assert _dot_node_label(generated_dot, "odt") == odt_label
+
+    assert not odt_lines[2].startswith("or ")
+    assert odt_lines[2].startswith("或 ")
+    assert GRAPH_DOT_ODT_CST_FROM not in odt_lines[2]
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = swift.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    py_xml = py.split("def format_graph_xml")[1].split("def format_readme")[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    readme_fn = swift.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    wb_fn = swift.split("private static func wbCube")[1].split(
+        "private static func odtCube"
+    )[0]
+
+    assert GRAPH_DOT_ODT_CST_LOCKED in dot_fn
+    assert GRAPH_DOT_ODT_CST_LOCKED in py_dot
+    assert GRAPH_DOT_ODT_CST_FROM not in dot_fn
+    assert GRAPH_DOT_ODT_CST_FROM not in py_dot
+    # README / other ODT lines keep English or CST (not this knife).
+    assert GRAPH_DOT_ODT_CST_FROM in readme_fn
+    assert GRAPH_DOT_ODT_CST_FROM in py_readme
+
+    # ㉗ four locked DOT/XML strings 一字不动.
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == GRAPH_DOT_WB_LINE_LOCKED
+    assert GRAPH_EXP_XML_DESC == GRAPH_EXP_XML_DESC_LOCKED
+    assert GRAPH_WB_XML_DESC == GRAPH_WB_XML_DESC_LOCKED
+    assert GRAPH_EXP_XML_DESC in xml_fn
+    assert GRAPH_WB_XML_DESC in xml_fn
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert GRAPH_DOT_WB_SWIFT in dot_fn
+    assert _dot_node_label(dot, "exp") == (
+        "曝光（可归零）\\n+1.50 档\\n02_Exposure.cube / .dctl"
+    )
+    assert _xml_node_description(xml, "Exposure") == GRAPH_EXP_XML_DESC_LOCKED
+    assert _xml_node_description(xml, "WB") == GRAPH_WB_XML_DESC_LOCKED
+
+    # ㉘ three locked strings 一字不动.
+    assert GRAPH_DOT_CLIP_LABEL == GRAPH_DOT_CLIP_LABEL_LOCKED
+    assert GRAPH_DOT_WORKING_SPACE == GRAPH_DOT_WORKING_SPACE_LOCKED
+    assert GRAPH_IDT_XML_DESC == GRAPH_IDT_XML_DESC_LOCKED
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert GRAPH_IDT_XML_DESC in xml_fn
+    assert "{GRAPH_IDT_XML_DESC}" in py_xml
+    assert _dot_node_label(dot, "clip") == GRAPH_DOT_CLIP_LABEL_LOCKED
+    assert _xml_node_description(xml, "IDT") == GRAPH_IDT_XML_DESC_LOCKED
+
+    # ㉙ three locked strings 一字不动.
+    assert GRAPH_DOT_IDT_THIRD == GRAPH_DOT_IDT_THIRD_LOCKED
+    assert GRAPH_DOT_ODT_HEAD == GRAPH_DOT_ODT_HEAD_LOCKED
+    assert GRAPH_DOT_TIMELINE_LABEL == GRAPH_DOT_TIMELINE_LABEL_LOCKED
+    assert r"或 ACES IDT / CST → ACEScct" in dot_fn
+    assert "709 预览（后续节点）" in dot_fn
+    assert r'timeline [shape=oval, label="时间线\\nACEScct"]' in dot_fn
+    assert _dot_node_label(dot, "idt").split("\\n")[3] == GRAPH_DOT_IDT_THIRD_LOCKED
+    assert odt_lines[0] == GRAPH_DOT_ODT_HEAD_LOCKED
+    assert _dot_node_label(dot, "timeline") == GRAPH_DOT_TIMELINE_LABEL_LOCKED
+
+    # FROZEN: cube TITLE, XML Desc, filenames, 色管, other ODT lines.
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
+    assert LOCKED_REC709_CUBE_TITLE in swift
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
+    assert GRAPH_ODT_USER in odt_label
+    assert wb_cube.splitlines()[0].startswith(f'TITLE "{WB_CUBE_TITLE_HEAD}')
+    assert '?? "pending / identity"' in wb_fn
+    assert 'name="Exposure" type="Gain_1D" bypassable="true"' in xml
+    assert 'name="WB" type="Corrector" bypassable="true"' in xml
+    assert 'name="IDT" type="LUT_or_CST" bypassable="false"' in xml
+    assert 'stops="1.500000"' in xml
+    for name in LOCKED_NODE_FILES:
+        assert name in swift
+        assert name in py
+    assert "matrixCCT = nil" in swift
+    assert "white_balance_matrix" in py
+    assert "def apply_exposure" in (root / "color/exposure.py").read_text(encoding="utf-8")
+    assert "达芬奇已验证" not in odt_lines[2]
+    _assert_chengpian_not_a_deliverable_claim(odt_lines[2])
 

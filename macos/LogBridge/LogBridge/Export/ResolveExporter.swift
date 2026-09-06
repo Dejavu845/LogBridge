@@ -726,7 +726,7 @@ enum ResolveExporter {
           idt  [label="IDT\\n\(idtLabel)\\n01_IDT_<idt>.cube\\n或 ACES IDT / CST → ACEScct"];
           exp  [label="曝光（可归零）\\n\(String(format: "%+.2f", exposureStops)) 档\\n02_Exposure.cube / .dctl"];
           wb   [label="白平衡（可旁路）\\n色温 \(cctLabel(cct))  绿品 \(tint)\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,\(wbStyle)", fillcolor="\(wbFill)"];
-          odt  [label="709 预览（后续节点）\\n04_ODT_Rec709.cube\\nor CST ACEScct → Rec.709\\n709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"];
+          odt  [label="709 预览（后续节点）\\n04_ODT_Rec709.cube\\n或 CST ACEScct → Rec.709\\n709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"];
           timeline [shape=oval, label="时间线\\nACEScct"];
 
           clip -> idt -> exp -> wb -> odt;
