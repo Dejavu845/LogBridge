@@ -129,11 +129,12 @@ REC709_PREVIEW_LABEL = "709 预览"
 REC709_CUBE_TITLE = (
     "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
 )
-# Graph / ODT / Description / cube # comment (knife ⑭). TITLE string stays.
-GRAPH_ODT_USER = "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+# Graph user line (knife ⑭). TITLE / XML Description stay.
+GRAPH_ODT_USER = "709 预览，不是 ACES 输出变换，默认关。预览·非成片。"
 REC709_CUBE_COMMENT = f"# {GRAPH_ODT_USER}"
 GRAPH_ODT_XML_DESC = (
-    f"{GRAPH_ODT_USER} Off = ACEScct deliverable (or ACES2065-1 EXR)."
+    "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    " Off = ACEScct deliverable (or ACES2065-1 EXR)."
 )
 # User-visible Resolve exportNote (UI). Package TITLE / XML stay as-is.
 EXPORT_NOTE_TITLE = "LogBridge M1 Resolve 导出（已实现（未验证））"
