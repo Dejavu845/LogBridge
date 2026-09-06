@@ -1466,6 +1466,80 @@ def test_escape_cancels_write_only():
     assert "已取消" in acceptance and "整段代理，不是全精度成片" in acceptance
 
 
+def test_import_skip_summary_is_human_chinese():
+    """Multi-file refuse list: header 未导入 N 条： then existing chips. Chips unchanged."""
+    from color.formats import (
+        IMPORT_SKIP_HEADER,
+        NOTE_ARRI_MXF,
+        NOTE_CAMERA_RAW,
+        NOTE_MOVIE_ACCEPT,
+        NOTE_REFUSE_CONTAINER,
+        NOTE_STILL_ACCEPT,
+        NOTE_UNKNOWN_CODEC,
+        classify,
+        import_skip_summary,
+    )
+
+    assert IMPORT_SKIP_HEADER == "未导入 {n} 条："
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
+    assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式已支持」。"
+    # Accept notes already Chinese (API names kept). Not rewritten.
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 走 ImageIO。不是成片。"
+    assert NOTE_MOVIE_ACCEPT == (
+        "MOV/MP4：ProRes / H.264 / HEVC 走 AVAssetReader Y′CbCr。不走 copyCGImage。"
+    )
+
+    rejects = [
+        ("A.r3d", classify("A.r3d")),
+        ("B.mxf", classify("B.mxf", "ARRIRAW")),
+        ("C.mov", classify("C.mov", "r210")),
+        ("D.xyz", classify("D.xyz")),
+    ]
+    assert classify("ok.mov").note == NOTE_MOVIE_ACCEPT
+    lines = [f"{name}：{decision.note}" for name, decision in rejects]
+    note = import_skip_summary(lines)
+    assert note.startswith("未导入 4 条：")
+    assert note.splitlines()[0] == IMPORT_SKIP_HEADER.format(n=4)
+    assert lines[0] == f"A.r3d：{NOTE_CAMERA_RAW}"
+    assert lines[1] == f"B.mxf：{NOTE_ARRI_MXF}"
+    assert lines[2] == f"C.mov：{NOTE_UNKNOWN_CODEC}"
+    assert lines[3] == f"D.xyz：{NOTE_REFUSE_CONTAINER}"
+    for line in lines:
+        assert line in note.splitlines()[1:]
+    one = [f"solo.r3d：{NOTE_CAMERA_RAW}"]
+    assert import_skip_summary(one) == one[0]
+    assert not import_skip_summary(one).startswith("未导入")
+    _chengpian_only_honesty(IMPORT_SKIP_HEADER)
+    _chengpian_only_honesty(note)
+    assert "完善" not in note
+    assert "精准" not in note
+
+    clip = _read(CLIP)
+    media = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/MediaFormat.swift")
+    helper = clip.split("static func importSkipSummary")[1].split("func importURL")[0]
+    assert "未导入 \\(skipped.count) 条：" in helper
+    assert "skipped.count > 1" in helper
+    assert "skipped.joined(separator: \"\\n\")" in helper
+    import_fn = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    assert "Self.importSkipSummary(skipped)" in import_fn
+    assert "skipped.joined(separator:" not in import_fn
+    assert '可点「估计白平衡」查看估计，确认后才写入。不是校准，不猜 5600。' in import_fn
+    assert NOTE_CAMERA_RAW in media
+    assert NOTE_ARRI_MXF in media
+    assert NOTE_UNKNOWN_CODEC in media
+    assert NOTE_REFUSE_CONTAINER in media
+    assert NOTE_MOVIE_ACCEPT in media
+    assert "走 ImageIO。不是成片。" in media
+
+    # Cancel-write: no leftover user-visible English. Scope stays import summary.
+    cancel_note = clip.split("func cancelledExportNote")[1].split("static let bytesPerEXRPixel")[0]
+    assert "已取消" in cancel_note
+    assert "Cancelled" not in _code_without_comments(cancel_note)
+    assert "canceled" not in _code_without_comments(cancel_note)
+
+
 def test_import_lands_on_first_pending():
     """Mixed drop selects first pending/unlocked. All-locked keeps first/existing. No new button."""
     clip = _read(CLIP)
