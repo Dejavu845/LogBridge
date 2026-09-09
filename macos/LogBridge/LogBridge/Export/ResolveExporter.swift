@@ -756,7 +756,7 @@ enum ResolveExporter {
         Standard Resolve deliverable: **ACEScct** timeline or **ACES2065-1** EXR / ACES workflow. Rec.709 is **709 预览** only (not ACES OT).
 
         1. **IDT** — `01_IDT_<idt>.cube` or Color Space Transform
-           - Input: camera log / camera gamut (`\(idtList)`)
+           - 输入：相机 Log / 相机色域 (`\(idtList)`)
            - Output: ACEScct (via ACES2065-1)
            - Contains **no** white balance.
 
