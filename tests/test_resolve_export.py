@@ -455,6 +455,13 @@ def _files_idt_row(text: str) -> str:
     raise AssertionError("Files 01_IDT_<idt>.cube row missing")
 
 
+def _files_wb_cube_row(text: str) -> str:
+    for ln in text.splitlines():
+        if ln.strip().startswith("| `03_WB.cube`"):
+            return ln.strip()
+    raise AssertionError("Files 03_WB.cube row missing")
+
+
 def _graph_wb_summary_line(text: str) -> str:
     for line in text.splitlines():
         stripped = line.strip().lstrip("- ").strip()
@@ -1369,8 +1376,11 @@ README_FILES_ROW_EXP_CUBE = (
 README_FILES_ROW_EXP_DCTL = (
     "| `02_Exposure.dctl` | Exposure as DCTL (linear gain) |"
 )
+README_FILES_WB_CUBE_TO = "白平衡查找表（Bradford CAT，ACEScct 封装）"
+README_FILES_WB_CUBE_FROM = "WB LUT (Bradford CAT, ACEScct-wrapped)"
+README_FILES_WB_CUBE_BANNED = "WB LUT"
 README_FILES_ROW_WB_CUBE = (
-    "| `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |"
+    "| `03_WB.cube` | 白平衡查找表（Bradford CAT，ACEScct 封装） |"
 )
 README_FILES_ROW_WB_CDL = (
     "| `03_WB.cdl` / `03_WB.ccc` | WB as ASC CDL Color Corrector |"
@@ -3582,4 +3592,281 @@ def test_readme_files_idt_plain_chinese(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(py_idt_row)
     _assert_chengpian_not_a_deliverable_claim(README_FILES_IDT_SWIFT_TO)
     _assert_chengpian_not_a_deliverable_claim(README_FILES_IDT_PY_TO)
+
+
+def test_readme_files_wb_cube_plain_chinese(tmp_path: Path):
+    """README Files ㊴: 03_WB Role 人话. Swift↔Py 该格一致. ㉗–㊳ + TITLE / XML / 色管 / Files 其余行 frozen."""
+    assert README_FILES_WB_CUBE_TO == "白平衡查找表（Bradford CAT，ACEScct 封装）"
+    assert README_FILES_WB_CUBE_FROM == "WB LUT (Bradford CAT, ACEScct-wrapped)"
+    assert README_FILES_WB_CUBE_BANNED == "WB LUT"
+    assert README_FILES_ROW_WB_CUBE == (
+        "| `03_WB.cube` | 白平衡查找表（Bradford CAT，ACEScct 封装） |"
+    )
+    assert README_FILES_WB_CUBE_TO in README_FILES_ROW_WB_CUBE
+    assert README_FILES_WB_CUBE_FROM not in README_FILES_ROW_WB_CUBE
+    assert README_FILES_WB_CUBE_BANNED in README_FILES_WB_CUBE_FROM
+    assert README_FILES_WB_CUBE_BANNED not in README_FILES_WB_CUBE_TO
+
+    export_resolve_bundle(
+        tmp_path,
+        idt_ids=["arri_logc4_awg4"],
+        include_wb=True,
+        cct=3200.0,
+        tint=0.25,
+        exposure_stops=1.5,
+        lut_size=5,
+    )
+    readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
+    xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    graph = _graph_section(readme)
+    apply = _apply_section(readme)
+    files = _files_section(readme)
+    wb_row = _files_wb_cube_row(readme)
+
+    assert wb_row == README_FILES_ROW_WB_CUBE
+    assert README_FILES_WB_CUBE_TO in wb_row
+    assert README_FILES_WB_CUBE_FROM not in wb_row
+    assert README_FILES_WB_CUBE_FROM not in files
+    assert README_FILES_WB_CUBE_FROM not in readme
+    assert README_FILES_WB_CUBE_BANNED not in wb_row
+    assert README_FILES_WB_CUBE_BANNED not in files
+    assert README_FILES_WB_CUBE_BANNED not in readme
+
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
+    generated_files = _files_section(generated)
+    generated_row = _files_wb_cube_row(generated)
+    assert generated_row == wb_row
+    assert generated_row == README_FILES_ROW_WB_CUBE
+    assert README_FILES_WB_CUBE_FROM not in generated
+    assert README_FILES_WB_CUBE_FROM not in generated_files
+    assert README_FILES_WB_CUBE_BANNED not in generated
+    assert README_FILES_WB_CUBE_BANNED not in generated_files
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = swift.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    py_xml = py.split("def format_graph_xml")[1].split("def format_readme")[0]
+    readme_fn = swift.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    swift_graph = _graph_section(readme_fn)
+    py_graph = _graph_section(py_readme)
+    swift_apply = _apply_section(readme_fn)
+    py_apply = _apply_section(py_readme)
+    swift_files = _files_section(readme_fn)
+    py_files = _files_section(py_readme)
+    swift_wb = _files_wb_cube_row(readme_fn)
+    py_wb_row = _files_wb_cube_row(py_readme)
+    swift_idt = _files_idt_row(readme_fn)
+    py_idt_row = _files_idt_row(py_readme)
+    swift_xml = _files_graph_xml_row(readme_fn)
+    py_xml_row = _files_graph_xml_row(py_readme)
+    swift_readme = _files_readme_row(readme_fn)
+    py_readme_row = _files_readme_row(py_readme)
+
+    # 验法㊴-1: one TO 一字不差. Swift↔Py 该格一致；Files 其余冻.
+    assert swift_wb == README_FILES_ROW_WB_CUBE
+    assert py_wb_row == README_FILES_ROW_WB_CUBE
+    assert swift_wb == py_wb_row
+    assert README_FILES_WB_CUBE_TO in swift_wb
+    assert README_FILES_WB_CUBE_TO in py_wb_row
+    assert README_FILES_WB_CUBE_FROM not in swift_wb
+    assert README_FILES_WB_CUBE_FROM not in py_wb_row
+    assert README_FILES_WB_CUBE_FROM not in swift_files
+    assert README_FILES_WB_CUBE_FROM not in py_files
+    assert README_FILES_WB_CUBE_FROM not in readme_fn
+    assert README_FILES_WB_CUBE_FROM not in py_readme
+    assert README_FILES_WB_CUBE_FROM not in swift
+    assert README_FILES_WB_CUBE_FROM not in py
+    assert README_FILES_WB_CUBE_BANNED not in swift_wb
+    assert README_FILES_WB_CUBE_BANNED not in py_wb_row
+    assert README_FILES_WB_CUBE_BANNED not in swift_files
+    assert README_FILES_WB_CUBE_BANNED not in py_files
+    assert README_FILES_WB_CUBE_BANNED not in readme_fn
+    assert README_FILES_WB_CUBE_BANNED not in py_readme
+    assert README_FILES_WB_CUBE_BANNED not in swift
+    assert README_FILES_WB_CUBE_BANNED not in py
+
+    # Files 其余行冻（含 01_IDT / graph.xml Swift/Py 分锁；不借此刀对齐曝光格）.
+    assert swift_idt == README_FILES_ROW_IDT_SWIFT
+    assert py_idt_row == README_FILES_ROW_IDT_PY
+    assert swift_idt != py_idt_row
+    assert README_FILES_ROW_IDT_SWIFT != README_FILES_ROW_IDT_PY
+    assert README_FILES_IDT_SWIFT_TO in swift_idt
+    assert README_FILES_IDT_PY_TO in py_idt_row
+    assert README_FILES_IDT_PY_TO not in swift_idt
+    assert README_FILES_IDT_SWIFT_TO not in py_idt_row
+    assert README_FILES_ROW_IDT_PY not in swift_files
+    assert README_FILES_ROW_IDT_SWIFT not in py_files
+    assert README_FILES_IDT_BANNED not in swift_files
+    assert README_FILES_IDT_BANNED not in py_files
+    assert swift_readme == README_FILES_ROW_README
+    assert py_readme_row == README_FILES_ROW_README
+    assert swift_readme == py_readme_row
+    assert README_FILES_README_TO == "本说明"
+    assert README_FILES_ROW_README == "| `README_RESOLVE.md` | 本说明 |"
+    assert README_FILES_README_FROM not in swift_files
+    assert README_FILES_README_FROM not in py_files
+    assert swift_xml == README_FILES_ROW_XML_SWIFT
+    assert py_xml_row == README_FILES_ROW_XML_PY
+    assert swift_xml != py_xml_row
+    assert README_FILES_ROW_XML_SWIFT != README_FILES_ROW_XML_PY
+    assert README_FILES_GRAPH_XML_SWIFT_TO in swift_xml
+    assert README_FILES_GRAPH_XML_PY_TO in py_xml_row
+    assert README_FILES_GRAPH_XML_PY_TO not in swift_xml
+    assert README_FILES_GRAPH_XML_SWIFT_TO not in py_xml_row
+    assert README_FILES_ROW_XML_PY not in swift_files
+    assert README_FILES_ROW_XML_SWIFT not in py_files
+    assert README_FILES_GRAPH_XML_BANNED not in swift_files
+    assert README_FILES_GRAPH_XML_BANNED not in py_files
+    assert _files_header_row(readme) == README_FILES_HEADER_TO
+    assert _files_header_row(readme_fn) == README_FILES_HEADER_TO
+    assert _files_header_row(py_readme) == README_FILES_HEADER_TO
+    assert README_FILES_HEADER_FROM not in swift_files
+    assert README_FILES_HEADER_FROM not in py_files
+    assert README_FILES_ROW_EXP_CUBE in py_files
+    assert README_FILES_ROW_EXP_DCTL in py_files
+    assert README_FILES_ROW_EXP_CUBE not in swift_files
+    assert README_FILES_ROW_WB_CDL in swift_files
+    assert README_FILES_ROW_WB_CDL in py_files
+    assert README_FILES_ROW_WB_DCTL in swift_files
+    assert README_FILES_ROW_WB_DCTL in py_files
+    assert README_FILES_ROW_ODT in swift_files
+    assert README_FILES_ROW_ODT in py_files
+    assert README_FILES_ROW_README in swift_files
+    assert README_FILES_ROW_README in py_files
+    assert README_FILES_ROW_XML_PY in files
+    assert README_FILES_ROW_IDT_PY in files
+    assert README_FILES_ROW_EXP_CUBE in files
+    assert README_FILES_ROW_WB_CUBE in files
+    assert README_FILES_ROW_README in files
+
+    # ㉗–㊳ locked strings 一字不动（含 01_IDT Role 分锁 / 本说明 / graph.xml 机器可读分锁 / | 文件 | 作用 | / 调色页，串行节点图： / 同一图的 Graphviz）.
+    assert README_FILES_IDT_SWIFT_TO == "IDT 查找表（不含白平衡）"
+    assert README_FILES_IDT_PY_TO == "IDT 查找表（不含白平衡、不含曝光）"
+    assert README_FILES_ROW_IDT_SWIFT == (
+        "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |"
+    )
+    assert README_FILES_ROW_IDT_PY == (
+        "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |"
+    )
+    assert _files_idt_row(readme) == README_FILES_ROW_IDT_PY
+    assert _files_idt_row(readme_fn) == README_FILES_ROW_IDT_SWIFT
+    assert _files_idt_row(py_readme) == README_FILES_ROW_IDT_PY
+    assert README_FILES_IDT_SWIFT_FROM not in swift_files
+    assert README_FILES_IDT_PY_FROM not in py_files
+    assert README_FILES_IDT_BANNED not in readme_fn
+    assert README_FILES_IDT_BANNED not in py_readme
+    assert README_FILES_README_TO == "本说明"
+    assert _files_readme_row(readme) == README_FILES_ROW_README
+    assert _files_readme_row(readme_fn) == README_FILES_ROW_README
+    assert _files_readme_row(py_readme) == README_FILES_ROW_README
+    assert README_FILES_GRAPH_XML_SWIFT_TO == "机器可读节点图（可旁路白平衡）"
+    assert README_FILES_GRAPH_XML_PY_TO == "机器可读节点图（可旁路曝光 + 白平衡）"
+    assert README_FILES_ROW_XML_SWIFT == (
+        "| `graph.xml` | 机器可读节点图（可旁路白平衡） |"
+    )
+    assert README_FILES_ROW_XML_PY == (
+        "| `graph.xml` | 机器可读节点图（可旁路曝光 + 白平衡） |"
+    )
+    assert _files_graph_xml_row(readme) == README_FILES_ROW_XML_PY
+    assert _files_graph_xml_row(readme_fn) == README_FILES_ROW_XML_SWIFT
+    assert _files_graph_xml_row(py_readme) == README_FILES_ROW_XML_PY
+    assert README_FILES_GRAPH_XML_SWIFT_FROM not in swift_files
+    assert README_FILES_GRAPH_XML_PY_FROM not in py_files
+    assert README_FILES_GRAPH_XML_BANNED not in readme_fn
+    assert README_FILES_GRAPH_XML_BANNED not in py_readme
+    assert README_FILES_HEADER_TO == "| 文件 | 作用 |"
+    assert README_COLOR_PAGE_TITLE_TO == "调色页，串行节点图："
+    assert _color_page_title_line(readme) == README_COLOR_PAGE_TITLE_TO
+    assert _color_page_title_line(readme_fn) == README_COLOR_PAGE_TITLE_TO
+    assert _color_page_title_line(py_readme) == README_COLOR_PAGE_TITLE_TO
+    assert README_COLOR_PAGE_TITLE_FROM not in readme_fn
+    assert README_COLOR_PAGE_TITLE_FROM not in py_readme
+    assert README_FILES_GRAPH_DOT_TO == "同一图的 Graphviz"
+    assert README_FILES_GRAPH_DOT_ROW == "| `graph.dot` | 同一图的 Graphviz |"
+    assert _files_graph_dot_row(readme) == README_FILES_GRAPH_DOT_ROW
+    assert _files_graph_dot_row(readme_fn) == README_FILES_GRAPH_DOT_ROW
+    assert _files_graph_dot_row(py_readme) == README_FILES_GRAPH_DOT_ROW
+    assert README_FILES_GRAPH_DOT_FROM not in swift_files
+    assert README_FILES_GRAPH_DOT_FROM not in py_files
+    assert README_APPLY_ODT_LINE == (
+        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    )
+    assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
+    assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
+    assert _apply_odt_line(py_readme) == README_APPLY_ODT_LINE
+    assert README_GRAPH_INPUT_TO == "输入：相机 Log / 相机色域"
+    assert README_GRAPH_INPUT_SWIFT in swift_graph
+    assert README_GRAPH_INPUT_PY in py_graph
+    assert README_GRAPH_INPUT_TO in graph
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == GRAPH_DOT_WB_LINE_LOCKED
+    assert GRAPH_EXP_XML_DESC == GRAPH_EXP_XML_DESC_LOCKED
+    assert GRAPH_WB_XML_DESC == GRAPH_WB_XML_DESC_LOCKED
+    assert GRAPH_DOT_CLIP_LABEL == GRAPH_DOT_CLIP_LABEL_LOCKED
+    assert GRAPH_DOT_WORKING_SPACE == GRAPH_DOT_WORKING_SPACE_LOCKED
+    assert GRAPH_IDT_XML_DESC == GRAPH_IDT_XML_DESC_LOCKED
+    assert GRAPH_DOT_IDT_THIRD == GRAPH_DOT_IDT_THIRD_LOCKED
+    assert GRAPH_DOT_ODT_HEAD == GRAPH_DOT_ODT_HEAD_LOCKED
+    assert GRAPH_DOT_TIMELINE_LABEL == GRAPH_DOT_TIMELINE_LABEL_LOCKED
+    assert GRAPH_DOT_ODT_CST_LOCKED == "或 CST ACEScct → Rec.709"
+    assert GRAPH_DOT_ODT_CST_LOCKED in dot_fn
+    assert GRAPH_DOT_ODT_CST_LOCKED in py_dot
+    assert GRAPH_DOT_ODT_CST_FROM not in dot_fn
+    assert GRAPH_DOT_ODT_CST_FROM not in py_dot
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert GRAPH_DOT_IDT_THIRD_LOCKED in dot_fn
+    assert GRAPH_DOT_ODT_HEAD_LOCKED in dot_fn
+    assert r'timeline [shape=oval, label="时间线\\nACEScct"]' in dot_fn
+    assert GRAPH_EXP_XML_DESC in xml_fn
+    assert GRAPH_WB_XML_DESC in xml_fn
+    assert GRAPH_IDT_XML_DESC in xml_fn
+    assert "{GRAPH_IDT_XML_DESC}" in py_xml
+    assert _xml_node_description(xml, "Exposure") == GRAPH_EXP_XML_DESC_LOCKED
+    assert _xml_node_description(xml, "WB") == GRAPH_WB_XML_DESC_LOCKED
+    assert _xml_node_description(xml, "IDT") == GRAPH_IDT_XML_DESC_LOCKED
+    assert "- Apply **IDT**" in apply
+    assert "- Apply **IDT**" in swift_apply
+    assert "- Apply **IDT**" in py_apply
+    assert "- Apply **WB**" in swift_apply
+    assert "- Apply **WB**" in py_apply
+
+    # FROZEN: cube TITLE, XML Desc, filenames, 色管.
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
+    assert LOCKED_REC709_CUBE_TITLE in swift
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_USER in graph
+    for name in LOCKED_NODE_FILES:
+        assert name in swift
+        assert name in py
+    assert "matrixCCT = nil" in swift
+    assert "white_balance_matrix" in py
+    assert "def apply_exposure" in (root / "color/exposure.py").read_text(encoding="utf-8")
+    assert "达芬奇已验证" not in swift_wb
+    assert "达芬奇已验证" not in py_wb_row
+    assert "达芬奇已验证" not in files
+    _assert_chengpian_not_a_deliverable_claim(swift_wb)
+    _assert_chengpian_not_a_deliverable_claim(py_wb_row)
+    _assert_chengpian_not_a_deliverable_claim(README_FILES_WB_CUBE_TO)
 
