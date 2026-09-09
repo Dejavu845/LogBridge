@@ -785,7 +785,7 @@ enum ResolveExporter {
         | File | Role |
         | --- | --- |
         | `graph.xml` | Machine-readable node graph (bypassable WB) |
-        | `graph.dot` | Graphviz of the same graph |
+        | `graph.dot` | 同一图的 Graphviz |
         | `01_IDT_<idt>.cube` | IDT LUT (no WB) |
         | `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |
         | `03_WB.cdl` / `03_WB.ccc` | WB as ASC CDL Color Corrector |
