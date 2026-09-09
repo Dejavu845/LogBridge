@@ -486,7 +486,9 @@ def _files_odt_row(text: str) -> str:
 def _readme_trail_line(text: str) -> str:
     for ln in text.splitlines():
         stripped = ln.strip()
-        if stripped.startswith("M1 is a serial node graph (IDT → Exposure → WB → ODT),"):
+        if stripped.startswith("M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT），") or stripped.startswith(
+            "M1 is a serial node graph (IDT → Exposure → WB → ODT),"
+        ):
             return stripped
     raise AssertionError("README trailing M1 sentence missing")
 
@@ -1437,7 +1439,9 @@ README_COLOR_PAGE_TITLE_BANNED = "Color page, serial node graph"
 README_FILES_HEADER_TO = "| 文件 | 作用 |"
 README_FILES_HEADER_FROM = "| File | Role |"
 README_FILES_HEADER_BANNED = "| File | Role |"
-README_TRAIL_HEAD = "M1 is a serial node graph (IDT → Exposure → WB → ODT), "
+README_TRAIL_HEAD = "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， "
+README_TRAIL_HEAD_FROM = "M1 is a serial node graph (IDT → Exposure → WB → ODT),"
+README_TRAIL_HEAD_BANNED = "M1 is a serial node graph"
 README_TRAIL_HALF_TO = "不是通用节点编辑器"
 README_TRAIL_HALF_FROM = "not a general node editor"
 README_TRAIL_HALF_BANNED = "not a general node editor"
@@ -1446,13 +1450,13 @@ README_TRAIL_CLAIM_FROM = "Golden grey-card samples are required before any accu
 README_TRAIL_CLAIM_BANNED = "Golden grey-card samples"
 README_TRAIL_FOLLOWING = "Implemented (unverified)."
 README_TRAIL_SENTENCE_TO = (
-    "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器."
+    "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器."
 )
 README_TRAIL_SENTENCE_FROM = (
     "M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor."
 )
 README_TRAIL_BLOCK_TO = (
-    "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器. "
+    "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器. "
     "任何精度声明前须有灰卡样张。 "
     "Implemented (unverified)."
 )
@@ -1463,7 +1467,7 @@ README_TRAIL_BLOCK_FROM = (
 )
 README_TRAIL_BLOCK_PRIOR = (
     "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器. "
-    "Golden grey-card samples are required before any accuracy claim. "
+    "任何精度声明前须有灰卡样张。 "
     "Implemented (unverified)."
 )
 
@@ -4909,8 +4913,10 @@ def test_readme_files_odt_plain_chinese(tmp_path: Path):
 
 
 def test_readme_trail_half_plain_chinese(tmp_path: Path):
-    """README ㊹: 半段 任何精度声明前须有灰卡样张。 Swift↔Py 该半段一致. ㉗–㊸ + TITLE / XML / 色管 / Files 行 frozen."""
-    assert README_TRAIL_HEAD == "M1 is a serial node graph (IDT → Exposure → WB → ODT), "
+    """README ㊺: 半段 M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， Swift↔Py 该半段一致. ㉗–㊹ + TITLE / XML / 色管 / Files 行 frozen."""
+    assert README_TRAIL_HEAD == "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， "
+    assert README_TRAIL_HEAD_FROM == "M1 is a serial node graph (IDT → Exposure → WB → ODT),"
+    assert README_TRAIL_HEAD_BANNED == "M1 is a serial node graph"
     assert README_TRAIL_HALF_TO == "不是通用节点编辑器"
     assert README_TRAIL_HALF_FROM == "not a general node editor"
     assert README_TRAIL_HALF_BANNED == "not a general node editor"
@@ -4921,13 +4927,13 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
     assert README_TRAIL_CLAIM_BANNED == "Golden grey-card samples"
     assert README_TRAIL_FOLLOWING == "Implemented (unverified)."
     assert README_TRAIL_SENTENCE_TO == (
-        "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器."
+        "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器."
     )
     assert README_TRAIL_SENTENCE_FROM == (
         "M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor."
     )
     assert README_TRAIL_BLOCK_TO == (
-        "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器. "
+        "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器. "
         "任何精度声明前须有灰卡样张。 "
         "Implemented (unverified)."
     )
@@ -4938,11 +4944,16 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
     )
     assert README_TRAIL_BLOCK_PRIOR == (
         "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器. "
-        "Golden grey-card samples are required before any accuracy claim. "
+        "任何精度声明前须有灰卡样张。 "
         "Implemented (unverified)."
     )
     assert README_TRAIL_SENTENCE_TO.startswith(README_TRAIL_HEAD)
     assert README_TRAIL_SENTENCE_TO.endswith(README_TRAIL_HALF_TO + ".")
+    assert README_TRAIL_HEAD in README_TRAIL_SENTENCE_TO
+    assert README_TRAIL_HEAD_FROM not in README_TRAIL_SENTENCE_TO
+    assert README_TRAIL_HEAD_BANNED not in README_TRAIL_SENTENCE_TO
+    assert README_TRAIL_HEAD_BANNED in README_TRAIL_HEAD_FROM
+    assert README_TRAIL_HEAD_BANNED not in README_TRAIL_HEAD
     assert README_TRAIL_HALF_TO in README_TRAIL_SENTENCE_TO
     assert README_TRAIL_HALF_FROM not in README_TRAIL_SENTENCE_TO
     assert README_TRAIL_HALF_BANNED not in README_TRAIL_SENTENCE_TO
@@ -4979,10 +4990,17 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
 
     assert trail == README_TRAIL_BLOCK_TO
     assert trail.startswith(README_TRAIL_HEAD)
+    assert README_TRAIL_HEAD in trail
     assert README_TRAIL_HALF_TO in trail
     assert README_TRAIL_CLAIM_TO in trail
     assert README_TRAIL_FOLLOWING in trail
     assert README_TRAIL_SENTENCE_TO in trail
+    assert README_TRAIL_HEAD_FROM not in trail
+    assert README_TRAIL_HEAD_FROM not in files
+    assert README_TRAIL_HEAD_FROM not in readme
+    assert README_TRAIL_HEAD_BANNED not in trail
+    assert README_TRAIL_HEAD_BANNED not in files
+    assert README_TRAIL_HEAD_BANNED not in readme
     assert README_TRAIL_HALF_FROM not in trail
     assert README_TRAIL_HALF_FROM not in files
     assert README_TRAIL_HALF_FROM not in readme
@@ -5004,9 +5022,15 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
     assert generated_trail == trail
     assert generated_trail == README_TRAIL_BLOCK_TO
     assert generated_trail.startswith(README_TRAIL_HEAD)
+    assert README_TRAIL_HEAD in generated_trail
     assert README_TRAIL_HALF_TO in generated_trail
     assert README_TRAIL_CLAIM_TO in generated_trail
     assert README_TRAIL_FOLLOWING in generated_trail
+    assert README_TRAIL_HEAD_FROM not in generated
+    assert README_TRAIL_HEAD_FROM not in generated_files
+    assert README_TRAIL_HEAD_BANNED not in generated_trail
+    assert README_TRAIL_HEAD_BANNED not in generated_files
+    assert README_TRAIL_HEAD_BANNED not in generated
     assert README_TRAIL_HALF_FROM not in generated
     assert README_TRAIL_HALF_FROM not in generated_files
     assert README_TRAIL_HALF_BANNED not in generated_trail
@@ -5059,12 +5083,14 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
     swift_readme = _files_readme_row(readme_fn)
     py_readme_row = _files_readme_row(py_readme)
 
-    # 验法㊹-1: 半段 TO 一字不差. ㊸ 半段与英文头不动；Implemented (unverified). 冻. Swift↔Py 该半段一致.
+    # 验法㊺-1: 半段 TO 一字不差. ㊸ 半段 / ㊹ 半段与 Implemented (unverified). 冻. Swift↔Py 该半段一致.
     assert swift_trail == README_TRAIL_BLOCK_TO
     assert py_trail == README_TRAIL_BLOCK_TO
     assert swift_trail == py_trail
     assert swift_trail.startswith(README_TRAIL_HEAD)
     assert py_trail.startswith(README_TRAIL_HEAD)
+    assert README_TRAIL_HEAD in swift_trail
+    assert README_TRAIL_HEAD in py_trail
     assert README_TRAIL_HALF_TO in swift_trail
     assert README_TRAIL_HALF_TO in py_trail
     assert README_TRAIL_CLAIM_TO in swift_trail
@@ -5073,6 +5099,22 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
     assert README_TRAIL_FOLLOWING in py_trail
     assert README_TRAIL_SENTENCE_TO in swift_trail
     assert README_TRAIL_SENTENCE_TO in py_trail
+    assert README_TRAIL_HEAD_FROM not in swift_trail
+    assert README_TRAIL_HEAD_FROM not in py_trail
+    assert README_TRAIL_HEAD_FROM not in swift_files
+    assert README_TRAIL_HEAD_FROM not in py_files
+    assert README_TRAIL_HEAD_FROM not in readme_fn
+    assert README_TRAIL_HEAD_FROM not in py_readme
+    assert README_TRAIL_HEAD_FROM not in swift
+    assert README_TRAIL_HEAD_FROM not in py
+    assert README_TRAIL_HEAD_BANNED not in swift_trail
+    assert README_TRAIL_HEAD_BANNED not in py_trail
+    assert README_TRAIL_HEAD_BANNED not in swift_files
+    assert README_TRAIL_HEAD_BANNED not in py_files
+    assert README_TRAIL_HEAD_BANNED not in readme_fn
+    assert README_TRAIL_HEAD_BANNED not in py_readme
+    assert README_TRAIL_HEAD_BANNED not in swift
+    assert README_TRAIL_HEAD_BANNED not in py
     assert README_TRAIL_HALF_FROM not in swift_trail
     assert README_TRAIL_HALF_FROM not in py_trail
     assert README_TRAIL_HALF_FROM not in swift_files
@@ -5208,7 +5250,7 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
     assert README_FILES_ROW_WB_DCTL in files
     assert README_FILES_ROW_README in files
 
-    # ㉗–㊸ locked strings 一字不动（含 不是通用节点编辑器 / 709 预览（BT.709 OETF，不是 ACES OT） / 白平衡 DCTL（精确 3×3） / 白平衡 ASC CDL 校色器 / 白平衡查找表（Bradford CAT，ACEScct 封装） / 01_IDT Role 分锁 / 本说明 / graph.xml 机器可读分锁 / | 文件 | 作用 | / 调色页，串行节点图： / 同一图的 Graphviz）.
+    # ㉗–㊹ locked strings 一字不动（含 不是通用节点编辑器 / 任何精度声明前须有灰卡样张。 / 709 预览（BT.709 OETF，不是 ACES OT） / 白平衡 DCTL（精确 3×3） / 白平衡 ASC CDL 校色器 / 白平衡查找表（Bradford CAT，ACEScct 封装） / 01_IDT Role 分锁 / 本说明 / graph.xml 机器可读分锁 / | 文件 | 作用 | / 调色页，串行节点图： / 同一图的 Graphviz）.
     assert README_FILES_ODT_TO == "709 预览（BT.709 OETF，不是 ACES OT）"
     assert README_FILES_ROW_ODT == (
         "| `04_ODT_Rec709.cube` | 709 预览（BT.709 OETF，不是 ACES OT） |"
@@ -5364,6 +5406,7 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
     assert "达芬奇已验证" not in files
     _assert_chengpian_not_a_deliverable_claim(swift_trail)
     _assert_chengpian_not_a_deliverable_claim(py_trail)
+    _assert_chengpian_not_a_deliverable_claim(README_TRAIL_HEAD)
     _assert_chengpian_not_a_deliverable_claim(README_TRAIL_HALF_TO)
     _assert_chengpian_not_a_deliverable_claim(README_TRAIL_CLAIM_TO)
 
