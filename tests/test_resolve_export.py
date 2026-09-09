@@ -2357,7 +2357,7 @@ def test_readme_files_graph_dot_plain_chinese(tmp_path: Path):
     assert README_FILES_ROW_ODT in py_files
     assert README_FILES_ROW_README in swift_files
     assert README_FILES_ROW_README in py_files
-    assert README_FILES_ROW_XML_SWIFT in files
+    assert README_FILES_ROW_XML_PY in files
     assert README_FILES_ROW_IDT_PY in files
     assert README_FILES_ROW_EXP_CUBE in files
     assert README_FILES_ROW_WB_CUBE in files
