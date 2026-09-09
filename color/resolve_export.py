@@ -895,7 +895,7 @@ Do not set DaVinci Wide Gamut Intermediate as the default deliverable.
 Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 / HLG / PQ 是预览·非成片。
 
 1. **IDT** — `01_IDT_<idt>.cube` or Color Space Transform
-   - Input: camera log / camera gamut (`{idt_list}`)
+   - 输入：相机 Log / 相机色域 (`{idt_list}`)
    - Output: ACEScct (via ACES2065-1)
    - Contains **no** white balance and **no** exposure.
 

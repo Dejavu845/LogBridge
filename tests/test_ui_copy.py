@@ -5223,3 +5223,165 @@ def test_graph_dot_odt_cst_zh():
     assert "达芬奇已验证" not in odt_cst_to
     assert "达芬奇已验证" not in dot_fn
     _chengpian_only_honesty(odt_cst_to)
+
+
+def test_readme_graph_input_zh():
+    """README Graph ㉛ 验法: 输入行人话. ㉗–㉚ frozen. Apply 另刀. No alg."""
+    from color.resolve_export import (
+        EXPORT_NOTE_IN_CAMERA,
+        GRAPH_DOT_CLIP_LABEL,
+        GRAPH_DOT_EXP_FILE,
+        GRAPH_DOT_EXP_HEAD,
+        GRAPH_DOT_IDT_THIRD,
+        GRAPH_DOT_ODT_HEAD,
+        GRAPH_DOT_TIMELINE_LABEL,
+        GRAPH_DOT_WB_FILE,
+        GRAPH_DOT_WB_HEAD,
+        GRAPH_DOT_WB_LINE,
+        GRAPH_DOT_WORKING_SPACE,
+        GRAPH_EXP_XML_DESC,
+        GRAPH_IDT_XML_DESC,
+        GRAPH_ODT_USER,
+        GRAPH_WB_SUMMARY,
+        GRAPH_WB_XML_DESC,
+        REC709_CUBE_TITLE,
+        format_readme,
+    )
+
+    input_to = "输入：相机 Log / 相机色域"
+    input_from = "Input: camera log / camera gamut"
+    input_banned = "Input: camera log"
+    input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
+    input_py = "- 输入：相机 Log / 相机色域 (`{idt_list}`)"
+    odt_cst_to = "或 CST ACEScct → Rec.709"
+    odt_cst_from = "or CST ACEScct → Rec.709"
+    idt_third_to = "或 ACES IDT / CST → ACEScct"
+    odt_head_to = "709 预览（后续节点）"
+    timeline_to = "时间线\\nACEScct"
+    clip_to = "素材\\n相机 Log"
+    ws_to = "工作空间"
+    idt_xml_to = "相机 Log 经 ACES2065-1 到 ACEScct。不含白平衡、不含曝光。"
+    exp_xml_to = (
+        "ACES2065-1 线性按档增益；不加减 Log 码值。独立节点；0 档不写进 IDT/白平衡。"
+    )
+    wb_xml_to = (
+        "机内色温/绿品只填旋钮；默认单位阵（不把机内 5600/6504 当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+        "旁路白平衡 = IDT → 曝光 → ACEScct，不烘焙。"
+    )
+    honesty_to = (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    graph_wb_to = (
+        "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    )
+
+    # 验法㉛-1: one TO 一字不差. Swift↔Py 标签一致；插值不动.
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    py = (ROOT / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = exporter.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = exporter.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    readme_fn = exporter.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    graph_fn = readme_fn.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    py_graph = py_readme.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    apply_fn = readme_fn.split("## How to bypass", 1)[1]
+    py_apply = py_readme.split("## How to bypass", 1)[1]
+
+    assert input_swift in graph_fn
+    assert input_py in py_graph
+    assert input_to in graph_fn
+    assert input_to in py_graph
+    assert "`\\(idtList)`" in graph_fn
+    assert "`{idt_list}`" in py_graph
+    assert input_from not in graph_fn
+    assert input_from not in py_graph
+    assert input_banned not in graph_fn
+    assert input_banned not in py_graph
+    assert input_banned not in readme_fn
+    assert input_banned not in py_readme
+
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
+    generated_graph = generated.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    assert "- 输入：相机 Log / 相机色域 (`arri_logc4_awg4`)" in generated_graph
+    assert input_banned not in generated_graph
+    assert input_banned not in generated
+
+    # Apply 整段另刀：英文 Apply 块一字不动.
+    assert "- Apply **IDT**" in apply_fn
+    assert "- Apply **WB**" in apply_fn
+    assert "- Apply **ODT**" in apply_fn
+    assert "- Apply **IDT**" in py_apply
+    assert odt_cst_from in apply_fn
+    assert odt_cst_from in py_apply
+
+    # 验法㉛-2: ㉗–㉚ locked strings 一字不动.
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == "色温 {cctLabel}  绿品 {tint}"
+    assert GRAPH_DOT_WB_FILE == "03_WB.cube / .cdl / .ccc / .dctl"
+    assert GRAPH_EXP_XML_DESC == exp_xml_to
+    assert GRAPH_WB_XML_DESC == wb_xml_to
+    assert GRAPH_DOT_CLIP_LABEL == clip_to
+    assert GRAPH_DOT_WORKING_SPACE == ws_to
+    assert GRAPH_IDT_XML_DESC == idt_xml_to
+    assert GRAPH_DOT_IDT_THIRD == idt_third_to
+    assert GRAPH_DOT_ODT_HEAD == odt_head_to
+    assert GRAPH_DOT_TIMELINE_LABEL == timeline_to
+    assert odt_cst_to in dot_fn
+    assert odt_cst_to in py_dot
+    assert odt_cst_from not in dot_fn
+    assert odt_cst_from not in py_dot
+    assert odt_cst_from in readme_fn
+    assert odt_cst_from in py_readme
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert idt_third_to in dot_fn
+    assert odt_head_to in dot_fn
+    assert r'timeline [shape=oval, label="时间线\\nACEScct"]' in dot_fn
+    assert exp_xml_to in xml_fn
+    assert wb_xml_to in xml_fn
+    assert idt_xml_to in xml_fn
+    assert EXPORT_NOTE_IN_CAMERA == honesty_to
+    assert GRAPH_WB_SUMMARY == graph_wb_to
+
+    # 验法㉛-3: cube TITLE / filenames / 色管 / XML Desc 冻.
+    assert REC709_CUBE_TITLE == (
+        "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+    )
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_USER in graph_fn
+    assert 'name="Exposure"' in xml_fn
+    assert 'name="WB"' in xml_fn
+    assert 'name="IDT"' in xml_fn
+    assert "02_Exposure.cube" in exporter
+    assert "03_WB.cube" in exporter
+    assert "04_ODT_Rec709.cube" in exporter
+    assert "matrixCCT = nil" in exporter
+    assert "完善" not in input_to
+    assert "精准" not in input_to
+    assert "达芬奇已验证" not in input_to
+    assert "达芬奇已验证" not in graph_fn
+    _chengpian_only_honesty(input_to)

@@ -1255,6 +1255,11 @@ GRAPH_DOT_IDT_ODT_TL_BANNED = (
 )
 GRAPH_DOT_ODT_CST_LOCKED = "或 CST ACEScct → Rec.709"
 GRAPH_DOT_ODT_CST_FROM = "or CST ACEScct → Rec.709"
+README_GRAPH_INPUT_TO = "输入：相机 Log / 相机色域"
+README_GRAPH_INPUT_FROM = "Input: camera log / camera gamut"
+README_GRAPH_INPUT_BANNED = "Input: camera log"
+README_GRAPH_INPUT_SWIFT = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
+README_GRAPH_INPUT_PY = "- 输入：相机 Log / 相机色域 (`{idt_list}`)"
 
 
 def _dot_node_label(dot: str, node: str) -> str:
@@ -1858,4 +1863,150 @@ def test_graph_dot_odt_cst_plain_chinese(tmp_path: Path):
     assert "def apply_exposure" in (root / "color/exposure.py").read_text(encoding="utf-8")
     assert "达芬奇已验证" not in odt_lines[2]
     _assert_chengpian_not_a_deliverable_claim(odt_lines[2])
+
+
+def test_readme_graph_input_plain_chinese(tmp_path: Path):
+    """README Graph ㉛: 输入行人话. ㉗–㉚ + Apply / TITLE / XML Desc / 色管 frozen."""
+    assert README_GRAPH_INPUT_TO == "输入：相机 Log / 相机色域"
+    assert README_GRAPH_INPUT_FROM == "Input: camera log / camera gamut"
+    assert README_GRAPH_INPUT_BANNED == "Input: camera log"
+    assert README_GRAPH_INPUT_SWIFT == "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
+    assert README_GRAPH_INPUT_PY == "- 输入：相机 Log / 相机色域 (`{idt_list}`)"
+
+    export_resolve_bundle(
+        tmp_path,
+        idt_ids=["arri_logc4_awg4"],
+        include_wb=True,
+        cct=3200.0,
+        tint=0.25,
+        exposure_stops=1.5,
+        lut_size=5,
+    )
+    readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
+    xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    graph = _graph_section(readme)
+    apply = readme.split("## How to bypass", 1)[1]
+
+    input_line = next(
+        ln.strip()
+        for ln in graph.splitlines()
+        if "相机色域" in ln or "camera gamut" in ln or ln.strip().lstrip("- ").startswith("Input:")
+    )
+    assert input_line == "- 输入：相机 Log / 相机色域 (`arri_logc4_awg4`)"
+    assert README_GRAPH_INPUT_TO in input_line
+    assert README_GRAPH_INPUT_BANNED not in input_line
+    assert README_GRAPH_INPUT_FROM not in graph
+    assert README_GRAPH_INPUT_BANNED not in graph
+    assert README_GRAPH_INPUT_BANNED not in readme
+
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
+    generated_graph = _graph_section(generated)
+    generated_line = next(
+        ln.strip() for ln in generated_graph.splitlines() if "相机色域" in ln
+    )
+    assert generated_line == input_line
+    empty = format_readme([], 3200.0, 0.0, True)
+    empty_line = next(
+        ln.strip() for ln in _graph_section(empty).splitlines() if "相机色域" in ln
+    )
+    assert empty_line == (
+        "- 输入：相机 Log / 相机色域 (`（无 — 请在达芬奇 CST 里指定 IDT）`)"
+    )
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = swift.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    readme_fn = swift.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    swift_graph = _graph_section(readme_fn)
+    py_graph = _graph_section(py_readme)
+    swift_apply = readme_fn.split("## How to bypass", 1)[1]
+    py_apply = py_readme.split("## How to bypass", 1)[1]
+
+    # 验法㉛-1: one TO 一字不差. Swift↔Py 标签一致；插值不动.
+    assert README_GRAPH_INPUT_SWIFT in swift_graph
+    assert README_GRAPH_INPUT_PY in py_graph
+    assert README_GRAPH_INPUT_TO in swift_graph
+    assert README_GRAPH_INPUT_TO in py_graph
+    assert "`\\(idtList)`" in swift_graph
+    assert "`{idt_list}`" in py_graph
+    assert README_GRAPH_INPUT_FROM not in swift_graph
+    assert README_GRAPH_INPUT_FROM not in py_graph
+    assert README_GRAPH_INPUT_BANNED not in swift_graph
+    assert README_GRAPH_INPUT_BANNED not in py_graph
+    assert README_GRAPH_INPUT_BANNED not in readme_fn
+    assert README_GRAPH_INPUT_BANNED not in py_readme
+
+    # Apply 整段另刀：英文 Apply 块一字不动.
+    assert "- Apply **IDT**" in apply
+    assert "- Apply **IDT**" in swift_apply
+    assert "- Apply **IDT**" in py_apply
+    assert "- Apply **WB**" in swift_apply
+    assert "- Apply **ODT**" in swift_apply
+    assert GRAPH_DOT_ODT_CST_FROM in swift_apply
+    assert GRAPH_DOT_ODT_CST_FROM in py_apply
+    assert GRAPH_DOT_ODT_CST_FROM in readme_fn
+    assert GRAPH_DOT_ODT_CST_FROM in py_readme
+
+    # ㉗–㉚ locked DOT/XML strings 一字不动.
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == GRAPH_DOT_WB_LINE_LOCKED
+    assert GRAPH_EXP_XML_DESC == GRAPH_EXP_XML_DESC_LOCKED
+    assert GRAPH_WB_XML_DESC == GRAPH_WB_XML_DESC_LOCKED
+    assert GRAPH_DOT_CLIP_LABEL == GRAPH_DOT_CLIP_LABEL_LOCKED
+    assert GRAPH_DOT_WORKING_SPACE == GRAPH_DOT_WORKING_SPACE_LOCKED
+    assert GRAPH_IDT_XML_DESC == GRAPH_IDT_XML_DESC_LOCKED
+    assert GRAPH_DOT_IDT_THIRD == GRAPH_DOT_IDT_THIRD_LOCKED
+    assert GRAPH_DOT_ODT_HEAD == GRAPH_DOT_ODT_HEAD_LOCKED
+    assert GRAPH_DOT_TIMELINE_LABEL == GRAPH_DOT_TIMELINE_LABEL_LOCKED
+    assert GRAPH_DOT_ODT_CST_LOCKED == "或 CST ACEScct → Rec.709"
+    assert GRAPH_DOT_ODT_CST_LOCKED in dot_fn
+    assert GRAPH_DOT_ODT_CST_LOCKED in py_dot
+    assert GRAPH_DOT_ODT_CST_FROM not in dot_fn
+    assert GRAPH_DOT_ODT_CST_FROM not in py_dot
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert GRAPH_DOT_IDT_THIRD_LOCKED in dot_fn
+    assert GRAPH_DOT_ODT_HEAD_LOCKED in dot_fn
+    assert r'timeline [shape=oval, label="时间线\\nACEScct"]' in dot_fn
+    assert GRAPH_EXP_XML_DESC in xml_fn
+    assert GRAPH_WB_XML_DESC in xml_fn
+    assert GRAPH_IDT_XML_DESC in xml_fn
+    assert _xml_node_description(xml, "Exposure") == GRAPH_EXP_XML_DESC_LOCKED
+    assert _xml_node_description(xml, "WB") == GRAPH_WB_XML_DESC_LOCKED
+    assert _xml_node_description(xml, "IDT") == GRAPH_IDT_XML_DESC_LOCKED
+
+    # FROZEN: cube TITLE, XML Desc, filenames, 色管.
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
+    assert LOCKED_REC709_CUBE_TITLE in swift
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_USER in graph
+    for name in LOCKED_NODE_FILES:
+        assert name in swift
+        assert name in py
+    assert "matrixCCT = nil" in swift
+    assert "white_balance_matrix" in py
+    assert "def apply_exposure" in (root / "color/exposure.py").read_text(encoding="utf-8")
+    assert "达芬奇已验证" not in input_line
+    assert "达芬奇已验证" not in graph
+    _assert_chengpian_not_a_deliverable_claim(input_line)
 
