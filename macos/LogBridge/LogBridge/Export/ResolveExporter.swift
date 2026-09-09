@@ -772,7 +772,7 @@ enum ResolveExporter {
 
         ## How to bypass WB in Resolve
 
-        Color page, serial node graph:
+        调色页，串行节点图：
 
         - Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or ACES IDT / CST camera → ACEScct).
         - Apply **WB** (node 3: LUT `03_WB.cube`, **or** DCTL `03_WB.dctl`, **or** import `03_WB.cdl` onto a Color Corrector).
