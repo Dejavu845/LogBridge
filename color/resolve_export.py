@@ -918,7 +918,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
 
 ## How to bypass Exposure / WB in Resolve
 
-Color page, serial node graph:
+调色页，串行节点图：
 
 - Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or CST camera → ACEScct, ACES workflow).
 - Apply **Exposure** (node 2: LUT `02_Exposure.cube` or DCTL `02_Exposure.dctl`). Zero stops or bypass = identity.
