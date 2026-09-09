@@ -791,7 +791,7 @@ enum ResolveExporter {
         | `03_WB.cdl` / `03_WB.ccc` | WB as ASC CDL Color Corrector |
         | `03_WB.dctl` | WB as DCTL (exact 3×3) |
         | `04_ODT_Rec709.cube` | 709 预览 (BT.709 OETF, not ACES OT) |
-        | `README_RESOLVE.md` | This file |
+        | `README_RESOLVE.md` | 本说明 |
 
         M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
         """
