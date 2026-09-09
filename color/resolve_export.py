@@ -940,7 +940,7 @@ Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview onl
 | `02_Exposure.dctl` | Exposure as DCTL (linear gain) |
 | `03_WB.cube` | 白平衡查找表（Bradford CAT，ACEScct 封装） |
 | `03_WB.cdl` / `03_WB.ccc` | 白平衡 ASC CDL 校色器 |
-| `03_WB.dctl` | WB as DCTL (exact 3×3) |
+| `03_WB.dctl` | 白平衡 DCTL（精确 3×3） |
 | `04_ODT_Rec709.cube` | 709 预览 (BT.709 OETF, not ACES OT) |
 | `README_RESOLVE.md` | 本说明 |
 
