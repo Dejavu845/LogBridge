@@ -923,7 +923,7 @@ Color page, serial node graph:
 - Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or CST camera → ACEScct, ACES workflow).
 - Apply **Exposure** (node 2: LUT `02_Exposure.cube` or DCTL `02_Exposure.dctl`). Zero stops or bypass = identity.
 - Apply **WB** (node 3: LUT `03_WB.cube`, **or** DCTL `03_WB.dctl`, **or** import `03_WB.cdl` onto a Color Corrector).
-- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) if you need a **709 预览** viewing node (not ACES OT). 预览·非成片.
+- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) 若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。
 
 To bypass Exposure: disable node 2 (or tick DCTL **Bypass Exposure**, or leave stops at 0). To bypass WB: disable node 3 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). The remaining graph is **IDT → (optional Exposure) → ACEScct → optional Rec.709 ODT**.
 
