@@ -782,7 +782,7 @@ enum ResolveExporter {
 
         ## Files
 
-        | File | Role |
+        | 文件 | 作用 |
         | --- | --- |
         | `graph.xml` | Machine-readable node graph (bypassable WB) |
         | `graph.dot` | 同一图的 Graphviz |

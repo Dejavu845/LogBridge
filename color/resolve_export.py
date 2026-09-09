@@ -931,7 +931,7 @@ Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview onl
 
 ## Files
 
-| File | Role |
+| 文件 | 作用 |
 | --- | --- |
 | `graph.xml` | Machine-readable node graph (bypassable Exposure + WB) |
 | `graph.dot` | 同一图的 Graphviz |
