@@ -935,7 +935,7 @@ Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview onl
 | --- | --- |
 | `graph.xml` | 机器可读节点图（可旁路曝光 + 白平衡） |
 | `graph.dot` | 同一图的 Graphviz |
-| `01_IDT_<idt>.cube` | IDT LUT (no WB, no exposure) |
+| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |
 | `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |
 | `02_Exposure.dctl` | Exposure as DCTL (linear gain) |
 | `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |

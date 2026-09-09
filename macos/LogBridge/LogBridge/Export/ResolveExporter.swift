@@ -786,7 +786,7 @@ enum ResolveExporter {
         | --- | --- |
         | `graph.xml` | 机器可读节点图（可旁路白平衡） |
         | `graph.dot` | 同一图的 Graphviz |
-        | `01_IDT_<idt>.cube` | IDT LUT (no WB) |
+        | `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |
         | `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |
         | `03_WB.cdl` / `03_WB.ccc` | WB as ASC CDL Color Corrector |
         | `03_WB.dctl` | WB as DCTL (exact 3×3) |

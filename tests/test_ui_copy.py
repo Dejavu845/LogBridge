@@ -5618,8 +5618,8 @@ def test_readme_files_graph_dot_zh():
     graph_dot_row = "| `graph.dot` | 同一图的 Graphviz |"
     xml_swift = "| `graph.xml` | 机器可读节点图（可旁路白平衡） |"
     xml_py = "| `graph.xml` | 机器可读节点图（可旁路曝光 + 白平衡） |"
-    idt_swift = "| `01_IDT_<idt>.cube` | IDT LUT (no WB) |"
-    idt_py = "| `01_IDT_<idt>.cube` | IDT LUT (no WB, no exposure) |"
+    idt_swift = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |"
+    idt_py = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |"
     exp_cube = "| `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |"
     exp_dctl = "| `02_Exposure.dctl` | Exposure as DCTL (linear gain) |"
     wb_cube = "| `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |"
@@ -5833,8 +5833,8 @@ def test_readme_color_page_title_zh():
     graph_dot_row = "| `graph.dot` | 同一图的 Graphviz |"
     xml_swift = "| `graph.xml` | 机器可读节点图（可旁路白平衡） |"
     xml_py = "| `graph.xml` | 机器可读节点图（可旁路曝光 + 白平衡） |"
-    idt_swift = "| `01_IDT_<idt>.cube` | IDT LUT (no WB) |"
-    idt_py = "| `01_IDT_<idt>.cube` | IDT LUT (no WB, no exposure) |"
+    idt_swift = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |"
+    idt_py = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |"
     exp_cube = "| `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |"
     exp_dctl = "| `02_Exposure.dctl` | Exposure as DCTL (linear gain) |"
     wb_cube = "| `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |"
@@ -6063,8 +6063,8 @@ def test_readme_files_header_zh():
     graph_dot_row = "| `graph.dot` | 同一图的 Graphviz |"
     xml_swift = "| `graph.xml` | 机器可读节点图（可旁路白平衡） |"
     xml_py = "| `graph.xml` | 机器可读节点图（可旁路曝光 + 白平衡） |"
-    idt_swift = "| `01_IDT_<idt>.cube` | IDT LUT (no WB) |"
-    idt_py = "| `01_IDT_<idt>.cube` | IDT LUT (no WB, no exposure) |"
+    idt_swift = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |"
+    idt_py = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |"
     exp_cube = "| `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |"
     exp_dctl = "| `02_Exposure.dctl` | Exposure as DCTL (linear gain) |"
     wb_cube = "| `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |"
@@ -6312,8 +6312,8 @@ def test_readme_files_graph_xml_zh():
     graph_dot_to = "同一图的 Graphviz"
     graph_dot_from = "Graphviz of the same graph"
     graph_dot_row = "| `graph.dot` | 同一图的 Graphviz |"
-    idt_swift = "| `01_IDT_<idt>.cube` | IDT LUT (no WB) |"
-    idt_py = "| `01_IDT_<idt>.cube` | IDT LUT (no WB, no exposure) |"
+    idt_swift = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |"
+    idt_py = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |"
     exp_cube = "| `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |"
     exp_dctl = "| `02_Exposure.dctl` | Exposure as DCTL (linear gain) |"
     wb_cube = "| `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |"
@@ -6588,8 +6588,8 @@ def test_readme_files_readme_zh():
     graph_dot_to = "同一图的 Graphviz"
     graph_dot_from = "Graphviz of the same graph"
     graph_dot_row = "| `graph.dot` | 同一图的 Graphviz |"
-    idt_swift = "| `01_IDT_<idt>.cube` | IDT LUT (no WB) |"
-    idt_py = "| `01_IDT_<idt>.cube` | IDT LUT (no WB, no exposure) |"
+    idt_swift = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |"
+    idt_py = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |"
     exp_cube = "| `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |"
     exp_dctl = "| `02_Exposure.dctl` | Exposure as DCTL (linear gain) |"
     wb_cube = "| `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |"
@@ -6833,3 +6833,323 @@ def test_readme_files_readme_zh():
     assert "达芬奇已验证" not in readme_to
     assert "达芬奇已验证" not in files_fn
     _chengpian_only_honesty(readme_to)
+
+
+def test_readme_files_idt_zh():
+    """README Files ㊳ 验法: 01_IDT Role 人话. Swift/Py 分锁. ㉗–㊲ frozen. TITLE / XML / 色管冻. No alg."""
+    from color.resolve_export import (
+        EXPORT_NOTE_IN_CAMERA,
+        GRAPH_DOT_CLIP_LABEL,
+        GRAPH_DOT_EXP_FILE,
+        GRAPH_DOT_EXP_HEAD,
+        GRAPH_DOT_IDT_THIRD,
+        GRAPH_DOT_ODT_HEAD,
+        GRAPH_DOT_TIMELINE_LABEL,
+        GRAPH_DOT_WB_FILE,
+        GRAPH_DOT_WB_HEAD,
+        GRAPH_DOT_WB_LINE,
+        GRAPH_DOT_WORKING_SPACE,
+        GRAPH_EXP_XML_DESC,
+        GRAPH_IDT_XML_DESC,
+        GRAPH_ODT_USER,
+        GRAPH_WB_SUMMARY,
+        GRAPH_WB_XML_DESC,
+        REC709_CUBE_TITLE,
+        format_readme,
+    )
+
+    idt_swift_to = "IDT 查找表（不含白平衡）"
+    idt_py_to = "IDT 查找表（不含白平衡、不含曝光）"
+    idt_swift_from = "IDT LUT (no WB)"
+    idt_py_from = "IDT LUT (no WB, no exposure)"
+    idt_banned = "IDT LUT"
+    idt_swift = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |"
+    idt_py = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |"
+    readme_to = "本说明"
+    readme_from = "This file"
+    readme_row = "| `README_RESOLVE.md` | 本说明 |"
+    xml_swift_to = "机器可读节点图（可旁路白平衡）"
+    xml_py_to = "机器可读节点图（可旁路曝光 + 白平衡）"
+    xml_swift_from = "Machine-readable node graph (bypassable WB)"
+    xml_py_from = "Machine-readable node graph (bypassable Exposure + WB)"
+    xml_banned = "Machine-readable node graph"
+    xml_swift = "| `graph.xml` | 机器可读节点图（可旁路白平衡） |"
+    xml_py = "| `graph.xml` | 机器可读节点图（可旁路曝光 + 白平衡） |"
+    header_to = "| 文件 | 作用 |"
+    header_from = "| File | Role |"
+    title_to = "调色页，串行节点图："
+    title_from = "Color page, serial node graph:"
+    graph_dot_to = "同一图的 Graphviz"
+    graph_dot_from = "Graphviz of the same graph"
+    graph_dot_row = "| `graph.dot` | 同一图的 Graphviz |"
+    exp_cube = "| `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |"
+    exp_dctl = "| `02_Exposure.dctl` | Exposure as DCTL (linear gain) |"
+    wb_cube = "| `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |"
+    wb_cdl = "| `03_WB.cdl` / `03_WB.ccc` | WB as ASC CDL Color Corrector |"
+    wb_dctl = "| `03_WB.dctl` | WB as DCTL (exact 3×3) |"
+    odt_row = "| `04_ODT_Rec709.cube` | 709 预览 (BT.709 OETF, not ACES OT) |"
+    odt_head = (
+        "Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709)"
+    )
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_line = f"- {odt_head} {odt_trail_to}"
+    input_to = "输入：相机 Log / 相机色域"
+    input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
+    input_py = "- 输入：相机 Log / 相机色域 (`{idt_list}`)"
+    odt_cst_to = "或 CST ACEScct → Rec.709"
+    odt_cst_from = "or CST ACEScct → Rec.709"
+    idt_third_to = "或 ACES IDT / CST → ACEScct"
+    odt_head_dot = "709 预览（后续节点）"
+    timeline_to = "时间线\\nACEScct"
+    clip_to = "素材\\n相机 Log"
+    ws_to = "工作空间"
+    idt_xml_to = "相机 Log 经 ACES2065-1 到 ACEScct。不含白平衡、不含曝光。"
+    exp_xml_to = (
+        "ACES2065-1 线性按档增益；不加减 Log 码值。独立节点；0 档不写进 IDT/白平衡。"
+    )
+    wb_xml_to = (
+        "机内色温/绿品只填旋钮；默认单位阵（不把机内 5600/6504 当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+        "旁路白平衡 = IDT → 曝光 → ACEScct，不烘焙。"
+    )
+    honesty_to = (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    graph_wb_to = (
+        "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    )
+
+    # 验法㊳-1: Swift / Py 各锁各 TO，不拉平. Files 其余冻.
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    py = (ROOT / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = exporter.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = exporter.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    readme_fn = exporter.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    graph_fn = readme_fn.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    py_graph = py_readme.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    apply_fn = readme_fn.split("## How to bypass", 1)[1]
+    py_apply = py_readme.split("## How to bypass", 1)[1]
+    files_fn = readme_fn.split("## Files", 1)[1]
+    py_files = py_readme.split("## Files", 1)[1]
+
+    def _idt_line(text: str) -> str:
+        for ln in text.splitlines():
+            if ln.strip().startswith("| `01_IDT_<idt>.cube`"):
+                return ln.strip()
+        raise AssertionError("Files 01_IDT_<idt>.cube row missing")
+
+    def _xml_line(text: str) -> str:
+        for ln in text.splitlines():
+            if ln.strip().startswith("| `graph.xml`"):
+                return ln.strip()
+        raise AssertionError("Files graph.xml row missing")
+
+    def _readme_line(text: str) -> str:
+        for ln in text.splitlines():
+            if ln.strip().startswith("| `README_RESOLVE.md`"):
+                return ln.strip()
+        raise AssertionError("Files README_RESOLVE.md row missing")
+
+    swift_idt = _idt_line(readme_fn)
+    py_idt = _idt_line(py_readme)
+    swift_xml = _xml_line(readme_fn)
+    py_xml = _xml_line(py_readme)
+    swift_readme = _readme_line(readme_fn)
+    py_readme_row = _readme_line(py_readme)
+
+    assert swift_idt == idt_swift
+    assert py_idt == idt_py
+    assert swift_idt != py_idt
+    assert idt_swift != idt_py
+    assert idt_swift_to != idt_py_to
+    assert idt_swift_to in swift_idt
+    assert idt_py_to in py_idt
+    assert idt_py_to not in swift_idt
+    assert idt_swift_to not in py_idt
+    assert idt_py not in files_fn
+    assert idt_swift not in py_files
+    assert "曝光" not in idt_swift_to
+    assert "曝光" not in swift_idt
+    assert "不含曝光" in idt_py_to
+    assert "不含白平衡、不含曝光" in idt_py_to
+    assert idt_swift_from not in swift_idt
+    assert idt_py_from not in py_idt
+    assert idt_banned not in swift_idt
+    assert idt_banned not in py_idt
+    assert idt_banned not in files_fn
+    assert idt_banned not in py_files
+    assert idt_banned not in readme_fn
+    assert idt_banned not in py_readme
+    assert idt_banned not in exporter
+    assert idt_banned not in py
+    assert idt_swift_from not in readme_fn
+    assert idt_py_from not in py_readme
+    assert idt_swift_from not in exporter
+    assert idt_py_from not in py
+    assert idt_swift_from not in files_fn
+    assert idt_py_from not in py_files
+
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
+    generated_idt = _idt_line(generated)
+    generated_files = generated.split("## Files", 1)[1]
+    assert generated_idt == idt_py
+    assert idt_swift not in generated
+    assert idt_swift_to not in generated_idt
+    assert idt_banned not in generated
+    assert idt_banned not in generated_files
+    assert idt_swift_from not in generated
+    assert idt_py_from not in generated
+
+    # 验法㊳-2: ㉗–㊲ locked strings 一字不动（含 本说明 / graph.xml 机器可读分锁 / | 文件 | 作用 | / 调色页，串行节点图： / 同一图的 Graphviz）.
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == "色温 {cctLabel}  绿品 {tint}"
+    assert GRAPH_DOT_WB_FILE == "03_WB.cube / .cdl / .ccc / .dctl"
+    assert GRAPH_EXP_XML_DESC == exp_xml_to
+    assert GRAPH_WB_XML_DESC == wb_xml_to
+    assert GRAPH_DOT_CLIP_LABEL == clip_to
+    assert GRAPH_DOT_WORKING_SPACE == ws_to
+    assert GRAPH_IDT_XML_DESC == idt_xml_to
+    assert GRAPH_DOT_IDT_THIRD == idt_third_to
+    assert GRAPH_DOT_ODT_HEAD == odt_head_dot
+    assert GRAPH_DOT_TIMELINE_LABEL == timeline_to
+    assert odt_cst_to in dot_fn
+    assert odt_cst_to in py_dot
+    assert odt_cst_from not in dot_fn
+    assert odt_cst_from not in py_dot
+    assert input_to in graph_fn
+    assert input_to in py_graph
+    assert input_swift in graph_fn
+    assert input_py in py_graph
+    swift_odt = next(
+        ln.strip() for ln in apply_fn.splitlines() if ln.strip().startswith("- Apply **ODT**")
+    )
+    py_odt = next(
+        ln.strip() for ln in py_apply.splitlines() if ln.strip().startswith("- Apply **ODT**")
+    )
+    assert swift_odt == odt_line
+    assert py_odt == odt_line
+    swift_dot = next(
+        ln.strip() for ln in files_fn.splitlines() if ln.strip().startswith("| `graph.dot`")
+    )
+    py_dot_row = next(
+        ln.strip() for ln in py_files.splitlines() if ln.strip().startswith("| `graph.dot`")
+    )
+    assert swift_dot == graph_dot_row
+    assert py_dot_row == graph_dot_row
+    assert graph_dot_to in swift_dot
+    assert graph_dot_from not in files_fn
+    assert graph_dot_from not in py_files
+    assert swift_xml == xml_swift
+    assert py_xml == xml_py
+    assert swift_xml != py_xml
+    assert xml_swift != xml_py
+    assert xml_swift_to != xml_py_to
+    assert xml_swift_to in swift_xml
+    assert xml_py_to in py_xml
+    assert xml_py_to not in swift_xml
+    assert xml_swift_to not in py_xml
+    assert "曝光" not in xml_swift_to
+    assert "曝光 + 白平衡" in xml_py_to
+    assert xml_banned not in files_fn
+    assert xml_banned not in py_files
+    assert xml_swift_from not in files_fn
+    assert xml_py_from not in py_files
+    assert swift_readme == readme_row
+    assert py_readme_row == readme_row
+    assert swift_readme == py_readme_row
+    assert readme_to in swift_readme
+    assert readme_from not in files_fn
+    assert readme_from not in py_files
+
+    def _title_line(text: str) -> str:
+        for ln in text.splitlines():
+            stripped = ln.strip()
+            if stripped.startswith("调色页，串行节点图") or stripped.startswith(
+                "Color page, serial node graph"
+            ):
+                return stripped
+        raise AssertionError("Color page title line missing")
+
+    def _header_line(text: str) -> str:
+        for ln in text.splitlines():
+            stripped = ln.strip()
+            if stripped in (header_to, header_from) or stripped.startswith(
+                "| File | Role"
+            ) or stripped.startswith("| 文件 | 作用"):
+                return stripped
+        raise AssertionError("Files table header row missing")
+
+    assert _title_line(readme_fn) == title_to
+    assert _title_line(py_readme) == title_to
+    assert title_from not in readme_fn
+    assert title_from not in py_readme
+    assert _header_line(readme_fn) == header_to
+    assert _header_line(py_readme) == header_to
+    assert header_from not in readme_fn
+    assert header_from not in py_readme
+    assert exp_cube in py_files
+    assert exp_dctl in py_files
+    assert exp_cube not in files_fn
+    assert wb_cube in files_fn
+    assert wb_cube in py_files
+    assert wb_cdl in files_fn
+    assert wb_cdl in py_files
+    assert wb_dctl in files_fn
+    assert wb_dctl in py_files
+    assert odt_row in files_fn
+    assert odt_row in py_files
+    assert readme_row in files_fn
+    assert readme_row in py_files
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert idt_third_to in dot_fn
+    assert odt_head_dot in dot_fn
+    assert r'timeline [shape=oval, label="时间线\\nACEScct"]' in dot_fn
+    assert exp_xml_to in xml_fn
+    assert wb_xml_to in xml_fn
+    assert idt_xml_to in xml_fn
+    assert EXPORT_NOTE_IN_CAMERA == honesty_to
+    assert GRAPH_WB_SUMMARY == graph_wb_to
+
+    # 验法㊳-3: cube TITLE / filenames / 色管 / XML Desc 冻.
+    assert REC709_CUBE_TITLE == (
+        "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+    )
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_USER in graph_fn
+    assert 'name="Exposure"' in xml_fn
+    assert 'name="WB"' in xml_fn
+    assert 'name="IDT"' in xml_fn
+    assert "02_Exposure.cube" in exporter
+    assert "03_WB.cube" in exporter
+    assert "04_ODT_Rec709.cube" in exporter
+    assert "matrixCCT = nil" in exporter
+    assert "完善" not in idt_swift_to
+    assert "精准" not in idt_swift_to
+    assert "达芬奇已验证" not in idt_swift_to
+    assert "达芬奇已验证" not in idt_py_to
+    assert "达芬奇已验证" not in files_fn
+    _chengpian_only_honesty(idt_swift_to)
+    _chengpian_only_honesty(idt_py_to)
