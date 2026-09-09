@@ -394,8 +394,9 @@ def _apply_section(text: str) -> str:
 
 def _apply_odt_line(text: str) -> str:
     for ln in text.splitlines():
-        if ln.strip().startswith("- Apply **ODT**"):
-            return ln.strip()
+        stripped = ln.strip()
+        if stripped.startswith("- 应用 **ODT**") or stripped.startswith("- Apply **ODT**"):
+            return stripped
     raise AssertionError("Apply ODT line missing")
 
 
@@ -1382,6 +1383,9 @@ README_GRAPH_INPUT_BANNED = "Input: camera log"
 README_GRAPH_INPUT_SWIFT = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
 README_GRAPH_INPUT_PY = "- 输入：相机 Log / 相机色域 (`{idt_list}`)"
 README_APPLY_ODT_HEAD = (
+    "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
+)
+README_APPLY_ODT_HEAD_FROM = (
     "Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709)"
 )
 README_APPLY_ODT_TRAIL_TO = (
@@ -1391,10 +1395,15 @@ README_APPLY_ODT_TRAIL_FROM = (
     "if you need a **709 预览** viewing node (not ACES OT). 预览·非成片."
 )
 README_APPLY_ODT_LINE = (
+    "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
+    "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+)
+README_APPLY_ODT_FROM = (
     "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
     "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
 )
-README_APPLY_ODT_BANNED = ("viewing node", "if you need")
+README_APPLY_ODT_BANNED = ("Apply **ODT**", "(node 4")
+README_APPLY_ODT_TRAIL_BANNED = ("viewing node", "if you need")
 README_APPLY_WB_LINE = (
     "- 应用 **白平衡**（节点 3：LUT `03_WB.cube`，**或** DCTL `03_WB.dctl`，"
     "**或** 把 `03_WB.cdl` 导入校色器）。"
@@ -2046,9 +2055,9 @@ def test_graph_dot_odt_cst_plain_chinese(tmp_path: Path):
     assert GRAPH_DOT_ODT_CST_LOCKED in py_dot
     assert GRAPH_DOT_ODT_CST_FROM not in dot_fn
     assert GRAPH_DOT_ODT_CST_FROM not in py_dot
-    # README / other ODT lines keep English or CST (not this knife).
-    assert GRAPH_DOT_ODT_CST_FROM in readme_fn
-    assert GRAPH_DOT_ODT_CST_FROM in py_readme
+    # Apply ODT 行见㊾（不再留英文 or CST）.
+    assert GRAPH_DOT_ODT_CST_FROM not in readme_fn
+    assert GRAPH_DOT_ODT_CST_FROM not in py_readme
 
     # ㉗ four locked DOT/XML strings 一字不动.
     assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
@@ -2199,16 +2208,16 @@ def test_readme_graph_input_plain_chinese(tmp_path: Path):
     assert README_GRAPH_INPUT_BANNED not in readme_fn
     assert README_GRAPH_INPUT_BANNED not in py_readme
 
-    # Apply 邻行冻：IDT 见㊽. ODT 英文不动. WB 行见㊼.
+    # Apply 邻行冻：IDT 见㊽. ODT 见㊾. WB 行见㊼.
     assert "- 应用 **IDT**" in apply
     assert "- 应用 **IDT**" in swift_apply
     assert "- 应用 **IDT**" in py_apply
     assert "- 应用 **白平衡**" in swift_apply
-    assert "- Apply **ODT**" in swift_apply
-    assert GRAPH_DOT_ODT_CST_FROM in swift_apply
-    assert GRAPH_DOT_ODT_CST_FROM in py_apply
-    assert GRAPH_DOT_ODT_CST_FROM in readme_fn
-    assert GRAPH_DOT_ODT_CST_FROM in py_readme
+    assert "- 应用 **ODT**" in swift_apply
+    assert GRAPH_DOT_ODT_CST_FROM not in swift_apply
+    assert GRAPH_DOT_ODT_CST_FROM not in py_apply
+    assert GRAPH_DOT_ODT_CST_FROM not in readme_fn
+    assert GRAPH_DOT_ODT_CST_FROM not in py_readme
 
     # ㉗–㉚ locked DOT/XML strings 一字不动.
     assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
@@ -2262,8 +2271,11 @@ def test_readme_graph_input_plain_chinese(tmp_path: Path):
 
 
 def test_readme_apply_odt_plain_chinese(tmp_path: Path):
-    """README Apply ㉜: ODT 行尾查看节点人话. ㉗–㉛ + 行头 / TITLE / XML / 色管 frozen."""
+    """README Apply ㉜/㊾: ODT 行头+行尾人话. ㉗–㉛ + TITLE / XML / 色管 frozen."""
     assert README_APPLY_ODT_HEAD == (
+        "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
+    )
+    assert README_APPLY_ODT_HEAD_FROM == (
         "Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709)"
     )
     assert README_APPLY_ODT_TRAIL_TO == (
@@ -2273,9 +2285,13 @@ def test_readme_apply_odt_plain_chinese(tmp_path: Path):
         "if you need a **709 预览** viewing node (not ACES OT). 预览·非成片."
     )
     assert README_APPLY_ODT_LINE == (
-        f"- {README_APPLY_ODT_HEAD} {README_APPLY_ODT_TRAIL_TO}"
+        f"- {README_APPLY_ODT_HEAD}{README_APPLY_ODT_TRAIL_TO}"
     )
-    assert README_APPLY_ODT_BANNED == ("viewing node", "if you need")
+    assert README_APPLY_ODT_FROM == (
+        f"- {README_APPLY_ODT_HEAD_FROM} {README_APPLY_ODT_TRAIL_TO}"
+    )
+    assert README_APPLY_ODT_BANNED == ("Apply **ODT**", "(node 4")
+    assert README_APPLY_ODT_TRAIL_BANNED == ("viewing node", "if you need")
 
     export_resolve_bundle(
         tmp_path,
@@ -2294,13 +2310,15 @@ def test_readme_apply_odt_plain_chinese(tmp_path: Path):
     odt_line = _apply_odt_line(readme)
 
     assert odt_line == README_APPLY_ODT_LINE
-    assert odt_line.startswith(f"- {README_APPLY_ODT_HEAD} ")
+    assert odt_line.startswith(f"- {README_APPLY_ODT_HEAD}")
     assert odt_line.endswith(README_APPLY_ODT_TRAIL_TO)
     assert README_APPLY_ODT_TRAIL_TO in odt_line
+    assert README_APPLY_ODT_FROM not in apply
+    assert README_APPLY_ODT_FROM not in readme
     assert README_APPLY_ODT_TRAIL_FROM not in odt_line
     assert README_APPLY_ODT_TRAIL_FROM not in apply
     assert README_APPLY_ODT_TRAIL_FROM not in readme
-    for token in README_APPLY_ODT_BANNED:
+    for token in README_APPLY_ODT_BANNED + README_APPLY_ODT_TRAIL_BANNED:
         assert token not in odt_line, token
         assert token not in apply, token
 
@@ -2309,7 +2327,8 @@ def test_readme_apply_odt_plain_chinese(tmp_path: Path):
     generated_line = _apply_odt_line(generated)
     assert generated_line == odt_line
     assert generated_line == README_APPLY_ODT_LINE
-    for token in README_APPLY_ODT_BANNED:
+    assert README_APPLY_ODT_FROM not in generated
+    for token in README_APPLY_ODT_BANNED + README_APPLY_ODT_TRAIL_BANNED:
         assert token not in generated_line, token
         assert token not in generated_apply, token
 
@@ -2337,7 +2356,7 @@ def test_readme_apply_odt_plain_chinese(tmp_path: Path):
     swift_odt = _apply_odt_line(readme_fn)
     py_odt = _apply_odt_line(py_readme)
 
-    # 验法㉜-1: one TO 一字不差. Swift↔Py 该片段一致；行头冻.
+    # 验法㉜/㊾-1: one TO 一字不差. Swift↔Py 该行一致. 行头+行尾人话.
     assert swift_odt == README_APPLY_ODT_LINE
     assert py_odt == README_APPLY_ODT_LINE
     assert swift_odt == py_odt
@@ -2345,14 +2364,19 @@ def test_readme_apply_odt_plain_chinese(tmp_path: Path):
     assert README_APPLY_ODT_HEAD in py_odt
     assert README_APPLY_ODT_TRAIL_TO in swift_odt
     assert README_APPLY_ODT_TRAIL_TO in py_odt
+    assert README_APPLY_ODT_FROM not in swift_apply
+    assert README_APPLY_ODT_FROM not in py_apply
     assert README_APPLY_ODT_TRAIL_FROM not in swift_odt
     assert README_APPLY_ODT_TRAIL_FROM not in py_odt
     assert README_APPLY_ODT_TRAIL_FROM not in swift_apply
     assert README_APPLY_ODT_TRAIL_FROM not in py_apply
-    assert GRAPH_DOT_ODT_CST_FROM in README_APPLY_ODT_HEAD
-    assert GRAPH_DOT_ODT_CST_FROM in swift_odt
-    assert GRAPH_DOT_ODT_CST_FROM in py_odt
-    for token in README_APPLY_ODT_BANNED:
+    assert GRAPH_DOT_ODT_CST_LOCKED in README_APPLY_ODT_HEAD
+    assert GRAPH_DOT_ODT_CST_LOCKED in swift_odt
+    assert GRAPH_DOT_ODT_CST_LOCKED in py_odt
+    assert GRAPH_DOT_ODT_CST_FROM not in README_APPLY_ODT_HEAD
+    assert GRAPH_DOT_ODT_CST_FROM not in swift_odt
+    assert GRAPH_DOT_ODT_CST_FROM not in py_odt
+    for token in README_APPLY_ODT_BANNED + README_APPLY_ODT_TRAIL_BANNED:
         assert token not in swift_odt, token
         assert token not in py_odt, token
         assert token not in swift_apply, token
@@ -2543,7 +2567,7 @@ def test_readme_files_graph_dot_plain_chinese(tmp_path: Path):
 
     # ㉗–㉜ locked strings 一字不动.
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -2706,7 +2730,7 @@ def test_readme_color_page_title_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in swift_files
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -2877,7 +2901,7 @@ def test_readme_files_header_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in swift_files
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -3126,7 +3150,7 @@ def test_readme_files_graph_xml_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in swift_files
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -3360,7 +3384,7 @@ def test_readme_files_readme_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in swift_files
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -3629,7 +3653,7 @@ def test_readme_files_idt_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in swift_files
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -3907,7 +3931,7 @@ def test_readme_files_wb_cube_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in swift_files
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -4210,7 +4234,7 @@ def test_readme_files_wb_cdl_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in swift_files
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -4535,7 +4559,7 @@ def test_readme_files_wb_dctl_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in swift_files
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -4877,7 +4901,7 @@ def test_readme_files_odt_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in swift_files
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -5396,7 +5420,7 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in swift_files
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
-        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
         "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
@@ -5810,4 +5834,184 @@ def test_readme_apply_idt_plain_chinese(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(py_idt)
     _assert_chengpian_not_a_deliverable_claim(README_APPLY_IDT_SWIFT)
     _assert_chengpian_not_a_deliverable_claim(README_APPLY_IDT_PY)
+
+
+def test_readme_apply_odt_line_plain_chinese(tmp_path: Path):
+    """README Apply ㊾: ODT 行人话. Swift↔Py 该行一致. ㉗–㊽ + 邻行 IDT/Exposure/WB / TITLE / XML / 色管 frozen."""
+    assert README_APPLY_ODT_LINE == (
+        "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    )
+    assert README_APPLY_ODT_FROM == (
+        "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    )
+    assert README_APPLY_ODT_BANNED == ("Apply **ODT**", "(node 4")
+    assert README_APPLY_ODT_TRAIL_TO == (
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    )
+
+    export_resolve_bundle(
+        tmp_path,
+        idt_ids=["arri_logc4_awg4"],
+        include_wb=True,
+        cct=3200.0,
+        tint=0.25,
+        exposure_stops=1.5,
+        lut_size=5,
+    )
+    readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
+    xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    graph = _graph_section(readme)
+    apply = _apply_section(readme)
+    files = _files_section(readme)
+    odt_line = _apply_odt_line(readme)
+
+    assert odt_line == README_APPLY_ODT_LINE
+    assert odt_line.endswith(README_APPLY_ODT_TRAIL_TO)
+    assert README_APPLY_ODT_FROM not in apply
+    assert README_APPLY_ODT_FROM not in readme
+    for token in README_APPLY_ODT_BANNED:
+        assert token not in odt_line, token
+
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
+    generated_line = _apply_odt_line(generated)
+    assert generated_line == odt_line
+    assert generated_line == README_APPLY_ODT_LINE
+    assert README_APPLY_ODT_FROM not in generated
+    for token in README_APPLY_ODT_BANNED:
+        assert token not in generated_line, token
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = swift.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    py_xml = py.split("def format_graph_xml")[1].split("def format_readme")[0]
+    readme_fn = swift.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    swift_graph = _graph_section(readme_fn)
+    py_graph = _graph_section(py_readme)
+    swift_apply = _apply_section(readme_fn)
+    py_apply = _apply_section(py_readme)
+    swift_idt = _apply_idt_line(readme_fn)
+    py_idt = _apply_idt_line(py_readme)
+    swift_wb = _apply_wb_line(readme_fn)
+    py_wb = _apply_wb_line(py_readme)
+    swift_odt = _apply_odt_line(readme_fn)
+    py_odt = _apply_odt_line(py_readme)
+
+    # 验法㊾-1: one TO 一字不差. Swift↔Py 该行一致.
+    assert swift_odt == README_APPLY_ODT_LINE
+    assert py_odt == README_APPLY_ODT_LINE
+    assert swift_odt == py_odt
+    assert README_APPLY_ODT_FROM not in swift_apply
+    assert README_APPLY_ODT_FROM not in py_apply
+    assert README_APPLY_ODT_FROM not in readme_fn
+    assert README_APPLY_ODT_FROM not in py_readme
+    for token in README_APPLY_ODT_BANNED:
+        assert token not in swift_odt, token
+        assert token not in py_odt, token
+
+    # Apply 邻行冻：IDT 见㊽（分锁）. Exposure / WB.
+    assert "- 应用 **IDT**" in apply
+    assert "- 应用 **IDT**" in swift_apply
+    assert "- 应用 **IDT**" in py_apply
+    assert "- Apply **Exposure**" in py_apply
+    assert (
+        "- 应用 **IDT**（节点 1：LUT `01_IDT_*.cube`，或 ACES IDT / CST 相机 → ACEScct）。"
+        in swift_apply
+    )
+    assert (
+        "- 应用 **IDT**（节点 1：LUT `01_IDT_*.cube`，或 CST 相机 → ACEScct，ACES 工作流）。"
+        in py_apply
+    )
+    assert (
+        "- Apply **Exposure** (node 2: LUT `02_Exposure.cube` or DCTL `02_Exposure.dctl`). "
+        "Zero stops or bypass = identity."
+    ) in py_apply
+    assert swift_idt == README_APPLY_IDT_SWIFT
+    assert py_idt == README_APPLY_IDT_PY
+    assert swift_idt != py_idt
+    assert swift_wb == README_APPLY_WB_LINE
+    assert py_wb == README_APPLY_WB_LINE
+    assert swift_wb == py_wb
+
+    # ㉗–㊽ locked strings 一字不动.
+    assert README_APPLY_WB_LINE in swift_apply
+    assert README_APPLY_WB_LINE in py_apply
+    assert README_APPLY_IDT_SWIFT in swift_apply
+    assert README_APPLY_IDT_PY in py_apply
+    assert README_TRAIL_BLOCK_TO in readme
+    assert README_TRAIL_BLOCK_TO in readme_fn
+    assert README_TRAIL_BLOCK_TO in py_readme
+    assert README_GRAPH_INPUT_TO == "输入：相机 Log / 相机色域"
+    assert README_GRAPH_INPUT_SWIFT in swift_graph
+    assert README_GRAPH_INPUT_PY in py_graph
+    assert README_GRAPH_INPUT_TO in graph
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == GRAPH_DOT_WB_LINE_LOCKED
+    assert GRAPH_EXP_XML_DESC == GRAPH_EXP_XML_DESC_LOCKED
+    assert GRAPH_WB_XML_DESC == GRAPH_WB_XML_DESC_LOCKED
+    assert GRAPH_DOT_CLIP_LABEL == GRAPH_DOT_CLIP_LABEL_LOCKED
+    assert GRAPH_DOT_WORKING_SPACE == GRAPH_DOT_WORKING_SPACE_LOCKED
+    assert GRAPH_IDT_XML_DESC == GRAPH_IDT_XML_DESC_LOCKED
+    assert GRAPH_DOT_IDT_THIRD == GRAPH_DOT_IDT_THIRD_LOCKED
+    assert GRAPH_DOT_ODT_HEAD == GRAPH_DOT_ODT_HEAD_LOCKED
+    assert GRAPH_DOT_TIMELINE_LABEL == GRAPH_DOT_TIMELINE_LABEL_LOCKED
+    assert GRAPH_DOT_ODT_CST_LOCKED == "或 CST ACEScct → Rec.709"
+    assert GRAPH_DOT_ODT_CST_LOCKED in dot_fn
+    assert GRAPH_DOT_ODT_CST_LOCKED in py_dot
+    assert GRAPH_DOT_ODT_CST_FROM not in dot_fn
+    assert GRAPH_DOT_ODT_CST_FROM not in py_dot
+    assert GRAPH_DOT_ODT_CST_FROM not in readme_fn
+    assert GRAPH_DOT_ODT_CST_FROM not in py_readme
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert GRAPH_DOT_IDT_THIRD_LOCKED in dot_fn
+    assert GRAPH_DOT_ODT_HEAD_LOCKED in dot_fn
+    assert r'timeline [shape=oval, label="时间线\\nACEScct"]' in dot_fn
+    assert GRAPH_EXP_XML_DESC in xml_fn
+    assert GRAPH_WB_XML_DESC in xml_fn
+    assert GRAPH_IDT_XML_DESC in xml_fn
+    assert "{GRAPH_IDT_XML_DESC}" in py_xml
+    assert _xml_node_description(xml, "Exposure") == GRAPH_EXP_XML_DESC_LOCKED
+    assert _xml_node_description(xml, "WB") == GRAPH_WB_XML_DESC_LOCKED
+    assert _xml_node_description(xml, "IDT") == GRAPH_IDT_XML_DESC_LOCKED
+
+    # FROZEN: cube TITLE, XML Desc, filenames, 色管.
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
+    assert LOCKED_REC709_CUBE_TITLE in swift
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_USER in graph
+    for name in LOCKED_NODE_FILES:
+        assert name in swift
+        assert name in py
+    assert "matrixCCT = nil" in swift
+    assert "white_balance_matrix" in py
+    assert "def apply_exposure" in (root / "color/exposure.py").read_text(encoding="utf-8")
+    assert "达芬奇已验证" not in swift_odt
+    assert "达芬奇已验证" not in py_odt
+    assert "达芬奇已验证" not in files
+    _assert_chengpian_not_a_deliverable_claim(swift_odt)
+    _assert_chengpian_not_a_deliverable_claim(py_odt)
+    _assert_chengpian_not_a_deliverable_claim(README_APPLY_ODT_LINE)
+    _assert_chengpian_not_a_deliverable_claim(README_APPLY_ODT_TRAIL_TO)
 
