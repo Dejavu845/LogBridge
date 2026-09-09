@@ -8594,7 +8594,7 @@ def test_readme_files_odt_zh():
 
 
 def test_readme_trail_half_zh():
-    """README ㊹ 验法: 半段 任何精度声明前须有灰卡样张。 Swift↔Py 该半段一致. ㉗–㊸ frozen. TITLE / XML / 色管冻. No alg."""
+    """README ㊺ 验法: 半段 M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， Swift↔Py 该半段一致. ㉗–㊹ frozen. TITLE / XML / 色管冻. No alg."""
     from color.resolve_export import (
         EXPORT_NOTE_IN_CAMERA,
         GRAPH_DOT_CLIP_LABEL,
@@ -8616,7 +8616,9 @@ def test_readme_trail_half_zh():
         format_readme,
     )
 
-    trail_head = "M1 is a serial node graph (IDT → Exposure → WB → ODT), "
+    trail_head = "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， "
+    trail_head_from = "M1 is a serial node graph (IDT → Exposure → WB → ODT),"
+    trail_head_banned = "M1 is a serial node graph"
     trail_to = "不是通用节点编辑器"
     trail_from = "not a general node editor"
     trail_banned = "not a general node editor"
@@ -8625,13 +8627,13 @@ def test_readme_trail_half_zh():
     trail_claim_banned = "Golden grey-card samples"
     trail_following = "Implemented (unverified)."
     trail_sentence_to = (
-        "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器."
+        "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器."
     )
     trail_sentence_from = (
         "M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor."
     )
     trail_block_to = (
-        "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器. "
+        "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器. "
         "任何精度声明前须有灰卡样张。 "
         "Implemented (unverified)."
     )
@@ -8642,7 +8644,7 @@ def test_readme_trail_half_zh():
     )
     trail_block_prior = (
         "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器. "
-        "Golden grey-card samples are required before any accuracy claim. "
+        "任何精度声明前须有灰卡样张。 "
         "Implemented (unverified)."
     )
     odt_to = "709 预览（BT.709 OETF，不是 ACES OT）"
@@ -8722,7 +8724,7 @@ def test_readme_trail_half_zh():
         "读不到则为待定/单位阵，不猜 5600 或 6504。"
     )
 
-    # 验法㊹-1: 半段 TO 一字不差. ㊸ 半段与英文头不动；Implemented (unverified). 冻. Swift↔Py 该半段一致.
+    # 验法㊺-1: 半段 TO 一字不差. ㊸ 半段 / ㊹ 半段与 Implemented (unverified). 冻. Swift↔Py 该半段一致.
     exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
     py = (ROOT / "color/resolve_export.py").read_text(encoding="utf-8")
     xml_fn = exporter.split("private static func graphXML")[1].split(
@@ -8750,7 +8752,9 @@ def test_readme_trail_half_zh():
     def _trail_line(text: str) -> str:
         for ln in text.splitlines():
             stripped = ln.strip()
-            if stripped.startswith("M1 is a serial node graph (IDT → Exposure → WB → ODT),"):
+            if stripped.startswith("M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT），") or stripped.startswith(
+                "M1 is a serial node graph (IDT → Exposure → WB → ODT),"
+            ):
                 return stripped
         raise AssertionError("README trailing M1 sentence missing")
 
@@ -8816,6 +8820,11 @@ def test_readme_trail_half_zh():
     assert trail_sentence_to.startswith(trail_head)
     assert trail_block_to.startswith(trail_sentence_to)
     assert trail_block_to.endswith(trail_following)
+    assert trail_head in trail_sentence_to
+    assert trail_head_from not in trail_sentence_to
+    assert trail_head_banned not in trail_sentence_to
+    assert trail_head_banned in trail_head_from
+    assert trail_head_banned not in trail_head
     assert trail_claim_to in trail_block_to
     assert trail_claim_from not in trail_block_to
     assert trail_claim_banned not in trail_block_to
@@ -8824,6 +8833,8 @@ def test_readme_trail_half_zh():
     assert swift_trail == py_trail
     assert swift_trail.startswith(trail_head)
     assert py_trail.startswith(trail_head)
+    assert trail_head in swift_trail
+    assert trail_head in py_trail
     assert trail_to in swift_trail
     assert trail_to in py_trail
     assert trail_claim_to in swift_trail
@@ -8832,6 +8843,22 @@ def test_readme_trail_half_zh():
     assert trail_following in py_trail
     assert trail_sentence_to in swift_trail
     assert trail_sentence_to in py_trail
+    assert trail_head_from not in swift_trail
+    assert trail_head_from not in py_trail
+    assert trail_head_from not in files_fn
+    assert trail_head_from not in py_files
+    assert trail_head_from not in readme_fn
+    assert trail_head_from not in py_readme
+    assert trail_head_from not in exporter
+    assert trail_head_from not in py
+    assert trail_head_banned not in swift_trail
+    assert trail_head_banned not in py_trail
+    assert trail_head_banned not in files_fn
+    assert trail_head_banned not in py_files
+    assert trail_head_banned not in readme_fn
+    assert trail_head_banned not in py_readme
+    assert trail_head_banned not in exporter
+    assert trail_head_banned not in py
     assert trail_from not in swift_trail
     assert trail_from not in py_trail
     assert trail_from not in files_fn
@@ -8876,9 +8903,15 @@ def test_readme_trail_half_zh():
     generated_files = generated.split("## Files", 1)[1]
     assert generated_trail == trail_block_to
     assert generated_trail.startswith(trail_head)
+    assert trail_head in generated_trail
     assert trail_to in generated_trail
     assert trail_claim_to in generated_trail
     assert trail_following in generated_trail
+    assert trail_head_from not in generated
+    assert trail_head_from not in generated_files
+    assert trail_head_banned not in generated_trail
+    assert trail_head_banned not in generated_files
+    assert trail_head_banned not in generated
     assert trail_from not in generated
     assert trail_from not in generated_files
     assert trail_banned not in generated_trail
@@ -8891,7 +8924,7 @@ def test_readme_trail_half_zh():
     assert trail_block_from not in generated
     assert trail_block_prior not in generated
 
-    # 验法㊹-2: ㉗–㊸ locked strings 一字不动（含 不是通用节点编辑器 / 709 预览（BT.709 OETF，不是 ACES OT） / 白平衡 DCTL（精确 3×3） / 白平衡 ASC CDL 校色器 / 白平衡查找表（Bradford CAT，ACEScct 封装） / 01_IDT Role 分锁 / 本说明 / graph.xml 机器可读分锁 / | 文件 | 作用 | / 调色页，串行节点图： / 同一图的 Graphviz）.
+    # 验法㊺-2: ㉗–㊹ locked strings 一字不动（含 不是通用节点编辑器 / 任何精度声明前须有灰卡样张。 / 709 预览（BT.709 OETF，不是 ACES OT） / 白平衡 DCTL（精确 3×3） / 白平衡 ASC CDL 校色器 / 白平衡查找表（Bradford CAT，ACEScct 封装） / 01_IDT Role 分锁 / 本说明 / graph.xml 机器可读分锁 / | 文件 | 作用 | / 调色页，串行节点图： / 同一图的 Graphviz）.
     assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
     assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
     assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
@@ -9054,7 +9087,7 @@ def test_readme_trail_half_zh():
     assert EXPORT_NOTE_IN_CAMERA == honesty_to
     assert GRAPH_WB_SUMMARY == graph_wb_to
 
-    # 验法㊹-3: cube TITLE / filenames / 色管 / XML Desc 冻.
+    # 验法㊺-3: cube TITLE / filenames / 色管 / XML Desc 冻.
     assert REC709_CUBE_TITLE == (
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
@@ -9069,6 +9102,9 @@ def test_readme_trail_half_zh():
     assert "03_WB.cube" in exporter
     assert "04_ODT_Rec709.cube" in exporter
     assert "matrixCCT = nil" in exporter
+    assert "完善" not in trail_head
+    assert "精准" not in trail_head
+    assert "达芬奇已验证" not in trail_head
     assert "完善" not in trail_to
     assert "精准" not in trail_to
     assert "达芬奇已验证" not in trail_to
@@ -9076,5 +9112,6 @@ def test_readme_trail_half_zh():
     assert "完善" not in trail_claim_to
     assert "精准" not in trail_claim_to
     assert "达芬奇已验证" not in trail_claim_to
+    _chengpian_only_honesty(trail_head)
     _chengpian_only_honesty(trail_to)
     _chengpian_only_honesty(trail_claim_to)
