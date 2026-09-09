@@ -938,7 +938,7 @@ Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview onl
 | `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |
 | `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |
 | `02_Exposure.dctl` | Exposure as DCTL (linear gain) |
-| `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |
+| `03_WB.cube` | 白平衡查找表（Bradford CAT，ACEScct 封装） |
 | `03_WB.cdl` / `03_WB.ccc` | WB as ASC CDL Color Corrector |
 | `03_WB.dctl` | WB as DCTL (exact 3×3) |
 | `04_ODT_Rec709.cube` | 709 预览 (BT.709 OETF, not ACES OT) |
