@@ -784,7 +784,7 @@ enum ResolveExporter {
 
         | 文件 | 作用 |
         | --- | --- |
-        | `graph.xml` | Machine-readable node graph (bypassable WB) |
+        | `graph.xml` | 机器可读节点图（可旁路白平衡） |
         | `graph.dot` | 同一图的 Graphviz |
         | `01_IDT_<idt>.cube` | IDT LUT (no WB) |
         | `03_WB.cube` | WB LUT (Bradford CAT, ACEScct-wrapped) |
