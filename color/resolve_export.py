@@ -944,7 +944,7 @@ Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview onl
 | `04_ODT_Rec709.cube` | 709 预览（BT.709 OETF，不是 ACES OT） |
 | `README_RESOLVE.md` | 本说明 |
 
-M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
+M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器. Golden grey-card samples are required before any accuracy claim. Implemented (unverified).
 """
 
 

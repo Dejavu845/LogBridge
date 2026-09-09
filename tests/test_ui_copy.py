@@ -8591,3 +8591,451 @@ def test_readme_files_odt_zh():
     assert "达芬奇已验证" not in odt_to
     assert "达芬奇已验证" not in files_fn
     _chengpian_only_honesty(odt_to)
+
+
+def test_readme_trail_half_zh():
+    """README ㊸ 验法: 半段 不是通用节点编辑器. Swift↔Py 该半段一致. ㉗–㊷ frozen. TITLE / XML / 色管冻. No alg."""
+    from color.resolve_export import (
+        EXPORT_NOTE_IN_CAMERA,
+        GRAPH_DOT_CLIP_LABEL,
+        GRAPH_DOT_EXP_FILE,
+        GRAPH_DOT_EXP_HEAD,
+        GRAPH_DOT_IDT_THIRD,
+        GRAPH_DOT_ODT_HEAD,
+        GRAPH_DOT_TIMELINE_LABEL,
+        GRAPH_DOT_WB_FILE,
+        GRAPH_DOT_WB_HEAD,
+        GRAPH_DOT_WB_LINE,
+        GRAPH_DOT_WORKING_SPACE,
+        GRAPH_EXP_XML_DESC,
+        GRAPH_IDT_XML_DESC,
+        GRAPH_ODT_USER,
+        GRAPH_WB_SUMMARY,
+        GRAPH_WB_XML_DESC,
+        REC709_CUBE_TITLE,
+        format_readme,
+    )
+
+    trail_head = "M1 is a serial node graph (IDT → Exposure → WB → ODT), "
+    trail_to = "不是通用节点编辑器"
+    trail_from = "not a general node editor"
+    trail_banned = "not a general node editor"
+    trail_following = (
+        "Golden grey-card samples are required before any accuracy claim. "
+        "Implemented (unverified)."
+    )
+    trail_sentence_to = (
+        "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器."
+    )
+    trail_sentence_from = (
+        "M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor."
+    )
+    trail_block_to = (
+        "M1 is a serial node graph (IDT → Exposure → WB → ODT), 不是通用节点编辑器. "
+        "Golden grey-card samples are required before any accuracy claim. "
+        "Implemented (unverified)."
+    )
+    trail_block_from = (
+        "M1 is a serial node graph (IDT → Exposure → WB → ODT), not a general node editor. "
+        "Golden grey-card samples are required before any accuracy claim. "
+        "Implemented (unverified)."
+    )
+    odt_to = "709 预览（BT.709 OETF，不是 ACES OT）"
+    odt_from = "709 预览 (BT.709 OETF, not ACES OT)"
+    odt_banned = "not ACES OT"
+    odt_row = "| `04_ODT_Rec709.cube` | 709 预览（BT.709 OETF，不是 ACES OT） |"
+    dctl_to = "白平衡 DCTL（精确 3×3）"
+    dctl_from = "WB as DCTL (exact 3×3)"
+    dctl_banned = "WB as DCTL (exact 3×3)"
+    wb_dctl = "| `03_WB.dctl` | 白平衡 DCTL（精确 3×3） |"
+    cdl_to = "白平衡 ASC CDL 校色器"
+    cdl_from = "WB as ASC CDL Color Corrector"
+    cdl_banned = "WB as ASC CDL Color Corrector"
+    wb_cdl = "| `03_WB.cdl` / `03_WB.ccc` | 白平衡 ASC CDL 校色器 |"
+    wb_to = "白平衡查找表（Bradford CAT，ACEScct 封装）"
+    wb_from = "WB LUT (Bradford CAT, ACEScct-wrapped)"
+    wb_banned = "WB LUT"
+    wb_cube = "| `03_WB.cube` | 白平衡查找表（Bradford CAT，ACEScct 封装） |"
+    idt_swift_to = "IDT 查找表（不含白平衡）"
+    idt_py_to = "IDT 查找表（不含白平衡、不含曝光）"
+    idt_swift_from = "IDT LUT (no WB)"
+    idt_py_from = "IDT LUT (no WB, no exposure)"
+    idt_banned = "IDT LUT"
+    idt_swift = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |"
+    idt_py = "| `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |"
+    readme_to = "本说明"
+    readme_from = "This file"
+    readme_row = "| `README_RESOLVE.md` | 本说明 |"
+    xml_swift_to = "机器可读节点图（可旁路白平衡）"
+    xml_py_to = "机器可读节点图（可旁路曝光 + 白平衡）"
+    xml_swift_from = "Machine-readable node graph (bypassable WB)"
+    xml_py_from = "Machine-readable node graph (bypassable Exposure + WB)"
+    xml_banned = "Machine-readable node graph"
+    xml_swift = "| `graph.xml` | 机器可读节点图（可旁路白平衡） |"
+    xml_py = "| `graph.xml` | 机器可读节点图（可旁路曝光 + 白平衡） |"
+    header_to = "| 文件 | 作用 |"
+    header_from = "| File | Role |"
+    title_to = "调色页，串行节点图："
+    title_from = "Color page, serial node graph:"
+    graph_dot_to = "同一图的 Graphviz"
+    graph_dot_from = "Graphviz of the same graph"
+    graph_dot_row = "| `graph.dot` | 同一图的 Graphviz |"
+    exp_cube = "| `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |"
+    exp_dctl = "| `02_Exposure.dctl` | Exposure as DCTL (linear gain) |"
+    odt_head = (
+        "Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709)"
+    )
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_line = f"- {odt_head} {odt_trail_to}"
+    input_to = "输入：相机 Log / 相机色域"
+    input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
+    input_py = "- 输入：相机 Log / 相机色域 (`{idt_list}`)"
+    odt_cst_to = "或 CST ACEScct → Rec.709"
+    odt_cst_from = "or CST ACEScct → Rec.709"
+    idt_third_to = "或 ACES IDT / CST → ACEScct"
+    odt_head_dot = "709 预览（后续节点）"
+    timeline_to = "时间线\\nACEScct"
+    clip_to = "素材\\n相机 Log"
+    ws_to = "工作空间"
+    idt_xml_to = "相机 Log 经 ACES2065-1 到 ACEScct。不含白平衡、不含曝光。"
+    exp_xml_to = (
+        "ACES2065-1 线性按档增益；不加减 Log 码值。独立节点；0 档不写进 IDT/白平衡。"
+    )
+    wb_xml_to = (
+        "机内色温/绿品只填旋钮；默认单位阵（不把机内 5600/6504 当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+        "旁路白平衡 = IDT → 曝光 → ACEScct，不烘焙。"
+    )
+    honesty_to = (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    graph_wb_to = (
+        "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    )
+
+    # 验法㊸-1: 半段 TO 一字不差. 英文头不动；后两句冻. Swift↔Py 该半段一致.
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    py = (ROOT / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = exporter.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = exporter.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    readme_fn = exporter.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    graph_fn = readme_fn.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    py_graph = py_readme.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    apply_fn = readme_fn.split("## How to bypass", 1)[1]
+    py_apply = py_readme.split("## How to bypass", 1)[1]
+    files_fn = readme_fn.split("## Files", 1)[1]
+    py_files = py_readme.split("## Files", 1)[1]
+
+    def _trail_line(text: str) -> str:
+        for ln in text.splitlines():
+            stripped = ln.strip()
+            if stripped.startswith("M1 is a serial node graph (IDT → Exposure → WB → ODT),"):
+                return stripped
+        raise AssertionError("README trailing M1 sentence missing")
+
+    def _odt_line(text: str) -> str:
+        for ln in text.splitlines():
+            if ln.strip().startswith("| `04_ODT_Rec709.cube`"):
+                return ln.strip()
+        raise AssertionError("Files 04_ODT_Rec709.cube row missing")
+
+    def _dctl_line(text: str) -> str:
+        for ln in text.splitlines():
+            if ln.strip().startswith("| `03_WB.dctl`"):
+                return ln.strip()
+        raise AssertionError("Files 03_WB.dctl row missing")
+
+    def _cdl_line(text: str) -> str:
+        for ln in text.splitlines():
+            if ln.strip().startswith("| `03_WB.cdl`"):
+                return ln.strip()
+        raise AssertionError("Files 03_WB.cdl / 03_WB.ccc row missing")
+
+    def _wb_line(text: str) -> str:
+        for ln in text.splitlines():
+            if ln.strip().startswith("| `03_WB.cube`"):
+                return ln.strip()
+        raise AssertionError("Files 03_WB.cube row missing")
+
+    def _idt_line(text: str) -> str:
+        for ln in text.splitlines():
+            if ln.strip().startswith("| `01_IDT_<idt>.cube`"):
+                return ln.strip()
+        raise AssertionError("Files 01_IDT_<idt>.cube row missing")
+
+    def _xml_line(text: str) -> str:
+        for ln in text.splitlines():
+            if ln.strip().startswith("| `graph.xml`"):
+                return ln.strip()
+        raise AssertionError("Files graph.xml row missing")
+
+    def _readme_line(text: str) -> str:
+        for ln in text.splitlines():
+            if ln.strip().startswith("| `README_RESOLVE.md`"):
+                return ln.strip()
+        raise AssertionError("Files README_RESOLVE.md row missing")
+
+    swift_trail = _trail_line(readme_fn)
+    py_trail = _trail_line(py_readme)
+    swift_odt = _odt_line(readme_fn)
+    py_odt = _odt_line(py_readme)
+    swift_dctl = _dctl_line(readme_fn)
+    py_dctl = _dctl_line(py_readme)
+    swift_cdl = _cdl_line(readme_fn)
+    py_cdl = _cdl_line(py_readme)
+    swift_wb = _wb_line(readme_fn)
+    py_wb = _wb_line(py_readme)
+    swift_idt = _idt_line(readme_fn)
+    py_idt = _idt_line(py_readme)
+    swift_xml = _xml_line(readme_fn)
+    py_xml = _xml_line(py_readme)
+    swift_readme = _readme_line(readme_fn)
+    py_readme_row = _readme_line(py_readme)
+
+    assert trail_sentence_to.startswith(trail_head)
+    assert trail_block_to.startswith(trail_sentence_to)
+    assert trail_block_to.endswith(trail_following)
+    assert swift_trail == trail_block_to
+    assert py_trail == trail_block_to
+    assert swift_trail == py_trail
+    assert swift_trail.startswith(trail_head)
+    assert py_trail.startswith(trail_head)
+    assert trail_to in swift_trail
+    assert trail_to in py_trail
+    assert trail_following in swift_trail
+    assert trail_following in py_trail
+    assert trail_sentence_to in swift_trail
+    assert trail_sentence_to in py_trail
+    assert trail_from not in swift_trail
+    assert trail_from not in py_trail
+    assert trail_from not in files_fn
+    assert trail_from not in py_files
+    assert trail_from not in readme_fn
+    assert trail_from not in py_readme
+    assert trail_from not in exporter
+    assert trail_from not in py
+    assert trail_banned not in swift_trail
+    assert trail_banned not in py_trail
+    assert trail_banned not in files_fn
+    assert trail_banned not in py_files
+    assert trail_banned not in readme_fn
+    assert trail_banned not in py_readme
+    assert trail_banned not in exporter
+    assert trail_banned not in py
+    assert trail_sentence_from not in exporter
+    assert trail_sentence_from not in py
+    assert trail_block_from not in exporter
+    assert trail_block_from not in py
+
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
+    generated_trail = _trail_line(generated)
+    generated_files = generated.split("## Files", 1)[1]
+    assert generated_trail == trail_block_to
+    assert generated_trail.startswith(trail_head)
+    assert trail_to in generated_trail
+    assert trail_following in generated_trail
+    assert trail_from not in generated
+    assert trail_from not in generated_files
+    assert trail_banned not in generated_trail
+    assert trail_banned not in generated_files
+    assert trail_block_from not in generated
+
+    # 验法㊸-2: ㉗–㊷ locked strings 一字不动（含 709 预览（BT.709 OETF，不是 ACES OT） / 白平衡 DCTL（精确 3×3） / 白平衡 ASC CDL 校色器 / 白平衡查找表（Bradford CAT，ACEScct 封装） / 01_IDT Role 分锁 / 本说明 / graph.xml 机器可读分锁 / | 文件 | 作用 | / 调色页，串行节点图： / 同一图的 Graphviz）.
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == "色温 {cctLabel}  绿品 {tint}"
+    assert GRAPH_DOT_WB_FILE == "03_WB.cube / .cdl / .ccc / .dctl"
+    assert GRAPH_EXP_XML_DESC == exp_xml_to
+    assert GRAPH_WB_XML_DESC == wb_xml_to
+    assert GRAPH_DOT_CLIP_LABEL == clip_to
+    assert GRAPH_DOT_WORKING_SPACE == ws_to
+    assert GRAPH_IDT_XML_DESC == idt_xml_to
+    assert GRAPH_DOT_IDT_THIRD == idt_third_to
+    assert GRAPH_DOT_ODT_HEAD == odt_head_dot
+    assert GRAPH_DOT_TIMELINE_LABEL == timeline_to
+    assert odt_cst_to in dot_fn
+    assert odt_cst_to in py_dot
+    assert odt_cst_from not in dot_fn
+    assert odt_cst_from not in py_dot
+    assert input_to in graph_fn
+    assert input_to in py_graph
+    assert input_swift in graph_fn
+    assert input_py in py_graph
+    swift_apply_odt = next(
+        ln.strip() for ln in apply_fn.splitlines() if ln.strip().startswith("- Apply **ODT**")
+    )
+    py_apply_odt = next(
+        ln.strip() for ln in py_apply.splitlines() if ln.strip().startswith("- Apply **ODT**")
+    )
+    assert swift_apply_odt == odt_line
+    assert py_apply_odt == odt_line
+    swift_dot = next(
+        ln.strip() for ln in files_fn.splitlines() if ln.strip().startswith("| `graph.dot`")
+    )
+    py_dot_row = next(
+        ln.strip() for ln in py_files.splitlines() if ln.strip().startswith("| `graph.dot`")
+    )
+    assert swift_dot == graph_dot_row
+    assert py_dot_row == graph_dot_row
+    assert graph_dot_to in swift_dot
+    assert graph_dot_from not in files_fn
+    assert graph_dot_from not in py_files
+    assert swift_odt == odt_row
+    assert py_odt == odt_row
+    assert swift_odt == py_odt
+    assert odt_to in swift_odt
+    assert odt_from not in files_fn
+    assert odt_from not in py_files
+    assert odt_banned not in files_fn
+    assert odt_banned not in py_files
+    assert swift_dctl == wb_dctl
+    assert py_dctl == wb_dctl
+    assert swift_dctl == py_dctl
+    assert dctl_to in swift_dctl
+    assert dctl_from not in files_fn
+    assert dctl_from not in py_files
+    assert dctl_banned not in files_fn
+    assert dctl_banned not in py_files
+    assert swift_cdl == wb_cdl
+    assert py_cdl == wb_cdl
+    assert swift_cdl == py_cdl
+    assert cdl_to in swift_cdl
+    assert cdl_from not in files_fn
+    assert cdl_from not in py_files
+    assert cdl_banned not in files_fn
+    assert cdl_banned not in py_files
+    assert swift_wb == wb_cube
+    assert py_wb == wb_cube
+    assert swift_wb == py_wb
+    assert wb_to in swift_wb
+    assert wb_from not in files_fn
+    assert wb_from not in py_files
+    assert wb_banned not in files_fn
+    assert wb_banned not in py_files
+    assert swift_idt == idt_swift
+    assert py_idt == idt_py
+    assert swift_idt != py_idt
+    assert idt_swift != idt_py
+    assert idt_swift_to != idt_py_to
+    assert idt_swift_to in swift_idt
+    assert idt_py_to in py_idt
+    assert idt_py_to not in swift_idt
+    assert idt_swift_to not in py_idt
+    assert "曝光" not in idt_swift_to
+    assert "曝光 + 白平衡" not in idt_swift_to
+    assert "不含曝光" in idt_py_to
+    assert idt_banned not in files_fn
+    assert idt_banned not in py_files
+    assert idt_swift_from not in files_fn
+    assert idt_py_from not in py_files
+    assert swift_xml == xml_swift
+    assert py_xml == xml_py
+    assert swift_xml != py_xml
+    assert xml_swift != xml_py
+    assert xml_swift_to != xml_py_to
+    assert xml_swift_to in swift_xml
+    assert xml_py_to in py_xml
+    assert xml_py_to not in swift_xml
+    assert xml_swift_to not in py_xml
+    assert "曝光" not in xml_swift_to
+    assert "曝光 + 白平衡" in xml_py_to
+    assert xml_banned not in files_fn
+    assert xml_banned not in py_files
+    assert xml_swift_from not in files_fn
+    assert xml_py_from not in py_files
+    assert swift_readme == readme_row
+    assert py_readme_row == readme_row
+    assert swift_readme == py_readme_row
+    assert readme_to in swift_readme
+    assert readme_from not in files_fn
+    assert readme_from not in py_files
+
+    def _title_line(text: str) -> str:
+        for ln in text.splitlines():
+            stripped = ln.strip()
+            if stripped.startswith("调色页，串行节点图") or stripped.startswith(
+                "Color page, serial node graph"
+            ):
+                return stripped
+        raise AssertionError("Color page title line missing")
+
+    def _header_line(text: str) -> str:
+        for ln in text.splitlines():
+            stripped = ln.strip()
+            if stripped in (header_to, header_from) or stripped.startswith(
+                "| File | Role"
+            ) or stripped.startswith("| 文件 | 作用"):
+                return stripped
+        raise AssertionError("Files table header row missing")
+
+    assert _title_line(readme_fn) == title_to
+    assert _title_line(py_readme) == title_to
+    assert title_from not in readme_fn
+    assert title_from not in py_readme
+    assert _header_line(readme_fn) == header_to
+    assert _header_line(py_readme) == header_to
+    assert header_from not in readme_fn
+    assert header_from not in py_readme
+    assert exp_cube in py_files
+    assert exp_dctl in py_files
+    assert exp_cube not in files_fn
+    assert wb_cube in files_fn
+    assert wb_cube in py_files
+    assert wb_cdl in files_fn
+    assert wb_cdl in py_files
+    assert wb_dctl in files_fn
+    assert wb_dctl in py_files
+    assert odt_row in files_fn
+    assert odt_row in py_files
+    assert readme_row in files_fn
+    assert readme_row in py_files
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert idt_third_to in dot_fn
+    assert odt_head_dot in dot_fn
+    assert r'timeline [shape=oval, label="时间线\\nACEScct"]' in dot_fn
+    assert exp_xml_to in xml_fn
+    assert wb_xml_to in xml_fn
+    assert idt_xml_to in xml_fn
+    assert EXPORT_NOTE_IN_CAMERA == honesty_to
+    assert GRAPH_WB_SUMMARY == graph_wb_to
+
+    # 验法㊸-3: cube TITLE / filenames / 色管 / XML Desc 冻.
+    assert REC709_CUBE_TITLE == (
+        "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+    )
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_USER in graph_fn
+    assert 'name="Exposure"' in xml_fn
+    assert 'name="WB"' in xml_fn
+    assert 'name="IDT"' in xml_fn
+    assert "02_Exposure.cube" in exporter
+    assert "03_WB.cube" in exporter
+    assert "04_ODT_Rec709.cube" in exporter
+    assert "matrixCCT = nil" in exporter
+    assert "完善" not in trail_to
+    assert "精准" not in trail_to
+    assert "达芬奇已验证" not in trail_to
+    assert "达芬奇已验证" not in files_fn
+    _chengpian_only_honesty(trail_to)
