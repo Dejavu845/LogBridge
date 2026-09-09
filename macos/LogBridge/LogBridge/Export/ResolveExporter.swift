@@ -778,7 +778,7 @@ enum ResolveExporter {
         - 应用 **白平衡**（节点 3：LUT `03_WB.cube`，**或** DCTL `03_WB.dctl`，**或** 把 `03_WB.cdl` 导入校色器）。
         - 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。
 
-        To bypass WB: disable node 2 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). Remaining graph: **IDT → ACEScct**, no bake.
+        旁路白平衡：关掉节点 2（或勾 DCTL **Bypass WB**，或跳过 CDL/LUT）。剩余图：**IDT → ACEScct**，不烘焙。
 
         ## Files
 
