@@ -5324,9 +5324,9 @@ def test_readme_graph_input_zh():
     assert input_banned not in generated_graph
     assert input_banned not in generated
 
-    # Apply 整段另刀：英文 Apply 块一字不动.
+    # Apply 邻行冻：IDT / ODT 英文不动. WB 行见㊼.
     assert "- Apply **IDT**" in apply_fn
-    assert "- Apply **WB**" in apply_fn
+    assert "- 应用 **白平衡**" in apply_fn
     assert "- Apply **ODT**" in apply_fn
     assert "- Apply **IDT**" in py_apply
     assert odt_cst_from in apply_fn
@@ -5510,11 +5510,11 @@ def test_readme_apply_odt_zh():
         assert token not in generated_odt, token
         assert token not in generated_apply, token
 
-    # Apply 其余冻：IDT / Exposure / WB 英文不动.
+    # Apply 其余冻：IDT / Exposure 英文不动. WB 行见㊼.
     assert "- Apply **IDT**" in apply_fn
-    assert "- Apply **WB**" in apply_fn
+    assert "- 应用 **白平衡**" in apply_fn
     assert "- Apply **IDT**" in py_apply
-    assert "- Apply **WB**" in py_apply
+    assert "- 应用 **白平衡**" in py_apply
     assert "- Apply **Exposure**" in py_apply
     assert (
         "- Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or ACES IDT / CST camera → ACEScct)."
@@ -5525,12 +5525,12 @@ def test_readme_apply_odt_zh():
         "Zero stops or bypass = identity."
     ) in py_apply
     assert (
-        "- Apply **WB** (node 3: LUT `03_WB.cube`, **or** DCTL `03_WB.dctl`, "
-        "**or** import `03_WB.cdl` onto a Color Corrector)."
+        "- 应用 **白平衡**（节点 3：LUT `03_WB.cube`，**或** DCTL `03_WB.dctl`，"
+        "**或** 把 `03_WB.cdl` 导入校色器）。"
     ) in apply_fn
     assert (
-        "- Apply **WB** (node 3: LUT `03_WB.cube`, **or** DCTL `03_WB.dctl`, "
-        "**or** import `03_WB.cdl` onto a Color Corrector)."
+        "- 应用 **白平衡**（节点 3：LUT `03_WB.cube`，**或** DCTL `03_WB.dctl`，"
+        "**或** 把 `03_WB.cdl` 导入校色器）。"
     ) in py_apply
 
     # 验法㉜-2: ㉗–㉛ locked strings 一字不动.
@@ -9137,3 +9137,219 @@ def test_readme_trail_half_zh():
     _chengpian_only_honesty(trail_to)
     _chengpian_only_honesty(trail_claim_to)
     _chengpian_only_honesty(trail_following)
+
+
+def test_readme_apply_wb_zh():
+    """README Apply ㊼ 验法: 白平衡行人话. ㉗–㊻ frozen. 邻行 IDT/ODT 冻. TITLE / XML / 色管冻. No alg."""
+    from color.resolve_export import (
+        EXPORT_NOTE_IN_CAMERA,
+        GRAPH_DOT_CLIP_LABEL,
+        GRAPH_DOT_EXP_FILE,
+        GRAPH_DOT_EXP_HEAD,
+        GRAPH_DOT_IDT_THIRD,
+        GRAPH_DOT_ODT_HEAD,
+        GRAPH_DOT_TIMELINE_LABEL,
+        GRAPH_DOT_WB_FILE,
+        GRAPH_DOT_WB_HEAD,
+        GRAPH_DOT_WB_LINE,
+        GRAPH_DOT_WORKING_SPACE,
+        GRAPH_EXP_XML_DESC,
+        GRAPH_IDT_XML_DESC,
+        GRAPH_ODT_USER,
+        GRAPH_WB_SUMMARY,
+        GRAPH_WB_XML_DESC,
+        REC709_CUBE_TITLE,
+        format_readme,
+    )
+
+    wb_to = (
+        "- 应用 **白平衡**（节点 3：LUT `03_WB.cube`，**或** DCTL `03_WB.dctl`，"
+        "**或** 把 `03_WB.cdl` 导入校色器）。"
+    )
+    wb_from = (
+        "- Apply **WB** (node 3: LUT `03_WB.cube`, **or** DCTL `03_WB.dctl`, "
+        "**or** import `03_WB.cdl` onto a Color Corrector)."
+    )
+    banned = ("Apply **WB**", "Color Corrector")
+    odt_head = (
+        "Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709)"
+    )
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_line = f"- {odt_head} {odt_trail_to}"
+    idt_swift = (
+        "- Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or ACES IDT / CST camera → ACEScct)."
+    )
+    idt_py = (
+        "- Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or CST camera → ACEScct, ACES workflow)."
+    )
+    exp_py = (
+        "- Apply **Exposure** (node 2: LUT `02_Exposure.cube` or DCTL `02_Exposure.dctl`). "
+        "Zero stops or bypass = identity."
+    )
+    trail_block_to = (
+        "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器. "
+        "任何精度声明前须有灰卡样张。 "
+        "已实现（未验证）。"
+    )
+    input_to = "输入：相机 Log / 相机色域"
+    input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
+    input_py = "- 输入：相机 Log / 相机色域 (`{idt_list}`)"
+    odt_cst_to = "或 CST ACEScct → Rec.709"
+    odt_cst_from = "or CST ACEScct → Rec.709"
+    idt_third_to = "或 ACES IDT / CST → ACEScct"
+    odt_head_dot = "709 预览（后续节点）"
+    timeline_to = "时间线\\nACEScct"
+    clip_to = "素材\\n相机 Log"
+    ws_to = "工作空间"
+    idt_xml_to = "相机 Log 经 ACES2065-1 到 ACEScct。不含白平衡、不含曝光。"
+    exp_xml_to = (
+        "ACES2065-1 线性按档增益；不加减 Log 码值。独立节点；0 档不写进 IDT/白平衡。"
+    )
+    wb_xml_to = (
+        "机内色温/绿品只填旋钮；默认单位阵（不把机内 5600/6504 当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+        "旁路白平衡 = IDT → 曝光 → ACEScct，不烘焙。"
+    )
+    honesty_to = (
+        "机内色温只填旋钮，默认是单位阵。"
+        "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
+        "灰卡是绝对校正；读不到就保持单位阵，不猜 5600。"
+    )
+    graph_wb_to = (
+        "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
+        "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
+        "读不到则为待定/单位阵，不猜 5600 或 6504。"
+    )
+
+    def _wb_apply_line(text: str) -> str:
+        for ln in text.splitlines():
+            stripped = ln.strip()
+            if stripped.startswith("- 应用 **白平衡**") or stripped.startswith("- Apply **WB**"):
+                return stripped
+        raise AssertionError("Apply WB line missing")
+
+    # 验法㊼-1: one TO 一字不差. Swift↔Py 该行一致.
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    py = (ROOT / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = exporter.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = exporter.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    readme_fn = exporter.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    graph_fn = readme_fn.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    py_graph = py_readme.split("## Graph (serial nodes)", 1)[1].split(
+        "## How to bypass", 1
+    )[0]
+    apply_fn = readme_fn.split("## How to bypass", 1)[1]
+    py_apply = py_readme.split("## How to bypass", 1)[1]
+    files_fn = readme_fn.split("## Files", 1)[1]
+    py_files = py_readme.split("## Files", 1)[1]
+    swift_wb = _wb_apply_line(apply_fn)
+    py_wb = _wb_apply_line(py_apply)
+
+    assert swift_wb == wb_to
+    assert py_wb == wb_to
+    assert swift_wb == py_wb
+    assert wb_from not in apply_fn
+    assert wb_from not in py_apply
+    assert wb_from not in readme_fn
+    assert wb_from not in py_readme
+    for token in banned:
+        assert token not in swift_wb, token
+        assert token not in py_wb, token
+
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
+    generated_apply = generated.split("## How to bypass", 1)[1]
+    generated_wb = _wb_apply_line(generated_apply)
+    assert generated_wb == wb_to
+    assert wb_from not in generated
+    for token in banned:
+        assert token not in generated_wb, token
+
+    # Apply 邻行冻：IDT / Exposure / ODT.
+    assert idt_swift in apply_fn
+    assert idt_py in py_apply
+    assert exp_py in py_apply
+    assert "- Apply **IDT**" in apply_fn
+    assert "- Apply **IDT**" in py_apply
+    assert "- Apply **Exposure**" in py_apply
+    assert "- Apply **ODT**" in apply_fn
+    assert "- Apply **ODT**" in py_apply
+    swift_odt = next(
+        ln.strip() for ln in apply_fn.splitlines() if ln.strip().startswith("- Apply **ODT**")
+    )
+    py_odt = next(
+        ln.strip() for ln in py_apply.splitlines() if ln.strip().startswith("- Apply **ODT**")
+    )
+    assert swift_odt == odt_line
+    assert py_odt == odt_line
+
+    # 验法㊼-2: ㉗–㊻ locked strings 一字不动.
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == "色温 {cctLabel}  绿品 {tint}"
+    assert GRAPH_DOT_WB_FILE == "03_WB.cube / .cdl / .ccc / .dctl"
+    assert GRAPH_EXP_XML_DESC == exp_xml_to
+    assert GRAPH_WB_XML_DESC == wb_xml_to
+    assert GRAPH_DOT_CLIP_LABEL == clip_to
+    assert GRAPH_DOT_WORKING_SPACE == ws_to
+    assert GRAPH_IDT_XML_DESC == idt_xml_to
+    assert GRAPH_DOT_IDT_THIRD == idt_third_to
+    assert GRAPH_DOT_ODT_HEAD == odt_head_dot
+    assert GRAPH_DOT_TIMELINE_LABEL == timeline_to
+    assert odt_cst_to in dot_fn
+    assert odt_cst_to in py_dot
+    assert odt_cst_from not in dot_fn
+    assert odt_cst_from not in py_dot
+    assert input_to in graph_fn
+    assert input_to in py_graph
+    assert input_swift in graph_fn
+    assert input_py in py_graph
+    assert trail_block_to in readme_fn
+    assert trail_block_to in py_readme
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert idt_third_to in dot_fn
+    assert odt_head_dot in dot_fn
+    assert r'timeline [shape=oval, label="时间线\\nACEScct"]' in dot_fn
+    assert exp_xml_to in xml_fn
+    assert wb_xml_to in xml_fn
+    assert idt_xml_to in xml_fn
+    assert EXPORT_NOTE_IN_CAMERA == honesty_to
+    assert GRAPH_WB_SUMMARY == graph_wb_to
+    assert "| 文件 | 作用 |" in files_fn
+    assert "| 文件 | 作用 |" in py_files
+    assert "调色页，串行节点图：" in apply_fn
+    assert "调色页，串行节点图：" in py_apply
+
+    # 验法㊼-3: cube TITLE / filenames / 色管 / XML Desc 冻.
+    assert REC709_CUBE_TITLE == (
+        "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
+    )
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_USER in graph_fn
+    assert 'name="Exposure"' in xml_fn
+    assert 'name="WB"' in xml_fn
+    assert 'name="IDT"' in xml_fn
+    assert "02_Exposure.cube" in exporter
+    assert "03_WB.cube" in exporter
+    assert "04_ODT_Rec709.cube" in exporter
+    assert "matrixCCT = nil" in exporter
+    assert "完善" not in wb_to
+    assert "精准" not in wb_to
+    assert "达芬奇已验证" not in wb_to
+    assert "达芬奇已验证" not in apply_fn
+    _chengpian_only_honesty(wb_to)
