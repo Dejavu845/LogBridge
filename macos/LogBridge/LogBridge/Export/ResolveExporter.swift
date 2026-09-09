@@ -788,7 +788,7 @@ enum ResolveExporter {
         | `graph.dot` | 同一图的 Graphviz |
         | `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |
         | `03_WB.cube` | 白平衡查找表（Bradford CAT，ACEScct 封装） |
-        | `03_WB.cdl` / `03_WB.ccc` | WB as ASC CDL Color Corrector |
+        | `03_WB.cdl` / `03_WB.ccc` | 白平衡 ASC CDL 校色器 |
         | `03_WB.dctl` | WB as DCTL (exact 3×3) |
         | `04_ODT_Rec709.cube` | 709 预览 (BT.709 OETF, not ACES OT) |
         | `README_RESOLVE.md` | 本说明 |
