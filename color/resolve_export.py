@@ -920,7 +920,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
 
 调色页，串行节点图：
 
-- Apply **IDT** (node 1: LUT `01_IDT_*.cube`, or CST camera → ACEScct, ACES workflow).
+- 应用 **IDT**（节点 1：LUT `01_IDT_*.cube`，或 CST 相机 → ACEScct，ACES 工作流）。
 - Apply **Exposure** (node 2: LUT `02_Exposure.cube` or DCTL `02_Exposure.dctl`). Zero stops or bypass = identity.
 - 应用 **白平衡**（节点 3：LUT `03_WB.cube`，**或** DCTL `03_WB.dctl`，**或** 把 `03_WB.cdl` 导入校色器）。
 - Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) 若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。
