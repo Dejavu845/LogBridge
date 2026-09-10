@@ -435,7 +435,7 @@ def _bypass_wb_swift_line(text: str) -> str:
 def _bypass_exposure_wb_py_line(text: str) -> str:
     for ln in text.splitlines():
         stripped = ln.strip()
-        if stripped.startswith("To bypass Exposure:"):
+        if stripped.startswith("旁路曝光：") or stripped.startswith("To bypass Exposure:"):
             return stripped
     raise AssertionError("Py bypass Exposure/WB line missing")
 
@@ -1468,10 +1468,21 @@ README_BYPASS_WB_SWIFT_FROM = (
     "Remaining graph: **IDT → ACEScct**, no bake."
 )
 README_BYPASS_WB_SWIFT_BANNED = ("To bypass WB", "Remaining graph", "no bake")
-README_BYPASS_WB_PY_FROZEN = (
+README_BYPASS_WB_PY_TO = (
+    "旁路曝光：关掉节点 2（或勾 DCTL **Bypass Exposure**，或停在 0 档）。"
+    "旁路白平衡：关掉节点 3（或勾 DCTL **Bypass WB**，或跳过 CDL/LUT）。"
+    "剩余图：**IDT →（可选曝光）→ ACEScct → 可选 Rec.709 ODT**。"
+)
+README_BYPASS_WB_PY_FROM = (
     "To bypass Exposure: disable node 2 (or tick DCTL **Bypass Exposure**, or leave stops at 0). "
     "To bypass WB: disable node 3 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). "
     "The remaining graph is **IDT → (optional Exposure) → ACEScct → optional Rec.709 ODT**."
+)
+README_BYPASS_WB_PY_BANNED = (
+    "To bypass Exposure",
+    "The remaining graph is",
+    "剩余图是",
+    "档位留 0",
 )
 README_FILES_GRAPH_DOT_TO = "同一图的 Graphviz"
 README_FILES_GRAPH_DOT_FROM = "Graphviz of the same graph"
@@ -6234,7 +6245,7 @@ def test_readme_apply_exposure_plain_chinese(tmp_path: Path):
 
 
 def test_readme_bypass_wb_swift_plain_chinese(tmp_path: Path):
-    """README 51: Swift 旁路白平衡短句. Py 长句英文冻另刀. ㉗–㊿ + 邻行 Apply / TITLE / XML / 色管 frozen."""
+    """README 51: Swift 旁路白平衡短句. Py 长句见 52. ㉗–㊿ + 邻行 Apply / TITLE / XML / 色管 frozen."""
     assert README_BYPASS_WB_SWIFT_TO == (
         "旁路白平衡：关掉节点 2（或勾 DCTL **Bypass WB**，或跳过 CDL/LUT）。"
         "剩余图：**IDT → ACEScct**，不烘焙。"
@@ -6245,10 +6256,10 @@ def test_readme_bypass_wb_swift_plain_chinese(tmp_path: Path):
     )
     assert README_BYPASS_WB_SWIFT_BANNED == ("To bypass WB", "Remaining graph", "no bake")
     assert "Bypass WB" in README_BYPASS_WB_SWIFT_TO
-    assert README_BYPASS_WB_PY_FROZEN == (
-        "To bypass Exposure: disable node 2 (or tick DCTL **Bypass Exposure**, or leave stops at 0). "
-        "To bypass WB: disable node 3 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). "
-        "The remaining graph is **IDT → (optional Exposure) → ACEScct → optional Rec.709 ODT**."
+    assert README_BYPASS_WB_PY_TO == (
+        "旁路曝光：关掉节点 2（或勾 DCTL **Bypass Exposure**，或停在 0 档）。"
+        "旁路白平衡：关掉节点 3（或勾 DCTL **Bypass WB**，或跳过 CDL/LUT）。"
+        "剩余图：**IDT →（可选曝光）→ ACEScct → 可选 Rec.709 ODT**。"
     )
 
     export_resolve_bundle(
@@ -6268,7 +6279,7 @@ def test_readme_bypass_wb_swift_plain_chinese(tmp_path: Path):
     files = _files_section(readme)
     py_bypass = _bypass_exposure_wb_py_line(readme)
 
-    assert py_bypass == README_BYPASS_WB_PY_FROZEN
+    assert py_bypass == README_BYPASS_WB_PY_TO
     assert README_BYPASS_WB_SWIFT_TO not in apply
     assert README_BYPASS_WB_SWIFT_TO not in readme
     assert README_BYPASS_WB_SWIFT_FROM not in apply
@@ -6276,7 +6287,7 @@ def test_readme_bypass_wb_swift_plain_chinese(tmp_path: Path):
 
     generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
     generated_bypass = _bypass_exposure_wb_py_line(generated)
-    assert generated_bypass == README_BYPASS_WB_PY_FROZEN
+    assert generated_bypass == README_BYPASS_WB_PY_TO
     assert README_BYPASS_WB_SWIFT_TO not in generated
     assert README_BYPASS_WB_SWIFT_FROM not in generated
 
@@ -6311,7 +6322,7 @@ def test_readme_bypass_wb_swift_plain_chinese(tmp_path: Path):
     swift_bypass = _bypass_wb_swift_line(readme_fn)
     py_src_bypass = _bypass_exposure_wb_py_line(py_readme)
 
-    # 验法51-1: Swift one TO 一字不差. Py 长句英文冻，不假造、不拉平.
+    # 验法51-1: Swift one TO 一字不差. Py 长句见 52，不假造、不拉平.
     assert swift_bypass == README_BYPASS_WB_SWIFT_TO
     assert "Bypass WB" in swift_bypass
     assert README_BYPASS_WB_SWIFT_FROM not in swift_apply
@@ -6319,18 +6330,19 @@ def test_readme_bypass_wb_swift_plain_chinese(tmp_path: Path):
     assert README_BYPASS_WB_SWIFT_FROM not in swift
     for token in README_BYPASS_WB_SWIFT_BANNED:
         assert token not in swift_bypass, token
-    assert py_src_bypass == README_BYPASS_WB_PY_FROZEN
+    assert py_src_bypass == README_BYPASS_WB_PY_TO
     assert py_src_bypass == py_bypass
     assert README_BYPASS_WB_SWIFT_TO not in py_apply
     assert README_BYPASS_WB_SWIFT_TO not in py_readme
-    assert README_BYPASS_WB_SWIFT_TO != README_BYPASS_WB_PY_FROZEN
+    assert README_BYPASS_WB_SWIFT_TO != README_BYPASS_WB_PY_TO
     assert swift_bypass != py_src_bypass
     with pytest.raises(AssertionError, match="Swift bypass WB line missing"):
         _bypass_wb_swift_line(py_readme)
     with pytest.raises(AssertionError, match="Py bypass Exposure/WB line missing"):
         _bypass_exposure_wb_py_line(readme_fn)
-    assert "To bypass Exposure:" in py_apply
-    assert "To bypass WB" in py_src_bypass
+    assert "旁路曝光：" in py_apply
+    assert "Bypass Exposure" in py_src_bypass
+    assert "Bypass WB" in py_src_bypass
 
     # Apply 邻行冻：IDT 见㊽（分锁）. Exposure 见㊿. WB 见㊼. ODT 见㊾.
     assert "- 应用 **IDT**" in apply
@@ -6423,5 +6435,227 @@ def test_readme_bypass_wb_swift_plain_chinese(tmp_path: Path):
     assert "达芬奇已验证" not in swift_bypass
     assert "达芬奇已验证" not in files
     _assert_chengpian_not_a_deliverable_claim(swift_bypass)
+    _assert_chengpian_not_a_deliverable_claim(README_BYPASS_WB_SWIFT_TO)
+
+
+def test_readme_bypass_exposure_wb_py_plain_chinese(tmp_path: Path):
+    """README 52: Py 旁路曝光/白平衡长句. Swift 旁路已锁另冻. ㉗–51 + 邻行 Apply / TITLE / XML / 色管 frozen."""
+    assert README_BYPASS_WB_PY_TO == (
+        "旁路曝光：关掉节点 2（或勾 DCTL **Bypass Exposure**，或停在 0 档）。"
+        "旁路白平衡：关掉节点 3（或勾 DCTL **Bypass WB**，或跳过 CDL/LUT）。"
+        "剩余图：**IDT →（可选曝光）→ ACEScct → 可选 Rec.709 ODT**。"
+    )
+    assert README_BYPASS_WB_PY_FROM == (
+        "To bypass Exposure: disable node 2 (or tick DCTL **Bypass Exposure**, or leave stops at 0). "
+        "To bypass WB: disable node 3 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). "
+        "The remaining graph is **IDT → (optional Exposure) → ACEScct → optional Rec.709 ODT**."
+    )
+    assert README_BYPASS_WB_PY_BANNED == (
+        "To bypass Exposure",
+        "The remaining graph is",
+        "剩余图是",
+        "档位留 0",
+    )
+    assert "Bypass Exposure" in README_BYPASS_WB_PY_TO
+    assert "Bypass WB" in README_BYPASS_WB_PY_TO
+    assert "剩余图：" in README_BYPASS_WB_PY_TO
+    assert "停在 0 档" in README_BYPASS_WB_PY_TO
+    assert README_BYPASS_WB_SWIFT_TO == (
+        "旁路白平衡：关掉节点 2（或勾 DCTL **Bypass WB**，或跳过 CDL/LUT）。"
+        "剩余图：**IDT → ACEScct**，不烘焙。"
+    )
+
+    export_resolve_bundle(
+        tmp_path,
+        idt_ids=["arri_logc4_awg4"],
+        include_wb=True,
+        cct=3200.0,
+        tint=0.25,
+        exposure_stops=1.5,
+        lut_size=5,
+    )
+    readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
+    xml = (tmp_path / "graph.xml").read_text(encoding="utf-8")
+    cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    graph = _graph_section(readme)
+    apply = _apply_section(readme)
+    files = _files_section(readme)
+    py_bypass = _bypass_exposure_wb_py_line(readme)
+
+    assert py_bypass == README_BYPASS_WB_PY_TO
+    assert README_BYPASS_WB_PY_FROM not in apply
+    assert README_BYPASS_WB_PY_FROM not in readme
+    for token in README_BYPASS_WB_PY_BANNED:
+        assert token not in py_bypass, token
+    assert README_BYPASS_WB_SWIFT_TO not in apply
+    assert README_BYPASS_WB_SWIFT_TO not in readme
+    assert README_BYPASS_WB_SWIFT_FROM not in apply
+    assert README_BYPASS_WB_SWIFT_FROM not in readme
+
+    generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.25, True)
+    generated_bypass = _bypass_exposure_wb_py_line(generated)
+    assert generated_bypass == README_BYPASS_WB_PY_TO
+    assert README_BYPASS_WB_PY_FROM not in generated
+    for token in README_BYPASS_WB_PY_BANNED:
+        assert token not in generated_bypass, token
+    assert README_BYPASS_WB_SWIFT_TO not in generated
+    assert README_BYPASS_WB_SWIFT_FROM not in generated
+
+    root = Path(__file__).resolve().parents[1]
+    swift = (root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(
+        encoding="utf-8"
+    )
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    xml_fn = swift.split("private static func graphXML")[1].split(
+        "private static func graphDOT"
+    )[0]
+    dot_fn = swift.split("private static func graphDOT")[1].split(
+        "private static func readme"
+    )[0]
+    py_dot = py.split("def format_dot")[1].split("def format_graph_xml")[0]
+    py_xml = py.split("def format_graph_xml")[1].split("def format_readme")[0]
+    readme_fn = swift.split("private static func readme")[1].split(
+        "/// Proxy sequence folder"
+    )[0]
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    swift_graph = _graph_section(readme_fn)
+    py_graph = _graph_section(py_readme)
+    swift_apply = _apply_section(readme_fn)
+    py_apply = _apply_section(py_readme)
+    swift_idt = _apply_idt_line(readme_fn)
+    py_idt = _apply_idt_line(py_readme)
+    swift_wb = _apply_wb_line(readme_fn)
+    py_wb = _apply_wb_line(py_readme)
+    swift_odt = _apply_odt_line(readme_fn)
+    py_odt = _apply_odt_line(py_readme)
+    py_exp = _apply_exposure_line(py_readme)
+    swift_bypass = _bypass_wb_swift_line(readme_fn)
+    py_src_bypass = _bypass_exposure_wb_py_line(py_readme)
+
+    # 验法52-1: Py one TO 一字不差. Swift 旁路已锁另冻，不假造、不拉平.
+    assert py_src_bypass == README_BYPASS_WB_PY_TO
+    assert py_src_bypass == py_bypass
+    assert "Bypass Exposure" in py_src_bypass
+    assert "Bypass WB" in py_src_bypass
+    assert "剩余图：" in py_src_bypass
+    assert "停在 0 档" in py_src_bypass
+    assert README_BYPASS_WB_PY_FROM not in py_apply
+    assert README_BYPASS_WB_PY_FROM not in py_readme
+    assert README_BYPASS_WB_PY_FROM not in py
+    for token in README_BYPASS_WB_PY_BANNED:
+        assert token not in py_src_bypass, token
+    assert swift_bypass == README_BYPASS_WB_SWIFT_TO
+    assert "Bypass WB" in swift_bypass
+    assert README_BYPASS_WB_SWIFT_FROM not in swift_apply
+    assert README_BYPASS_WB_SWIFT_FROM not in readme_fn
+    assert README_BYPASS_WB_SWIFT_FROM not in swift
+    for token in README_BYPASS_WB_SWIFT_BANNED:
+        assert token not in swift_bypass, token
+    assert README_BYPASS_WB_SWIFT_TO not in py_apply
+    assert README_BYPASS_WB_SWIFT_TO not in py_readme
+    assert README_BYPASS_WB_PY_TO not in swift_apply
+    assert README_BYPASS_WB_PY_TO not in readme_fn
+    assert README_BYPASS_WB_SWIFT_TO != README_BYPASS_WB_PY_TO
+    assert swift_bypass != py_src_bypass
+    with pytest.raises(AssertionError, match="Swift bypass WB line missing"):
+        _bypass_wb_swift_line(py_readme)
+    with pytest.raises(AssertionError, match="Py bypass Exposure/WB line missing"):
+        _bypass_exposure_wb_py_line(readme_fn)
+
+    # Apply 邻行冻：IDT 见㊽（分锁）. Exposure 见㊿. WB 见㊼. ODT 见㊾. Swift 旁路见 51.
+    assert "- 应用 **IDT**" in apply
+    assert "- 应用 **IDT**" in swift_apply
+    assert "- 应用 **IDT**" in py_apply
+    assert (
+        "- 应用 **IDT**（节点 1：LUT `01_IDT_*.cube`，或 ACES IDT / CST 相机 → ACEScct）。"
+        in swift_apply
+    )
+    assert (
+        "- 应用 **IDT**（节点 1：LUT `01_IDT_*.cube`，或 CST 相机 → ACEScct，ACES 工作流）。"
+        in py_apply
+    )
+    assert swift_idt == README_APPLY_IDT_SWIFT
+    assert py_idt == README_APPLY_IDT_PY
+    assert swift_idt != py_idt
+    assert swift_wb == README_APPLY_WB_LINE
+    assert py_wb == README_APPLY_WB_LINE
+    assert swift_wb == py_wb
+    assert swift_odt == README_APPLY_ODT_LINE
+    assert py_odt == README_APPLY_ODT_LINE
+    assert swift_odt == py_odt
+    assert py_exp == README_APPLY_EXP_LINE
+    assert README_APPLY_EXP_LINE in py_apply
+    assert README_APPLY_EXP_LINE not in swift_apply
+    assert README_BYPASS_WB_SWIFT_TO in swift_apply
+    assert README_BYPASS_WB_SWIFT_TO not in py_apply
+
+    # ㉗–51 locked strings 一字不动.
+    assert README_APPLY_WB_LINE in swift_apply
+    assert README_APPLY_WB_LINE in py_apply
+    assert README_APPLY_IDT_SWIFT in swift_apply
+    assert README_APPLY_IDT_PY in py_apply
+    assert README_APPLY_ODT_LINE in swift_apply
+    assert README_APPLY_ODT_LINE in py_apply
+    assert README_APPLY_EXP_LINE in py_apply
+    assert README_BYPASS_WB_SWIFT_TO in swift_apply
+    assert README_TRAIL_BLOCK_TO in readme
+    assert README_TRAIL_BLOCK_TO in readme_fn
+    assert README_TRAIL_BLOCK_TO in py_readme
+    assert README_GRAPH_INPUT_TO == "输入：相机 Log / 相机色域"
+    assert README_GRAPH_INPUT_SWIFT in swift_graph
+    assert README_GRAPH_INPUT_PY in py_graph
+    assert README_GRAPH_INPUT_TO in graph
+    assert GRAPH_DOT_EXP_HEAD == "曝光（可归零）"
+    assert GRAPH_DOT_EXP_FILE == "02_Exposure.cube / .dctl"
+    assert GRAPH_DOT_WB_HEAD == "白平衡（可旁路）"
+    assert GRAPH_DOT_WB_LINE == GRAPH_DOT_WB_LINE_LOCKED
+    assert GRAPH_EXP_XML_DESC == GRAPH_EXP_XML_DESC_LOCKED
+    assert GRAPH_WB_XML_DESC == GRAPH_WB_XML_DESC_LOCKED
+    assert GRAPH_DOT_CLIP_LABEL == GRAPH_DOT_CLIP_LABEL_LOCKED
+    assert GRAPH_DOT_WORKING_SPACE == GRAPH_DOT_WORKING_SPACE_LOCKED
+    assert GRAPH_IDT_XML_DESC == GRAPH_IDT_XML_DESC_LOCKED
+    assert GRAPH_DOT_IDT_THIRD == GRAPH_DOT_IDT_THIRD_LOCKED
+    assert GRAPH_DOT_ODT_HEAD == GRAPH_DOT_ODT_HEAD_LOCKED
+    assert GRAPH_DOT_TIMELINE_LABEL == GRAPH_DOT_TIMELINE_LABEL_LOCKED
+    assert GRAPH_DOT_ODT_CST_LOCKED == "或 CST ACEScct → Rec.709"
+    assert GRAPH_DOT_ODT_CST_LOCKED in dot_fn
+    assert GRAPH_DOT_ODT_CST_LOCKED in py_dot
+    assert GRAPH_DOT_ODT_CST_FROM not in dot_fn
+    assert GRAPH_DOT_ODT_CST_FROM not in py_dot
+    assert GRAPH_DOT_ODT_CST_FROM not in readme_fn
+    assert GRAPH_DOT_ODT_CST_FROM not in py_readme
+    assert "曝光（可归零）" in dot_fn
+    assert "白平衡（可旁路）" in dot_fn
+    assert r'clip [label="素材\\n相机 Log"]' in dot_fn
+    assert 'label="工作空间"' in dot_fn
+    assert GRAPH_DOT_IDT_THIRD_LOCKED in dot_fn
+    assert GRAPH_DOT_ODT_HEAD_LOCKED in dot_fn
+    assert r'timeline [shape=oval, label="时间线\\nACEScct"]' in dot_fn
+    assert GRAPH_EXP_XML_DESC in xml_fn
+    assert GRAPH_WB_XML_DESC in xml_fn
+    assert GRAPH_IDT_XML_DESC in xml_fn
+    assert "{GRAPH_IDT_XML_DESC}" in py_xml
+    assert _xml_node_description(xml, "Exposure") == GRAPH_EXP_XML_DESC_LOCKED
+    assert _xml_node_description(xml, "WB") == GRAPH_WB_XML_DESC_LOCKED
+    assert _xml_node_description(xml, "IDT") == GRAPH_IDT_XML_DESC_LOCKED
+
+    # FROZEN: cube TITLE, XML Desc, filenames, 色管.
+    assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
+    assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
+    assert LOCKED_REC709_CUBE_TITLE in swift
+    assert GRAPH_ODT_USER == (
+        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+    )
+    assert GRAPH_ODT_USER in graph
+    for name in LOCKED_NODE_FILES:
+        assert name in swift
+        assert name in py
+    assert "matrixCCT = nil" in swift
+    assert "white_balance_matrix" in py
+    assert "def apply_exposure" in (root / "color/exposure.py").read_text(encoding="utf-8")
+    assert "达芬奇已验证" not in py_src_bypass
+    assert "达芬奇已验证" not in files
+    _assert_chengpian_not_a_deliverable_claim(py_src_bypass)
+    _assert_chengpian_not_a_deliverable_claim(README_BYPASS_WB_PY_TO)
     _assert_chengpian_not_a_deliverable_claim(README_BYPASS_WB_SWIFT_TO)
 

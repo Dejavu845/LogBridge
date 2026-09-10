@@ -925,7 +925,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
 - 应用 **白平衡**（节点 3：LUT `03_WB.cube`，**或** DCTL `03_WB.dctl`，**或** 把 `03_WB.cdl` 导入校色器）。
 - 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。
 
-To bypass Exposure: disable node 2 (or tick DCTL **Bypass Exposure**, or leave stops at 0). To bypass WB: disable node 3 (or tick DCTL **Bypass WB**, or skip the CDL/LUT). The remaining graph is **IDT → (optional Exposure) → ACEScct → optional Rec.709 ODT**.
+旁路曝光：关掉节点 2（或勾 DCTL **Bypass Exposure**，或停在 0 档）。旁路白平衡：关掉节点 3（或勾 DCTL **Bypass WB**，或跳过 CDL/LUT）。剩余图：**IDT →（可选曝光）→ ACEScct → 可选 Rec.709 ODT**。
 
 Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview only.
 
