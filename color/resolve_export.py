@@ -927,7 +927,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
 
 旁路曝光：关掉节点 2（或勾 DCTL **Bypass Exposure**，或停在 0 档）。旁路白平衡：关掉节点 3（或勾 DCTL **Bypass WB**，或跳过 CDL/LUT）。剩余图：**IDT →（可选曝光）→ ACEScct → 可选 Rec.709 ODT**。
 
-Do not use a single Rec.709 file as the only deliverable. Rec.709 is preview only.
+不要把单个 Rec.709 文件当作唯一交付物。Rec.709 仅预览。
 
 ## Files
 
