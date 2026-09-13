@@ -563,9 +563,14 @@ def detect_from_filename(path: str) -> Detection | None:
     return None
 
 
+def venice_model_needs_picker(model: str | None) -> bool:
+    """Cycle 38: a Venice body name is not an IDT. Gamut still required."""
+    return _venice_hit(model or "")
+
+
 def detect_from_model(model: str) -> Detection | None:
     m = (model or "").lower()
-    if _venice_hit(m):
+    if venice_model_needs_picker(m):
         # Venice body is not an IDT by itself — gamut still required. Never default.
         return Detection(
             None,
