@@ -85,8 +85,9 @@ def generate_luts() -> None:
 def generate_matrices() -> None:
     """No .spimtx files. config.ocio inlines the three AP0 matrices; the
     leftover BT2020/DGamut/AppleWideGamut files were unreferenced dead bytes.
+    Do not mkdir an empty ocio/matrices/ — nothing writes there anymore.
     """
-    MTX_DIR.mkdir(parents=True, exist_ok=True)
+    return
 
 
 def builtin_cs(name: str, style: str, description: str) -> str:
