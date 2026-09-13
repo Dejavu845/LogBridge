@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 25 — Swift implemented set == Python IDT_PAIRS
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | IDT set | Swift `IDT` raw values minus stub equal `IDT_PAIRS`. Non-Venice implemented set equals `IMPLEMENTED_NON_VENICE`. |
+
 ## Cycle 24 — Swift/Python picker ID parity
 
 | ID | Item | What landed |
