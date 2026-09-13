@@ -198,6 +198,32 @@ def test_one_click_blocked_while_picker_needed():
     assert can_one_click_process(d) is False
 
 
+def test_live_picker_ui_uses_pair_label_and_zh_badge():
+    """Cycle 29: Inspector shows pairLabel; badge is 已实现（未验证）/待选/未实现."""
+    root = ROOT / "macos" / "LogBridge" / "LogBridge"
+    inspector = (root / "Views" / "InspectorView.swift").read_text(encoding="utf-8")
+    assert "pair.pairLabel" in inspector
+    assert "menuLabel" not in inspector
+    assert "supported" not in inspector.lower()
+    assert "支持" not in inspector
+
+    clip = (root / "Models" / "Clip.swift").read_text(encoding="utf-8")
+    start = clip.find("var hasLockedPair")
+    end = clip.find("var processSkipReason", start)
+    locked = clip[start:end]
+    assert "!idt.isStub" in locked
+    assert "!needsUserPicker" in locked
+
+    bstart = clip.find("var verificationBadge")
+    bend = clip.find("var sidebarStatusChip", bstart)
+    badge = clip[bstart:bend]
+    assert '"已实现（未验证）"' in badge
+    assert '"待选"' in badge
+    assert '"未实现"' in badge
+    assert "supported" not in badge.lower()
+    assert "支持" not in badge
+
+
 def test_dlog_m_still_absent_from_idt_pairs():
     from color.gamuts import IDT_PAIRS
     from color.stubs import STUB_IDTS, dlog_m_to_linear
