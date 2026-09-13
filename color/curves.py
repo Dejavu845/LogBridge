@@ -493,7 +493,7 @@ _ENCODE = {
 }
 
 
-def decode_log(curve: str, x):
+def decode_log(curve: str, x) -> np.ndarray:
     """Decode a named camera log curve to scene linear."""
     try:
         fn = _DECODE[curve]
@@ -502,7 +502,7 @@ def decode_log(curve: str, x):
     return fn(x)
 
 
-def encode_log(curve: str, lin):
+def encode_log(curve: str, lin) -> np.ndarray:
     """Encode scene linear to a named camera log curve."""
     try:
         fn = _ENCODE[curve]
