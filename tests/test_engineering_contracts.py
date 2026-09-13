@@ -40,7 +40,7 @@ def test_engineering_docs_exist_and_stay_honest():
     assert "CI 绿不等于达芬奇已验证" in blob
     assert "整段代理，不是全精度成片" in blob
     assert "一键精准" in blob  # named as forbidden
-    assert "Not “supported”" in blob or 'Not "supported"' in blob
+    assert "Not \u201csupported\u201d" in blob or 'Not "supported"' in blob
     assert "python -m pytest -q" in blob
     assert "macos/LogBridge/LogBridge.xcodeproj" in blob
     assert "处理已锁定片段" in blob
@@ -51,9 +51,15 @@ def test_engineering_docs_exist_and_stay_honest():
     assert "全格式已支持" not in blob
 
 
-def test_optimizations_records_cycle1_and_leaves_p1():
+def test_optimizations_records_cycles_and_leaves_p1():
     text = OPTIMIZATIONS.read_text(encoding="utf-8")
     assert "Cycle 1" in text
+    assert "Cycle 3" in text
+    assert "Cycle 4" in text
+    assert "Cycle 5" in text
+    assert "P0-batch-floor" in text
+    assert "test_batch_file_floor.py" in text
+    assert "LB-01" in text
     assert "P1-ruff-style" in text
     assert "P1-types" in text
     assert "P2-cameras" in text
@@ -112,7 +118,7 @@ def test_python_package_doc_forbids_supported_camera_claims():
 
 def test_dlog_m_stays_stub_not_an_idt_pair():
     from color.gamuts import IDT_PAIRS
-
+    
     assert "dji_dlog_m" not in IDT_PAIRS
     assert any(s["id"] == "dji_dlog_m" for s in STUB_IDTS)
     try:
@@ -148,3 +154,4 @@ def test_pytest_suite_is_present_for_the_ci_guard():
     assert "test_ui_copy.py" in names
     assert "test_settings_zh.py" in names
     assert "test_engineering_contracts.py" in names
+    assert "test_batch_file_floor.py" in names
