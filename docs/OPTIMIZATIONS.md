@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 39 — Venice is never a silent default
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | Venice default | `veniceIsSilentDefault()` stays `false`. `venice_rows_allowed(False)` is false. Color math unchanged. |
+
 ## Cycle 38 — Venice body name is not an IDT
 
 | ID | Item | What landed |
