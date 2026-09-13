@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 28 — one-click blocked while picker is up
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | One-click | `can_one_click_process` stays false when `needs_user_picker` even if `idt_id` is a real pair. Color math unchanged. |
+
 ## Cycle 27 — menuLabel never says supported
 
 | ID | Item | What landed |
