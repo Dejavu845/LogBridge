@@ -24,6 +24,16 @@ def test_future_idts_dlog_m_stays_unsupported():
     assert "return linear" not in text.lower()
 
 
+def test_picker_never_offers_dlog_m():
+    """Cycle 22: the paired picker must not list the stub camera."""
+    from color.detect import picker_pairs
+
+    assert "dji_dlog_m" not in picker_pairs()
+    assert "dji_dlog_m" not in picker_pairs(venice_detected=True)
+    assert "dji_dlog_m" not in picker_pairs(curve="s-log3", needs_picker=True)
+    assert "dji_dlog_m" not in picker_pairs(curve="c-log3", needs_picker=True)
+
+
 def test_dlog_m_still_absent_from_idt_pairs():
     from color.gamuts import IDT_PAIRS
     from color.stubs import STUB_IDTS, dlog_m_to_linear
