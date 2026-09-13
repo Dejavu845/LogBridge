@@ -228,7 +228,7 @@ def test_docs_hdr_ot_unverified_not_supported():
     assert "implemented (unverified)" in blob
     assert "一键精准" in blob  # named as forbidden
     # Must not claim HDR is supported or a one-click accurate path.
-    assert "HLG/PQ supported" not in blob.lower()
+    assert "hlg/pq supported" not in blob.lower()
     assert "一键精准" in blob
     assert "ColorSync" in blob
     assert "itur_2100" in blob

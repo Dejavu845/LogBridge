@@ -25,6 +25,18 @@ def _code_without_comments(src: str) -> str:
     return "\n".join(line.split("//", 1)[0] for line in src.splitlines())
 
 
+_SETTINGS_DISCLAIMER_LINES = {
+    "/// 设置页。中文。不写精准 / 一键还原 / 全自动校准。",
+    'Text("已实现（未验证）。不写精准 / 一键还原 / 全自动校准。")',
+}
+
+
+def _settings_minus_disclaimers(settings: str) -> str:
+    return "\n".join(
+        ln for ln in settings.splitlines() if ln.strip() not in _SETTINGS_DISCLAIMER_LINES
+    )
+
+
 def test_settings_copy_is_chinese():
     s = _read(SETTINGS)
     ui = _code_without_comments(s)
@@ -50,9 +62,10 @@ def test_settings_copy_is_chinese():
     assert "不猜 5600" in s
     assert "不是校准" in s
     assert "完善" not in s
-    assert "精准" not in s or "不写精准" in s
-    assert "一键还原" not in s or "不写" in s
-    assert "全自动校准" not in s or "不写" in s
+    scanned = _settings_minus_disclaimers(s)
+    assert "精准" not in scanned
+    assert "一键还原" not in scanned
+    assert "全自动校准" not in scanned
     assert "达芬奇已验证" not in s
     assert "已实现（未验证）" in s
     assert "implemented (unverified)" not in s.lower()

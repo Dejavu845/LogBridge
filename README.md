@@ -139,6 +139,8 @@ Split preview: the **source** pane is camera/log (untagged working-space dump) a
 
 ## Run tests (Linux or macOS)
 
+Engineering workflow (local / Xcode / CI / PR / acceptance): `docs/ENGINEERING.md`.
+
 ```bash
 python3 -m pip install -e ".[test]"
 python3 -m pytest -q
@@ -259,10 +261,11 @@ color/          Python source of truth (curves, WB, serial graph, pipeline, dete
 tests/          pytest (must pass on Linux)
 ocio/           config.ocio (BuiltinTransform) + handwritten F-Log2 / N-Log LUTs
 macos/LogBridge Xcode / SwiftUI (preview + IDT + process; node strip in 高级)
-scripts/        LUT/config generator；本机试用清隔离（clear-app-quarantine.sh，不是公证）
+scripts/        LUT/config generator；Cloud Agent 安装；本机试用清隔离（clear-app-quarantine.sh，不是公证）
+docs/           ENGINEERING.md (workflow) + OPTIMIZATIONS.md (backlog)
+.cursor/        Cloud Agent environment (Linux pytest; no Xcode)
 ```
 
 ## 许可证 / License
 
 本项目以 MIT License 发布。详见根目录 `LICENSE`。
-

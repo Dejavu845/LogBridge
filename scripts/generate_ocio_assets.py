@@ -13,6 +13,7 @@ There is no APPLE_LOG2 Builtin.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -52,14 +53,6 @@ def write_spi1d(path: Path, values: np.ndarray, from_min=0.0, from_max=1.0) -> N
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_spimtx(path: Path, m: np.ndarray) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    rows = []
-    for i in range(3):
-        rows.append(f"{m[i, 0]:.12f} {m[i, 1]:.12f} {m[i, 2]:.12f} 0")
-    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
-
-
 def ocio_matrix_16(m3: np.ndarray) -> str:
     m = np.eye(4)
     m[:3, :3] = m3
@@ -82,12 +75,11 @@ def generate_luts() -> None:
 
 
 def generate_matrices() -> None:
-    write_spimtx(MTX_DIR / "BT2020_to_AP0.spimtx", camera_to_aces2065_matrix("BT2020"))
-    write_spimtx(MTX_DIR / "DGamut_to_AP0.spimtx", camera_to_aces2065_matrix("DGamut"))
-    write_spimtx(
-        MTX_DIR / "AppleWideGamut_to_AP0.spimtx",
-        camera_to_aces2065_matrix("AppleWideGamut"),
-    )
+    """No .spimtx files. config.ocio inlines the three AP0 matrices; the
+    leftover BT2020/DGamut/AppleWideGamut files were unreferenced dead bytes.
+    Do not mkdir an empty ocio/matrices/ — nothing writes there anymore.
+    """
+    return
 
 
 def builtin_cs(name: str, style: str, description: str) -> str:
@@ -460,14 +452,87 @@ colorspaces:
     CONFIG.write_text(text, encoding="utf-8")
 
 
-def main() -> None:
+def configure_ocio_root(ocio_root: Path) -> None:
+    """Point LUT/matrix/config writes at ``ocio_root`` (default: repo ``ocio/``)."""
+    global LUT_DIR, MTX_DIR, CONFIG
+    LUT_DIR = ocio_root / "luts"
+    MTX_DIR = ocio_root / "matrices"
+    CONFIG = ocio_root / "config.ocio"
+
+
+def emitted_relative_paths() -> list[str]:
+    """Files this generator writes (relative to the ocio root)."""
+    return [
+        "luts/FLog2_to_lin.spi1d",
+        "luts/NLog_to_lin.spi1d",
+        "luts/CLog2_to_lin.spi1d",
+        "luts/CLog3_to_lin.spi1d",
+        "luts/DLog_to_lin.spi1d",
+        "luts/lin_to_Rec709_oetf.spi1d",
+        "config.ocio",
+    ]
+
+
+def generate_all() -> None:
     generate_luts()
     generate_matrices()
     write_config()
+
+
+def check_against(committed_ocio: Path) -> list[str]:
+    """Generate into a temp tree; return relative paths that differ from ``committed_ocio``."""
+    import tempfile
+
+    global LUT_DIR, MTX_DIR, CONFIG
+    prev = (LUT_DIR, MTX_DIR, CONFIG)
+    diffs: list[str] = []
+    try:
+        with tempfile.TemporaryDirectory(prefix="logbridge-ocio-") as tmp:
+            configure_ocio_root(Path(tmp))
+            generate_all()
+            for rel in emitted_relative_paths():
+                got = (Path(tmp) / rel).read_bytes()
+                want_path = committed_ocio / rel
+                if not want_path.is_file():
+                    diffs.append(f"{rel}: missing in repo")
+                    continue
+                if got != want_path.read_bytes():
+                    diffs.append(rel)
+    finally:
+        LUT_DIR, MTX_DIR, CONFIG = prev
+    return diffs
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=ROOT / "ocio",
+        help="ocio directory to write (default: repo ocio/)",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="generate into a temp dir and exit 1 if any emitted file differs from --out",
+    )
+    args = parser.parse_args(argv)
+    out = args.out.resolve()
+    if args.check:
+        diffs = check_against(out)
+        if diffs:
+            print("ocio assets differ from generator:", file=sys.stderr)
+            for name in diffs:
+                print(f"  {name}", file=sys.stderr)
+            return 1
+        print("ocio assets match generator")
+        return 0
+    configure_ocio_root(out)
+    generate_all()
     print(f"Wrote LUTs in {LUT_DIR}")
-    print(f"Wrote matrices in {MTX_DIR}")
     print(f"Wrote {CONFIG}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

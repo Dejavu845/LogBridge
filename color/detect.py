@@ -148,6 +148,9 @@ SLOG3_VENICE_PAIRS = ("sony_slog3_sgamut3_venice", "sony_slog3_sgamut3cine_venic
 CLOG2_PAIRS = ("canon_clog2_cgamut", "canon_clog2_bt2020")
 CLOG3_PAIRS = ("canon_clog3_cgamut", "canon_clog3_bt2020")
 IMPLEMENTED_NON_VENICE = tuple(k for k in IDT_PAIRS if k not in VENICE_IDTS)
+# Cycle 27: picker status copy. Never “supported”. Never 一键精准.
+IMPLEMENTED_STATUS = "implemented (unverified)"
+STUB_STATUS = "stub, not implemented"
 
 
 @dataclass(frozen=True)
@@ -210,6 +213,53 @@ def _with_as_shot(d: Detection, as_shot: AsShotWB) -> Detection:
     return replace(d, as_shot_cct=as_shot.cct, as_shot_tint=float(as_shot.tint))
 
 
+def _clog_filename_has_gamut(name: str) -> bool:
+    n = (name or "").lower()
+    if "cinema" in n or "cgamut" in n or "c-gamut" in n:
+        return True
+    if "bt.2020" in n or "bt2020" in n or "rec2020" in n or "rec.2020" in n:
+        return True
+    return False
+
+
+def clog2_filename_needs_picker(name: str) -> bool:
+    """True when a filename has C-Log2 but no Cinema Gamut / BT.2020 token.
+
+    Cycle 32: never silent-lock Cinema Gamut from a bare clog2 token.
+    """
+    n = (name or "").lower()
+    if "c-log2" not in n and "clog2" not in n:
+        return False
+    return not _clog_filename_has_gamut(n)
+
+
+def clog3_filename_needs_picker(name: str) -> bool:
+    """True when a filename has C-Log3 but no Cinema Gamut / BT.2020 token.
+
+    Cycle 32: never silent-lock Cinema Gamut from a bare clog3 token.
+    """
+    n = (name or "").lower()
+    if "c-log3" not in n and "clog3" not in n:
+        return False
+    return not _clog_filename_has_gamut(n)
+
+
+def slog3_filename_needs_picker(name: str) -> bool:
+    """True when a filename has S-Log3 but no S-Gamut3 / Cine token.
+
+    Cycle 31: never silent-lock Cine (or Venice) from a bare slog3 token.
+    """
+    n = (name or "").lower()
+    if "s-log3" not in n and "slog3" not in n:
+        return False
+    cine = ("sgamut3.cine", "s-gamut3.cine", "sgamut3cine", "sgamut3_cine")
+    if any(token in n for token in cine):
+        return False
+    if "sgamut3" in n or "s-gamut3" in n:
+        return False
+    return True
+
+
 def _is_slog3(curve: str | None) -> bool:
     if not curve:
         return False
@@ -231,6 +281,11 @@ def _is_clog3(curve: str | None) -> bool:
     return c in {"clog3", "c-log3"}
 
 
+def venice_rows_allowed(venice_detected: bool) -> bool:
+    """Cycle 26: Venice picker rows require a detection token. Never silent."""
+    return bool(venice_detected)
+
+
 def picker_pairs(
     *,
     curve: str | None = None,
@@ -244,8 +299,9 @@ def picker_pairs(
     C-Log2 / C-Log3 without a locked gamut offer Cinema Gamut and BT.2020 —
     never a silent Cinema Gamut default.
     """
+    venice_rows = venice_rows_allowed(venice_detected)
     if needs_picker and _is_slog3(curve):
-        return list(SLOG3_VENICE_PAIRS if venice_detected else SLOG3_PAIRS)
+        return list(SLOG3_VENICE_PAIRS if venice_rows else SLOG3_PAIRS)
     if needs_picker and _is_clog2(curve):
         # Never a silent Cinema Gamut default.
         return list(CLOG2_PAIRS)
@@ -253,7 +309,7 @@ def picker_pairs(
         # Never a silent Cinema Gamut default.
         return list(CLOG3_PAIRS)
     out = list(IMPLEMENTED_NON_VENICE)
-    if venice_detected:
+    if venice_rows:
         try:
             i = out.index("sony_slog3_sgamut3cine") + 1
             out[i:i] = list(SLOG3_VENICE_PAIRS)
@@ -288,14 +344,16 @@ def can_one_click_process_all(detections: list[Detection]) -> bool:
     return bool(detections) and all(can_one_click_process(d) for d in detections)
 
 
+# Cycle 34: QuickTime tags never identify an IDT. Same set as as_shot._NCLC_KEYS.
+NCLC_KEYS = frozenset({"nclc", "nclx", "colr", "quicktime_nclc", "qt_nclc"})
+
+
 def _detect_from_metadata_idt(meta: dict) -> Detection | None:
     """Camera-private metadata only. Ignores QuickTime nclc / nclx / colr."""
     if not meta:
         return None
-    # Explicitly ignore QuickTime tags even if present.
-    forbidden = {"nclc", "nclx", "colr", "quicktime_nclc", "qt_nclc"}
     # A caller might pass nclc thinking it identifies LogC4/S-Log3. Drop it.
-    cleaned = {k: v for k, v in meta.items() if k.lower() not in forbidden}
+    cleaned = {k: v for k, v in meta.items() if k.lower() not in NCLC_KEYS}
 
     arri = str(cleaned.get("arri_mxf_color_space", cleaned.get("arri_color_space", ""))).lower()
     if "logc4" in arri or "awg4" in arri or "wide gamut 4" in arri:
@@ -395,7 +453,7 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
         return _pair("apple_log_bt2020", "metadata", NOTE_META_APPLE_LOG)
 
     dji = str(cleaned.get("dji_gamma", cleaned.get("dji_log", ""))).lower()
-    if "d-log m" in dji or "dlog m" in dji or "dlogm" in dji or "d-logm" in dji:
+    if dlog_m_token_hit(dji):
         return Detection(
             None,
             None,
@@ -418,9 +476,18 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
     return None
 
 
+DLOG_M_TOKENS = ("d-log m", "dlog m", "dlogm", "d-logm")
+
+
+def dlog_m_token_hit(text: str) -> bool:
+    """Cycle 33: D-Log M tokens never become D-Log + D-Gamut."""
+    n = (text or "").lower()
+    return any(token in n for token in DLOG_M_TOKENS)
+
+
 def _unsupported_filename(name: str) -> Detection | None:
     """D-Log M stays unresolved — never a silent IDT. No public decode/xy."""
-    if "d-log m" in name or "dlog m" in name or "dlogm" in name or "d-logm" in name:
+    if dlog_m_token_hit(name):
         return Detection(
             None,
             None,
@@ -439,31 +506,33 @@ def detect_from_filename(path: str) -> Detection | None:
         return blocked
     # C-Log2 / C-Log3 are paired — lock only when a gamut token is present.
     if "c-log2" in name or "clog2" in name:
+        if clog2_filename_needs_picker(name):
+            return Detection(
+                None,
+                "clog2",
+                None,
+                "filename",
+                True,
+                NOTE_CLOG2_NO_GAMUT,
+            )
         if "cinema" in name or "cgamut" in name or "c-gamut" in name:
             return _pair("canon_clog2_cgamut", "filename", NOTE_FILENAME_CLOG2_CGAMUT)
         if "bt.2020" in name or "bt2020" in name or "rec2020" in name or "rec.2020" in name:
             return _pair("canon_clog2_bt2020", "filename", NOTE_FILENAME_CLOG2_BT2020)
-        return Detection(
-            None,
-            "clog2",
-            None,
-            "filename",
-            True,
-            NOTE_CLOG2_NO_GAMUT,
-        )
     if "c-log3" in name or "clog3" in name:
+        if clog3_filename_needs_picker(name):
+            return Detection(
+                None,
+                "clog3",
+                None,
+                "filename",
+                True,
+                NOTE_CLOG3_NO_GAMUT,
+            )
         if "cinema" in name or "cgamut" in name or "c-gamut" in name:
             return _pair("canon_clog3_cgamut", "filename", NOTE_FILENAME_CLOG3_CGAMUT)
         if "bt.2020" in name or "bt2020" in name or "rec2020" in name or "rec.2020" in name:
             return _pair("canon_clog3_bt2020", "filename", NOTE_FILENAME_CLOG3_BT2020)
-        return Detection(
-            None,
-            "clog3",
-            None,
-            "filename",
-            True,
-            NOTE_CLOG3_NO_GAMUT,
-        )
     # Check more specific tokens first (already ordered).
     venice = _venice_hit(name)
     for token, idt_id in _FILENAME_HINTS:
@@ -481,7 +550,7 @@ def detect_from_filename(path: str) -> Detection | None:
                 return _pair(pair, "filename", _filename_success_note(pair, token))
             return _pair(idt_id, "filename", _filename_success_note(idt_id, token))
     # S-Log3 without gamut token: do not assume Cine or Venice.
-    if "s-log3" in name or "slog3" in name:
+    if slog3_filename_needs_picker(name):
         return Detection(
             None,
             "slog3",
@@ -494,9 +563,14 @@ def detect_from_filename(path: str) -> Detection | None:
     return None
 
 
+def venice_model_needs_picker(model: str | None) -> bool:
+    """Cycle 38: a Venice body name is not an IDT. Gamut still required."""
+    return _venice_hit(model or "")
+
+
 def detect_from_model(model: str) -> Detection | None:
     m = (model or "").lower()
-    if _venice_hit(m):
+    if venice_model_needs_picker(m):
         # Venice body is not an IDT by itself — gamut still required. Never default.
         return Detection(
             None,

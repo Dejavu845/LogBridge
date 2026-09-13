@@ -7,11 +7,18 @@ name = "logbridge-color"
 version = "0.1.0"
 description = "LogBridge M1 log curves, WB CAT, and IDT pipeline (source of truth)"
 readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
+keywords = ["aces", "ocio", "log", "color"]
+
+[project.urls]
+Homepage = "https://github.com/Dejavu845/LogBridge"
+Issues = "https://github.com/Dejavu845/LogBridge/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
+lint = ["ruff>=0.6"]
 
 [tool.setuptools.packages.find]
 include = ["color*"]
@@ -19,3 +26,12 @@ include = ["color*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+target-version = "py310"
+src = ["color", "tests", "scripts"]
+exclude = [".venv", "venv", "build", "dist"]
+
+[tool.ruff.lint]
+# Lightweight CI gate: syntax / undefined names only. Broader E/F/I is P1.
+select = ["E9", "F63", "F7", "F82"]
