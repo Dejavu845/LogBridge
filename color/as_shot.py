@@ -264,7 +264,7 @@ def effective_cat_cct(
     Source ``as_shot`` is never a CAT, even at 3200 or 5600.
     Source ``grey`` is an absolute CAT. Source ``estimate`` (confirmed
     auto WB) is an absolute CAT. Source ``user`` with as-shot
-    is relative. Source ``unknown" with an explicit CCT (CLI / unit
+    is relative. Source ``unknown`` with an explicit CCT (CLI / unit
     construction) stays an absolute CAT.
     """
     if wb_cct is None:
