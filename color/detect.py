@@ -148,6 +148,9 @@ SLOG3_VENICE_PAIRS = ("sony_slog3_sgamut3_venice", "sony_slog3_sgamut3cine_venic
 CLOG2_PAIRS = ("canon_clog2_cgamut", "canon_clog2_bt2020")
 CLOG3_PAIRS = ("canon_clog3_cgamut", "canon_clog3_bt2020")
 IMPLEMENTED_NON_VENICE = tuple(k for k in IDT_PAIRS if k not in VENICE_IDTS)
+# Cycle 27: picker status copy. Never “supported”. Never 一键精准.
+IMPLEMENTED_STATUS = "implemented (unverified)"
+STUB_STATUS = "stub, not implemented"
 
 
 @dataclass(frozen=True)
