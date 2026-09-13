@@ -63,7 +63,8 @@ PYTHONPATH=. python3 -m pytest -q
 Optional OCIO asset regen (does not change 18% Python references):
 
 ```bash
-python3 scripts/generate_ocio_assets.py
+python3 scripts/generate_ocio_assets.py --check   # drift vs committed ocio/
+python3 scripts/generate_ocio_assets.py           # rewrite (same numbers)
 ```
 
 Cloud Agent / Linux bootstrap (idempotent, no Xcode):

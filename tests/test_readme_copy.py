@@ -17,6 +17,8 @@ README = ROOT / "README.md"
 ACCEPTANCE = ROOT / "ACCEPTANCE.md"
 CJK = re.compile(r"[\u3400-\u9fff]")
 
+# Inventory as of 2026-09-13. Shrink this set by adding the string to README
+# or ACCEPTANCE — never by deleting a constant.
 KNOWN_DESYNC = {
     "STUB_CHIP",
     "EMPTY_RGB_CHIP",
@@ -127,24 +129,46 @@ def test_cjk_batch_constants_in_spec_or_known_desync():
     assert not unknown, sorted(unknown)
 
 
+# Exact disclaimer lines. A future Text("一键精准校准，不写日志") must not
+# borrow a substring exemption.
+_BAN_QUOTE_ALLOWLIST = {
+    ROOT
+    / "macos"
+    / "LogBridge"
+    / "LogBridge"
+    / "Views"
+    / "SettingsView.swift": (
+        "/// 设置页。中文。不写精准 / 一键还原 / 全自动校准。",
+        'Text("已实现（未验证）。不写精准 / 一键还原 / 全自动校准。")',
+    )
+}
+
+_UI_LITERAL = re.compile(
+    r"(\.help|navigationTitle|Text|Button|Toggle|Picker|Label|Section|"
+    r"Menu|TextField|Alert)\(\s*\""
+)
+
+
 def test_user_visible_surfaces_forbid_overclaim_phrases():
+    """Do not grep README/ACCEPTANCE — they quote the forbidden words on purpose."""
     swift_root = ROOT / "macos" / "LogBridge" / "LogBridge"
     needles = ("一键精准", "一键校准", "一键还原", "全自动校准")
     hits: list[str] = []
     for path in swift_root.rglob("*.swift"):
         text = path.read_text(encoding="utf-8")
+        allowed = {ln.strip() for ln in _BAN_QUOTE_ALLOWLIST.get(path, ())}
         for i, line in enumerate(text.splitlines(), 1):
             if not any(n in line for n in needles):
                 continue
-            if "不写" in line or "禁止" in line or "never" in line.lower():
+            if line.strip() in allowed:
                 continue
-            if re.search(r'(Text|Button|Toggle|Picker)\(\s*"', line):
+            if _UI_LITERAL.search(line):
                 hits.append(f"{path.relative_to(ROOT)}:{i}:{line.strip()}")
     constants = _cjk_constants()
     for name, value in constants.items():
         for n in needles:
             if n in value and "不写" not in value:
                 hits.append(f"color/batch.py:{name}")
-        if re.search(r"(?<![ 未])已验证", value) and "未验证" not in value:
+        if re.search(r"(?<![未])已验证", value):
             hits.append(f"color/batch.py:{name}:已验证")
     assert hits == [], hits
