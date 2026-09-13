@@ -53,14 +53,6 @@ def write_spi1d(path: Path, values: np.ndarray, from_min=0.0, from_max=1.0) -> N
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_spimtx(path: Path, m: np.ndarray) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    rows = []
-    for i in range(3):
-        rows.append(f"{m[i, 0]:.12f} {m[i, 1]:.12f} {m[i, 2]:.12f} 0")
-    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
-
-
 def ocio_matrix_16(m3: np.ndarray) -> str:
     m = np.eye(4)
     m[:3, :3] = m3
@@ -538,7 +530,6 @@ def main(argv: list[str] | None = None) -> int:
     configure_ocio_root(out)
     generate_all()
     print(f"Wrote LUTs in {LUT_DIR}")
-    print(f"Wrote matrices in {MTX_DIR}")
     print(f"Wrote {CONFIG}")
     return 0
 
