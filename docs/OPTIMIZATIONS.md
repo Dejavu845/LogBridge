@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 34 — QuickTime nclc never identifies an IDT
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | nclc | `NCLC_KEYS` matches `as_shot._NCLC_KEYS`. Metadata IDT path drops those keys. Swift still discards nclc. Color math unchanged. |
+
 ## Cycle 33 — D-Log M tokens never lock D-Gamut
 
 | ID | Item | What landed |
