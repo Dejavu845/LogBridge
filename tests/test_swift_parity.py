@@ -86,10 +86,15 @@ def test_preview_engine_switches_cover_every_idt_case():
         assert name in _case_names_in(export_cst), f"{name} missing from ResolveExporter"
 
 
+def _strip_block_comments(src: str) -> str:
+    """Remove `/* … */` spans. Swift has no nested block comments."""
+    return re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+
+
 def _live_code_lines(chunk: str) -> list[str]:
-    """Drop full-line `//` comments and `//` tails. Empty lines omitted."""
+    """Drop `/* */`, full-line `//` comments, and `//` tails. Empty lines omitted."""
     live: list[str] = []
-    for raw in chunk.splitlines():
+    for raw in _strip_block_comments(chunk).splitlines():
         stripped = raw.lstrip()
         if stripped.startswith("//"):
             continue
@@ -97,6 +102,25 @@ def _live_code_lines(chunk: str) -> list[str]:
         if code.strip():
             live.append(code)
     return live
+
+
+def _swift_case_body(switch_body: str, case_token: str) -> str:
+    """From the `case .<token>` label through the line before the next `case `."""
+    needle = f".{case_token}"
+    lines = switch_body.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        if stripped.startswith("case ") and needle in stripped:
+            start = i
+            break
+    assert start is not None, f"case {case_token} not found"
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        if lines[j].lstrip().startswith("case "):
+            end = j
+            break
+    return "\n".join(lines[start:end])
 
 
 def _swift_let_exprs(chunk: str) -> dict[str, str]:
@@ -123,9 +147,16 @@ def test_logc4_decode_has_negative_extension_in_both_swift_files():
     for path in (PREVIEW, EXPORTER):
         text = path.read_text(encoding="utf-8")
         body = _switch_body(text, "decodeLog")
-        idx = body.index("arriLogC4AWG4")
-        chunk = body[idx : idx + 800]
-        live = "\n".join(_live_code_lines(chunk))
+        chunk = _swift_case_body(body, "arriLogC4AWG4")
+        live_lines = _live_code_lines(chunk)
+        for line in live_lines:
+            assert not line.lstrip().startswith("#"), (
+                f"{path.name} LogC4 case has a compiler directive `{line.strip()}`"
+            )
+        live = "\n".join(live_lines)
+        assert not re.search(r"\bif\s+false\b", live), (
+            f"{path.name} LogC4 case wraps live code in `if false`"
+        )
         assert required in live, f"{path.name} LogC4 missing live `{required}`"
         lets = _swift_let_exprs(chunk)
         env: dict[str, float] = {}
