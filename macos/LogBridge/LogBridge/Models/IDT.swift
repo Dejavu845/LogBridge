@@ -90,7 +90,7 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    /// Cycle 27: picker copy. Never “supported”. Never 一键精准.
+    /// Cycle 27: picker copy. Never “supported”. Never the one-click overclaim.
     static let implementedStatus = "implemented (unverified)"
     static let stubStatus = "stub, not implemented"
 
