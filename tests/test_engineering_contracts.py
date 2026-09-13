@@ -144,7 +144,7 @@ def test_pyproject_hygiene_and_ruff_is_lightweight():
     assert 'lint = ["ruff>=0.6"]' in text
     assert 'select = ["E9", "F63", "F7", "F82"]' in text
     assert "testpaths = [\"tests\"]" in text
-    
+
 
 def test_python_package_doc_forbids_supported_camera_claims():
     doc = COLOR_INIT.read_text(encoding="utf-8")
