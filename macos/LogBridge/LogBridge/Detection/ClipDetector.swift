@@ -192,36 +192,40 @@ enum ClipDetector {
             return locked(.arriLogC3EI800AWG3, source: .filename, note: "文件名 AWG3 (LogC3 EI800 + AWG3)")
         }
         if name.contains("c-log2") || name.contains("clog2") {
+            if filenameNeedsCLog2Picker(name) {
+                return DetectionResult(
+                    idt: nil,
+                    curve: "C-Log2",
+                    gamut: nil,
+                    source: .filename,
+                    needsUserPicker: true,
+                    note: "C-Log2 没有色域，先选择成对 IDT"
+                )
+            }
             if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {
                 return locked(.canonCLog2CGamut, source: .filename, note: "文件名 C-Log2 + Cinema Gamut")
             }
             if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
                 return locked(.canonCLog2BT2020, source: .filename, note: "文件名 C-Log2 + BT.2020")
             }
-            return DetectionResult(
-                idt: nil,
-                curve: "C-Log2",
-                gamut: nil,
-                source: .filename,
-                needsUserPicker: true,
-                note: "C-Log2 没有色域，先选择成对 IDT"
-            )
         }
         if name.contains("c-log3") || name.contains("clog3") {
+            if filenameNeedsCLog3Picker(name) {
+                return DetectionResult(
+                    idt: nil,
+                    curve: "C-Log3",
+                    gamut: nil,
+                    source: .filename,
+                    needsUserPicker: true,
+                    note: "C-Log3 没有色域，先选择成对 IDT"
+                )
+            }
             if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {
                 return locked(.canonCLog3CGamut, source: .filename, note: "文件名 C-Log3 + Cinema Gamut")
             }
             if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
                 return locked(.canonCLog3BT2020, source: .filename, note: "文件名 C-Log3 + BT.2020")
             }
-            return DetectionResult(
-                idt: nil,
-                curve: "C-Log3",
-                gamut: nil,
-                source: .filename,
-                needsUserPicker: true,
-                note: "C-Log3 没有色域，先选择成对 IDT"
-            )
         }
         if name.contains("apple log") || name.contains("applelog") {
             return locked(.appleLogBT2020, source: .filename, note: "文件名 Apple Log")
@@ -243,6 +247,28 @@ enum ClipDetector {
             )
         }
         return nil
+    }
+
+    /// Cycle 32: C-Log2 without a gamut token never locks Cinema Gamut.
+    static func filenameNeedsCLog2Picker(_ raw: String) -> Bool {
+        let name = raw.lowercased()
+        if !name.contains("c-log2") && !name.contains("clog2") { return false }
+        if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") { return false }
+        if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
+            return false
+        }
+        return true
+    }
+
+    /// Cycle 32: C-Log3 without a gamut token never locks Cinema Gamut.
+    static func filenameNeedsCLog3Picker(_ raw: String) -> Bool {
+        let name = raw.lowercased()
+        if !name.contains("c-log3") && !name.contains("clog3") { return false }
+        if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") { return false }
+        if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
+            return false
+        }
+        return true
     }
 
     /// Cycle 31: S-Log3 without a gamut token never locks Cine.
