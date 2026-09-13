@@ -72,6 +72,14 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | M2 | Settings `不写` hatches | `test_ui_copy.py` / `test_settings_zh.py` scan SettingsView with the two allowlisted disclaimer lines removed. Tree-wide `一键精准` / HDR `精准` bans have no `Not 一键精准` disjunct. |
 | M3 | False matrices print | Drop `Wrote matrices in …` and unused `write_spimtx`. `generate_matrices()` stays a no-op. |
 
+## Cycle 9 — Opus C7 leftover M4 / nits
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| M4 | Assigned CJK literals | `test_readme_copy.py` flags `let` / `var` / `static let` string assignments that contain a banned phrase, not only UI constructors. |
+| N1 | LogC4 pin comment | One-line pin next to both Swift `if x < 0.0 { return x * s + t }` (local Swift; same human push as Venice). |
+| N3 | Stale MARK | `ResolveExporter` MARK no longer points at deleted `ocio/matrices/*.spimtx`. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |
