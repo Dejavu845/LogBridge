@@ -86,6 +86,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | M4 | Joined quotes | `Text("一键" + "精准校准")` is caught by joining every `"…"` on a UI constructor line. |
 
+## Cycle 11 — C7 M4 multiline residual
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| M4 | Split constructor | `Text(` on one line and a banned quoted phrase on the next is caught. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |

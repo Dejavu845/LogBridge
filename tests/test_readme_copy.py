@@ -171,9 +171,22 @@ def test_user_visible_surfaces_forbid_overclaim_phrases():
     for path in swift_root.rglob("*.swift"):
         text = path.read_text(encoding="utf-8")
         allowed = {ln.strip() for ln in _BAN_QUOTE_ALLOWLIST.get(path, ())}
-        for i, line in enumerate(text.splitlines(), 1):
+        lines = text.splitlines()
+        for i, line in enumerate(lines, 1):
             joined = _joined_quotes(line)
             if not any(n in line or n in joined for n in needles):
+                # Cycle 11: Text(↵ "一键精准校准") — needle on the next line.
+                if i < len(lines):
+                    nxt = lines[i]
+                    if (
+                        _UI_CTOR.search(line)
+                        and '"' not in line.split("//")[0]
+                        and any(n in _joined_quotes(nxt) for n in needles)
+                        and nxt.strip() not in allowed
+                    ):
+                        hits.append(
+                            f"{path.relative_to(ROOT)}:{i + 1}:{nxt.strip()}"
+                        )
                 continue
             if line.strip() in allowed:
                 continue
