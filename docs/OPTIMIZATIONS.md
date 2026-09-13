@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 20 — batch YCbCr returns (local restore only)
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P1-types | batch YCbCr | Local `ycbcr_*` / `preview_u8_promoted_float` declare returns. `test_batch_ycbcr_helpers_annotated_when_restored` skips when `batch.py` < 1340. Do not MCP-upload `batch.py`. |
+
 ## Cycle 19 — ENGINEERING types + batch floor honesty
 
 | ID | Item | What landed |

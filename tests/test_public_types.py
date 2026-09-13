@@ -10,6 +10,9 @@ Cycle 18: remaining public color modules except unrestored batch.py.
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
+
+import pytest
 
 from color import (
     as_shot,
@@ -102,3 +105,21 @@ def test_remaining_color_modules_public_return_annotations():
         for name in _public(mod):
             fn = getattr(mod, name)
             assert "return" in fn.__annotations__, f"{mod.__name__}.{name}"
+
+
+def test_batch_ycbcr_helpers_annotated_when_restored():
+    """Local 1350-line batch.py. Remote 1006-line stub skips. Do not weaken ≥1340."""
+    root = Path(__file__).resolve().parents[1]
+    batch_py = root / "color" / "batch.py"
+    nlines = len(batch_py.read_text(encoding="utf-8").splitlines())
+    if nlines < 1340:
+        pytest.skip(f"batch.py unrestored ({nlines} lines)")
+    from color import batch
+
+    for name in (
+        "ycbcr_range_offsets",
+        "ycbcr_to_rgb_float",
+        "ycbcr_to_preview_u8",
+        "preview_u8_promoted_float",
+    ):
+        assert "return" in getattr(batch, name).__annotations__, name
