@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 33 — D-Log M tokens never lock D-Gamut
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | D-Log M | `dlog_m_token_hit` / Swift `filenameIsDLogMStub`. Filename and metadata D-Log M stay stub. Plain D-Log still locks D-Gamut. Color math unchanged. |
+
 ## Cycle 32 — C-Log2 / C-Log3 without gamut stay on the picker
 
 | ID | Item | What landed |
