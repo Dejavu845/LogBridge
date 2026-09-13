@@ -213,6 +213,37 @@ def _with_as_shot(d: Detection, as_shot: AsShotWB) -> Detection:
     return replace(d, as_shot_cct=as_shot.cct, as_shot_tint=float(as_shot.tint))
 
 
+def _clog_filename_has_gamut(name: str) -> bool:
+    n = (name or "").lower()
+    if "cinema" in n or "cgamut" in n or "c-gamut" in n:
+        return True
+    if "bt.2020" in n or "bt2020" in n or "rec2020" in n or "rec.2020" in n:
+        return True
+    return False
+
+
+def clog2_filename_needs_picker(name: str) -> bool:
+    """True when a filename has C-Log2 but no Cinema Gamut / BT.2020 token.
+
+    Cycle 32: never silent-lock Cinema Gamut from a bare clog2 token.
+    """
+    n = (name or "").lower()
+    if "c-log2" not in n and "clog2" not in n:
+        return False
+    return not _clog_filename_has_gamut(n)
+
+
+def clog3_filename_needs_picker(name: str) -> bool:
+    """True when a filename has C-Log3 but no Cinema Gamut / BT.2020 token.
+
+    Cycle 32: never silent-lock Cinema Gamut from a bare clog3 token.
+    """
+    n = (name or "").lower()
+    if "c-log3" not in n and "clog3" not in n:
+        return False
+    return not _clog_filename_has_gamut(n)
+
+
 def slog3_filename_needs_picker(name: str) -> bool:
     """True when a filename has S-Log3 but no S-Gamut3 / Cine token.
 
@@ -464,31 +495,33 @@ def detect_from_filename(path: str) -> Detection | None:
         return blocked
     # C-Log2 / C-Log3 are paired — lock only when a gamut token is present.
     if "c-log2" in name or "clog2" in name:
+        if clog2_filename_needs_picker(name):
+            return Detection(
+                None,
+                "clog2",
+                None,
+                "filename",
+                True,
+                NOTE_CLOG2_NO_GAMUT,
+            )
         if "cinema" in name or "cgamut" in name or "c-gamut" in name:
             return _pair("canon_clog2_cgamut", "filename", NOTE_FILENAME_CLOG2_CGAMUT)
         if "bt.2020" in name or "bt2020" in name or "rec2020" in name or "rec.2020" in name:
             return _pair("canon_clog2_bt2020", "filename", NOTE_FILENAME_CLOG2_BT2020)
-        return Detection(
-            None,
-            "clog2",
-            None,
-            "filename",
-            True,
-            NOTE_CLOG2_NO_GAMUT,
-        )
     if "c-log3" in name or "clog3" in name:
+        if clog3_filename_needs_picker(name):
+            return Detection(
+                None,
+                "clog3",
+                None,
+                "filename",
+                True,
+                NOTE_CLOG3_NO_GAMUT,
+            )
         if "cinema" in name or "cgamut" in name or "c-gamut" in name:
             return _pair("canon_clog3_cgamut", "filename", NOTE_FILENAME_CLOG3_CGAMUT)
         if "bt.2020" in name or "bt2020" in name or "rec2020" in name or "rec.2020" in name:
             return _pair("canon_clog3_bt2020", "filename", NOTE_FILENAME_CLOG3_BT2020)
-        return Detection(
-            None,
-            "clog3",
-            None,
-            "filename",
-            True,
-            NOTE_CLOG3_NO_GAMUT,
-        )
     # Check more specific tokens first (already ordered).
     venice = _venice_hit(name)
     for token, idt_id in _FILENAME_HINTS:
