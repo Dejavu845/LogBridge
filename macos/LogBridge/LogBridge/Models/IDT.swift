@@ -90,11 +90,15 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// Cycle 27: picker copy. Never “supported”. Never 一键精准.
+    static let implementedStatus = "implemented (unverified)"
+    static let stubStatus = "stub, not implemented"
+
     var menuLabel: String {
         if isStub {
-            return "\(pairLabel) — stub, not implemented"
+            return "\(pairLabel) — \(Self.stubStatus)"
         }
-        return "\(pairLabel) — implemented (unverified)"
+        return "\(pairLabel) — \(Self.implementedStatus)"
     }
 
     /// OCIO colorspace name in ocio/config.ocio.
