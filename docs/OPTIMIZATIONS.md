@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 32 — C-Log2 / C-Log3 without gamut stay on the picker
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | C-Log filename | `clog2_filename_needs_picker` / `clog3_filename_needs_picker` + Swift `filenameNeedsCLog2Picker` / `filenameNeedsCLog3Picker`. Bare C-Log never locks Cinema Gamut. Color math unchanged. |
+
 ## Cycle 31 — S-Log3 without gamut stays on the picker
 
 | ID | Item | What landed |
