@@ -19,7 +19,7 @@ Public white papers were fetched where possible. **No manufacturer constant from
 
 ## Filled in (not a constant change)
 
-1. **LogC4 negatives** — research: “linear extension”. Implemented official `s`, `t` from the spec CTL (`E' * s + t` for `E' < 0`; encode uses `Escene < t`). Swift `decodeLog` (PreviewEngine + ResolveExporter) now mirrors that negative extension; still unverified.
+1. **LogC4 negatives** — research: “linear extension”. Implemented official `s`, `t` from the spec CTL (`E' * s + t` for `E' < 0`; encode uses `Escene < t`). Swift `decodeLog` (PreviewEngine + ResolveExporter) mirrors that extension **on the local tree**; still unverified. The draft PR is missing those two Swift files until a human `git push`.
 2. **S-Log3 shadow** — research: “else the official shadow linear segment”. Decode: `(in*1023-95)*0.01125/(171.2102946929-95)`. Encode uses `in >= 0.01125` for the log piece. 0% → 95/1023, 90% → 598/1023.
 3. **V-Log encode** — `cut1=0.01`: `5.6*in+0.125` else `c*log10(in+b)+d`.
 4. **F-Log2 encode** — `cut1=0.000889`: `e*in+f` else `c*log10(a*in+b)+d`.
