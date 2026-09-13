@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 30 — filename hints stay locked pairs
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | Filename | Apple Log 2 → AWG (not BT.2020). LogC3 → EI800+AWG3. D-Log → D-Gamut, never D-Log M. Swift `ClipDetector.detectFilename` matches. Color math unchanged. |
+
 ## Cycle 29 — live picker UI copy
 
 | ID | Item | What landed |
