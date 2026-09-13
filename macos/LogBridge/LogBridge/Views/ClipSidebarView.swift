@@ -21,9 +21,11 @@ struct ClipSidebarView: View {
             .padding(.top, 8)
             .padding(.bottom, 4)
 
-            DropZone(targeted: session.dropTargeted, empty: session.clips.isEmpty)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 6)
+            DropZone(targeted: session.dropTargeted, empty: session.clips.isEmpty) {
+                session.showImporter = true
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
 
             Text("1 把混源文件夹拖进来  2 每条选成对 Log 与色域  3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。")
                 .font(.caption2)
@@ -71,6 +73,7 @@ struct ClipSidebarView: View {
 private struct DropZone: View {
     let targeted: Bool
     let empty: Bool
+    let onTap: () -> Void
 
     var body: some View {
         VStack(spacing: 4) {
@@ -100,6 +103,12 @@ private struct DropZone: View {
                 .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5]))
                 .foregroundStyle(targeted ? Color.accentColor : Color.secondary.opacity(0.4))
         )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if empty {
+                onTap()
+            }
+        }
     }
 }
 

@@ -11044,3 +11044,69 @@ def test_readme_deliverable_warn_py_zh():
     _chengpian_only_honesty(warn_to)
     _chengpian_only_honesty(py_bypass_to)
     _chengpian_only_honesty(bypass_to)
+
+
+def test_empty_dropzone_tap_opens_same_importer():
+    """Empty DropZone tap sets the same showImporter as 「添加…」. Non-empty does not."""
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    content = _read(CONTENT)
+    clip = _read(CLIP)
+    view = sidebar.split("struct ClipSidebarView")[1].split("private struct DropZone")[0]
+    drop = sidebar.split("struct DropZone")[1].split("struct ClipRow")[0]
+    ui_view = _code_without_comments(view)
+    ui_drop = _code_without_comments(drop)
+    ui_sidebar = _code_without_comments(sidebar)
+
+    assert 'Button("添加…") { session.showImporter = true }' in view
+    assert "DropZone(targeted: session.dropTargeted, empty: session.clips.isEmpty)" in view
+    assert ui_view.count("session.showImporter = true") == 2
+    assert "isPresented: $session.showImporter" in content
+
+    assert ".onTapGesture" in ui_drop
+    tap = ui_drop.split(".onTapGesture")[1]
+    assert "if empty" in tap
+    before, gated = tap.split("if empty", 1)
+    assert "onTap()" not in before
+    assert "onTap()" in gated
+    assert "showImporter" not in ui_drop
+    assert ui_drop.count(".onTapGesture") == 1
+
+    row_tap = ui_view.split(".onTapGesture")[1]
+    assert "revealClipExportInFinder" in row_tap
+    assert "showImporter" not in row_tap
+
+    assert EMPTY_STATE_STEP_1 == "把混源文件夹拖进来"
+    assert EMPTY_STATE_STEP_2 == "每条选成对 Log 与色域"
+    assert EMPTY_STATE_STEP_3 == "点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
+    assert EMPTY_STATE_STEPS == (
+        "1 把混源文件夹拖进来  2 每条选成对 Log 与色域  "
+        "3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
+    )
+    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEP_1 in drop
+    assert EMPTY_STATE_STEP_2 in drop
+    assert "把文件夹拖进来" in drop
+    assert "选出对数" not in ui_sidebar
+    assert "选出对数" not in EMPTY_STATE_STEP_2
+    assert "选出对数" not in EMPTY_STATE_STEPS
+
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert bar.count("Button(") == 1
+    assert "处理已锁定片段" in bar
+    assert "取消" in bar
+    assert "isWritingDeliverables" in bar
+    assert "cancelLockedDeliverables" in bar
+    assert 'Button("添加…")' not in bar
+
+    fn = clip.split("func cancelWritingFromEscape")[1].split("static func exportProgressText")[0]
+    assert "isWritingDeliverables" in fn
+    assert "cancelLockedDeliverables" in fn
+    assert "showSettings" in fn
+    assert "showImporter" in fn
+    assert "selectedID" not in fn
+    assert "cancelWritingFromEscape" in content
+    assert "case 53" in content
+
+    assert "达芬奇已验证" not in ui_sidebar
+    assert "精准" not in ui_drop
+    _chengpian_only_honesty(ui_drop)
