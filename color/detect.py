@@ -344,14 +344,16 @@ def can_one_click_process_all(detections: list[Detection]) -> bool:
     return bool(detections) and all(can_one_click_process(d) for d in detections)
 
 
+# Cycle 34: QuickTime tags never identify an IDT. Same set as as_shot._NCLC_KEYS.
+NCLC_KEYS = frozenset({"nclc", "nclx", "colr", "quicktime_nclc", "qt_nclc"})
+
+
 def _detect_from_metadata_idt(meta: dict) -> Detection | None:
     """Camera-private metadata only. Ignores QuickTime nclc / nclx / colr."""
     if not meta:
         return None
-    # Explicitly ignore QuickTime tags even if present.
-    forbidden = {"nclc", "nclx", "colr", "quicktime_nclc", "qt_nclc"}
     # A caller might pass nclc thinking it identifies LogC4/S-Log3. Drop it.
-    cleaned = {k: v for k, v in meta.items() if k.lower() not in forbidden}
+    cleaned = {k: v for k, v in meta.items() if k.lower() not in NCLC_KEYS}
 
     arri = str(cleaned.get("arri_mxf_color_space", cleaned.get("arri_color_space", ""))).lower()
     if "logc4" in arri or "awg4" in arri or "wide gamut 4" in arri:
