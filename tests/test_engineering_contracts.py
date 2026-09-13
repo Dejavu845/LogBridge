@@ -89,6 +89,7 @@ def test_optimizations_records_cycles_and_leaves_p1():
     assert "Cycle 33" in text
     assert "Cycle 34" in text
     assert "Cycle 35" in text
+    assert "Cycle 36" in text
     assert "Do not MCP-upload `batch.py`" in text or "Do not MCP-upload batch.py" in text
     assert "test_swift_file_floor.py" in text
     assert "test_public_types.py" in text
@@ -143,7 +144,7 @@ def test_pyproject_hygiene_and_ruff_is_lightweight():
     assert 'lint = ["ruff>=0.6"]' in text
     assert 'select = ["E9", "F63", "F7", "F82"]' in text
     assert "testpaths = [\"tests\"]" in text
-
+    
 
 def test_python_package_doc_forbids_supported_camera_claims():
     doc = COLOR_INIT.read_text(encoding="utf-8")
