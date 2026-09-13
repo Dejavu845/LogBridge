@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 23 — Swift picker excludes D-Log M stub
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | Swift picker | `IDT.pickerPairs` is locked to `implemented.filter` (not `allCases`). `can_one_click_process` is false for `dji_dlog_m`. |
+
 ## Cycle 22 — picker never offers D-Log M
 
 | ID | Item | What landed |
@@ -156,7 +162,7 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 
 | ID | Item | What landed |
 | --- | --- | --- |
-| P1-types | Rest of `color/` | `dlog_m_to_linear` is `-> NoReturn` (still raises; D-Log M stays stub). Public `auto_wb` / `exr_write` / `gamuts` / `graph` / `ocio_builtins` / `resolve_export` / `wb` / `stubs` returns are locked. `batch.py` stays a human-push item. |
+| P1-types | Rest of `color/` | `dlog_m_to_linear` is `-> NoReturn` (still raises; D-Log M stays stub). Public `auto_wb` / `exr_write` / `gamuts` / `graph` / `ocio_builtins` / `resolve_export` / `wb` / `stubs` returns are locked. `batch.py` stays a restored human-push item. |
 
 ## P1 — left for next cycle
 
