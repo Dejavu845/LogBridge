@@ -46,7 +46,7 @@ _LOGC4_T = (2.0 ** (14.0 * (-_LOGC4_C / _LOGC4_B) + 6.0) - 64.0) / _LOGC4_A
 LOGC4_18_PERCENT = 0.2784
 
 
-def logc4_to_linear(x):
+def logc4_to_linear(x) -> np.ndarray:
     """Decode ARRI LogC4 (normalized 0-1, negatives allowed) to scene linear."""
     x = np.asarray(x, dtype=np.float64)
     p = 14.0 * (x - _LOGC4_C) / _LOGC4_B + 6.0
@@ -55,7 +55,7 @@ def logc4_to_linear(x):
     return np.where(x >= 0.0, lin_pos, lin_neg)
 
 
-def linear_to_logc4(lin):
+def linear_to_logc4(lin) -> np.ndarray:
     """Encode relative scene linear to ARRI LogC4."""
     lin = np.asarray(lin, dtype=np.float64)
     log_pos = (np.log2(_LOGC4_A * lin + 64.0) - 6.0) / 14.0 * _LOGC4_B + _LOGC4_C
@@ -73,7 +73,7 @@ SLOG3_0_PERCENT = 95.0 / 1023.0
 SLOG3_90_PERCENT = 598.0 / 1023.0  # 10-bit 598 for 90% reflectance
 
 
-def slog3_to_linear(x):
+def slog3_to_linear(x) -> np.ndarray:
     """Decode Sony S-Log3 (normalized 0-1) to scene-linear reflectance."""
     x = np.asarray(x, dtype=np.float64)
     cv = x * 1023.0
@@ -82,7 +82,7 @@ def slog3_to_linear(x):
     return np.where(x >= _SLOG3_CUT, lin_hi, lin_lo)
 
 
-def linear_to_slog3(lin):
+def linear_to_slog3(lin) -> np.ndarray:
     """Encode scene-linear reflectance to Sony S-Log3 (normalized 0-1)."""
     lin = np.asarray(lin, dtype=np.float64)
     log_hi = (420.0 + np.log10((lin + 0.01) / (0.18 + 0.01)) * 261.5) / 1023.0
@@ -103,7 +103,7 @@ VLOG_0_PERCENT = 128.0 / 1023.0
 VLOG_90_PERCENT = 602.0 / 1023.0
 
 
-def vlog_to_linear(x):
+def vlog_to_linear(x) -> np.ndarray:
     """Decode Panasonic V-Log (normalized 0-1) to scene-linear reflectance."""
     x = np.asarray(x, dtype=np.float64)
     lin_hi = np.power(10.0, (x - _VLOG_D) / _VLOG_C) - _VLOG_B
@@ -111,7 +111,7 @@ def vlog_to_linear(x):
     return np.where(x >= _VLOG_CUT2, lin_hi, lin_lo)
 
 
-def linear_to_vlog(lin):
+def linear_to_vlog(lin) -> np.ndarray:
     """Encode scene-linear reflectance to Panasonic V-Log."""
     lin = np.asarray(lin, dtype=np.float64)
     log_hi = _VLOG_C * np.log10(lin + _VLOG_B) + _VLOG_D
@@ -134,7 +134,7 @@ FLOG2_18_PERCENT = 400.0 / 1023.0  # white paper 10-bit 18% grey
 FLOG2_0_PERCENT = 95.0 / 1023.0
 
 
-def flog2_to_linear(x):
+def flog2_to_linear(x) -> np.ndarray:
     """Decode Fujifilm F-Log2 (normalized 0-1) to scene-linear reflectance."""
     x = np.asarray(x, dtype=np.float64)
     lin_hi = np.power(10.0, (x - _FLOG2_D) / _FLOG2_C) / _FLOG2_A - _FLOG2_B / _FLOG2_A
@@ -142,7 +142,7 @@ def flog2_to_linear(x):
     return np.where(x >= _FLOG2_CUT2, lin_hi, lin_lo)
 
 
-def linear_to_flog2(lin):
+def linear_to_flog2(lin) -> np.ndarray:
     """Encode scene-linear reflectance to Fujifilm F-Log2."""
     lin = np.asarray(lin, dtype=np.float64)
     log_hi = _FLOG2_C * np.log10(_FLOG2_A * lin + _FLOG2_B) + _FLOG2_D
@@ -159,7 +159,7 @@ NLOG_CUT_X = 452.0
 NLOG_CUT_Y = 0.328
 
 
-def nlog_to_linear(x):
+def nlog_to_linear(x) -> np.ndarray:
     """Decode Nikon N-Log 10-bit code value (0-1023) to reflectance.
 
     ``x`` is the 10-bit code, not a 0-1 normalized value. Dividing by 1023
@@ -171,7 +171,7 @@ def nlog_to_linear(x):
     return np.where(x < NLOG_CUT_X, lin_lo, lin_hi)
 
 
-def linear_to_nlog(lin):
+def linear_to_nlog(lin) -> np.ndarray:
     """Encode reflectance to Nikon N-Log 10-bit code value (0-1023)."""
     lin = np.asarray(lin, dtype=np.float64)
     # Spec: log is natural log because decode uses exp.
@@ -181,7 +181,7 @@ def linear_to_nlog(lin):
     return np.where(lin < NLOG_CUT_Y, cv_lo, cv_hi)
 
 
-def nlog_normalized_to_linear(x01):
+def nlog_normalized_to_linear(x01) -> np.ndarray:
     """Convenience: decode N-Log stored as 0-1 (code/1023) by expanding to 10-bit.
 
     OCIO image buffers are 0-1; this wrapper multiplies by 1023 then calls
@@ -191,7 +191,7 @@ def nlog_normalized_to_linear(x01):
     return nlog_to_linear(x01 * 1023.0)
 
 
-def linear_to_nlog_normalized(lin):
+def linear_to_nlog_normalized(lin) -> np.ndarray:
     """Encode reflectance to N-Log stored as 0-1 (code/1023)."""
     return linear_to_nlog(lin) / 1023.0
 
@@ -208,7 +208,7 @@ LOG3G10_ZERO = 0.091551  # white-paper mapping of linear 0
 LOG3G10_MAX_LIN = 0.18 * (2.0**10)  # 184.32, encodes to 1.0
 
 
-def log3g10_to_linear(x):
+def log3g10_to_linear(x) -> np.ndarray:
     """Decode RED Log3G10 (normalized, 0 is the break) to scene linear."""
     x = np.asarray(x, dtype=np.float64)
     lin_pos = (np.power(10.0, x / _L3G10_A) - 1.0) / _L3G10_B - _L3G10_C
@@ -216,7 +216,7 @@ def log3g10_to_linear(x):
     return np.where(x >= 0.0, lin_pos, lin_neg)
 
 
-def linear_to_log3g10(lin):
+def linear_to_log3g10(lin) -> np.ndarray:
     """Encode scene linear to RED Log3G10.
 
     Matches the white-paper C: offset by c, then linear slope if the offset
@@ -240,7 +240,7 @@ _CLOG2_C2 = 87.099375
 CLOG2_18_PERCENT = 0.39825469203794917  # encode(0.18) reflection
 
 
-def clog2_to_linear(x):
+def clog2_to_linear(x) -> np.ndarray:
     """Decode Canon C-Log2 (normalized 0-1) to scene-linear reflectance.
 
     Positive: ``0.9*(10**((in-0.092864125)/0.24136077)-1)/87.099375``.
@@ -254,7 +254,7 @@ def clog2_to_linear(x):
     return np.where(x >= _CLOG2_CUT, lin_pos, lin_neg)
 
 
-def linear_to_clog2(lin):
+def linear_to_clog2(lin) -> np.ndarray:
     """Encode scene-linear reflectance to Canon C-Log2 (ACES CTL inverse)."""
     lin = np.asarray(lin, dtype=np.float64)
     ire = lin / 0.9
@@ -279,7 +279,7 @@ _CLOG3_POS_OFF = 0.12240537
 CLOG3_18_PERCENT = 0.3433893703739356  # encode(0.18) reflection
 
 
-def clog3_to_linear(x):
+def clog3_to_linear(x) -> np.ndarray:
     """Decode Canon C-Log3 (normalized 0-1) to scene-linear reflectance.
 
     ``<0.097465473`` negative log, ``0.097465473–0.15277891`` linear,
@@ -294,7 +294,7 @@ def clog3_to_linear(x):
     return ire * 0.9
 
 
-def linear_to_clog3(lin):
+def linear_to_clog3(lin) -> np.ndarray:
     """Encode scene-linear reflectance to Canon C-Log3 (ACES / Canon v1.2)."""
     lin = np.asarray(lin, dtype=np.float64)
     ire = lin / 0.9
@@ -344,7 +344,7 @@ _LOGC3_EI800_ENC_GAIN, _LOGC3_EI800_ENC_OFFSET, _LOGC3_EI800_NZ, _LOGC3_EI800_GR
 LOGC3_EI800_18_PERCENT = 0.391
 
 
-def logc3_ei800_to_linear(x):
+def logc3_ei800_to_linear(x) -> np.ndarray:
     """Decode ARRI LogC3 EI800 (normalized 0-1) to relative scene exposure.
 
     ACES ``normalizedLogC3ToRelativeExposure(t, 800)``. EI800 only.
@@ -359,7 +359,7 @@ def logc3_ei800_to_linear(x):
     )
 
 
-def linear_to_logc3_ei800(lin):
+def linear_to_logc3_ei800(lin) -> np.ndarray:
     """Encode relative scene exposure to ARRI LogC3 EI800 (ACES, EI<1600)."""
     lin = np.asarray(lin, dtype=np.float64)
     ns = lin * (_LOGC3_MID_GRAY * _LOGC3_NOMINAL_EI / _LOGC3_EI800) / 0.18 + _LOGC3_BLACK
@@ -386,7 +386,7 @@ _APPLE_PT = _APPLE_C * (_APPLE_RT - _APPLE_R0) ** 2
 APPLE_LOG_18_PERCENT = 0.4882724585268676  # encode(0.18)
 
 
-def apple_log_to_linear(p):
+def apple_log_to_linear(p) -> np.ndarray:
     """Decode Apple Log 1 (normalized 0-1) to scene-linear reflectance."""
     p = np.asarray(p, dtype=np.float64)
     lin_hi = np.power(2.0, (p - _APPLE_DELTA) / _APPLE_GAMMA) - _APPLE_BETA
@@ -394,7 +394,7 @@ def apple_log_to_linear(p):
     return np.where(p >= _APPLE_PT, lin_hi, np.where(p >= 0.0, lin_mid, _APPLE_R0))
 
 
-def linear_to_apple_log(lin):
+def linear_to_apple_log(lin) -> np.ndarray:
     """Encode scene-linear reflectance to Apple Log 1."""
     lin = np.asarray(lin, dtype=np.float64)
     log_hi = _APPLE_GAMMA * np.log2(np.maximum(lin + _APPLE_BETA, 1e-30)) + _APPLE_DELTA
@@ -411,7 +411,7 @@ _DLOG_CUT_LIN = 0.0078
 DLOG_18_PERCENT = 0.3987645561893306  # encode(0.18)
 
 
-def dlog_to_linear(x):
+def dlog_to_linear(x) -> np.ndarray:
     """Decode DJI D-Log (2017 white paper) to scene-linear."""
     x = np.asarray(x, dtype=np.float64)
     lin_hi = (np.power(10.0, 3.89616 * x - 2.27752) - 0.0108) / 0.9892
@@ -419,7 +419,7 @@ def dlog_to_linear(x):
     return np.where(x > _DLOG_CUT_LOG, lin_hi, lin_lo)
 
 
-def linear_to_dlog(lin):
+def linear_to_dlog(lin) -> np.ndarray:
     """Encode scene-linear to DJI D-Log (2017 white paper)."""
     lin = np.asarray(lin, dtype=np.float64)
     log_hi = np.log10(lin * 0.9892 + 0.0108) * 0.256663 + 0.584555

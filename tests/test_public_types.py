@@ -36,6 +36,12 @@ def test_curves_dispatch_return_annotations():
     assert "return" in curves.encode_log.__annotations__
 
 
+def test_curves_public_return_annotations():
+    for name in _public(curves):
+        fn = getattr(curves, name)
+        assert "return" in fn.__annotations__, name
+
+
 def test_formats_public_return_annotations():
     for name in _public(formats):
         fn = getattr(formats, name)

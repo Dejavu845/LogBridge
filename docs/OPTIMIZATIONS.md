@@ -20,7 +20,7 @@ Every IDT / HDR OT stays **implemented (unverified)**. Not “supported”. Not 
 
 None of the P0 engineering-quality items above are left unfinished on purpose. Remaining P0 **product** gates are **not** coding work for a Linux agent:
 
-- Golden grey-card samples still pending (`tests/fixtures/grey_card/` empty slots). Do not invent numbers.
+- Golden grey-block samples still pending (`tests/fixtures/grey_card/` empty slots). Do not invent numbers.
 - 真机达芬奇验收: **未跑** unless a Mac `.app`, Resolve, and owner-supplied mixed Log exist. Do not fake-pass.
 
 ## Cycle 3 — implemented
@@ -116,12 +116,18 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | More return annotations | Public `formats` / `detect` already declared returns; the lock now requires them. `rec709` helpers and `odt.apply_odt` declare `-> np.ndarray`. Numbers unchanged. |
 
+## Cycle 16 — P1-types individual log curves
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P1-types | Curve pair returns | Every public function in `color/curves.py` now declares `-> np.ndarray` (encode/decode pairs plus dispatch). Numbers unchanged. `test_curves_public_return_annotations` locks them. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |
 | --- | --- | --- |
 | P1-ruff-style | Broader Ruff (E/F/I/UP) | Cycle 1 only gates syntax/undefined names so we do not churn the huge copy-lock tests. |
-| P1-types | Type hints across `color/` | Cycle 15 locked formats / detect / rec709 / `odt.apply_odt`. Remaining modules (`curves` individuals, `batch`, mypy) stay later. |
+| P1-types | Type hints across `color/` | Cycle 16 locked all public `curves` returns. Remaining: `batch` / as_shot / mypy. |
 | P1-split-ui-tests | Split `tests/test_ui_copy.py` | The file is a locked copy contract. Splitting risks false diffs in review. |
 | P1-lockfile | `uv.lock` / pip-tools pin | pyproject ranges + CI cache are enough; a lockfile is nicer but not required for pytest. |
 | P1-unused-swift | Swift dead-code pass | Needs Xcode; Linux agents cannot compile. |
