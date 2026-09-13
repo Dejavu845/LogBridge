@@ -74,6 +74,7 @@ def _sony_pair(gamut_cine: bool, venice: bool) -> str:
         return "sony_slog3_sgamut3cine_venice" if gamut_cine else "sony_slog3_sgamut3_venice"
     return "sony_slog3_sgamut3cine" if gamut_cine else "sony_slog3_sgamut3"
 
+
 # Filename tokens that hint a locked pair. Lowercase matching.
 _FILENAME_HINTS = (
     ("logc4", "arri_logc4_awg4"),
@@ -231,6 +232,11 @@ def _is_clog3(curve: str | None) -> bool:
     return c in {"clog3", "c-log3"}
 
 
+def venice_rows_allowed(venice_detected: bool) -> bool:
+    """Cycle 26: Venice picker rows require a detection token. Never silent."""
+    return bool(venice_detected)
+
+
 def picker_pairs(
     *,
     curve: str | None = None,
@@ -244,8 +250,9 @@ def picker_pairs(
     C-Log2 / C-Log3 without a locked gamut offer Cinema Gamut and BT.2020 —
     never a silent Cinema Gamut default.
     """
+    venice_rows = venice_rows_allowed(venice_detected)
     if needs_picker and _is_slog3(curve):
-        return list(SLOG3_VENICE_PAIRS if venice_detected else SLOG3_PAIRS)
+        return list(SLOG3_VENICE_PAIRS if venice_rows else SLOG3_PAIRS)
     if needs_picker and _is_clog2(curve):
         # Never a silent Cinema Gamut default.
         return list(CLOG2_PAIRS)
@@ -253,7 +260,7 @@ def picker_pairs(
         # Never a silent Cinema Gamut default.
         return list(CLOG3_PAIRS)
     out = list(IMPLEMENTED_NON_VENICE)
-    if venice_detected:
+    if venice_rows:
         try:
             i = out.index("sony_slog3_sgamut3cine") + 1
             out[i:i] = list(SLOG3_VENICE_PAIRS)
