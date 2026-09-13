@@ -187,6 +187,17 @@ def test_menu_label_never_says_supported():
     assert "supported" not in chunk.lower()
 
 
+def test_one_click_blocked_while_picker_needed():
+    """Cycle 28: a locked pair id still cannot one-click while the picker is up."""
+    from color.detect import Detection, can_one_click_process
+    from color.gamuts import IDT_PAIRS
+
+    locked = next(iter(IDT_PAIRS))
+    d = Detection(locked, "S-Log3", None, "test", True, "pick")
+    assert d.idt_id in IDT_PAIRS
+    assert can_one_click_process(d) is False
+
+
 def test_dlog_m_still_absent_from_idt_pairs():
     from color.gamuts import IDT_PAIRS
     from color.stubs import STUB_IDTS, dlog_m_to_linear

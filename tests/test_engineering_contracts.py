@@ -81,6 +81,7 @@ def test_optimizations_records_cycles_and_leaves_p1():
     assert "Cycle 25" in text
     assert "Cycle 26" in text
     assert "Cycle 27" in text
+    assert "Cycle 28" in text
     assert "Do not MCP-upload `batch.py`" in text or "Do not MCP-upload batch.py" in text
     assert "test_swift_file_floor.py" in text
     assert "test_public_types.py" in text
