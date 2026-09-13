@@ -48,6 +48,30 @@ def test_swift_idt_picker_excludes_stub():
     assert "implemented.filter" in chunk
 
 
+def test_swift_python_curve_picker_ids_match():
+    """Cycle 24: Swift pickerPairs case lists match Python pair tuples."""
+    from color.detect import CLOG2_PAIRS, CLOG3_PAIRS, SLOG3_PAIRS, SLOG3_VENICE_PAIRS
+
+    idt = ROOT / "macos" / "LogBridge" / "LogBridge" / "Models" / "IDT.swift"
+    text = idt.read_text(encoding="utf-8")
+    start = text.find("static func pickerPairs")
+    end = text.find("static func isSLog3", start)
+    chunk = text[start:end]
+    assert "[.sonySLog3SGamut3, .sonySLog3SGamut3Cine]" in chunk
+    assert "[.sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice]" in chunk
+    assert "[.canonCLog2CGamut, .canonCLog2BT2020]" in chunk
+    assert "[.canonCLog3CGamut, .canonCLog3BT2020]" in chunk
+    assert SLOG3_PAIRS == ("sony_slog3_sgamut3", "sony_slog3_sgamut3cine")
+    assert SLOG3_VENICE_PAIRS == (
+        "sony_slog3_sgamut3_venice",
+        "sony_slog3_sgamut3cine_venice",
+    )
+    assert CLOG2_PAIRS == ("canon_clog2_cgamut", "canon_clog2_bt2020")
+    assert CLOG3_PAIRS == ("canon_clog3_cgamut", "canon_clog3_bt2020")
+    for raw in (*SLOG3_PAIRS, *SLOG3_VENICE_PAIRS, *CLOG2_PAIRS, *CLOG3_PAIRS):
+        assert f'= "{raw}"' in text
+
+
 def test_can_one_click_never_for_stub_id():
     from color.detect import Detection, can_one_click_process
 
