@@ -74,7 +74,6 @@ def _sony_pair(gamut_cine: bool, venice: bool) -> str:
         return "sony_slog3_sgamut3cine_venice" if gamut_cine else "sony_slog3_sgamut3_venice"
     return "sony_slog3_sgamut3cine" if gamut_cine else "sony_slog3_sgamut3"
 
-
 # Filename tokens that hint a locked pair. Lowercase matching.
 _FILENAME_HINTS = (
     ("logc4", "arri_logc4_awg4"),
