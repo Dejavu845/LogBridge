@@ -224,6 +224,32 @@ def test_live_picker_ui_uses_pair_label_and_zh_badge():
     assert "支持" not in badge
 
 
+def test_filename_hints_never_silent_wrong_pair():
+    """Cycle 30: Apple Log 2 / LogC3 / D-Log filename tokens stay the locked pairs."""
+    from color.detect import _FILENAME_HINTS
+
+    by_token = {token: idt_id for token, idt_id in _FILENAME_HINTS}
+    assert by_token["applelog2"] == "apple_log2_awg"
+    assert by_token["apple log 2"] == "apple_log2_awg"
+    assert by_token["logc3"] == "arri_logc3_ei800_awg3"
+    assert by_token["awg3"] == "arri_logc3_ei800_awg3"
+    assert by_token["d-log"] == "dji_dlog_dgamut"
+    assert by_token["dlog"] == "dji_dlog_dgamut"
+    for token, idt_id in _FILENAME_HINTS:
+        assert "dlog_m" not in idt_id
+        if "apple" in token and "2" in token.replace(" ", "").replace("-", ""):
+            assert idt_id == "apple_log2_awg"
+        if token in {"logc3", "logc 3", "awg3"}:
+            assert idt_id == "arri_logc3_ei800_awg3"
+
+    det = ROOT / "macos" / "LogBridge" / "LogBridge" / "Detection" / "ClipDetector.swift"
+    text = det.read_text(encoding="utf-8")
+    assert "locked(.appleLog2AWG" in text
+    assert "locked(.arriLogC3EI800AWG3" in text
+    assert "D-Log M 暂不支持" in text
+    assert ".djiDLogMStub" not in text.split("func detectFilename")[1].split("func detectModel")[0]
+
+
 def test_dlog_m_still_absent_from_idt_pairs():
     from color.gamuts import IDT_PAIRS
     from color.stubs import STUB_IDTS, dlog_m_to_linear
