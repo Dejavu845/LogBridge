@@ -4,7 +4,7 @@ on:
   push:
   pull_request:
 
-# Linux pytest 保留。macos-15 只编现有 LogBridge scheme，并跐同一套 pytest。
+# Linux pytest 保留。macos-15 只编现有 LogBridge scheme，并跑同一套 pytest。
 # Rec709PreviewView 里 CALayer.colorspace 用 KVC 对齐 runner Swift overlay（Xcode 26.3 仍无此 member）。
 # 不改 709 观感。Metal GPU、Finder 显示、真机写出 / 真机导出 在 Actions 上测不了，仍靠人在 Mac 上点。
 # 没有真机 CI，也不覆盖 Metal / Finder / 真写出。
