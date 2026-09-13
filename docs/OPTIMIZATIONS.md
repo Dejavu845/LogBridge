@@ -80,6 +80,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | N1 | LogC4 pin comment | One-line pin next to both Swift `if x < 0.0 { return x * s + t }` (local Swift; same human push as Venice). |
 | N3 | Stale MARK | `ResolveExporter` MARK no longer points at deleted `ocio/matrices/*.spimtx`. |
 
+## Cycle 10 — C7 M4 concat residual
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| M4 | Joined quotes | `Text("一键" + "精准校准")` is caught by joining every `"…"` on a UI constructor line. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |

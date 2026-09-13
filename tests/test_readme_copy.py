@@ -147,11 +147,20 @@ _UI_LITERAL = re.compile(
     r"(\.help|navigationTitle|Text|Button|Toggle|Picker|Label|Section|"
     r"Menu|TextField|Alert)\(\s*\""
 )
+_UI_CTOR = re.compile(
+    r"(\.help|navigationTitle|Text|Button|Toggle|Picker|Label|Section|"
+    r"Menu|TextField|Alert)\("
+)
 # Cycle 9 / C7 M4: `let overclaim = "一键精准校准"` then Text(overclaim)
 # must not hide the needle from the constructor-only gate.
 _ASSIGNED_LITERAL = re.compile(
     r"""\b(?:static\s+)?(?:let|var)\s+[A-Za-z_]\w*\s*(?::[^=]+)?=\s*\""""
 )
+
+
+def _joined_quotes(line: str) -> str:
+    """`Text("一键" + "精准校准")` has no contiguous needle until quotes join."""
+    return "".join(re.findall(r'"([^"]*)"', line))
 
 
 def test_user_visible_surfaces_forbid_overclaim_phrases():
@@ -163,17 +172,22 @@ def test_user_visible_surfaces_forbid_overclaim_phrases():
         text = path.read_text(encoding="utf-8")
         allowed = {ln.strip() for ln in _BAN_QUOTE_ALLOWLIST.get(path, ())}
         for i, line in enumerate(text.splitlines(), 1):
-            if not any(n in line for n in needles):
+            joined = _joined_quotes(line)
+            if not any(n in line or n in joined for n in needles):
                 continue
             if line.strip() in allowed:
                 continue
-            if _UI_LITERAL.search(line) or _ASSIGNED_LITERAL.search(line):
+            if (
+                _UI_LITERAL.search(line)
+                or _ASSIGNED_LITERAL.search(line)
+                or (_UI_CTOR.search(line) and any(n in joined for n in needles))
+            ):
                 hits.append(f"{path.relative_to(ROOT)}:{i}:{line.strip()}")
     constants = _cjk_constants()
     for name, value in constants.items():
         for n in needles:
             if n in value:
                 hits.append(f"color/batch.py:{name}")
-        if re.search(r"(?<![未])已验证", value):
+        if re.search(r"(?<![\u672a])\u5df2\u9a8c\u8bc1", value):
             hits.append(f"color/batch.py:{name}:已验证")
     assert hits == [], hits
