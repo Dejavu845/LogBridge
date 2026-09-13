@@ -17,4 +17,7 @@ enum FutureIDTs {
 
     /// Cycle 21 lock. D-Log M is not an IDT pair.
     static func dLogMIsSupported() -> Bool { false }
+
+    /// Cycle 26 lock. Venice rows are never a silent default.
+    static func veniceIsSilentDefault() -> Bool { false }
 }
