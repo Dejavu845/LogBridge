@@ -47,6 +47,16 @@ PENDING_NOTE = (
     "(do not guess 5600 or 6504). Implemented (unverified)."
 )
 
+# Cycle 35: missing CCT stays None. Camera-written 5600/6504 is honored.
+NEVER_GUESS_CCT = (5600.0, 6504.0)
+
+
+def pending_as_shot_has_no_guess(shot: AsShotWB) -> bool:
+    """True when a pending as-shot did not invent 5600/6504."""
+    if not shot.pending:
+        return True
+    return shot.cct is None
+
 
 @dataclass(frozen=True)
 class AsShotWB:
