@@ -229,7 +229,7 @@ enum ClipDetector {
         if name.contains("d-log") || name.contains("dlog") || name.contains("d-gamut") || name.contains("dgamut") {
             return locked(.djiDLogDGamut, source: .filename, note: "文件名 D-Log")
         }
-        if name.contains("s-log3") || name.contains("slog3") {
+        if filenameNeedsSLog3Picker(name) {
             return DetectionResult(
                 idt: nil,
                 curve: "S-Log3",
@@ -243,6 +243,16 @@ enum ClipDetector {
             )
         }
         return nil
+    }
+
+    /// Cycle 31: S-Log3 without a gamut token never locks Cine.
+    static func filenameNeedsSLog3Picker(_ raw: String) -> Bool {
+        let name = raw.lowercased()
+        if !name.contains("s-log3") && !name.contains("slog3") { return false }
+        let cineTokens = ["sgamut3.cine", "s-gamut3.cine", "sgamut3cine", "sgamut3_cine"]
+        if cineTokens.contains(where: { name.contains($0) }) { return false }
+        if name.contains("sgamut3") || name.contains("s-gamut3") { return false }
+        return true
     }
 
     static func detectModel(_ model: String?) -> DetectionResult? {
