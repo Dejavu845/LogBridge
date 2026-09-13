@@ -174,6 +174,6 @@ def test_user_visible_surfaces_forbid_overclaim_phrases():
         for n in needles:
             if n in value:
                 hits.append(f"color/batch.py:{name}")
-        if re.search(r"(?<![\u672a])\u5df2验证", value):
+        if re.search(r"(?<![未])已验证", value):
             hits.append(f"color/batch.py:{name}:已验证")
     assert hits == [], hits
