@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 29 — live picker UI copy
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | Live UI | Inspector uses `pair.pairLabel`. `verificationBadge` is 已实现（未验证）/待选/未实现. `hasLockedPair` requires `!isStub` and `!needsUserPicker`. Color math unchanged. |
+
 ## Cycle 28 — one-click blocked while picker is up
 
 | ID | Item | What landed |
