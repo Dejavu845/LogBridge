@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 36 — Swift as-shot reader never assigns 5600/6504
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | as-shot Swift | `readAsShotWB(from:)` live lines have no 5600/6504 literals. Missing CCT stays `Double?` nil. Color math unchanged. |
+
 ## Cycle 35 — missing as-shot CCT never guesses 5600/6504
 
 | ID | Item | What landed |
