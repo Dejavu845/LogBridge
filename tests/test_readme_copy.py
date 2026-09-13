@@ -156,6 +156,15 @@ _UI_CTOR = re.compile(
 _ASSIGNED_LITERAL = re.compile(
     r"""\b(?:static\s+)?(?:let|var)\s+[A-Za-z_]\w*\s*(?::[^=]+)?=\s*\""""
 )
+_ASSIGN_HEAD = re.compile(
+    r"""\b(?:static\s+)?(?:let|var)\s+[A-Za-z_]\w*\s*(?::[^=]+)?="""
+)
+# Continuation of `let x = "一键"` / `Text(` ↵ `"精准校准"` / `"一键" + "还原"`.
+_STR_CONT = re.compile(
+    r"""^\s*(?:\+\s*)?(?:\"[^\"]*\"\s*(?:\+\s*)*)+;?\s*$"""
+)
+
+_OVERCLAIM_NEEDLES = ("一键精准", "一键校准", "一键还原", "全自动校准")
 
 
 def _joined_quotes(line: str) -> str:
@@ -163,42 +172,96 @@ def _joined_quotes(line: str) -> str:
     return "".join(re.findall(r'"([^"]*)"', line))
 
 
+def _span_joined(lines: list[str], start: int, head_ok) -> str | None:
+    """Join quoted fragments on `start` plus up to 7 string-continuation lines."""
+    code = lines[start].split("//")[0]
+    if not head_ok(code):
+        return None
+    parts = [_joined_quotes(code)]
+    for j in range(start + 1, min(start + 8, len(lines))):
+        nxt = lines[j].split("//")[0]
+        stripped = nxt.strip()
+        if not stripped:
+            break
+        if _STR_CONT.match(nxt) or (stripped.startswith("+") and '"' in nxt):
+            parts.append(_joined_quotes(nxt))
+            continue
+        break
+    return "".join(parts)
+
+
+def _overclaim_hits(
+    text: str, rel: str, allowed: set[str] | None = None
+) -> list[str]:
+    """Scan Swift (or a synthetic snippet) for banned UI/assignment phrases."""
+    allowed = allowed or set()
+    hits: list[str] = []
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if line.strip() in allowed:
+            continue
+        code = line.split("//")[0]
+        assign_span = _span_joined(lines, i, _ASSIGN_HEAD.search)
+        ctor_span = _span_joined(lines, i, _UI_CTOR.search)
+        if assign_span and any(n in assign_span for n in _OVERCLAIM_NEEDLES):
+            hits.append(f"{rel}:{i + 1}:{line.strip()}")
+            continue
+        if ctor_span and any(n in ctor_span for n in _OVERCLAIM_NEEDLES):
+            hits.append(f"{rel}:{i + 1}:{line.strip()}")
+            continue
+        joined = _joined_quotes(line)
+        if not any(n in line or n in joined for n in _OVERCLAIM_NEEDLES):
+            # Cycle 11: Text(↵ "一键精准校准") — needle on the next line.
+            if i + 1 < len(lines):
+                nxt = lines[i + 1]
+                if (
+                    _UI_CTOR.search(line)
+                    and '"' not in code
+                    and any(n in _joined_quotes(nxt) for n in _OVERCLAIM_NEEDLES)
+                    and nxt.strip() not in allowed
+                ):
+                    hits.append(f"{rel}:{i + 2}:{nxt.strip()}")
+            continue
+        if (
+            _UI_LITERAL.search(line)
+            or _ASSIGNED_LITERAL.search(line)
+            or (_UI_CTOR.search(line) and any(n in joined for n in _OVERCLAIM_NEEDLES))
+        ):
+            hits.append(f"{rel}:{i + 1}:{line.strip()}")
+    return hits
+
+
+def test_cycle12_assignment_and_ctor_spans_catch_split_overclaims():
+    """`let x = "一键"` ↵ `+ "精准校准"` must not hide the needle."""
+    cases = (
+        'let overclaim = "一键"\n    + "精准校准"\n',
+        'let overclaim =\n    "一键精准校准"\n',
+        'static let overclaim: String =\n    "一键" + "还原"\n',
+        'let overclaim = "一键" +\n    "校准"\n',
+        'Text(\n    "一键"\n    + "精准校准"\n)\n',
+    )
+    for src in cases:
+        assert _overclaim_hits(src, "synthetic.swift"), src
+    safe = 'let title = "已实现（未验证）"\nText("处理已锁定片段")\n'
+    assert _overclaim_hits(safe, "synthetic.swift") == []
+
+
 def test_user_visible_surfaces_forbid_overclaim_phrases():
     """Do not grep README/ACCEPTANCE — they quote the forbidden words on purpose."""
     swift_root = ROOT / "macos" / "LogBridge" / "LogBridge"
-    needles = ("一键精准", "一键校准", "一键还原", "全自动校准")
     hits: list[str] = []
     for path in swift_root.rglob("*.swift"):
-        text = path.read_text(encoding="utf-8")
         allowed = {ln.strip() for ln in _BAN_QUOTE_ALLOWLIST.get(path, ())}
-        lines = text.splitlines()
-        for i, line in enumerate(lines, 1):
-            joined = _joined_quotes(line)
-            if not any(n in line or n in joined for n in needles):
-                # Cycle 11: Text(↵ "一键精准校准") — needle on the next line.
-                if i < len(lines):
-                    nxt = lines[i]
-                    if (
-                        _UI_CTOR.search(line)
-                        and '"' not in line.split("//")[0]
-                        and any(n in _joined_quotes(nxt) for n in needles)
-                        and nxt.strip() not in allowed
-                    ):
-                        hits.append(
-                            f"{path.relative_to(ROOT)}:{i + 1}:{nxt.strip()}"
-                        )
-                continue
-            if line.strip() in allowed:
-                continue
-            if (
-                _UI_LITERAL.search(line)
-                or _ASSIGNED_LITERAL.search(line)
-                or (_UI_CTOR.search(line) and any(n in joined for n in needles))
-            ):
-                hits.append(f"{path.relative_to(ROOT)}:{i}:{line.strip()}")
+        hits.extend(
+            _overclaim_hits(
+                path.read_text(encoding="utf-8"),
+                str(path.relative_to(ROOT)),
+                allowed,
+            )
+        )
     constants = _cjk_constants()
     for name, value in constants.items():
-        for n in needles:
+        for n in _OVERCLAIM_NEEDLES:
             if n in value:
                 hits.append(f"color/batch.py:{name}")
         if re.search(r"(?<![未])已验证", value):

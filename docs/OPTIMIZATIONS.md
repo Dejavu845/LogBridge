@@ -92,6 +92,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | M4 | Split constructor | `Text(` on one line and a banned quoted phrase on the next is caught. |
 
+## Cycle 12 — C7 M4 assignment/ctor continuation
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| M4 | Assignment / ctor spans | `let x = "一键"` ↵ `+ "精准校准"` and `Text(` ↵ `"一键"` ↵ `+ "精准校准"` join up to 8 lines. Synthetic cases in `test_readme_copy.py`. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |
