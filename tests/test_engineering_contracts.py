@@ -64,6 +64,8 @@ def test_optimizations_records_cycles_and_leaves_p1():
     assert "Cycle 10" in text
     assert "Cycle 11" in text
     assert "Cycle 12" in text
+    assert "Cycle 13" in text
+    assert "test_swift_file_floor.py" in text
     assert "P0-batch-floor" in text
     assert "test_batch_file_floor.py" in text
     assert "LB-01" in text

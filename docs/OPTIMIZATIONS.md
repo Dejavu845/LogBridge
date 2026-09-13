@@ -98,6 +98,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | M4 | Assignment / ctor spans | `let x = "一键"` ↵ `+ "精准校准"` and `Text(` ↵ `"一键"` ↵ `+ "精准校准"` join up to 8 lines. Synthetic cases in `test_readme_copy.py`. |
 
+## Cycle 13 — Swift file floors
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| LB-floor | Preview / Exporter | `tests/test_swift_file_floor.py` + `ci-guard-tests.sh` require ≥1700 / ≥900 lines, `Venice`, and the live LogC4 `if x < 0.0 { return x * s + t }`. Does **not** rewrite those Swift files. Remote truncated PreviewEngine stays red until a human push. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |

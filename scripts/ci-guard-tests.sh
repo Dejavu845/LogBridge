@@ -20,3 +20,19 @@ test -f color/batch.py
 batch_lines=$(python3 -c 'from pathlib import Path; print(len(Path("color/batch.py").read_text(encoding="utf-8").splitlines()))')
 echo "color/batch.py lines: ${batch_lines}"
 test "${batch_lines}" -ge 1340
+
+# Catch MCP/contents-API rewrites that drop Venice / live LogC4 (Cycle 13).
+preview="macos/LogBridge/LogBridge/Preview/PreviewEngine.swift"
+exporter="macos/LogBridge/LogBridge/Export/ResolveExporter.swift"
+test -f "${preview}"
+test -f "${exporter}"
+preview_lines=$(python3 -c 'from pathlib import Path; print(len(Path("macos/LogBridge/LogBridge/Preview/PreviewEngine.swift").read_text(encoding="utf-8").splitlines()))')
+echo "PreviewEngine.swift lines: ${preview_lines}"
+test "${preview_lines}" -ge 1700
+python3 -c 'from pathlib import Path
+p = Path("macos/LogBridge/LogBridge/Preview/PreviewEngine.swift").read_text(encoding="utf-8")
+e = Path("macos/LogBridge/LogBridge/Export/ResolveExporter.swift").read_text(encoding="utf-8")
+assert "Venice" in p and "Venice" in e
+assert "if x < 0.0 { return x * s + t }" in p
+assert "if x < 0.0 { return x * s + t }" in e
+'
