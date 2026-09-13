@@ -29,6 +29,16 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P0-batch-floor | Catch truncated `color/batch.py` | `scripts/ci-guard-tests.sh` + `test_batch_py_is_not_a_truncated_mcp_rewrite` require ≥1300 lines and key helpers. Does **not** rewrite `batch.py`. |
 
+## Cycle 4 — implemented
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| LB-01 | Venice silent-IDT in preview | `PreviewEngine.cameraToAP0` / `decodeLog` now include both Venice cases (same non-Venice S-Gamut3 pair as `ResolveExporter` / `color/pipeline.py`). No invented Venice matrix. |
+| LB-05 | LogC4 `x<0` | Swift `decodeLog` mirrors `color/curves.py` `_LOGC4_S` / `_LOGC4_T`. Still unverified. |
+| LB-04 | Swift↔Python parity | `tests/test_swift_parity.py` locks every non-stub IDT case, Preview==Exporter matrices, and Python `camera_to_aces2065_matrix`. |
+| LB-07 | OCIO drift + stale DWG | `generate_ocio_assets.py --out/--check`; delete unreferenced `*_to_DWG` / leftover XYZ matrices. Keep the three AP0 files the generator emits. |
+| LB-08 | README copy inventory | `tests/test_readme_copy.py` — CJK constants must be in README/ACCEPTANCE or listed in `KNOWN_DESYNC`. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |
