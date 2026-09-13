@@ -129,7 +129,7 @@ def test_ci_pins_python_312_caches_and_fails_if_tests_missing():
     )
     assert 'pip install -e ".[test,lint]"' in text
     assert "ruff check" in text
-    assert "xcodebuild" in text
+    assert "xcodebuild" in text  # macos job only
     assert "CI 绿不等于达芬奇已验证" in text
 
 
@@ -181,6 +181,7 @@ def test_known_chinese_write_failures_are_not_rewritten_to_decode():
 
 
 def test_pytest_suite_is_present_for_the_ci_guard():
+    # Same recursive count as scripts/ci-guard-tests.sh (`find tests -name 'test_*.py'`).
     modules = list((ROOT / "tests").rglob("test_*.py"))
     assert len(modules) >= 10
     names = {p.name for p in modules}
