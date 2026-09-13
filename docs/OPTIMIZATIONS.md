@@ -104,12 +104,18 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | LB-floor | Preview / Exporter | `tests/test_swift_file_floor.py` + `ci-guard-tests.sh` require ≥1700 / ≥900 lines, `Venice`, and the live LogC4 `if x < 0.0 { return x * s + t }`. Does **not** rewrite those Swift files. Remote truncated PreviewEngine stays red until a human push. |
 
+## Cycle 14 — P1-types return annotations
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P1-types | Return annotations | `pipeline.apply_odt_rec709` / `apply_selected_odt`, all public `working_space` helpers, and `curves.decode_log` / `encode_log` now declare `-> np.ndarray`. Numbers unchanged. `tests/test_public_types.py` locks the annotations. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |
 | --- | --- | --- |
 | P1-ruff-style | Broader Ruff (E/F/I/UP) | Cycle 1 only gates syntax/undefined names so we do not churn the huge copy-lock tests. |
-| P1-types | Type hints across `color/` | Public functions already have some; a mypy extra would be a dedicated pass, not mixed with copy contracts. |
+| P1-types | Type hints across `color/` | Cycle 14 annotated pipeline / working_space / curve-dispatch returns. Remaining modules and mypy stay later. |
 | P1-split-ui-tests | Split `tests/test_ui_copy.py` | The file is a locked copy contract. Splitting risks false diffs in review. |
 | P1-lockfile | `uv.lock` / pip-tools pin | pyproject ranges + CI cache are enough; a lockfile is nicer but not required for pytest. |
 | P1-unused-swift | Swift dead-code pass | Needs Xcode; Linux agents cannot compile. |

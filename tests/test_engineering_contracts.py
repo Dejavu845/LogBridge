@@ -65,7 +65,9 @@ def test_optimizations_records_cycles_and_leaves_p1():
     assert "Cycle 11" in text
     assert "Cycle 12" in text
     assert "Cycle 13" in text
+    assert "Cycle 14" in text
     assert "test_swift_file_floor.py" in text
+    assert "test_public_types.py" in text
     assert "P0-batch-floor" in text
     assert "test_batch_file_floor.py" in text
     assert "LB-01" in text
@@ -116,7 +118,7 @@ def test_pyproject_hygiene_and_ruff_is_lightweight():
     assert 'test = ["pytest>=7.0"]' in text
     assert 'lint = ["ruff>=0.6"]' in text
     assert 'select = ["E9", "F63", "F7", "F82"]' in text
-    assert "testpaths = [\"tests\"]" in text
+    assert 'testpaths = [\"tests\"]' in text
 
 
 def test_python_package_doc_forbids_supported_camera_claims():
