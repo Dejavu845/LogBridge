@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 21 — D-Log M Swift stub lock
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | D-Log M stub | `FutureIDTs.dLogMIsSupported()` is locked `false`. `test_dlog_m_stub_lock.py` refuses a homemade transfer. Numbers unchanged. |
+
 ## Cycle 20 — batch YCbCr returns (local restore only)
 
 | ID | Item | What landed |

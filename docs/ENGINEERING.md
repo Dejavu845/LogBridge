@@ -35,12 +35,12 @@ Do not regress these without updating the locked tests (`tests/test_ui_copy.py`,
 
 - **Python 3.10+** locally; **3.12** in CI and Cloud Agents. `from __future__ import annotations` is the existing style.
 - **Do not change** curve constants, gamut matrices, IDT pair tables, OCIO Builtin names, or WB CAT unless you have a failing test that cites a white paper mismatch. 18% codes live in `color/curves.py` and `FORMULAS.md`.
-- **Do not add cameras.** D-Log M stays a stub (`color/stubs.py`, `FutureIDTs.swift`).
+- **Do not add cameras.** D-Log M stays a stub (`color/stubs.py`, `FutureIDTs.swift`). Cycle 21 locks `FutureIDTs.dLogMIsSupported()` as false. Do not invent a transfer.
 - **Do not add manufacturer demo clips.** Grey-card slots under `tests/fixtures/grey_card/` stay empty in git.
 - **Copy contracts.** User-visible Chinese strings are duplicated in Swift and `color/batch.py` / `color/formats.py` on purpose. Change both, then run pytest. Never replace a known chip with generic **解析失败** / **解码失败**.
 - **Status language.** “implemented (unverified)” in Python/docs; **已实现（未验证）** in the app. Never “supported” as a camera/HDR claim.
 - **Imports.** New code adds no unused imports; existing unused imports stay **P1-ruff-style**. New code should have type hints on public functions.
-- **Types.** Cycles 14–18 lock public returns across `color/` except `color/batch.py`. The draft-PR copy of `batch.py` is the unrestored 1006-line stub. Do not weaken the ≥1340 line floor. Do not MCP-upload `batch.py`.
+- **Types.** Cycles 14–18 lock public returns across `color/` except `color/batch.py`. The draft-PR copy of `batch.py` is the unrestored 1006-line stub. Do not weaken the ≥1340 line floor. Do not MCP-upload `batch.py`. Cycle 21 does not change color math.
 - **Tests.** New behavior needs a pytest. Do not skip a missing grey-card by writing a fake 0.18 file.
 
 ## Local development (Linux or Mac)
