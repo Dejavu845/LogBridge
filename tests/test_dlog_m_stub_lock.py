@@ -97,6 +97,73 @@ def test_can_one_click_never_for_stub_id():
     assert can_one_click_process(d) is False
 
 
+def test_venice_never_silent_in_picker():
+    """Cycle 26: Venice rows require a detection token. Never a silent default."""
+    from color.detect import (
+        SLOG3_PAIRS,
+        SLOG3_VENICE_PAIRS,
+        _FILENAME_HINTS,
+        _MODEL_HINTS,
+        _venice_hit,
+        picker_pairs,
+        venice_rows_allowed,
+    )
+    from color.gamuts import VENICE_IDTS
+
+    assert venice_rows_allowed(False) is False
+    assert venice_rows_allowed(True) is True
+    silent_cases = [
+        {},
+        {"venice_detected": False},
+        {"curve": "s-log3", "needs_picker": True},
+        {"curve": "s-log3", "venice_detected": False, "needs_picker": True},
+        {"curve": "c-log2", "needs_picker": True},
+        {"curve": "c-log3", "needs_picker": True},
+        {"needs_picker": False, "venice_detected": False},
+        {"curve": None, "venice_detected": False, "needs_picker": True},
+    ]
+    for kwargs in silent_cases:
+        ids = picker_pairs(**kwargs)
+        assert set(ids).isdisjoint(VENICE_IDTS), kwargs
+
+    venice_only = picker_pairs(curve="s-log3", venice_detected=True, needs_picker=True)
+    assert list(venice_only) == list(SLOG3_VENICE_PAIRS)
+    assert set(venice_only).isdisjoint(SLOG3_PAIRS)
+
+    for _token, idt_id in (*_FILENAME_HINTS, *_MODEL_HINTS):
+        assert idt_id not in VENICE_IDTS
+        assert "venice" not in idt_id
+
+    assert _venice_hit("sony fx3") is False
+    assert _venice_hit("sgamut3") is False
+    assert _venice_hit("") is False
+    assert _venice_hit("venice") is True
+    assert _venice_hit("Sony VENICE 2") is True
+
+
+def test_swift_venice_rows_require_detection():
+    """Cycle 26: Swift match/picker go through allowsVeniceRows."""
+    future = FUTURE.read_text(encoding="utf-8")
+    assert "veniceIsSilentDefault" in future
+    assert "-> Bool { false }" in future
+
+    idt = ROOT / "macos" / "LogBridge" / "LogBridge" / "Models" / "IDT.swift"
+    text = idt.read_text(encoding="utf-8")
+    assert "static func allowsVeniceRows" in text
+    start = text.find("static func match")
+    end = text.find("static func pickerPairs", start)
+    chunk = text[start:end]
+    assert "allowsVeniceRows(veniceDetected)" in chunk
+    assert "hits.first(where: { !$0.isVenice }) ?? hits.first" in chunk
+
+    pstart = text.find("static func pickerPairs")
+    pend = text.find("static func isSLog3", pstart)
+    pchunk = text[pstart:pend]
+    assert "let veniceRows = allowsVeniceRows(veniceDetected)" in pchunk
+    assert "if veniceDetected" not in pchunk
+    assert "if veniceRows" in pchunk
+
+
 def test_dlog_m_still_absent_from_idt_pairs():
     from color.gamuts import IDT_PAIRS
     from color.stubs import STUB_IDTS, dlog_m_to_linear
