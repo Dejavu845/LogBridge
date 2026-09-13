@@ -49,6 +49,18 @@ PENDING_NOTE = (
 
 # Cycle 35: missing CCT stays None. Camera-written 5600/6504 is honored.
 NEVER_GUESS_CCT = (5600.0, 6504.0)
+# Cycle 37: same camera range as Swift ClipDetector.parseCCT (nclc 1-1-1 is not Kelvin).
+CCT_MIN = 1000.0
+CCT_MAX = 25000.0
+
+
+def cct_in_camera_range(cct: float | None) -> float | None:
+    """Keep only camera-plausible Kelvin. Out of range → pending, not a guess."""
+    if cct is None:
+        return None
+    if cct < CCT_MIN or cct > CCT_MAX:
+        return None
+    return float(cct)
 
 
 def pending_as_shot_has_no_guess(shot: AsShotWB) -> bool:
@@ -172,7 +184,7 @@ def read_as_shot_wb(meta: dict | None) -> AsShotWB:
     if not meta:
         return UNKNOWN_AS_SHOT
     cleaned = {k: v for k, v in meta.items() if str(k).lower() not in _NCLC_KEYS}
-    cct = _first_number(cleaned, _CCT_KEYS)
+    cct = cct_in_camera_range(_first_number(cleaned, _CCT_KEYS))
     tint = _first_number(cleaned, _TINT_KEYS)
     if cct is None:
         return UNKNOWN_AS_SHOT
