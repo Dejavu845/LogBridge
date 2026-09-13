@@ -40,6 +40,7 @@ Do not regress these without updating the locked tests (`tests/test_ui_copy.py`,
 - **Copy contracts.** User-visible Chinese strings are duplicated in Swift and `color/batch.py` / `color/formats.py` on purpose. Change both, then run pytest. Never replace a known chip with generic **解析失败** / **解码失败**.
 - **Status language.** “implemented (unverified)” in Python/docs; **已实现（未验证）** in the app. Never “supported” as a camera/HDR claim.
 - **Imports.** New code adds no unused imports; existing unused imports stay **P1-ruff-style**. New code should have type hints on public functions.
+- **Types.** Cycles 14–18 lock public returns across `color/` except `color/batch.py`. The draft-PR copy of `batch.py` is the unrestored 1006-line stub. Do not weaken the ≥1340 line floor. Do not MCP-upload `batch.py`.
 - **Tests.** New behavior needs a pytest. Do not skip a missing grey-card by writing a fake 0.18 file.
 
 ## Local development (Linux or Mac)

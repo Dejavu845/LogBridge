@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 19 — ENGINEERING types + batch floor honesty
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| docs | Types / batch floor | ENGINEERING states Cycles 14–18 locked public `color/` returns except unrestored `batch.py`. Do not weaken ≥1340. Do not MCP-upload `batch.py`. |
+
 ## Cycle 18 — remaining color modules (not batch)
 
 | ID | Item | What landed |

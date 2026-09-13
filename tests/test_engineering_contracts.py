@@ -42,6 +42,8 @@ def test_engineering_docs_exist_and_stay_honest():
     assert "一键精准" in blob  # named as forbidden
     assert "Not “supported”" in blob or 'Not "supported"' in blob
     assert "python -m pytest -q" in blob
+    assert "Do not MCP-upload" in blob
+    assert "1006-line" in blob or "≥1340" in blob
     assert "macos/LogBridge/LogBridge.xcodeproj" in blob
     assert "处理已锁定片段" in blob
     assert "先选择 Log 与色域" in blob
@@ -70,6 +72,8 @@ def test_optimizations_records_cycles_and_leaves_p1():
     assert "Cycle 16" in text
     assert "Cycle 17" in text
     assert "Cycle 18" in text
+    assert "Cycle 19" in text
+    assert "Do not MCP-upload `batch.py`" in text or "Do not MCP-upload batch.py" in text
     assert "test_swift_file_floor.py" in text
     assert "test_public_types.py" in text
     assert "P0-batch-floor" in text
@@ -122,6 +126,7 @@ def test_pyproject_hygiene_and_ruff_is_lightweight():
     assert 'test = ["pytest>=7.0"]' in text
     assert 'lint = ["ruff>=0.6"]' in text
     assert 'select = ["E9", "F63", "F7", "F82"]' in text
+    assert "testpaths = [\"tests\"]" in text
     assert "testpaths = [\"tests\"]" in text
 
 
