@@ -61,8 +61,16 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | M1 | Live-code LogC4 lock | `_live_code_lines` drops `//` comments; requires live `if x < 0.0 { return x * s + t }`; first `let` wins so a later comment/case cannot shadow. |
 | N1 | Trailing `//` on `let s` | Split before `eval` (same as MagicPad `test-protocol.py`). |
-| M2 | Last `不写` hatch | `test_readme_copy.py` CJK constants no longer exempt a needle because the value also contains `不写`. |
+| M2 | CJK `不写` hatch | `test_readme_copy.py` CJK constants no longer exempt a needle because the value also contains `不写`. Cycle 7 called this the last hatch; it was not — see Cycle 8. |
 | N2 | Empty matrices dir | `generate_matrices()` is a true no-op (no `mkdir`). |
+
+## Cycle 8 — Opus C7 follow-up
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| M1 | Case-scoped LogC4 lock | Chunk is the `arriLogC4AWG4` case body (next `case `), not 800 characters. `_live_code_lines` strips `/* */`. Live `#if` / `if false` rejected. |
+| M2 | Settings `不写` hatches | `test_ui_copy.py` / `test_settings_zh.py` scan SettingsView with the two allowlisted disclaimer lines removed. Tree-wide `一键精准` / HDR `精准` bans have no `Not 一键精准` disjunct. |
+| M3 | False matrices print | Drop `Wrote matrices in …` and unused `write_spimtx`. `generate_matrices()` stays a no-op. |
 
 ## P1 — left for next cycle
 
