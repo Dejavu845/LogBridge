@@ -55,6 +55,15 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | M4 | Dead AP0 `.spimtx` | Stop emitting / delete `BT2020_to_AP0`, `DGamut_to_AP0`, `AppleWideGamut_to_AP0`. `config.ocio` already inlines those matrices; the files were unreferenced. |
 | M5 | Handbook | `docs/ENGINEERING.md` documents `--check`. |
 
+## Cycle 7 — Opus C6 follow-up
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| M1 | Live-code LogC4 lock | `_live_code_lines` drops `//` comments; requires live `if x < 0.0 { return x * s + t }`; first `let` wins so a later comment/case cannot shadow. |
+| N1 | Trailing `//` on `let s` | Split before `eval` (same as MagicPad `test-protocol.py`). |
+| M2 | Last `不写` hatch | `test_readme_copy.py` CJK constants no longer exempt a needle because the value also contains `不写`. |
+| N2 | Empty matrices dir | `generate_matrices()` is a true no-op (no `mkdir`). |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |
