@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 24 — Swift/Python picker ID parity
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | Picker IDs | Swift `pickerPairs` S-Log3 / C-Log2 / C-Log3 case lists match Python `SLOG3_*` / `CLOG2_PAIRS` / `CLOG3_PAIRS` raw values. |
+
 ## Cycle 23 — Swift picker excludes D-Log M stub
 
 | ID | Item | What landed |
