@@ -40,7 +40,7 @@ def test_engineering_docs_exist_and_stay_honest():
     assert "CI 绿不等于达芬奇已验证" in blob
     assert "整段代理，不是全精度成片" in blob
     assert "一键精准" in blob  # named as forbidden
-    assert "Not \u201csupported\u201d" in blob or 'Not "supported"' in blob
+    assert "Not “supported”" in blob or 'Not "supported"' in blob
     assert "python -m pytest -q" in blob
     assert "macos/LogBridge/LogBridge.xcodeproj" in blob
     assert "处理已锁定片段" in blob

@@ -161,7 +161,7 @@ _ASSIGN_HEAD = re.compile(
 )
 # Continuation of `let x = "一键"` / `Text(` ↵ `"精准校准"` / `"一键" + "还原"`.
 _STR_CONT = re.compile(
-    r"""^\s*(?:\+\s*)?(?:\"[^\"]*\"\s*(?:\+\s*)*)+;?\s*$"""
+    r"""^\s*(?:\+\s*)?(?:"[^"]*"\s*(?:\+\s*)*)+;?\s*$"""
 )
 
 _OVERCLAIM_NEEDLES = ("一键精准", "一键校准", "一键还原", "全自动校准")
