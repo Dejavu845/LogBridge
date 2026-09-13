@@ -162,7 +162,7 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 
 | ID | Item | What landed |
 | --- | --- | --- |
-| P1-types | Rest of `color/` | `dlog_m_to_linear` is `-> NoReturn` (still raises; D-Log M stays stub). Public `auto_wb` / `exr_write` / `gamuts` / `graph` / `ocio_builtins` / `resolve_export` / `wb` / `stubs` returns are locked. `batch.py` stays a restored human-push item. |
+| P1-types | Rest of `color/` | `dlog_m_to_linear` is `-> NoReturn` (still raises; D-Log M stays stub). Public `auto_wb` / `exr_write` / `gamuts` / `graph` / `ocio_builtins` / `resolve_export` / `wb` / `stubs` returns are locked. `batch.py` stays a human-push item. |
 
 ## P1 — left for next cycle
 
