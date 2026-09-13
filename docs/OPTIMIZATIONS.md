@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 35 — missing as-shot CCT never guesses 5600/6504
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | as-shot | `NEVER_GUESS_CCT` + `pending_as_shot_has_no_guess`. Empty / nclc metadata stays pending. Camera-written 5600 is still honored. Color math unchanged. |
+
 ## Cycle 34 — QuickTime nclc never identifies an IDT
 
 | ID | Item | What landed |
