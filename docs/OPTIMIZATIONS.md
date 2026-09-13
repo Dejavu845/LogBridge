@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 26 — Venice rows never silent
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | Venice gate | `venice_rows_allowed` / Swift `allowsVeniceRows`. Filename/model hints never emit Venice IDs. `FutureIDTs.veniceIsSilentDefault()` is false. Color math unchanged. |
+
 ## Cycle 25 — Swift implemented set == Python IDT_PAIRS
 
 | ID | Item | What landed |
