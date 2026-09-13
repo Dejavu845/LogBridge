@@ -128,12 +128,18 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 18 — remaining color modules (not batch)
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P1-types | Rest of `color/` | `dlog_m_to_linear` is `-> NoReturn` (still raises; D-Log M stays stub). Public `auto_wb` / `exr_write` / `gamuts` / `graph` / `ocio_builtins` / `resolve_export` / `wb` / `stubs` returns are locked. `batch.py` stays a human-push item. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |
 | --- | --- | --- |
 | P1-ruff-style | Broader Ruff (E/F/I/UP) | Cycle 1 only gates syntax/undefined names so we do not churn the huge copy-lock tests. |
-| P1-types | Type hints across `color/` | Cycle 17 locked as_shot / exposure. Remaining: `batch` (human push) / mypy. |
+| P1-types | Type hints across `color/` | Cycle 18 locked the rest of public `color/` except `batch.py` (human push) / mypy. |
 | P1-split-ui-tests | Split `tests/test_ui_copy.py` | The file is a locked copy contract. Splitting risks false diffs in review. |
 | P1-lockfile | `uv.lock` / pip-tools pin | pyproject ranges + CI cache are enough; a lockfile is nicer but not required for pytest. |
 | P1-unused-swift | Swift dead-code pass | Needs Xcode; Linux agents cannot compile. |

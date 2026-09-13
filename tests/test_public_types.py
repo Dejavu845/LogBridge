@@ -4,13 +4,32 @@ Cycle 14: pipeline / working_space / curve dispatch.
 Cycle 15: formats + detect + rec709 + odt.apply_odt.
 Cycle 16: every public curves encode/decode.
 Cycle 17: as_shot + exposure public returns.
+Cycle 18: remaining public color modules except unrestored batch.py.
 """
 
 from __future__ import annotations
 
 import inspect
 
-from color import as_shot, curves, detect, exposure, formats, odt, pipeline, rec709, working_space
+from color import (
+    as_shot,
+    auto_wb,
+    curves,
+    detect,
+    exposure,
+    exr_write,
+    formats,
+    gamuts,
+    graph,
+    ocio_builtins,
+    odt,
+    pipeline,
+    rec709,
+    resolve_export,
+    stubs,
+    wb,
+    working_space,
+)
 
 
 def _public(mod):
@@ -76,3 +95,10 @@ def test_exposure_public_return_annotations():
     for name in _public(exposure):
         fn = getattr(exposure, name)
         assert "return" in fn.__annotations__, name
+
+
+def test_remaining_color_modules_public_return_annotations():
+    for mod in (auto_wb, exr_write, gamuts, graph, ocio_builtins, resolve_export, stubs, wb):
+        for name in _public(mod):
+            fn = getattr(mod, name)
+            assert "return" in fn.__annotations__, f"{mod.__name__}.{name}"
