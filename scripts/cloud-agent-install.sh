@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Cloud Agent / Linux bootstrap. Idempotent. Does not require Xcode.
 #
-# Installs numpy + pytest via pyproject extras so `python -m pytest -q` works.
+# Installs numpy + pytest + ruff via pyproject extras so
+# `python -m pytest -q` and `python -m ruff check color tests scripts` work.
 # macOS Xcode / Metal / Finder / real EXR writes are out of scope here.
 # CI 绿不等于达芬奇已验证。整段代理，不是全精度成片.
 
@@ -27,13 +28,16 @@ fi
     exit 1
   }
 
+echo "Resolved interpreter: $PY"
+"$PY" -c 'import sys; print(sys.executable); print(sys.version)'
+
 install_pkg() {
   "$PY" -m pip install "$@"
 }
 
 "$PY" -m pip install --upgrade pip || true
-if ! install_pkg -e ".[test]"; then
-  install_pkg --break-system-packages -e ".[test]"
+if ! install_pkg -e ".[test,lint]"; then
+  install_pkg --break-system-packages -e ".[test,lint]"
 fi
 
 "$PY" - <<'PY'
@@ -44,7 +48,10 @@ import sys
 print(
     "LogBridge Linux deps ok:",
     f"python={sys.version.split()[0]}",
+    f"executable={sys.executable}",
     f"numpy={numpy.__version__}",
     f"pytest={pytest.__version__}",
 )
 PY
+
+"$PY" -m ruff --version

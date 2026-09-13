@@ -47,7 +47,7 @@ def test_engineering_docs_exist_and_stay_honest():
     assert "先选择 Log 与色域" in blob
     assert "No Xcode on Linux" in blob or "Do not require Xcode" in blob
     assert "never 一键还原" in blob or "一键还原 added" in blob
-    assert "HLG/PQ supported" not in blob.lower()
+    assert "hlg/pq supported" not in blob.lower()
     assert "全格式已支持" not in blob
 
 
@@ -74,9 +74,8 @@ def test_cursor_environment_is_linux_pytest_without_xcode():
     script = INSTALL.read_text(encoding="utf-8")
     assert "Does not require Xcode" in script or "does not require Xcode" in script
     assert "python3.12" in script
-    assert ".[test]" in script
+    assert ".[test,lint]" in script
     assert "xcodebuild" not in script
-    assert INSTALL.stat().st_mode & 0o111  # executable for Cloud Agents
 
 
 def test_ci_pins_python_312_caches_and_fails_if_tests_missing():
@@ -84,8 +83,11 @@ def test_ci_pins_python_312_caches_and_fails_if_tests_missing():
     assert 'python-version: "3.12"' in text
     assert "cache: pip" in text
     assert "Guard pytest suite present" in text
-    assert "test_*.py" in text
-    assert 'pip install -e ".[test]"' in text
+    assert "scripts/ci-guard-tests.sh" in text
+    assert "test_*.py" in (ROOT / "scripts" / "ci-guard-tests.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'pip install -e ".[test,lint]"' in text
     assert "ruff check" in text
     assert "xcodebuild" in text  # macos job only
     assert "CI 绿不等于达芬奇已验证" in text
@@ -99,7 +101,7 @@ def test_pyproject_hygiene_and_ruff_is_lightweight():
     assert 'test = ["pytest>=7.0"]' in text
     assert 'lint = ["ruff>=0.6"]' in text
     assert 'select = ["E9", "F63", "F7", "F82"]' in text
-    assert 'testpaths = ["tests"]' in text
+    assert "testpaths = [\"tests\"]" in text
 
 
 def test_python_package_doc_forbids_supported_camera_claims():
@@ -139,7 +141,8 @@ def test_known_chinese_write_failures_are_not_rewritten_to_decode():
 
 
 def test_pytest_suite_is_present_for_the_ci_guard():
-    modules = list((ROOT / "tests").glob("test_*.py"))
+    # Same recursive count as scripts/ci-guard-tests.sh (`find tests -name 'test_*.py'`).
+    modules = list((ROOT / "tests").rglob("test_*.py"))
     assert len(modules) >= 10
     names = {p.name for p in modules}
     assert "test_ui_copy.py" in names

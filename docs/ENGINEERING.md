@@ -39,7 +39,7 @@ Do not regress these without updating the locked tests (`tests/test_ui_copy.py`,
 - **Do not add manufacturer demo clips.** Grey-card slots under `tests/fixtures/grey_card/` stay empty in git.
 - **Copy contracts.** User-visible Chinese strings are duplicated in Swift and `color/batch.py` / `color/formats.py` on purpose. Change both, then run pytest. Never replace a known chip with generic **解析失败** / **解码失败**.
 - **Status language.** “implemented (unverified)” in Python/docs; **已实现（未验证）** in the app. Never “supported” as a camera/HDR claim.
-- **Imports.** No unused imports. New code should have type hints on public functions.
+- **Imports.** New code adds no unused imports; existing unused imports stay **P1-ruff-style**. New code should have type hints on public functions.
 - **Tests.** New behavior needs a pytest. Do not skip a missing grey-card by writing a fake 0.18 file.
 
 ## Local development (Linux or Mac)
