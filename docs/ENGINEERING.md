@@ -35,7 +35,7 @@ Do not regress these without updating the locked tests (`tests/test_ui_copy.py`,
 
 - **Python 3.10+** locally; **3.12** in CI and Cloud Agents. `from __future__ import annotations` is the existing style.
 - **Do not change** curve constants, gamut matrices, IDT pair tables, OCIO Builtin names, or WB CAT unless you have a failing test that cites a white paper mismatch. 18% codes live in `color/curves.py` and `FORMULAS.md`.
-- **Do not add cameras.** D-Log M stays a stub (`color/stubs.py`, `FutureIDTs.swift`). Cycle 21 locks `FutureIDTs.dLogMIsSupported()` as false. Do not invent a transfer.
+- **Do not add cameras.** D-Log M stays a stub (`color/stubs.py`, `FutureIDTs.swift`). Cycle 21 locks `FutureIDTs.dLogMIsSupported()` as false. Cycle 22: `picker_pairs()` must not list `dji_dlog_m`. Do not invent a transfer.
 - **Do not add manufacturer demo clips.** Grey-card slots under `tests/fixtures/grey_card/` stay empty in git.
 - **Copy contracts.** User-visible Chinese strings are duplicated in Swift and `color/batch.py` / `color/formats.py` on purpose. Change both, then run pytest. Never replace a known chip with generic **解析失败** / **解码失败**.
 - **Status language.** “implemented (unverified)” in Python/docs; **已实现（未验证）** in the app. Never “supported” as a camera/HDR claim.

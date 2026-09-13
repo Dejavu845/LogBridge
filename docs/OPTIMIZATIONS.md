@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 22 — picker never offers D-Log M
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | Picker lock | `picker_pairs()` never returns `dji_dlog_m` (Venice / S-Log3 / C-Log3 variants included). `test_picker_never_offers_dlog_m`. |
+
 ## Cycle 21 — D-Log M Swift stub lock
 
 | ID | Item | What landed |
