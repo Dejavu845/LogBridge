@@ -86,15 +86,31 @@ def test_preview_engine_switches_cover_every_idt_case():
         assert name in _case_names_in(export_cst), f"{name} missing from ResolveExporter"
 
 
+def _live_code_lines(chunk: str) -> list[str]:
+    """Drop full-line `//` comments and `//` tails. Empty lines omitted."""
+    live: list[str] = []
+    for raw in chunk.splitlines():
+        stripped = raw.lstrip()
+        if stripped.startswith("//"):
+            continue
+        code = raw.split("//")[0].rstrip()
+        if code.strip():
+            live.append(code)
+    return live
+
+
 def _swift_let_exprs(chunk: str) -> dict[str, str]:
+    """First live `let a/b/c/d/s/t` wins. Comments cannot shadow later."""
     out: dict[str, str] = {}
-    for name, expr in re.findall(r"\blet ([abcdst]) = (.+)", chunk):
-        out[name] = expr.strip()
+    for line in _live_code_lines(chunk):
+        match = re.search(r"\blet ([abcdst]) = (.+)", line)
+        if match and match.group(1) not in out:
+            out[match.group(1)] = match.group(2).strip()
     return out
 
 
 def _eval_swift_arith(expr: str, env: dict[str, float]) -> float:
-    """Swift pow/log names; no other builtins."""
+    """Swift pow/log names; no other builtins. `//` tails already stripped."""
     return float(
         eval(expr, {"__builtins__": {}}, {"pow": pow, "log": math.log, **env})
     )
@@ -103,13 +119,14 @@ def _eval_swift_arith(expr: str, env: dict[str, float]) -> float:
 def test_logc4_decode_has_negative_extension_in_both_swift_files():
     want_s = float(_LOGC4_S)
     want_t = float(_LOGC4_T)
+    required = "if x < 0.0 { return x * s + t }"
     for path in (PREVIEW, EXPORTER):
         text = path.read_text(encoding="utf-8")
         body = _switch_body(text, "decodeLog")
         idx = body.index("arriLogC4AWG4")
         chunk = body[idx : idx + 800]
-        assert "if x < 0.0" in chunk, f"{path.name} LogC4 missing x < 0.0"
-        assert "x * s + t" in chunk, f"{path.name} LogC4 missing x * s + t"
+        live = "\n".join(_live_code_lines(chunk))
+        assert required in live, f"{path.name} LogC4 missing live `{required}`"
         lets = _swift_let_exprs(chunk)
         env: dict[str, float] = {}
         for name in ("a", "b", "c"):

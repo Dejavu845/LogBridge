@@ -167,7 +167,7 @@ def test_user_visible_surfaces_forbid_overclaim_phrases():
     constants = _cjk_constants()
     for name, value in constants.items():
         for n in needles:
-            if n in value and "不写" not in value:
+            if n in value:
                 hits.append(f"color/batch.py:{name}")
         if re.search(r"(?<![未])已验证", value):
             hits.append(f"color/batch.py:{name}:已验证")
