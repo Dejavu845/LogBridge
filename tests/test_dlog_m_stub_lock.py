@@ -164,6 +164,29 @@ def test_swift_venice_rows_require_detection():
     assert "if veniceRows" in pchunk
 
 
+def test_menu_label_never_says_supported():
+    """Cycle 27: picker status is implemented (unverified) / stub, not supported."""
+    from color.detect import IMPLEMENTED_STATUS, STUB_STATUS
+
+    assert IMPLEMENTED_STATUS == "implemented (unverified)"
+    assert STUB_STATUS == "stub, not implemented"
+    assert "supported" not in IMPLEMENTED_STATUS.lower()
+    assert "supported" not in STUB_STATUS.lower()
+    assert "精准" not in IMPLEMENTED_STATUS
+    assert "精准" not in STUB_STATUS
+
+    idt = ROOT / "macos" / "LogBridge" / "LogBridge" / "Models" / "IDT.swift"
+    text = idt.read_text(encoding="utf-8")
+    assert f'static let implementedStatus = "{IMPLEMENTED_STATUS}"' in text
+    assert f'static let stubStatus = "{STUB_STATUS}"' in text
+    start = text.find("var menuLabel")
+    end = text.find("var ocioName", start)
+    chunk = text[start:end]
+    assert "Self.implementedStatus" in chunk
+    assert "Self.stubStatus" in chunk
+    assert "supported" not in chunk.lower()
+
+
 def test_dlog_m_still_absent_from_idt_pairs():
     from color.gamuts import IDT_PAIRS
     from color.stubs import STUB_IDTS, dlog_m_to_linear
