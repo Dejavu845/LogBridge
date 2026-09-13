@@ -2,13 +2,15 @@
 
 Cycle 14: pipeline / working_space / curve dispatch.
 Cycle 15: formats + detect + rec709 + odt.apply_odt.
+Cycle 16: every public curves encode/decode.
+Cycle 17: as_shot + exposure public returns.
 """
 
 from __future__ import annotations
 
 import inspect
 
-from color import curves, detect, formats, odt, pipeline, rec709, working_space
+from color import as_shot, curves, detect, exposure, formats, odt, pipeline, rec709, working_space
 
 
 def _public(mod):
@@ -62,3 +64,15 @@ def test_rec709_public_return_annotations():
 
 def test_odt_apply_return_annotation():
     assert "return" in odt.apply_odt.__annotations__
+
+
+def test_as_shot_public_return_annotations():
+    for name in _public(as_shot):
+        fn = getattr(as_shot, name)
+        assert "return" in fn.__annotations__, name
+
+
+def test_exposure_public_return_annotations():
+    for name in _public(exposure):
+        fn = getattr(exposure, name)
+        assert "return" in fn.__annotations__, name

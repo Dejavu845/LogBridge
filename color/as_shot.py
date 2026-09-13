@@ -7,7 +7,7 @@ knobs as “as-shot”. Default CAT is identity.
 Apply the existing linear AP0 CAT **only** when the user moves CCT/tint
 away from the as-shot values (relative CAT(user→D65)·inv(CAT(as→D65))
 == CAT(user→as) in AP0; 3200→5600 warms),
-or applies a grey-card override (absolute CAT). First typed CCT with
+    or applies a grey-card override (absolute CAT). First typed CCT with
 no as-shot is a label (identity).
 
 Review locks:
@@ -321,7 +321,7 @@ def wb_defaults_from_as_shot(shot: AsShotWB) -> dict:
     }
 
 
-def write_as_shot_to_graph(graph, shot: AsShotWB):
+def write_as_shot_to_graph(graph, shot: AsShotWB) -> object:
     """Populate the existing WB knobs (UI only). CAT stays identity."""
     graph.apply_as_shot(shot)
     return graph
