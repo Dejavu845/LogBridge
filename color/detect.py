@@ -213,6 +213,22 @@ def _with_as_shot(d: Detection, as_shot: AsShotWB) -> Detection:
     return replace(d, as_shot_cct=as_shot.cct, as_shot_tint=float(as_shot.tint))
 
 
+def slog3_filename_needs_picker(name: str) -> bool:
+    """True when a filename has S-Log3 but no S-Gamut3 / Cine token.
+
+    Cycle 31: never silent-lock Cine (or Venice) from a bare slog3 token.
+    """
+    n = (name or "").lower()
+    if "s-log3" not in n and "slog3" not in n:
+        return False
+    cine = ("sgamut3.cine", "s-gamut3.cine", "sgamut3cine", "sgamut3_cine")
+    if any(token in n for token in cine):
+        return False
+    if "sgamut3" in n or "s-gamut3" in n:
+        return False
+    return True
+
+
 def _is_slog3(curve: str | None) -> bool:
     if not curve:
         return False
@@ -490,7 +506,7 @@ def detect_from_filename(path: str) -> Detection | None:
                 return _pair(pair, "filename", _filename_success_note(pair, token))
             return _pair(idt_id, "filename", _filename_success_note(idt_id, token))
     # S-Log3 without gamut token: do not assume Cine or Venice.
-    if "s-log3" in name or "slog3" in name:
+    if slog3_filename_needs_picker(name):
         return Detection(
             None,
             "slog3",
