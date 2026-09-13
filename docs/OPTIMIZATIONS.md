@@ -33,17 +33,27 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 
 | ID | Item | What landed |
 | --- | --- | --- |
-| LB-01 | Venice silent-IDT in preview | `PreviewEngine.cameraToAP0` / `decodeLog` now include both Venice cases (same non-Venice S-Gamut3 pair as `ResolveExporter` / `color/pipeline.py`). No invented Venice matrix. |
-| LB-05 | LogC4 `x<0` | Swift `decodeLog` mirrors `color/curves.py` `_LOGC4_S` / `_LOGC4_T`. Still unverified. |
+| LB-01 | Venice silent-IDT in preview | `PreviewEngine.cameraToAP0` / `decodeLog` now include both Venice cases (same non-Venice S-Gamut3 pair as `ResolveExporter` / `color/pipeline.py`). No invented Venice matrix. **Local tree only until a human pushes PreviewEngine.swift.** |
+| LB-05 | LogC4 `x<0` | Swift `decodeLog` mirrors `color/curves.py` `_LOGC4_S` / `_LOGC4_T`. Still unverified. **Local tree only until PreviewEngine / ResolveExporter are pushed.** |
 | LB-04 | Swift↔Python parity | `tests/test_swift_parity.py` locks every non-stub IDT case, Preview==Exporter matrices, and Python `camera_to_aces2065_matrix`. |
-| LB-07 | OCIO drift + stale DWG | `generate_ocio_assets.py --out/--check`; delete unreferenced `*_to_DWG` / leftover XYZ matrices. Keep the three AP0 files the generator emits. |
-| LB-08 | README copy inventory | `tests/test_readme_copy.py` — CJK constants must be in README/ACCEPTANCE or listed in `KNOWN_DESYNC`. |
+| LB-07 | OCIO drift + stale DWG | `generate_ocio_assets.py --out/--check`; delete unreferenced `*_to_DWG` / leftover XYZ matrices. |
+| LB-08 | README copy inventory | `tests/test_readme_copy.py` — CJK constants must be in README/ACCEPTANCE or listed in `KNOWN_DESYNC` (65 of 93 sit in `KNOWN_DESYNC`; the rest are pinned. The list is a ratchet, not a sync claim). |
 
 ## Cycle 5 — Opus C3 follow-up
 
 | ID | Item | What landed |
 | --- | --- | --- |
 | P0-batch-floor | Same statement, same counter | `ci-guard-tests.sh` now uses `splitlines()` (not `wc -l`). Floor is 1340 (10-line slack on 1350). Helper-name asserts live in `tests/test_batch_file_floor.py` so a SyntaxError in `batch.py` still prints the intended message (that module does not `import color.batch`). |
+
+## Cycle 6 — Opus C4 follow-up
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| H1 | LogC4 numeric lock | `test_swift_parity.py` evaluates Swift `let s` / `let t` and compares to `_LOGC4_S` / `_LOGC4_T` at 1e-12. A comment naming those tokens no longer passes. |
+| M1/M2 | Copy gate | `.help` / `navigationTitle` / `Label` / …; ban-quote allowlist is the two SettingsView disclaimer lines, not a `不写` substring. |
+| M3 | `--check` globals | `check_against` restores `LUT_DIR` / `MTX_DIR` / `CONFIG` in `finally`. |
+| M4 | Dead AP0 `.spimtx` | Stop emitting / delete `BT2020_to_AP0`, `DGamut_to_AP0`, `AppleWideGamut_to_AP0`. `config.ocio` already inlines those matrices; the files were unreferenced. |
+| M5 | Handbook | `docs/ENGINEERING.md` documents `--check`. |
 
 ## P1 — left for next cycle
 

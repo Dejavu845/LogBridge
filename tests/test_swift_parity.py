@@ -6,11 +6,13 @@ must match the existing Python tables; do not invent a Venice matrix.
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
 import numpy as np
 
+from color.curves import _LOGC4_S, _LOGC4_T
 from color.gamuts import IDT_PAIRS, camera_to_aces2065_matrix
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +44,7 @@ def _idt_cases() -> list[tuple[str, str]]:
 def _switch_body(src: str, func_name: str) -> str:
     marker = f"private static func {func_name}"
     start = src.index(marker)
+    # Next top-level-ish func or type closer at column 4.
     rest = src[start:]
     nxt = re.search(r"\n    (private static func |/// |\}\n)", rest[len(marker) :])
     if nxt is None:
@@ -50,9 +53,14 @@ def _switch_body(src: str, func_name: str) -> str:
 
 
 def _case_names_in(body: str) -> set[str]:
+    """Only tokens on a `case` label line — not `.x` / `.rows` / comments."""
     names: set[str] = set()
-    for raw in re.findall(r"\.([A-Za-z0-9]+)", body):
-        names.add(raw)
+    for line in body.splitlines():
+        stripped = line.lstrip()
+        if not stripped.startswith("case "):
+            continue
+        for raw in re.findall(r"\.([A-Za-z0-9]+)", stripped):
+            names.add(raw)
     return names
 
 
@@ -64,7 +72,7 @@ def test_preview_engine_switches_cover_every_idt_case():
     preview_log = _switch_body(preview, "decodeLog")
     export_ap0 = _switch_body(exporter, "cameraToAP0")
     export_log = _switch_body(exporter, "decodeLog")
-    export_cst = exporter
+    export_cst = _switch_body(exporter, "resolveCST")
     for name, raw in cases:
         if name.endswith("Stub") or raw.endswith("_stub") or "Stub" in name:
             continue
@@ -78,14 +86,41 @@ def test_preview_engine_switches_cover_every_idt_case():
         assert name in _case_names_in(export_cst), f"{name} missing from ResolveExporter"
 
 
+def _swift_let_exprs(chunk: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for name, expr in re.findall(r"\blet ([abcdst]) = (.+)", chunk):
+        out[name] = expr.strip()
+    return out
+
+
+def _eval_swift_arith(expr: str, env: dict[str, float]) -> float:
+    """Swift pow/log names; no other builtins."""
+    return float(
+        eval(expr, {"__builtins__": {}}, {"pow": pow, "log": math.log, **env})
+    )
+
+
 def test_logc4_decode_has_negative_extension_in_both_swift_files():
+    want_s = float(_LOGC4_S)
+    want_t = float(_LOGC4_T)
     for path in (PREVIEW, EXPORTER):
         text = path.read_text(encoding="utf-8")
         body = _switch_body(text, "decodeLog")
         idx = body.index("arriLogC4AWG4")
         chunk = body[idx : idx + 800]
-        assert "x < 0.0" in chunk, f"{path.name} LogC4 missing x < 0.0"
-        assert "_LOGC4_S" in chunk or "14.0 * c / b" in chunk
+        assert "if x < 0.0" in chunk, f"{path.name} LogC4 missing x < 0.0"
+        assert "x * s + t" in chunk, f"{path.name} LogC4 missing x * s + t"
+        lets = _swift_let_exprs(chunk)
+        env: dict[str, float] = {}
+        for name in ("a", "b", "c"):
+            assert name in lets, f"{path.name} LogC4 missing let {name}"
+            env[name] = _eval_swift_arith(lets[name], env)
+        assert "s" in lets and "t" in lets, f"{path.name} LogC4 missing let s/t"
+        # A comment naming _LOGC4_S must not satisfy this — evaluate the RHS.
+        got_s = _eval_swift_arith(lets["s"], env)
+        got_t = _eval_swift_arith(lets["t"], env)
+        assert abs(got_s - want_s) < 1e-12, f"{path.name} s={got_s} want {want_s}"
+        assert abs(got_t - want_t) < 1e-12, f"{path.name} t={got_t} want {want_t}"
 
 
 def test_preview_and_exporter_camera_matrices_match_each_other_and_python():
@@ -125,6 +160,7 @@ def test_white_balance_ap0_to_xyz_literal_matches_python():
 def _extract_case_matrices(body: str) -> dict[str, np.ndarray]:
     """Map Swift case name → 3×3 from the following simd_double3x3(rows:)."""
     out: dict[str, np.ndarray] = {}
+    # Split on `case` labels inside the switch.
     chunks = re.split(r"\n        case ", body)
     for chunk in chunks[1:]:
         header, _, rest = chunk.partition(":")
