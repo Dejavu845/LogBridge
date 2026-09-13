@@ -72,6 +72,24 @@ def test_swift_python_curve_picker_ids_match():
         assert f'= "{raw}"' in text
 
 
+def test_swift_implemented_non_venice_matches_python():
+    """Cycle 25: Swift implemented (minus Venice, minus stub) == Python table."""
+    import re
+
+    from color.detect import IMPLEMENTED_NON_VENICE
+    from color.gamuts import IDT_PAIRS, VENICE_IDTS
+
+    idt = ROOT / "macos" / "LogBridge" / "LogBridge" / "Models" / "IDT.swift"
+    text = idt.read_text(encoding="utf-8")
+    raws = re.findall(r'case \w+ = "([a-z0-9_]+)"', text)
+    assert "dji_dlog_m" in raws
+    implemented = [r for r in raws if r != "dji_dlog_m"]
+    non_venice = [r for r in implemented if r not in VENICE_IDTS]
+    assert set(non_venice) == set(IMPLEMENTED_NON_VENICE)
+    assert set(implemented) == set(IDT_PAIRS)
+    assert "dji_dlog_m" not in IDT_PAIRS
+
+
 def test_can_one_click_never_for_stub_id():
     from color.detect import Detection, can_one_click_process
 
