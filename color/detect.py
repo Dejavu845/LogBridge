@@ -451,7 +451,7 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
         return _pair("apple_log_bt2020", "metadata", NOTE_META_APPLE_LOG)
 
     dji = str(cleaned.get("dji_gamma", cleaned.get("dji_log", ""))).lower()
-    if "d-log m" in dji or "dlog m" in dji or "dlogm" in dji or "d-logm" in dji:
+    if dlog_m_token_hit(dji):
         return Detection(
             None,
             None,
@@ -474,9 +474,18 @@ def _detect_from_metadata_idt(meta: dict) -> Detection | None:
     return None
 
 
+DLOG_M_TOKENS = ("d-log m", "dlog m", "dlogm", "d-logm")
+
+
+def dlog_m_token_hit(text: str) -> bool:
+    """Cycle 33: D-Log M tokens never become D-Log + D-Gamut."""
+    n = (text or "").lower()
+    return any(token in n for token in DLOG_M_TOKENS)
+
+
 def _unsupported_filename(name: str) -> Detection | None:
     """D-Log M stays unresolved — never a silent IDT. No public decode/xy."""
-    if "d-log m" in name or "dlog m" in name or "dlogm" in name or "d-logm" in name:
+    if dlog_m_token_hit(name):
         return Detection(
             None,
             None,
