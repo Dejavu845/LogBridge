@@ -290,10 +290,16 @@ enum ClipDetector {
         return true
     }
 
+    /// Cycle 38: a Venice body name is not an IDT. Gamut still required.
+    static func modelNeedsVenicePicker(_ raw: String?) -> Bool {
+        guard let raw else { return false }
+        return raw.lowercased().contains("venice")
+    }
+
     static func detectModel(_ model: String?) -> DetectionResult? {
         guard let model else { return nil }
         let m = model.lowercased()
-        if m.contains("venice") {
+        if modelNeedsVenicePicker(m) {
             return DetectionResult(
                 idt: nil,
                 curve: "S-Log3",
