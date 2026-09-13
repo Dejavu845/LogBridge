@@ -1,14 +1,14 @@
-"""P1-types: public helpers in pipeline / working_space / curves declare returns.
+"""P1-types: public helpers declare returns. Numbers unchanged.
 
-Does not change CAT / IDT / curve numbers. Cycle 14 only annotates existing
-functions that already returned ndarrays.
+Cycle 14: pipeline / working_space / curve dispatch.
+Cycle 15: formats + detect + rec709 + odt.apply_odt.
 """
 
 from __future__ import annotations
 
 import inspect
 
-from color import curves, pipeline, working_space
+from color import curves, detect, formats, odt, pipeline, rec709, working_space
 
 
 def _public(mod):
@@ -34,3 +34,25 @@ def test_working_space_public_return_annotations():
 def test_curves_dispatch_return_annotations():
     assert "return" in curves.decode_log.__annotations__
     assert "return" in curves.encode_log.__annotations__
+
+
+def test_formats_public_return_annotations():
+    for name in _public(formats):
+        fn = getattr(formats, name)
+        assert "return" in fn.__annotations__, name
+
+
+def test_detect_public_return_annotations():
+    for name in _public(detect):
+        fn = getattr(detect, name)
+        assert "return" in fn.__annotations__, name
+
+
+def test_rec709_public_return_annotations():
+    for name in _public(rec709):
+        fn = getattr(rec709, name)
+        assert "return" in fn.__annotations__, name
+
+
+def test_odt_apply_return_annotation():
+    assert "return" in odt.apply_odt.__annotations__

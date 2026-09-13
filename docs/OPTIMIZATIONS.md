@@ -110,12 +110,18 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | Return annotations | `pipeline.apply_odt_rec709` / `apply_selected_odt`, all public `working_space` helpers, and `curves.decode_log` / `encode_log` now declare `-> np.ndarray`. Numbers unchanged. `tests/test_public_types.py` locks the annotations. |
 
+## Cycle 15 — P1-types formats / detect / rec709 / ODT
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P1-types | More return annotations | Public `formats` / `detect` already declared returns; the lock now requires them. `rec709` helpers and `odt.apply_odt` declare `-> np.ndarray`. Numbers unchanged. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |
 | --- | --- | --- |
 | P1-ruff-style | Broader Ruff (E/F/I/UP) | Cycle 1 only gates syntax/undefined names so we do not churn the huge copy-lock tests. |
-| P1-types | Type hints across `color/` | Cycle 14 annotated pipeline / working_space / curve-dispatch returns. Remaining modules and mypy stay later. |
+| P1-types | Type hints across `color/` | Cycle 15 locked formats / detect / rec709 / `odt.apply_odt`. Remaining modules (`curves` individuals, `batch`, mypy) stay later. |
 | P1-split-ui-tests | Split `tests/test_ui_copy.py` | The file is a locked copy contract. Splitting risks false diffs in review. |
 | P1-lockfile | `uv.lock` / pip-tools pin | pyproject ranges + CI cache are enough; a lockfile is nicer but not required for pytest. |
 | P1-unused-swift | Swift dead-code pass | Needs Xcode; Linux agents cannot compile. |
