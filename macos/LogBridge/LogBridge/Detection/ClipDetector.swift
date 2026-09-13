@@ -176,7 +176,7 @@ enum ClipDetector {
         if name.contains("log3g10") || name.contains("redwidegamut") {
             return locked(.redLog3G10RWG, source: .filename, note: "文件名 Log3G10")
         }
-        if name.contains("d-log m") || name.contains("dlog m") || name.contains("dlogm") || name.contains("d-logm") {
+        if filenameIsDLogMStub(name) {
             return DetectionResult(
                 idt: nil, curve: nil, gamut: nil, source: .filename, needsUserPicker: true,
                 note: "D-Log M 暂不支持，请用 D-Log + D-Gamut"
@@ -247,6 +247,15 @@ enum ClipDetector {
             )
         }
         return nil
+    }
+
+    /// Cycle 33: D-Log M tokens never lock D-Log + D-Gamut.
+    static func filenameIsDLogMStub(_ raw: String) -> Bool {
+        let name = raw.lowercased()
+        return name.contains("d-log m")
+            || name.contains("dlog m")
+            || name.contains("dlogm")
+            || name.contains("d-logm")
     }
 
     /// Cycle 32: C-Log2 without a gamut token never locks Cinema Gamut.
