@@ -7,7 +7,7 @@ knobs as “as-shot”. Default CAT is identity.
 Apply the existing linear AP0 CAT **only** when the user moves CCT/tint
 away from the as-shot values (relative CAT(user→D65)·inv(CAT(as→D65))
 == CAT(user→as) in AP0; 3200→5600 warms),
-    or applies a grey-card override (absolute CAT). First typed CCT with
+or applies a grey-card override (absolute CAT). First typed CCT with
 no as-shot is a label (identity).
 
 Review locks:
@@ -264,7 +264,7 @@ def effective_cat_cct(
     Source ``as_shot`` is never a CAT, even at 3200 or 5600.
     Source ``grey`` is an absolute CAT. Source ``estimate`` (confirmed
     auto WB) is an absolute CAT. Source ``user`` with as-shot
-    is relative. Source ``unknown`` with an explicit CCT (CLI / unit
+    is relative. Source ``unknown" with an explicit CCT (CLI / unit
     construction) stays an absolute CAT.
     """
     if wb_cct is None:
