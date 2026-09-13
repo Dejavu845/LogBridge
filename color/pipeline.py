@@ -38,9 +38,7 @@ from .ocio_builtins import (
 )
 from .odt import HDR_ODTS, ODT_OFF, ODT_REC709, apply_hdr_odt
 from .rec709 import rec709_oetf
-from .wb import apply_white_balance
 from .working_space import (
-    DEFAULT_WORKING_LINEAR,
     aces2065_to_acescct,
     acescct_decode,
 )

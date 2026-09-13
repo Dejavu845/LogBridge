@@ -4,10 +4,11 @@ on:
   push:
   pull_request:
 
-# Linux pytest 保留。macos-15 只编现有 LogBridge scheme，并跑同一套 pytest。
+# Linux pytest 保留。macos-15 只编现有 LogBridge scheme，并跐同一套 pytest。
 # Rec709PreviewView 里 CALayer.colorspace 用 KVC 对齐 runner Swift overlay（Xcode 26.3 仍无此 member）。
 # 不改 709 观感。Metal GPU、Finder 显示、真机写出 / 真机导出 在 Actions 上测不了，仍靠人在 Mac 上点。
 # 没有真机 CI，也不覆盖 Metal / Finder / 真写出。
+# CI 绿不等于达芬奇已验证。整段代理，不是全精度成片。
 
 jobs:
   pytest:
@@ -17,10 +18,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements.txt
+      - name: Guard pytest suite present
+        run: |
+          set -euo pipefail
+          test -d tests
+          n=$(find tests -name 'test_*.py' | wc -l)
+          echo "test modules: ${n}"
+          test "${n}" -ge 10
       - name: Install
-        run: python -m pip install --upgrade pip && pip install numpy pytest
+        run: python -m pip install --upgrade pip && pip install -e ".[test]" && pip install ruff
       - name: Test
         run: python -m pytest -q
+      - name: Ruff (syntax / undefined names)
+        run: python -m ruff check color tests scripts
 
   macos:
     runs-on: macos-15
@@ -43,7 +57,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements.txt
+      - name: Guard pytest suite present
+        run: |
+          set -euo pipefail
+          test -d tests
+          n=$(find tests -name 'test_*.py' | wc -l)
+          echo "test modules: ${n}"
+          test "${n}" -ge 10
       - name: Install
-        run: python -m pip install --upgrade pip && pip install numpy pytest
+        run: python -m pip install --upgrade pip && pip install -e ".[test]"
       - name: Test
         run: python -m pytest -q
