@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 31 — S-Log3 without gamut stays on the picker
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | S-Log3 filename | `slog3_filename_needs_picker` / Swift `filenameNeedsSLog3Picker`. Bare `slog3` never locks Cine. `sgamut3` still locks the pair. IDT.swift comment no longer contains the banned one-click overclaim substring. Color math unchanged. |
+
 ## Cycle 30 — filename hints stay locked pairs
 
 | ID | Item | What landed |
