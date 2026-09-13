@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 27 — menuLabel never says supported
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | Status copy | Swift `implementedStatus` / `stubStatus` + Python mirrors. menuLabel interpolates those tokens. Never “supported”. Color math unchanged. |
+
 ## Cycle 26 — Venice rows never silent
 
 | ID | Item | What landed |
