@@ -128,6 +128,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 | --- | --- | --- |
 | P1-types | as_shot / exposure | `write_as_shot_to_graph` declares a return. Public `as_shot` and `exposure` helpers are locked. CAT/IDT numbers unchanged. `batch.py` still unrestored on remote. |
 
+## Cycle 37 — CCT must be camera Kelvin
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P2-cameras | as-shot range | `CCT_MIN`/`CCT_MAX` (1000–25000) match Swift `parseCCT`. `cct=1` / nclc-like values stay pending. 3200 still honored. Color math unchanged. |
+
 ## Cycle 36 — Swift as-shot reader never assigns 5600/6504
 
 | ID | Item | What landed |
