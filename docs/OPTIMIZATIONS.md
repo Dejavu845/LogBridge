@@ -23,6 +23,12 @@ None of the P0 engineering-quality items above are left unfinished on purpose. R
 - Golden grey-card samples still pending (`tests/fixtures/grey_card/` empty slots). Do not invent numbers.
 - 真机达芬奇验收: **未跑** unless a Mac `.app`, Resolve, and owner-supplied mixed Log exist. Do not fake-pass.
 
+## Cycle 3 — implemented
+
+| ID | Item | What landed |
+| --- | --- | --- |
+| P0-batch-floor | Catch truncated `color/batch.py` | `scripts/ci-guard-tests.sh` + `test_batch_py_is_not_a_truncated_mcp_rewrite` require ≥1300 lines and key helpers. Does **not** rewrite `batch.py`. |
+
 ## P1 — left for next cycle
 
 | ID | Item | Why wait |

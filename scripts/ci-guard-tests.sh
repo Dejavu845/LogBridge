@@ -12,3 +12,9 @@ test -d tests
 n=$(find tests -name 'test_*.py' | wc -l | tr -d '[:space:]')
 echo "test modules: ${n}"
 test "${n}" -ge 10
+
+# Catch MCP/contents-API rewrites that drop public helpers (Opus B1).
+test -f color/batch.py
+batch_lines=$(wc -l < color/batch.py | tr -d '[:space:]')
+echo "color/batch.py lines: ${batch_lines}"
+test "${batch_lines}" -ge 1300
