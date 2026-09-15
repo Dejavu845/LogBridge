@@ -6,6 +6,7 @@ import Combine
 /// Defaults (调研):
 ///   - Preview ODT: Rec.709 (DIY OETF, 预览·非成片)
 ///   - Prompt estimate WB after import: off (on = prompt only, never write CAT)
+///   - Frame rate: source metadata only (user pick is 用户指定（未核对）)
 ///   - Block process when IDT unlocked: always on, not user-toggleable
 final class AppSettings: ObservableObject {
     static let shared = AppSettings()
@@ -14,6 +15,8 @@ final class AppSettings: ObservableObject {
         static let defaultPreviewODT = "logbridge.defaultPreviewODT"
         static let promptEstimateWB = "logbridge.promptEstimateWBOnImport"
         static let lastExportDirectory = "logbridge.lastExportDirectory"
+        static let frameRatePolicy = "logbridge.frameRatePolicy"
+        static let userFrameRate = "logbridge.userFrameRate"
     }
 
     /// Settings default for the preview pane. Export stays ACEScct.
@@ -24,6 +27,28 @@ final class AppSettings: ObservableObject {
     /// Off by default. When on, import only *prompts* 白平衡（估计）. Never writes CAT. Never 5600.
     @Published var promptEstimateWBOnImport: Bool {
         didSet { UserDefaults.standard.set(promptEstimateWBOnImport, forKey: Key.promptEstimateWB) }
+    }
+
+    /// Default: source metadata only. User pick is 用户指定（未核对）, never a silent rate.
+    @Published var frameRatePolicy: FrameRatePolicy {
+        didSet { UserDefaults.standard.set(frameRatePolicy.rawValue, forKey: Key.frameRatePolicy) }
+    }
+
+    /// User pick only. Nil when policy is source or nothing was chosen.
+    var userWorkingFPS: Double? {
+        guard frameRatePolicy == .user else { return nil }
+        return userFrameRate?.fps
+    }
+
+    /// Nil until the user picks a named rate. Not applied while policy is `.source`.
+    @Published var userFrameRate: NamedFrameRate? {
+        didSet {
+            if let userFrameRate {
+                UserDefaults.standard.set(userFrameRate.rawValue, forKey: Key.userFrameRate)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Key.userFrameRate)
+            }
+        }
     }
 
     /// Cannot be turned off. Pending IDT always blocks 处理已锁定片段.
@@ -61,5 +86,12 @@ final class AppSettings: ObservableObject {
         defaultPreviewODT = ODTMode(rawValue: raw) ?? .rec709
         promptEstimateWBOnImport = UserDefaults.standard.bool(forKey: Key.promptEstimateWB)
         lastExportDirectoryPath = UserDefaults.standard.string(forKey: Key.lastExportDirectory)
+        let policyRaw = UserDefaults.standard.string(forKey: Key.frameRatePolicy) ?? FrameRatePolicy.source.rawValue
+        frameRatePolicy = FrameRatePolicy(rawValue: policyRaw) ?? .source
+        if let rateRaw = UserDefaults.standard.string(forKey: Key.userFrameRate) {
+            userFrameRate = NamedFrameRate(rawValue: rateRaw)
+        } else {
+            userFrameRate = nil
+        }
     }
 }
