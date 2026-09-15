@@ -19,7 +19,7 @@ Public white papers were fetched where possible. **No manufacturer constant from
 
 ## Filled in (not a constant change)
 
-1. **LogC4 negatives** — research: “linear extension”. Implemented official `s`, `t` from the spec CTL (`E' * s + t` for `E' < 0`; encode uses `Escene < t`).
+1. **LogC4 negatives** — research: “linear extension”. Implemented official `s`, `t` from the spec CTL (`E' * s + t` for `E' < 0`; encode uses `Escene < t`). Swift `decodeLog` (PreviewEngine + ResolveExporter) mirrors that extension **on the local tree**; still unverified. The draft PR is missing those two Swift files until a human `git push`.
 2. **S-Log3 shadow** — research: “else the official shadow linear segment”. Decode: `(in*1023-95)*0.01125/(171.2102946929-95)`. Encode uses `in >= 0.01125` for the log piece. 0% → 95/1023, 90% → 598/1023.
 3. **V-Log encode** — `cut1=0.01`: `5.6*in+0.125` else `c*log10(in+b)+d`.
 4. **F-Log2 encode** — `cut1=0.000889`: `e*in+f` else `c*log10(a*in+b)+d`.
@@ -158,7 +158,7 @@ As-shot writes **only** the existing linear AP0 CAT node (`color/wb.py` Bradford
 - First typed CCT with no as-shot = label, identity. Do not CAT(user→D65) on first fill.
 - Missing CCT/tint → **pending / identity** (knobs empty). Do not guess 5600 or 6504. `cct is None` returns `I` from `white_balance_matrix`.
 - Grey-card pick: mean of the post-IDT ACES2065-1 (AP0) linear patch → XYZ → xy → invert `cct_to_xy` (locus search + 1e-3 uv tint). Overrides metadata; that is an **absolute** CAT of the sampled white to D65 (identity only if sampled D65). Implemented (unverified).
-- Resolve WB node stays bypassable (`graph.xml` `bypassable="true"`; DCTL **Bypass WB**). Implemented (unverified).
+- Resolve WB node stays bypassable (`graph.xml` `bypassable=\"true\"`; DCTL **Bypass WB**). Implemented (unverified).
 
 
 # Auto WB estimate (not calibration)
