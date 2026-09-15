@@ -6,11 +6,10 @@ struct NodeStripView: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(alignment: .center, spacing: 6) {
             Text("节点")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .padding(.trailing, 8)
             ForEach(NodeSlot.allCases) { slot in
                 if slot != .idt {
                     NodeConnector()
@@ -21,16 +20,16 @@ struct NodeStripView: View {
                     enabled: session.graph.isEnabled(slot),
                     detail: chipDetail(slot)
                 )
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .onTapGesture { session.selectedNode = slot }
             }
-            Spacer(minLength: 8)
             Text("已实现（未验证）")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.bar)
+        .background(LBChrome.controlMaterial)
     }
 
     private func chipDetail(_ slot: NodeSlot) -> String {
@@ -62,8 +61,7 @@ private struct NodeConnector: View {
     var body: some View {
         Rectangle()
             .fill(Color.secondary.opacity(0.45))
-            .frame(width: 18, height: 2)
-            .padding(.horizontal, 4)
+            .frame(width: 8, height: 2)
     }
 }
 
@@ -74,7 +72,7 @@ private struct NodeChip: View {
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Text("\(slot.rawValue)")
                     .font(.caption2.monospacedDigit().weight(.bold))
@@ -84,26 +82,33 @@ private struct NodeChip: View {
                     .foregroundStyle(.white)
                     .clipShape(Capsule())
                 Text(slot.title)
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                 if slot.isBypassable && !enabled {
                     Text("关")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
+            Text(slot.subtitle)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
             Text(detail)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(selected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.04))
+        .padding(.vertical, 8)
+        .background(LBChrome.controlMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(selected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: selected ? 1.5 : 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(selected ? Color.accentColor.opacity(0.14) : Color.clear)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(selected ? Color.accentColor : Color.white.opacity(0.12), lineWidth: selected ? 1.5 : 1)
+        )
         .opacity(enabled || slot == .idt ? 1 : 0.7)
     }
 }
