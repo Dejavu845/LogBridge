@@ -158,7 +158,7 @@ As-shot writes **only** the existing linear AP0 CAT node (`color/wb.py` Bradford
 - First typed CCT with no as-shot = label, identity. Do not CAT(user→D65) on first fill.
 - Missing CCT/tint → **pending / identity** (knobs empty). Do not guess 5600 or 6504. `cct is None` returns `I` from `white_balance_matrix`.
 - Grey-card pick: mean of the post-IDT ACES2065-1 (AP0) linear patch → XYZ → xy → invert `cct_to_xy` (locus search + 1e-3 uv tint). Overrides metadata; that is an **absolute** CAT of the sampled white to D65 (identity only if sampled D65). Implemented (unverified).
-- Resolve WB node stays bypassable (`graph.xml` `bypassable=\"true\"`; DCTL **Bypass WB**). Implemented (unverified).
+- Resolve WB node stays bypassable (`graph.xml` `bypassable="true"`; DCTL **Bypass WB**). Implemented (unverified).
 
 
 # Auto WB estimate (not calibration)
