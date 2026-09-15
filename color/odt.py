@@ -188,7 +188,7 @@ def apply_hdr_odt(aces_ap0, odt: str) -> np.ndarray:
     return apply_builtin_group(resolve_hdr_styles(odt), aces_ap0)
 
 
-def apply_odt(aces_ap0, odt: str):
+def apply_odt(aces_ap0, odt: str) -> np.ndarray:
     """Dispatch ODT. Off returns ACES2065-1. Rec.709 is preview-only."""
     if odt in (ODT_OFF, None, ""):
         return np.asarray(aces_ap0, dtype=np.float64)
