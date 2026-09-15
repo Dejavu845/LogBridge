@@ -38,9 +38,7 @@ from .ocio_builtins import (
 )
 from .odt import HDR_ODTS, ODT_OFF, ODT_REC709, apply_hdr_odt
 from .rec709 import rec709_oetf
-from .wb import apply_white_balance
 from .working_space import (
-    DEFAULT_WORKING_LINEAR,
     aces2065_to_acescct,
     acescct_decode,
 )
@@ -113,7 +111,7 @@ def camera_linear_to_working(lin_rgb, idt_id: str, working: str = "AP1") -> np.n
     raise KeyError(f"Unsupported working space {working!r} (use AP1 / ACEScct / ACES2065-1)")
 
 
-def apply_odt_rec709(working_lin, working: str = "AP1"):
+def apply_odt_rec709(working_lin, working: str = "AP1") -> np.ndarray:
     """Scene-linear working RGB -> Rec.709 encoded RGB.
 
     Tags conceptually as Rec.709. No tone-mapping RRT; 18% grey will encode
@@ -135,7 +133,7 @@ def apply_odt_rec709(working_lin, working: str = "AP1"):
     return rec709_oetf(np.clip(rec_lin, 0.0, None))
 
 
-def apply_selected_odt(aces_ap0, odt: str):
+def apply_selected_odt(aces_ap0, odt: str) -> np.ndarray:
     """Apply the selected ODT to ACES2065-1. Off returns the AP0 buffer."""
     if odt in (ODT_OFF, None, ""):
         return np.asarray(aces_ap0, dtype=np.float64)
