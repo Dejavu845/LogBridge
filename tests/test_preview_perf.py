@@ -688,13 +688,24 @@ def test_per_frame_scrubber_odt_only_no_whole_clip_decode():
     content = _read(ROOT / "macos/LogBridge/LogBridge/ContentView.swift")
 
     assert "func setPreviewFrame" in clip
+    assert "func setPreviewTime" in clip
     assert "func resetPreviewScrub" in clip
     assert "func scrub(" in engine
     assert "private func applyScrub" in engine
     assert "previewScrubLastFrame" in clip
+    assert "previewScrubDuration" in clip
+    assert "previewScrubFPS" in clip
     assert "previewScrubFail" in clip
     assert "Slider(" in content
     assert "struct PreviewScrubBar" in content
+    bar = content.split("struct PreviewScrubBar")[1].split("/// One Chinese line on the preview")[0]
+    assert "setPreviewTime" in bar
+    assert "previewScrubDuration" in bar
+    assert "step:" not in bar
+    assert "第 " not in bar
+    assert " 帧" not in bar
+    assert "24" not in bar
+    assert "30" not in bar
     assert "第 " in content
     assert " 帧" in content
 
@@ -710,6 +721,7 @@ def test_per_frame_scrubber_odt_only_no_whole_clip_decode():
     assert "精准" not in reset
 
     set_fn = clip.split("func setPreviewFrame")[1].split("func resetPreviewScrub")[0]
+    assert "func setPreviewTime" in set_fn
     assert "preview.scrub(" in set_fn
     assert "preview.refresh(" not in set_fn
     assert "preview.refreshODT" not in set_fn
@@ -717,6 +729,8 @@ def test_per_frame_scrubber_odt_only_no_whole_clip_decode():
     assert "24" not in set_fn
     assert "30" not in set_fn
     assert "精准" not in set_fn
+    assert "previewScrubFPS" in set_fn
+    assert "previewScrubDuration" in set_fn
 
     session_refresh = clip.split("func refreshPreview()")[1].split("func refreshODTOnly()")[0]
     assert "frameIndex: previewFrameIndex" in session_refresh
@@ -808,3 +822,24 @@ def test_per_frame_scrubber_odt_only_no_whole_clip_decode():
     assert "预览·非成片" in engine
     assert "未验证" in clip
 
+
+def test_extent_falls_back_to_track_timing_not_guessed_rate():
+    """asset.duration can be 0 on first read. Use track timing. Do not invent a rate."""
+    media = _read(ROOT / "macos/LogBridge/LogBridge/Models/MediaFormat.swift")
+    clip = _read(CLIP)
+    ext = media.split("static func extent(url:")[1].split("static func classify")[0]
+    assert "asset.duration" in ext
+    assert "timeRange.duration" in ext
+    assert "minFrameDuration" in ext
+    assert "24" not in ext
+    assert "30" not in ext
+    assert "精准" not in ext
+    refresh = clip.split("func refreshPreview()")[1].split("func refreshODTOnly()")[0]
+    assert "recoverPreviewScrubIfNeeded" in refresh
+    recover = clip.split("func recoverPreviewScrubIfNeeded()")[1].split(
+        "func failClosedHDRPreviewLayer"
+    )[0]
+    assert "expectedSourceFrames" in recover
+    assert "MediaFormat.extent" in recover
+    assert "24" not in recover
+    assert "30" not in recover
