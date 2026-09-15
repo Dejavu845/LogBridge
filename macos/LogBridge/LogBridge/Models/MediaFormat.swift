@@ -87,8 +87,22 @@ enum MediaFormat {
         let size = track.naturalSize.applying(track.preferredTransform)
         let width = Int(abs(size.width).rounded())
         let height = Int(abs(size.height).rounded())
-        let fps = fpsRaw.isFinite && fpsRaw > 0 ? fpsRaw : nil
-        let duration = durRaw.isFinite && durRaw > 0 ? durRaw : nil
+        // asset.duration / nominalFrameRate can be 0 before keys load.
+        // Track timing is still metadata — not a guessed frame rate.
+        var fps = fpsRaw.isFinite && fpsRaw > 0 ? fpsRaw : nil
+        if fps == nil {
+            let step = CMTimeGetSeconds(track.minFrameDuration)
+            if step.isFinite && step > 0 {
+                fps = 1.0 / step
+            }
+        }
+        var duration = durRaw.isFinite && durRaw > 0 ? durRaw : nil
+        if duration == nil {
+            let trackDur = CMTimeGetSeconds(track.timeRange.duration)
+            if trackDur.isFinite && trackDur > 0 {
+                duration = trackDur
+            }
+        }
         return MediaExtent(
             frameCount: nil,
             durationSeconds: duration,
