@@ -20,8 +20,10 @@ struct ContentView: View {
                 SplitPreview(session: session)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .layoutPriority(1)
-                PairedIDTBar(session: session)
-                ProcessLockedBar(session: session)
+                LBChrome.decisionDock {
+                    PairedIDTBar(session: session)
+                    ProcessLockedBar(session: session)
+                }
                 AdvancedPanel(session: session, isExpanded: $showAdvanced)
                 StatusBar(session: session)
             }
@@ -29,6 +31,7 @@ struct ContentView: View {
             InspectorView(session: session)
                 .frame(minWidth: 196, idealWidth: 220, maxWidth: 260)
         }
+        .preferredColorScheme(.dark)
         .onDrop(of: [.fileURL], isTargeted: $session.dropTargeted) { providers in
             session.importProviders(providers)
             return true
@@ -42,6 +45,8 @@ struct ContentView: View {
         }
         .sheet(isPresented: $session.showSettings) {
             SettingsView(settings: session.settings, session: session)
+                .background(LBChrome.controlMaterial)
+                .preferredColorScheme(.dark)
         }
         .onChange(of: session.selectedID) { _, _ in
             if let clip = session.selectedClip {
@@ -189,44 +194,42 @@ struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                Text(session.lockStatusText)
-                    .font(.caption.weight(.semibold))
-                if let reason = session.selectedClip?.processSkipReason {
-                    Text(reason)
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                if session.showsProcessLockedButton {
-                    Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
-                        if session.isWritingDeliverables {
-                            session.cancelLockedDeliverables()
-                        } else {
-                            session.processLockedClips()
+        LBChrome.processModule {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    Text(session.lockStatusText)
+                        .font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 8)
+                    if session.showsProcessLockedButton {
+                        Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
+                            if session.isWritingDeliverables {
+                                session.cancelLockedDeliverables()
+                            } else {
+                                session.processLockedClips()
+                            }
                         }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .font(.body.weight(.semibold))
+                        .tint(session.isWritingDeliverables ? LBChrome.warn : LBChrome.locked)
+                        .help("写出的是图片序列（EXR），不是 mp4/mov")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .help("写出的是图片序列（EXR），不是 mp4/mov")
                 }
-            }
-            Text("代理 EXR，不是视频。整段代理，不是全精度成片。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            if session.showsBatchSummary {
-                Text(session.lastExportNote)
-                    .font(.caption2)
+                Text("代理 EXR，不是视频。整段代理，不是全精度成片。")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if session.showsBatchSummary {
+                    Text(session.lastExportNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(Color.primary.opacity(0.03))
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .padding(.bottom, 14)
     }
 }
 
@@ -258,10 +261,17 @@ struct AdvancedPanel: View {
                 .padding(.bottom, 6)
             }
         }
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
         .help("节点与导出 ACEScct / EXR。默认收起。预览·非成片。")
-        .padding(.horizontal, 10)
-        .padding(.vertical, 2)
-        .background(Color.primary.opacity(0.02))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .background(LBChrome.controlMaterial)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(LBChrome.hairline)
+                .frame(height: 1)
+        }
     }
 }
 
@@ -270,41 +280,50 @@ struct SplitPreview: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HSplitView {
-                SourcePreviewView(
-                    title: "源（相机 Log）",
-                    caption: "未套 Rec.709。相机编码值。",
-                    image: session.preview.sourceImage
-                )
-                if session.graph.odt.isHDR {
-                    HDRPreviewView(
-                        title: session.odtPreviewTitle,
-                        caption: session.odtPreviewCaption,
-                        image: session.preview.odtImage,
-                        odt: session.graph.odt,
-                        pickingNeutral: session.pickingNeutral && !session.isExporting,
-                        onPick: { nx, ny in
-                            session.handlePreviewPick(nx: nx, ny: ny)
-                        },
-                        onLayerFail: {
-                            session.failClosedHDRPreviewLayer()
-                        }
+            ZStack {
+                HSplitView {
+                    SourcePreviewView(
+                        title: "源（相机 Log）",
+                        caption: "未套 Rec.709。相机编码值。",
+                        image: session.preview.sourceImage
                     )
-                } else {
-                    Rec709PreviewView(
-                        title: session.odtPreviewTitle,
-                        caption: session.odtPreviewCaption,
-                        image: session.preview.odtImage,
-                        pickingNeutral: session.pickingNeutral && !session.isExporting,
-                        onPick: { nx, ny in
-                            session.handlePreviewPick(nx: nx, ny: ny)
-                        }
-                    )
+                    if session.graph.odt.isHDR {
+                        HDRPreviewView(
+                            title: session.odtPreviewTitle,
+                            caption: session.odtPreviewCaption,
+                            image: session.preview.odtImage,
+                            odt: session.graph.odt,
+                            pickingNeutral: session.pickingNeutral && !session.isExporting,
+                            onPick: { nx, ny in
+                                session.handlePreviewPick(nx: nx, ny: ny)
+                            },
+                            onLayerFail: {
+                                session.failClosedHDRPreviewLayer()
+                            }
+                        )
+                    } else {
+                        Rec709PreviewView(
+                            title: session.odtPreviewTitle,
+                            caption: session.odtPreviewCaption,
+                            image: session.preview.odtImage,
+                            pickingNeutral: session.pickingNeutral && !session.isExporting,
+                            onPick: { nx, ny in
+                                session.handlePreviewPick(nx: nx, ny: ny)
+                            }
+                        )
+                    }
+                }
+                if session.clips.isEmpty {
+                    EmptyPreviewHero(targeted: session.dropTargeted) {
+                        session.showImporter = true
+                    }
                 }
             }
+            .background(LBChrome.canvas)
             PreviewScrubBar(session: session)
+            // Mid-write: lastExportNote is 「写出代理 i/N · 第 k 帧」. Idle: selected caption only.
             if session.isExporting {
-                WriteProgressLine(text: session.lastExportNote)
+                WriteProgressLine(text: session.lastExportNote, writing: true)
             } else if let caption = session.selectedClip?.previewCaption {
                 WriteProgressLine(text: caption)
             }
@@ -312,40 +331,69 @@ struct SplitPreview: View {
     }
 }
 
-/// Movie: slider first…last from duration × metadata fps. Cache hit: 只重跑预览输出.
-/// Missing fps/duration: Chinese fail, no fake range. Stills: no slider.
+/// Movie: time axis from published duration. Decode lands on a frame via published fps.
+/// Missing fps/duration: Chinese fail, no fake range. Stills: reserved strip, no slider.
+/// Selected clip always keeps this strip so the viewer is not a dead pane.
 struct PreviewScrubBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        if session.isExporting {
+        // Hidden during write. Identity, not a fade. Scrub is not the write line.
+        if session.isExporting || session.selectedClip == nil {
             EmptyView()
-        } else if let fail = session.previewScrubFail {
-            Text(fail)
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-        } else if let last = session.previewScrubLastFrame {
-            HStack(spacing: 8) {
-                Slider(
-                    value: Binding(
-                        get: { Double(session.previewFrameIndex) },
-                        set: { session.setPreviewFrame(Int($0.rounded())) }
-                    ),
-                    in: 0...Double(last),
-                    step: 1
-                )
-                .controlSize(.small)
-                .help("预览·非成片")
-                Text("第 \(session.previewFrameIndex + 1) / \(last + 1) 帧")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 88, alignment: .trailing)
+        } else {
+            HStack(spacing: 12) {
+                if session.previewScrubLastFrame != nil,
+                   let duration = session.previewScrubDuration,
+                   duration > 0,
+                   session.previewScrubFPS != nil {
+                    Slider(
+                        value: Binding(
+                            get: { session.previewTimeSeconds },
+                            set: { session.setPreviewTime($0) }
+                        ),
+                        in: 0...duration
+                    )
+                    .controlSize(.regular)
+                    .tint(LBChrome.locked)
+                    .help("预览·非成片")
+                    Text("\(SessionModel.formatPreviewClock(session.previewTimeSeconds)) / \(SessionModel.formatPreviewClock(duration))")
+                        .font(.caption.monospacedDigit().weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(LBChrome.controlMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    if let fps = session.previewScrubFPS {
+                        Text(SessionModel.formatPreviewFPS(fps))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text("预览·非成片")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                } else if let fail = session.previewScrubFail {
+                    Text(fail)
+                        .font(.caption)
+                        .foregroundStyle(LBChrome.warn)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("预览·非成片")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Text("静帧。预览·非成片。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(LBChrome.controlMaterial)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(LBChrome.hairline)
+                    .frame(height: 1)
+            }
         }
     }
 }
@@ -354,17 +402,43 @@ struct PreviewScrubBar: View {
 /// Mid-write wording stays 「写出代理 i/N · 第 k 帧」 (「第 k / 共 m 帧」 when total known). No cancel / process / retry button here.
 struct WriteProgressLine: View {
     let text: String
+    var writing: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shown: Bool
+
+    init(text: String, writing: Bool = false) {
+        self.text = text
+        self.writing = writing
+        _shown = State(initialValue: !writing)
+    }
 
     var body: some View {
-        Text(text)
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color.accentColor.opacity(0.08))
-            .help("按每一帧出一张图，不是一条视频")
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(LBChrome.locked)
+                .frame(width: 2, height: 10)
+            Text(text)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 5)
+        .background(LBChrome.controlMaterial)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(LBChrome.hairline)
+                .frame(height: 1)
+        }
+        .opacity(shown ? 1 : 0)
+        .onAppear {
+            guard writing, !shown else { return }
+            LBChrome.runAppearMotion(reduceMotion) {
+                shown = true
+            }
+        }
+        .help("按每一帧出一张图，不是一条视频")
     }
 }
 
@@ -384,17 +458,11 @@ struct StatusBar: View {
                 .lineLimit(1)
             if !session.isExporting, !session.lastExportNote.isEmpty {
                 if session.canRevealLastExport {
-                    Button(session.lastExportNote) {
-                        session.revealLastExportInFinder()
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .help(SessionModel.revealInFinderLabel)
                     Button("在 Finder 中显示") {
                         session.revealLastExportInFinder()
                     }
                     .buttonStyle(.plain)
+                    .help(SessionModel.revealInFinderLabel)
                 } else {
                     Text(session.lastExportNote)
                         .foregroundStyle(.secondary)
@@ -403,10 +471,16 @@ struct StatusBar: View {
             }
             Spacer()
         }
-        .font(.caption)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(.bar)
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 5)
+        .background(LBChrome.controlMaterial)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(LBChrome.hairline)
+                .frame(height: 1)
+        }
         .help("按每一帧出一张图，不是一条视频")
     }
 }
