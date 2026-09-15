@@ -15,7 +15,7 @@ _BETA = 0.018053968510807
 _ALPHA = 1.09929682680944
 
 
-def rec709_oetf(lin):
+def rec709_oetf(lin) -> np.ndarray:
     """Scene-linear Rec.709 RGB -> Rec.709 encoded (0-1)."""
     lin = np.asarray(lin, dtype=np.float64)
     return np.where(
@@ -25,7 +25,7 @@ def rec709_oetf(lin):
     )
 
 
-def rec709_oetf_inverse(enc):
+def rec709_oetf_inverse(enc) -> np.ndarray:
     """Rec.709 encoded -> scene-linear Rec.709 RGB."""
     enc = np.asarray(enc, dtype=np.float64)
     thresh = 4.5 * _BETA
@@ -36,12 +36,12 @@ def rec709_oetf_inverse(enc):
     )
 
 
-def bt1886_eotf(v, gamma: float = 2.4):
+def bt1886_eotf(v, gamma: float = 2.4) -> np.ndarray:
     """BT.1886 display EOTF (black=0, white=1): V**gamma."""
     v = np.asarray(v, dtype=np.float64)
     return np.power(np.maximum(v, 0.0), gamma)
 
 
-def bt1886_eotf_inverse(lin, gamma: float = 2.4):
+def bt1886_eotf_inverse(lin, gamma: float = 2.4) -> np.ndarray:
     lin = np.asarray(lin, dtype=np.float64)
     return np.power(np.maximum(lin, 0.0), 1.0 / gamma)

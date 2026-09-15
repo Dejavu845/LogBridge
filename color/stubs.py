@@ -10,6 +10,8 @@ Status: not implemented. Do not mark this camera as supported.
 
 from __future__ import annotations
 
+from typing import NoReturn
+
 STUB_IDTS = (
     {
         "id": "dji_dlog_m",
@@ -21,7 +23,7 @@ STUB_IDTS = (
 )
 
 
-def dlog_m_to_linear(_x):
+def dlog_m_to_linear(_x) -> NoReturn:
     raise NotImplementedError(
         "DJI D-Log M is unsupported. Use D-Log + D-Gamut (2017 white paper)."
     )
