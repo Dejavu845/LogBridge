@@ -57,16 +57,18 @@ struct Rec709PreviewView: View {
 }
 
 /// Overlay on every preview pane. 预览·非成片.
+/// Opaque fill on the canvas. Not controlMaterial. Not glass.
 struct PreviewNotDeliverableBadge: View {
     var body: some View {
         Text("预览·非成片")
-            .font(.caption2.weight(.bold))
-            .padding(.horizontal, 6)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(.black.opacity(0.72))
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-            .padding(6)
+            .background(.black.opacity(0.45))
+            .foregroundStyle(.white.opacity(0.88))
+            .clipShape(Capsule())
+            .padding(8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             .accessibilityLabel("预览·非成片")
             .help("预览·非成片")
     }
@@ -209,19 +211,17 @@ struct SourcePreviewView: View {
 }
 
 /// Thin title over the image so the pane itself stays the preview.
+/// Overlay on canvas. Not controlMaterial. Not glass.
 private struct PreviewPaneTitle: View {
     let title: String
 
     var body: some View {
         Text(title)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(.black.opacity(0.55))
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-            .padding(6)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white.opacity(0.92))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
