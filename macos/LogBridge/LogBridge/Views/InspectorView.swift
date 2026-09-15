@@ -7,42 +7,47 @@ struct PairedIDTBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("成对 IDT")
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                 Text("先选 Log 与色域，才能处理")
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 if let clip = session.selectedClip {
                     Text(clip.verificationBadge)
                         .font(.caption2.weight(clip.isPending ? .regular : .semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(clip.isPending ? Color.yellow.opacity(0.28) : Color.orange.opacity(0.2))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(clip.isPending ? LBChrome.pending.opacity(0.16) : LBChrome.locked.opacity(0.16))
+                        .foregroundStyle(clip.isPending ? LBChrome.pending : LBChrome.locked)
                         .clipShape(Capsule())
                 }
             }
             if let clip = session.selectedClip {
                 // One locked pair per row. Never two independent curve/gamut dropdowns.
-                Picker("用户选择成对 IDT", selection: Binding(
-                    get: { clip.idt },
-                    set: { newValue in
-                        if let idt = newValue {
-                            session.setIDT(clip.id, idt)
+                LBChrome.controlSlot {
+                    Picker("用户选择成对 IDT", selection: Binding(
+                        get: { clip.idt },
+                        set: { newValue in
+                            if let idt = newValue {
+                                session.setIDT(clip.id, idt)
+                            }
+                        }
+                    )) {
+                        Text("— 先选择成对 IDT —").tag(Optional<IDT>.none)
+                        ForEach(clip.pickerPairs) { pair in
+                            Text(pair.pairLabel).tag(Optional(pair))
                         }
                     }
-                )) {
-                    Text("— 先选择成对 IDT —").tag(Optional<IDT>.none)
-                    ForEach(clip.pickerPairs) { pair in
-                        Text(pair.pairLabel).tag(Optional(pair))
-                    }
+                    .labelsHidden()
+                    .controlSize(.regular)
+                    .frame(maxWidth: 420)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
                 }
-                .labelsHidden()
-                .controlSize(.small)
-                .frame(maxWidth: 420)
                 .disabled(session.isExporting)
                 // S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。
                 .help("S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。")
@@ -58,12 +63,16 @@ struct PairedIDTBar: View {
                     if let reason = clip.processSkipReason {
                         Text(reason)
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(LBChrome.warn)
                             .lineLimit(1)
                     }
                 }
                 Text(clip.detectionNote)
                     .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                Text(clip.timingSidebarLine(settings: session.settings))
+                    .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             } else {
@@ -72,31 +81,79 @@ struct PairedIDTBar: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.03))
     }
 }
 
 /// Right inspector: Exposure + WB three states only.
 /// IDT lives under the preview — not in 「高级」. Node strip / export only.
+/// Node-strip tap sets `selectedNode`; 曝光 / 白平衡 scroll here and get the
+/// same accent stroke as the chip. 输入 / 输出 stay in the center / 高级.
 struct InspectorView: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 7) {
-                ExposureInspector(session: session)
-                Divider()
-                WBInspector(session: session)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    LBChrome.inspectorCard {
+                        ExposureInspector(session: session)
+                    }
+                    .id(NodeSlot.exposure)
+                    .overlay(followsNodeStroke(session.selectedNode == .exposure))
+                    LBChrome.inspectorCard {
+                        WBInspector(session: session)
+                    }
+                    .id(NodeSlot.wb)
+                    .overlay(followsNodeStroke(session.selectedNode == .wb))
+                    LBChrome.inspectorCard {
+                        Text("输出在设置的默认预览，以及预览窗。预览·非成片。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .id(NodeSlot.odt)
+                    .overlay(followsNodeStroke(session.selectedNode == .odt))
+                }
+                .disabled(session.isExporting)
+                .opacity(session.isExporting ? 0.45 : 1)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .disabled(session.isExporting)
-            .opacity(session.isExporting ? 0.45 : 1)
-            .padding(6)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .onChange(of: session.selectedNode) { _, slot in
+                guard slot == .exposure || slot == .wb || slot == .odt else { return }
+                proxy.scrollTo(slot, anchor: .top)
+            }
         }
-        .background(Color.primary.opacity(0.02))
+        .background(LBChrome.controlMaterial)
+    }
+
+    private func followsNodeStroke(_ on: Bool) -> some View {
+        FollowsNodeStroke(on: on)
+    }
+}
+
+/// Local drawn stroke so withAnimation does not leak into the preview host.
+private struct FollowsNodeStroke: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var on: Bool
+    @State private var drawn: Bool
+
+    init(on: Bool) {
+        self.on = on
+        _drawn = State(initialValue: on)
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(drawn ? Color.accentColor : Color.clear, lineWidth: drawn ? 1.5 : 0)
+            .onChange(of: on) { _, new in
+                LBChrome.runSelectionMotion(reduceMotion) {
+                    drawn = new
+                }
+            }
     }
 }
 
@@ -106,7 +163,7 @@ struct WBInspector: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("白平衡")
-                .font(.caption.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
             Toggle("启用白平衡（可旁路，不烘焙）", isOn: Binding(
                 get: { session.graph.wbEnabled },
                 set: { session.setWBEnabled($0) }
@@ -309,7 +366,7 @@ struct ExposureInspector: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("曝光")
-                .font(.caption.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
             Toggle("启用曝光（0 档 = 不动）", isOn: Binding(
                 get: { session.graph.exposureEnabled },
                 set: { session.setExposureEnabled($0) }
