@@ -105,6 +105,39 @@ def test_unsupported_idts_named():
     assert "not BT.2020" in apple2.lower() or "Not BT.2020" in apple2
 
 
+def test_generated_assets_match_committed():
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import generate_ocio_assets as gen
+
+    diffs = gen.check_against(ROOT / "ocio")
+    assert diffs == [], diffs
+
+
+def test_no_unreferenced_ocio_assets():
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import generate_ocio_assets as gen
+
+    config = CONFIG.read_text(encoding="utf-8")
+    emitted = {Path(p).name for p in gen.emitted_relative_paths()}
+    extras = []
+    for folder in (ROOT / "ocio" / "luts", ROOT / "ocio" / "matrices"):
+        if not folder.is_dir():
+            continue
+        for path in folder.iterdir():
+            if not path.is_file():
+                continue
+            if path.name in emitted:
+                continue
+            if f"src: {path.name}" in config:
+                continue
+            extras.append(str(path.relative_to(ROOT)))
+    assert extras == [], extras
+
+
 def test_handwritten_luts_only_for_no_builtin():
     luts = ROOT / "ocio" / "luts"
     assert (luts / "FLog2_to_lin.spi1d").is_file()
