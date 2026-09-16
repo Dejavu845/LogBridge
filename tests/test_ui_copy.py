@@ -11085,6 +11085,22 @@ def test_empty_dropzone_tap_opens_same_importer():
     assert "Button(" in chip
     assert "已写出代理" in sidebar
 
+    pending = sidebar.split("if let reason = clip.processSkipReason")[1].split(
+        "} else if let chip"
+    )[0]
+    assert "onRevealWritten" not in pending
+    assert "revealClipExportInFinder" not in pending
+    assert "Button(" not in pending
+    fail = (
+        sidebar.split("if chip == SessionModel.wroteProxyChip")[1]
+        .split("} else {")[1]
+        .split("}")[0]
+    )
+    assert "Text(chip)" in fail
+    assert "onRevealWritten" not in fail
+    assert "revealClipExportInFinder" not in fail
+    assert "Button(" not in fail
+
     assert EMPTY_STATE_STEP_1 == "把混源文件夹拖进来"
     assert EMPTY_STATE_STEP_2 == "每条选成对 Log 与色域"
     assert EMPTY_STATE_STEP_3 == "点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
