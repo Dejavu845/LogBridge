@@ -1362,7 +1362,7 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
 
 
 def test_sidebar_chip_row_reveals_clip_sequence_folder(tmp_path: Path):
-    """Reveal-on-chip/row uses last dest + deliverable_dir_name. 成片 is not success."""
+    """Reveal-on-chip uses last dest + deliverable_dir_name. Row tap does not reveal. 成片 is not success."""
     dest = tmp_path / "Exports"
     dest.mkdir()
     clips = [
@@ -1420,7 +1420,9 @@ def test_sidebar_chip_row_reveals_clip_sequence_folder(tmp_path: Path):
     assert WRITTEN_CHIP in sidebar
     assert "onTapGesture" in sidebar
     row_tap = sidebar.split(".onTapGesture")[1].split("}")[0]
-    assert "revealClipExportInFinder" in row_tap
+    assert "revealClipExportInFinder" not in row_tap
+    assert "refreshPreview" in row_tap
+    assert "selectedID" in row_tap
     chip = sidebar.split("if chip == SessionModel.wroteProxyChip")[1].split("} else {")[0]
     assert "onRevealWritten" in chip
     assert "Button(" in chip

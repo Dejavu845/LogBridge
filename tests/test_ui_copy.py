@@ -11072,8 +11072,18 @@ def test_empty_dropzone_tap_opens_same_importer():
     assert ui_drop.count(".onTapGesture") == 1
 
     row_tap = ui_view.split(".onTapGesture")[1]
-    assert "revealClipExportInFinder" in row_tap
+    assert "revealClipExportInFinder" not in row_tap
+    assert "selectedID" in row_tap
+    assert "refreshPreview" in row_tap
     assert "showImporter" not in row_tap
+    assert "showInFinder" not in row_tap
+    assert "activateFileViewerSelecting" not in row_tap
+
+    assert 'onRevealWritten: { session.revealClipExportInFinder(clip) }' in ui_view
+    chip = sidebar.split("if chip == SessionModel.wroteProxyChip")[1].split("} else {")[0]
+    assert "onRevealWritten" in chip
+    assert "Button(" in chip
+    assert "已写出代理" in sidebar
 
     assert EMPTY_STATE_STEP_1 == "把混源文件夹拖进来"
     assert EMPTY_STATE_STEP_2 == "每条选成对 Log 与色域"
