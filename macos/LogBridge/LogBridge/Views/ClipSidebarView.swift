@@ -55,7 +55,6 @@ struct ClipSidebarView: View {
                             .onTapGesture {
                                 session.selectedID = clip.id
                                 session.refreshPreview()
-                                session.revealClipExportInFinder(clip)
                             }
                         }
                     }
