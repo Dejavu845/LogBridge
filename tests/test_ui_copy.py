@@ -11136,3 +11136,36 @@ def test_empty_dropzone_tap_opens_same_importer():
     assert "达芬奇已验证" not in ui_sidebar
     assert "精准" not in ui_drop
     _chengpian_only_honesty(ui_drop)
+
+
+def test_add_ellipsis_command_o_opens_same_importer():
+    """「添加…」挂 ⌘O → same showImporter. No ContentView menu; ProcessLockedBar unchanged."""
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    content = _read(CONTENT)
+    view = sidebar.split("struct ClipSidebarView")[1].split("private struct DropZone")[0]
+    ui_view = _code_without_comments(view)
+    add = view.split('Button("添加…")')[1].split('Button("设置")')[0]
+    ui_add = _code_without_comments(add)
+
+    assert 'Button("添加…") { session.showImporter = true }' in view
+    assert "session.showImporter = true" in ui_add
+    assert '.keyboardShortcut("o", modifiers: .command)' in ui_add
+    assert ui_add.count("keyboardShortcut") == 1
+    assert ui_view.count("session.showImporter = true") == 2
+    assert ui_view.count("keyboardShortcut") == 1
+    settings = view.split('Button("设置")')[1].split("DropZone")[0]
+    assert "keyboardShortcut" not in settings
+    assert "showImporter" not in settings
+
+    assert "isPresented: $session.showImporter" in content
+    assert "keyboardShortcut" not in content
+    assert ".commands" not in _code_without_comments(content)
+
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert "keyboardShortcut" not in bar
+    assert 'Button("添加…")' not in bar
+    assert bar.count("Button(") == 1
+    assert "处理已锁定片段" in bar
+    assert "取消" in bar
+    assert "isWritingDeliverables" in bar
+    assert "cancelLockedDeliverables" in bar
