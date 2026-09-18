@@ -14,6 +14,7 @@ final class AppSettings: ObservableObject {
         static let defaultPreviewODT = "logbridge.defaultPreviewODT"
         static let promptEstimateWB = "logbridge.promptEstimateWBOnImport"
         static let lastExportDirectory = "logbridge.lastExportDirectory"
+        static let advancedPanelExpanded = "logbridge.advancedPanelExpanded"
     }
 
     /// Settings default for the preview pane. Export stays ACEScct.
@@ -24,6 +25,11 @@ final class AppSettings: ObservableObject {
     /// Off by default. When on, import only *prompts* 白平衡（估计）. Never writes CAT. Never 5600.
     @Published var promptEstimateWBOnImport: Bool {
         didSet { UserDefaults.standard.set(promptEstimateWBOnImport, forKey: Key.promptEstimateWB) }
+    }
+
+    /// 「高级」DisclosureGroup. Default collapsed; survives relaunch via UserDefaults.
+    @Published var advancedPanelExpanded: Bool {
+        didSet { UserDefaults.standard.set(advancedPanelExpanded, forKey: Key.advancedPanelExpanded) }
     }
 
     /// Cannot be turned off. Pending IDT always blocks 处理已锁定片段.
@@ -60,6 +66,7 @@ final class AppSettings: ObservableObject {
         let raw = UserDefaults.standard.string(forKey: Key.defaultPreviewODT) ?? ODTMode.rec709.rawValue
         defaultPreviewODT = ODTMode(rawValue: raw) ?? .rec709
         promptEstimateWBOnImport = UserDefaults.standard.bool(forKey: Key.promptEstimateWB)
+        advancedPanelExpanded = UserDefaults.standard.bool(forKey: Key.advancedPanelExpanded)
         lastExportDirectoryPath = UserDefaults.standard.string(forKey: Key.lastExportDirectory)
     }
 }

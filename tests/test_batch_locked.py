@@ -241,7 +241,8 @@ def test_swift_mirrors_locked_batch_and_one_button():
     assert 'Button("导出 ACEScct / EXR")' in content.split("struct AdvancedPanel")[1]
     assert ADVANCED_DISCLOSURE in content
     assert 'DisclosureGroup("高级"' in content
-    assert "showAdvanced = false" in content
+    assert "advancedPanelExpanded" in content
+    assert "@State private var showAdvanced = false" not in content
     assert "PairedIDTBar" in content
     assert "InspectorView" in content
     assert PROCESS_BUTTON in swift
