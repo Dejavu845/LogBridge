@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 /// Unlocked IDT is skipped, never guessed. Export: "导出 ACEScct / EXR".
 struct ContentView: View {
     @StateObject private var session = SessionModel()
-    @State private var showAdvanced = false
+    @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
         HSplitView {
@@ -22,7 +22,7 @@ struct ContentView: View {
                     .layoutPriority(1)
                 PairedIDTBar(session: session)
                 ProcessLockedBar(session: session)
-                AdvancedPanel(session: session, isExpanded: $showAdvanced)
+                AdvancedPanel(session: session, isExpanded: $settings.advancedPanelExpanded)
                 StatusBar(session: session)
             }
             .frame(minWidth: 520)
