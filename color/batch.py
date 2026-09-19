@@ -97,7 +97,6 @@ from .graph import SerialGraph
 
 REASON_PICK_LOG_GAMUT = "先选择 Log 与色域"
 REASON_PICK_PAIRED_IDT = "先选择成对 IDT"
-# Leftover English failure chips → short Chinese. Copy only.
 STUB_CHIP = "未实现"
 EMPTY_RGB_CHIP = "RGB 是空的，未写出"
 NOTE_DLOG_M = "D-Log M 暂不支持，请用 D-Log + D-Gamut"
@@ -106,7 +105,6 @@ NOTE_SLOG3_NO_GAMUT_VENICE = "S-Log3 没有色域，检测到 Venice，先选择
 NOTE_CLOG2_NO_GAMUT = "C-Log2 没有色域，先选择成对 IDT"
 NOTE_CLOG3_NO_GAMUT = "C-Log3 没有色域，先选择成对 IDT"
 NOTE_VENICE_PICK = "检测到 Venice，先选择成对 IDT"
-# Leftover English success / accept notes → short Chinese. Copy only.
 NOTE_FILENAME_SGAMUT3 = "文件名 S-Gamut3"
 NOTE_FILENAME_SGAMUT3_CINE = "文件名 S-Gamut3.Cine"
 NOTE_FILENAME_LOGC4 = "文件名 LogC4/AWG4"
@@ -140,7 +138,6 @@ NOTE_META_APPLE_LOG = "元数据 Apple Log"
 NOTE_META_DLOG = "元数据 D-Log"
 NOTE_META_LOGC3 = "元数据 LogC3 EI800 + AWG3"
 WROTE_FILES_NOTE = "已写出 {n} 个文件"
-# preview.status (Swift PreviewEngine). Existing phrases only. No 精准.
 PREVIEW_STATUS_EMPTY = "没有素材"
 PREVIEW_STATUS_DECODING = "正在解码预览…"
 PREVIEW_STATUS_DECODE_FAIL = "解不出预览帧"
@@ -173,8 +170,6 @@ PROCESS_BUTTON_HELP = (
     "整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
     "待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
 )
-# User-visible Swift copy (trial usability). Python constants above stay
-# locked by tests/test_batch_locked.py (owned by PR #63).
 PROCESS_BUTTON_HELP_UI = "写出的是图片序列（EXR），不是 mp4/mov"
 PROCESS_DELIVERABLE_NOTE_UI = "代理 EXR，不是视频。整段代理，不是全精度成片。"
 FOLDER_PICKER_MESSAGE_UI = (
@@ -206,7 +201,6 @@ CANCELLED_STATUS_TEMPLATE = (
     "（先选择 Log 与色域 / 先选择成对 IDT）。"
     "整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
 )
-# Folder of per-frame EXRs. Names must include _proxy so this is not a 成片 claim.
 DELIVERABLE_DIR_SUFFIX = "_ACES2065-1_proxy"
 DELIVERABLE_SUFFIX = DELIVERABLE_DIR_SUFFIX
 SEQUENCE_FRAME_PREFIX = "frame"
@@ -225,7 +219,6 @@ WRITE_LONG_EDGE_CEILING = 16384
 WRITE_OVERSIZE_CHIP = "片源边长超过 16384，未写出"
 DISK_SHORT_STATUS = "磁盘空间不足，未写出"
 RESOLVE_INCOMPLETE_CHIP = "达芬奇包不完整，未写出"
-# Openable Resolve set. XML + DCTL + cube + README. Not 01_IDT_*.
 RESOLVE_REQUIRED_XML = "graph.xml"
 RESOLVE_REQUIRED_README = "README_RESOLVE.md"
 RESOLVE_REQUIRED_DCTL = "03_WB.dctl"
@@ -236,7 +229,6 @@ RESOLVE_REQUIRED_NAMES = (
     RESOLVE_REQUIRED_DCTL,
     RESOLVE_REQUIRED_CUBE,
 )
-# Session package files (not ``_ACES2065-1_proxy`` folders).
 RESOLVE_BUNDLE_FILENAMES = (
     "README_RESOLVE.md",
     "graph.xml",
@@ -249,8 +241,6 @@ RESOLVE_BUNDLE_FILENAMES = (
     "03_WB.cube",
     "04_ODT_Rec709.cube",
 )
-# Uncompressed float32 RGB scanline payload (3 × 4). Not ZIP/PIZ.
-# Header + offset table are not per-pixel; DISK_MARGIN covers them.
 BYTES_PER_EXR_PIXEL = 12
 DISK_MARGIN_RATIO = 0.10
 DISK_MARGIN_MIN_BYTES = 64 * 1024 * 1024
@@ -265,9 +255,6 @@ DISK_SHORT_STATUS_TEMPLATE = (
 SKIPPED_BUCKET = "待选跳过"
 FAILED_BUCKET = "失败原因"
 BATCH_SUMMARY_TEMPLATE = "{wrote} 条已写出代理 / {skipped} 条待选跳过 / {failed} 条失败"
-
-# Y′CbCr → R′G′B′ matrix-only. Coefficients follow the source matrix
-# (BT.601 / BT.709 / BT.2020). Write path does not apply a Rec.709 transfer.
 YCBCR_MATRIX_COEFFS = {
     "bt709": (1.5748, 0.1873, 0.4681, 1.8556),
     "bt601": (1.402, 0.344136, 0.714136, 1.772),
@@ -276,18 +263,11 @@ YCBCR_MATRIX_COEFFS = {
 YCBCR_BT709_RV, YCBCR_BT709_GU, YCBCR_BT709_GV, YCBCR_BT709_BU = YCBCR_MATRIX_COEFFS[
     "bt709"
 ]
-# Video-range 8/10-bit legal spans (ITU). Not a literal 1023 for every 10-bit clip.
 YCBCR_OFF_8 = (16.0, 219.0, 128.0, 224.0)
 YCBCR_OFF_10 = (64.0, 876.0, 512.0, 896.0)
 
 
 def ycbcr_range_offsets(bit_depth: int, sample_range: str):
-    """Y/C offsets from bit-depth AND full/video. Never always /1023.
-
-    Video n-bit: Y 16<<(n-8) … 235<<(n-8), C 16<<(n-8) … 240<<(n-8).
-    10-bit video is 64–940 / 64–960, not 0–1023. Full n-bit is 0…2^n-1.
-    N-Log 10-bit video-range codes are wrong if blindly divided by 1023.
-    """
     if int(bit_depth) < 8:
         raise ValueError(f"bit_depth must be >= 8, got {bit_depth}")
     max_code = float((1 << int(bit_depth)) - 1)
@@ -304,21 +284,7 @@ def ycbcr_range_offsets(bit_depth: int, sample_range: str):
     return (y_off, y_span, mid, c_span)
 
 
-def ycbcr_to_rgb_float(
-    y,
-    cb,
-    cr,
-    *,
-    bit_depth: int,
-    sample_range: str,
-    matrix: str,
-):
-    """Source-code Y′CbCr → float R′G′B′. Matrix-only. No 8-bit RGB quantize.
-
-    ``matrix`` / ``sample_range`` follow the source (attachments / nclc).
-    No Rec.709 OETF/EOTF. Superwhite / superblack may leave 0-1.
-    Still 整段代理，不是全精度成片.
-    """
+def ycbcr_to_rgb_float(y, cb, cr, *, bit_depth: int, sample_range: str, matrix: str):
     key = str(matrix).lower().replace(".", "")
     if key not in YCBCR_MATRIX_COEFFS:
         raise ValueError(f"matrix must be bt709 / bt601 / bt2020, got {matrix}")
@@ -331,7 +297,6 @@ def ycbcr_to_rgb_float(
 
 
 def _normalize_ycbcr_matrix(value) -> str | None:
-    """Map nclc/colr/vui matrix to bt709 / bt601 / bt2020. Unspecified → None."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -353,7 +318,6 @@ def _normalize_ycbcr_matrix(value) -> str | None:
 
 
 def _matrix_from_code(code: int) -> str | None:
-    """ITU/H.273 matrix_coefficients. 0/2 unspecified → None (no 709 default)."""
     if code == 1:
         return "bt709"
     if code in (4, 5, 6, 7):
@@ -364,7 +328,6 @@ def _matrix_from_code(code: int) -> str | None:
 
 
 def _nclc_triplet(value) -> tuple[int, int, int] | None:
-    """nclc / nclx / colr as primaries-transfer-matrix. Do not use P/T for IDT."""
     if value is None:
         return None
     if isinstance(value, (list, tuple)) and len(value) >= 3:
@@ -383,16 +346,9 @@ def _nclc_triplet(value) -> tuple[int, int, int] | None:
 
 
 def parse_source_ycbcr_matrix(tags) -> str | None:
-    """Matrix from nclc / colr / vui only. Missing or unspecified → None."""
     if not isinstance(tags, dict):
         return None
-    for key in (
-        "ycbcr_matrix",
-        "YCbCrMatrix",
-        "vui_matrix",
-        "matrix_coefficients",
-        "nclc_matrix",
-    ):
+    for key in ("ycbcr_matrix", "YCbCrMatrix", "vui_matrix", "matrix_coefficients", "nclc_matrix"):
         if key in tags:
             got = _normalize_ycbcr_matrix(tags[key])
             if got:
@@ -406,16 +362,9 @@ def parse_source_ycbcr_matrix(tags) -> str | None:
 
 
 def parse_source_ycbcr_range(tags) -> str | None:
-    """Full/video from nclc/nclx/vui. Missing → None (not video by default)."""
     if not isinstance(tags, dict):
         return None
-    for key in (
-        "full_range",
-        "FullRangeVideo",
-        "video_full_range_flag",
-        "nclx_full_range",
-        "sample_range",
-    ):
+    for key in ("full_range", "FullRangeVideo", "video_full_range_flag", "nclx_full_range", "sample_range"):
         if key not in tags:
             continue
         value = tags[key]
@@ -435,11 +384,6 @@ def parse_source_ycbcr_range(tags) -> str | None:
 
 
 def require_source_ycbcr_tags(tags) -> tuple[str, str]:
-    """Write unpack: both matrix and range from tags, or Chinese failure.
-
-    No silent BT.709 + video-range default. Does not read primaries/transfer
-    to change an IDT or to apply a 709 curve.
-    """
     matrix = parse_source_ycbcr_matrix(tags)
     sample_range = parse_source_ycbcr_range(tags)
     if matrix is None or sample_range is None:
@@ -448,24 +392,13 @@ def require_source_ycbcr_tags(tags) -> tuple[str, str]:
 
 
 def ycbcr_to_preview_u8(y, cb, cr, *, bit_depth: int = 10, sample_range: str = "video", matrix: str = "bt709"):
-    """Preview 8-bit path: matrix, then clamp and quantize to 0-255.
-
-    Swift preview reads matrix+range from nclc/colr/vui (same helper as
-    write). No silent 709-video default. ``extractRGB`` later does
-    ``u8 / 255``. Write must not use this.
-    """
-    r, g, b = ycbcr_to_rgb_float(
-        y, cb, cr, bit_depth=bit_depth, sample_range=sample_range, matrix=matrix
-    )
-
+    r, g, b = ycbcr_to_rgb_float(y, cb, cr, bit_depth=bit_depth, sample_range=sample_range, matrix=matrix)
     def _u8(x: float) -> int:
         return max(0, min(255, int(round(min(max(x, 0.0), 1.0) * 255.0))))
-
     return (_u8(r), _u8(g), _u8(b))
 
 
 def preview_u8_promoted_float(y, cb, cr, *, bit_depth: int = 10):
-    """What the old write path did: preview 8-bit, then /255 to float."""
     r, g, b = ycbcr_to_preview_u8(y, cb, cr, bit_depth=bit_depth)
     return (r / 255.0, g / 255.0, b / 255.0)
 
@@ -488,41 +421,32 @@ class BatchClip:
 class BatchPlan:
     locked: tuple[BatchClip, ...]
     skipped: tuple[tuple[BatchClip, str], ...]
-
     @property
     def locked_count(self) -> int:
         return len(self.locked)
-
     @property
     def pending_count(self) -> int:
         return len(self.skipped)
-
     @property
     def lock_status_text(self) -> str:
-        return LOCK_STATUS_TEMPLATE.format(
-            locked=self.locked_count, pending=self.pending_count
-        )
-
+        return LOCK_STATUS_TEMPLATE.format(locked=self.locked_count, pending=self.pending_count)
     @property
     def shows_process_button(self) -> bool:
         return self.locked_count > 0
 
 
 def has_locked_idt(clip: BatchClip) -> bool:
-    """Processable only when a non-stub paired IDT is locked."""
     if not clip.idt or clip.is_stub or clip.needs_user_picker:
         return False
     return True
 
 
 def require_write_source_pixels(width: int, height: int) -> None:
-    """16384 is a refuse ceiling. Write stays 1:1. Do not scale."""
     if max(int(width), int(height)) > WRITE_LONG_EDGE_CEILING:
         raise ValueError(WRITE_OVERSIZE_CHIP)
 
 
 def skip_reason(clip: BatchClip) -> str | None:
-    """Chinese reason for unlocked / pending clips. None when locked."""
     if has_locked_idt(clip):
         return None
     if clip.detected_curve or clip.is_stub or clip.needs_user_picker or clip.idt:
@@ -531,42 +455,28 @@ def skip_reason(clip: BatchClip) -> str | None:
 
 
 def preserved_failure_note(error: str) -> str | None:
-    """Known Chinese class notes stay as-is. Never rewrite them to 解析失败."""
     if error.startswith("先选择"):
         return error
     if "读不到元数据" in error:
         return error
     if error in (
-        FRAME_MISMATCH_CHIP,
-        MISSING_FPS_CHIP,
-        MISSING_DURATION_CHIP,
-        MISSING_YCBCR_TAGS_CHIP,
-        MISSING_YCBCR_TAGS_CHIP_UI,
-        WRITE_OVERSIZE_CHIP,
-        DECODE_FAILED_CHIP,
-        RESOLVE_INCOMPLETE_CHIP,
-        NOTE_CAMERA_RAW,
-        NOTE_ARRI_MXF,
-        NOTE_MXF_NO_TRACK,
-        NOTE_UNKNOWN_CODEC,
-        PREVIEW_STATUS_DECODE_FAIL,
-        STUB_CHIP,
-        EMPTY_RGB_CHIP,
-        NOTE_DLOG_M,
-        NOTE_SLOG3_NO_GAMUT,
-        NOTE_SLOG3_NO_GAMUT_VENICE,
-        NOTE_CLOG2_NO_GAMUT,
-        NOTE_CLOG3_NO_GAMUT,
-        NOTE_VENICE_PICK,
+        FRAME_MISMATCH_CHIP, MISSING_FPS_CHIP, MISSING_DURATION_CHIP,
+        MISSING_YCBCR_TAGS_CHIP, MISSING_YCBCR_TAGS_CHIP_UI, WRITE_OVERSIZE_CHIP,
+        DECODE_FAILED_CHIP, WRITE_FAILED_CHIP, DISK_SHORT_STATUS, CANCELLED_NOTE,
+        RESOLVE_INCOMPLETE_CHIP, NOTE_CAMERA_RAW, NOTE_ARRI_MXF, NOTE_MXF_NO_TRACK,
+        NOTE_UNKNOWN_CODEC, PREVIEW_STATUS_DECODE_FAIL, STUB_CHIP, EMPTY_RGB_CHIP,
+        NOTE_DLOG_M, NOTE_SLOG3_NO_GAMUT, NOTE_SLOG3_NO_GAMUT_VENICE,
+        NOTE_CLOG2_NO_GAMUT, NOTE_CLOG3_NO_GAMUT, NOTE_VENICE_PICK,
     ):
         return error
     if "不接" in error or "暂不支持" in error or "无法读取" in error:
+        return error
+    if "未写出" in error or "已取消" in error:
         return error
     return None
 
 
 def user_facing_failure_note(error: str) -> str:
-    """Preview / import / decode status. Name the class; never bare 解析失败."""
     if kept := preserved_failure_note(error):
         return kept
     low = error.lower()
@@ -574,21 +484,12 @@ def user_facing_failure_note(error: str) -> str:
         return REASON_PICK_PAIRED_IDT
     if error in ("empty RGB buffer", "write produced no file"):
         return EMPTY_RGB_CHIP if error == "empty RGB buffer" else WRITE_FAILED_CHIP
-    if (
-        "decode" in low
-        or "grade" in low
-        or "parse" in low
-        or "no pixels" in low
-        or error == GENERIC_PARSE_FAILED
-    ):
+    if "decode" in low or "grade" in low or "parse" in low or "no pixels" in low or error == GENERIC_PARSE_FAILED:
         return DECODE_FAILED_CHIP
     return DECODE_FAILED_CHIP
 
 
-def short_export_chip(
-    error: str | None = None, *, written: bool = False, cancelled: bool = False
-) -> str | None:
-    """Per-clip sidebar chip. 已写出代理 on success. Cancelled in-progress is nil."""
+def short_export_chip(error: str | None = None, *, written: bool = False, cancelled: bool = False) -> str | None:
     if cancelled:
         return None
     if written:
@@ -602,26 +503,16 @@ def short_export_chip(
         return REASON_PICK_PAIRED_IDT
     if error in ("empty RGB buffer", "write produced no file"):
         return EMPTY_RGB_CHIP if error == "empty RGB buffer" else WRITE_FAILED_CHIP
-    if (
-        "decode" in low
-        or "grade" in low
-        or "parse" in low
-        or "no pixels" in low
-        or error == GENERIC_PARSE_FAILED
-    ):
+    if "decode" in low or "grade" in low or "parse" in low or "no pixels" in low or error == GENERIC_PARSE_FAILED:
         return DECODE_FAILED_CHIP
     return WRITE_FAILED_CHIP
 
 
 def sidebar_status_chip(clip: BatchClip, export_chip: str | None = None) -> str | None:
-    """Pending keep skip reasons. Locked rows use the export chip."""
     return skip_reason(clip) or export_chip
 
 
-def sidebar_export_chips(
-    clips: Sequence[BatchClip], report: "BatchWriteReport"
-) -> dict[str, str | None]:
-    """Sidebar chips after a batch. Cancelled in-progress is not 已写出代理."""
+def sidebar_export_chips(clips: Sequence[BatchClip], report: "BatchWriteReport") -> dict[str, str | None]:
     written = {w.name for w in report.written}
     errors = {e.name: e.error for e in report.errors}
     out: dict[str, str | None] = {}
@@ -639,22 +530,13 @@ def sidebar_export_chips(
     return out
 
 
-def clip_sequence_reveal_path(
-    clip_name: str,
-    dest,
-    export_chip: str | None = None,
-) -> Path | None:
-    """Last dest + ``deliverable_dir_name``. Success chip only.
-
-    Pending / failed / cancelled (not 「已写出代理」) do not reveal.
-    """
+def clip_sequence_reveal_path(clip_name: str, dest, export_chip: str | None = None) -> Path | None:
     if export_chip != WRITTEN_CHIP or dest is None:
         return None
     return Path(dest) / deliverable_dir_name(clip_name)
 
 
 def plan_locked_batch(clips: Sequence[BatchClip]) -> BatchPlan:
-    """Walk locked clips only. Unlocked stay listed; never guessed."""
     locked: list[BatchClip] = []
     skipped: list[tuple[BatchClip, str]] = []
     for clip in clips:
@@ -666,7 +548,6 @@ def plan_locked_batch(clips: Sequence[BatchClip]) -> BatchPlan:
 
 
 def process_locked_names(clips: Sequence[BatchClip]) -> list[str]:
-    """Names the batch would process. Unlocked are omitted, not invented."""
     return [c.name for c in plan_locked_batch(clips).locked]
 
 
@@ -683,19 +564,12 @@ def _positive_float(value) -> float | None:
         n = float(value)
     except (TypeError, ValueError):
         return None
-    if n != n or n <= 0:  # noqa: PLR0124 — NaN check
+    if n != n or n <= 0:
         return None
     return n
 
 
-def clip_frame_count(
-    clip: BatchClip, rgb_frames: Sequence[np.ndarray] | None = None
-) -> tuple[int, str]:
-    """Frames for one locked clip. ``known`` / ``duration_fps`` / ``guess``.
-
-    Known: provided frames or ``frame_count``. Else duration×fps.
-    Else conservative 24 fps and/or 60 s (said in the estimate note).
-    """
+def clip_frame_count(clip: BatchClip, rgb_frames: Sequence[np.ndarray] | None = None) -> tuple[int, str]:
     if rgb_frames:
         return max(1, len(rgb_frames)), "known"
     known = _positive_int(clip.frame_count)
@@ -713,10 +587,6 @@ def clip_frame_count(
 
 
 def expected_source_frames(clip: BatchClip) -> tuple[int | None, str | None]:
-    """Expected EXR count: duration × metadata fps only. Never invent fps.
-
-    Missing fps → 「读不到帧率，未核对」. Missing duration → 「读不到时长，未核对」.
-    """
     duration = _positive_float(clip.duration_seconds)
     fps = _positive_float(clip.fps)
     if duration is not None and fps is not None:
@@ -727,7 +597,6 @@ def expected_source_frames(clip: BatchClip) -> tuple[int | None, str | None]:
 
 
 def count_proxy_exrs(seq_dir) -> int:
-    """How many ``.exr`` files are in the proxy folder. Missing folder → 0."""
     folder = Path(seq_dir)
     if not folder.is_dir():
         return 0
@@ -735,26 +604,12 @@ def count_proxy_exrs(seq_dir) -> int:
 
 
 def frames_count_matches(written: int, expected: int) -> bool:
-    """True when counts match. Off-by-one: inclusive last frame on duration×fps.
-
-    AVAsset / container duration × nominal fps (ceil) can land on the last
-    sample boundary, so |written − expected| ≤ 1 is accepted when both ≥ 1.
-    An empty folder is never a match.
-    """
     if written < 1 or expected < 1:
         return False
     return abs(int(written) - int(expected)) <= 1
 
 
 def verify_locked_proxy_sequence(seq_dir, clip: BatchClip) -> tuple[bool, str | None]:
-    """Post-write check. Folder exists, EXRs exist, count matches metadata.
-
-    Empty ``_ACES2065-1_proxy`` (no EXRs / 0 frames) fails first as
-    「帧数对不上」 — do not fall through to a timing chip.
-    Success → (True, None) so the caller may mark 已写出代理.
-    Failure → (False, Chinese chip). Caller must drop the folder so it is
-    not advertised as a finished sequence.
-    """
     folder = Path(seq_dir)
     if not folder.is_dir():
         return False, FRAME_MISMATCH_CHIP
@@ -770,7 +625,6 @@ def verify_locked_proxy_sequence(seq_dir, clip: BatchClip) -> tuple[bool, str | 
 
 
 def _readable_nonempty(path) -> bool:
-    """True when ``path`` is a regular file, readable, and not empty."""
     dest = Path(path)
     try:
         if not dest.is_file():
@@ -784,11 +638,6 @@ def _readable_nonempty(path) -> bool:
 
 
 def verify_resolve_bundle(dest) -> tuple[bool, str | None]:
-    """XML / DCTL / cube / README must exist, be readable, and not empty.
-
-    Success → (True, None). Failure → (False, 「达芬奇包不完整，未写出」).
-    Does not invent files. Does not touch ``_ACES2065-1_proxy`` folders.
-    """
     folder = Path(dest)
     for name in RESOLVE_REQUIRED_NAMES:
         if not _readable_nonempty(folder / name):
@@ -797,11 +646,6 @@ def verify_resolve_bundle(dest) -> tuple[bool, str | None]:
 
 
 def remove_incomplete_resolve_bundle(dest) -> None:
-    """Drop a half Resolve package (XML / DCTL / cube / README).
-
-    Does not touch ``_ACES2065-1_proxy`` folders. Locked-write callers that
-    must not mark 已写出代理 also call ``remove_failed_proxy_dir``.
-    """
     folder = Path(dest)
     if not folder.is_dir():
         return
@@ -815,11 +659,6 @@ def remove_incomplete_resolve_bundle(dest) -> None:
 
 
 def remove_failed_proxy_dir(seq_dir) -> None:
-    """Drop a ``_ACES2065-1_proxy`` folder that must not be 已写出代理.
-
-    Empty folders, zero-frame writes, and half packages after a Resolve
-    fail-closed. Name must end with ``_ACES2065-1_proxy``.
-    """
     folder = Path(seq_dir)
     if not folder.is_dir():
         return
@@ -828,10 +667,7 @@ def remove_failed_proxy_dir(seq_dir) -> None:
     shutil.rmtree(folder)
 
 
-def clip_pixel_count(
-    clip: BatchClip, rgb_frames: Sequence[np.ndarray] | None = None
-) -> tuple[int, str]:
-    """Pixels per frame. Known size, else conservative 3840×2160."""
+def clip_pixel_count(clip: BatchClip, rgb_frames: Sequence[np.ndarray] | None = None) -> tuple[int, str]:
     if rgb_frames:
         arr = np.asarray(rgb_frames[0])
         if arr.ndim >= 2:
@@ -845,34 +681,24 @@ def clip_pixel_count(
 
 @dataclass(frozen=True)
 class ProxyDiskEstimate:
-    """Locked-only dest estimate. Uncompressed float32 RGB EXR."""
-
     bytes: int
     used_frame_guess: bool
     used_pixel_guess: bool
     used_duration_fps: bool = False
-
     @property
     def needed_bytes(self) -> int:
-        """Estimate plus 10% and a 64 MiB floor so headers do not sneak past."""
         return int(self.bytes * (1.0 + DISK_MARGIN_RATIO)) + DISK_MARGIN_MIN_BYTES
-
     @property
     def note(self) -> str:
-        """Folder-picker / abort suffix. 不是成片. No 精准."""
         size = format_proxy_bytes(self.bytes)
         if self.used_frame_guess:
-            return (
-                f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}；"
-                f"帧数按每秒 {int(CONSERVATIVE_FPS)} 帧估算）"
-            )
+            return f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}；帧数按每秒 {int(CONSERVATIVE_FPS)} 帧估算）"
         if self.used_duration_fps:
             return f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}；帧数按时长×帧率估算）"
         return f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}）"
 
 
 def format_proxy_bytes(n: int) -> str:
-    """Short size for the picker / abort note."""
     n = max(0, int(n))
     if n >= 1_000_000_000:
         return f"{n / 1_000_000_000:.1f} GB"
@@ -883,17 +709,7 @@ def format_proxy_bytes(n: int) -> str:
     return f"{n} B"
 
 
-def estimate_locked_proxy_bytes(
-    clips: Sequence[BatchClip],
-    frames: dict[str, np.ndarray | Sequence[np.ndarray]] | None = None,
-) -> ProxyDiskEstimate:
-    """Sum locked clips only. Pending / unlocked add nothing.
-
-    When ``frames`` is passed (a real write), only clips with RGB frames
-    are counted — missing pixels error without a folder and must not
-    invent a 4K×60s guess. When ``frames`` is omitted (folder picker),
-    use clip timing or the conservative per-second guess.
-    """
+def estimate_locked_proxy_bytes(clips: Sequence[BatchClip], frames: dict[str, np.ndarray | Sequence[np.ndarray]] | None = None) -> ProxyDiskEstimate:
     frames_supplied = frames is not None
     frames = frames or {}
     total = 0
@@ -913,16 +729,10 @@ def estimate_locked_proxy_bytes(
             used_duration_fps = True
         if pixel_src == "guess":
             used_pixel_guess = True
-    return ProxyDiskEstimate(
-        bytes=int(total),
-        used_frame_guess=used_frame_guess,
-        used_pixel_guess=used_pixel_guess,
-        used_duration_fps=used_duration_fps,
-    )
+    return ProxyDiskEstimate(bytes=int(total), used_frame_guess=used_frame_guess, used_pixel_guess=used_pixel_guess, used_duration_fps=used_duration_fps)
 
 
 def dest_free_bytes(dest, free_bytes: int | None = None) -> int | None:
-    """Volume free space. ``free_bytes`` is the tiny-disk / test mock."""
     if free_bytes is not None:
         return int(free_bytes)
     probe = Path(dest)
@@ -933,12 +743,7 @@ def dest_free_bytes(dest, free_bytes: int | None = None) -> int | None:
     return int(shutil.disk_usage(probe).free)
 
 
-def dest_has_space(
-    dest,
-    needed_bytes: int,
-    free_bytes: int | None = None,
-) -> bool:
-    """False when free space is known and below the estimate. Unknown → True."""
+def dest_has_space(dest, needed_bytes: int, free_bytes: int | None = None) -> bool:
     available = dest_free_bytes(dest, free_bytes)
     if available is None:
         return True
@@ -946,7 +751,6 @@ def dest_has_space(
 
 
 def disk_short_status_text(estimate: ProxyDiskEstimate | None = None) -> str:
-    """Abort status. 「磁盘空间不足，未写出」 + honesty. Did not write."""
     note = DISK_SHORT_STATUS_TEMPLATE
     if estimate is not None:
         return f"{DISK_SHORT_STATUS}。{estimate.note}。{HONEST_PROXY_NOTE}。"
@@ -954,17 +758,14 @@ def disk_short_status_text(estimate: ProxyDiskEstimate | None = None) -> str:
 
 
 def folder_picker_message_with_estimate(estimate: ProxyDiskEstimate) -> str:
-    """Existing picker copy plus the dest-size note. Not a second button."""
     return f"{FOLDER_PICKER_MESSAGE}{estimate.note}。"
 
 
 def estimate_chip_lit(wb_source: str) -> bool:
-    """Estimate chip lights only AFTER confirm (wb_source == estimate)."""
     return wb_source == WB_SOURCE_ESTIMATE
 
 
 def propose_auto_wb(state: dict, cct: float | None, tint: float = 0.0) -> dict:
-    """Propose only. Does not write CAT / wb_source. Empty stays empty."""
     out = dict(state)
     out["auto_wb_cct"] = cct
     out["auto_wb_tint"] = tint
@@ -972,7 +773,6 @@ def propose_auto_wb(state: dict, cct: float | None, tint: float = 0.0) -> dict:
 
 
 def confirm_auto_wb(state: dict) -> dict:
-    """Write estimate CAT only after confirm. Grey-card wins. No 5600 guess."""
     out = dict(state)
     if out.get("wb_source") == WB_SOURCE_GREY:
         return out
@@ -986,31 +786,22 @@ def confirm_auto_wb(state: dict) -> dict:
 
 
 def never_guess_cct(cct: float | None) -> bool:
-    """Missing CCT stays empty. Never fill 5600 or 6504."""
     return cct is None
 
 
 def deliverable_dir_name(clip_name: str) -> str:
-    """Sequence folder. ``{stem}_ACES2065-1_proxy`` — proxy, not 成片."""
     return f"{Path(clip_name).stem}{DELIVERABLE_DIR_SUFFIX}"
 
 
 def sequence_frame_name(index: int) -> str:
-    """One sequence frame: ``frame_000000.exr``. Zero-based."""
     return f"{SEQUENCE_FRAME_PREFIX}_{index:0{SEQUENCE_FRAME_WIDTH}d}.exr"
 
 
 def deliverable_name(clip_name: str, index: int = 0) -> str:
-    """Relative path of one proxy sequence frame. Not a lone ``_frame0`` file."""
     return f"{deliverable_dir_name(clip_name)}/{sequence_frame_name(index)}"
 
 
 def as_frame_sequence(value) -> list[np.ndarray]:
-    """Normalize a clip's pixels to a list of RGB frames.
-
-    Accepts one RGB array (still / 1-frame), a sequence of RGB arrays, or
-    an ``(N, H, W, 3)`` stack. Empty / missing → no frames.
-    """
     if value is None:
         return []
     if isinstance(value, (list, tuple)):
@@ -1024,33 +815,14 @@ def as_frame_sequence(value) -> list[np.ndarray]:
 
 
 def processed_status_text(processed: int, skipped: int, dest=None) -> str:
-    """「N 条已处理」 is sequence writes / attempts, not preview refresh.
-
-    ``dest`` (short last path component) is appended only for a successful
-    write. Cancelled / empty writes omit it so a deleted half-folder is
-    not treated as success.
-    """
     note = PROCESSED_STATUS_TEMPLATE.format(processed=processed, skipped=skipped)
     if dest is not None:
         note += f" {short_export_path(dest)}"
     return note
 
 
-def batch_summary_text(
-    wrote: int,
-    skipped: int,
-    failed: int,
-    failure_reasons: Sequence[str] | None = None,
-    dest=None,
-) -> str:
-    """Post-batch three buckets. Existing Chinese chips only.
-
-    「N 条已写出代理 / M 条待选跳过 / K 条失败」 plus 失败原因.
-    Does not invent fps and does not reuse the dest-disk frame guess.
-    """
-    note = BATCH_SUMMARY_TEMPLATE.format(
-        wrote=int(wrote), skipped=int(skipped), failed=int(failed)
-    )
+def batch_summary_text(wrote: int, skipped: int, failed: int, failure_reasons: Sequence[str] | None = None, dest=None) -> str:
+    note = BATCH_SUMMARY_TEMPLATE.format(wrote=int(wrote), skipped=int(skipped), failed=int(failed))
     reasons = [str(item) for item in (failure_reasons or ()) if item]
     if reasons:
         note += f"。{FAILED_BUCKET} " + " ".join(reasons)
@@ -1061,17 +833,10 @@ def batch_summary_text(
 
 
 def short_export_path(path) -> str:
-    """Short dest shown in status. Parent name, not a deliverable claim."""
     return Path(path).name
 
 
-def progress_text(
-    clip_index: int,
-    clip_total: int,
-    frame: int | None = None,
-    frame_total: int | None = None,
-) -> str:
-    """Chinese write progress. Example: 「写出代理 2/5 · 第 120 帧」."""
+def progress_text(clip_index: int, clip_total: int, frame: int | None = None, frame_total: int | None = None) -> str:
     note = f"{PROGRESS_PREFIX} {clip_index}/{clip_total}"
     if frame is None:
         return note
@@ -1081,7 +846,6 @@ def progress_text(
 
 
 def cancelled_status_text(processed: int, skipped: int) -> str:
-    """Cancel status. 已取消 + honesty. Partial output is 不是成片."""
     return CANCELLED_STATUS_TEMPLATE.format(processed=processed, skipped=skipped)
 
 
@@ -1103,33 +867,24 @@ class BatchWriteReport:
     disk_short: bool = False
     disk_estimate: ProxyDiskEstimate | None = None
     locked_count: int = 0
-
     @property
     def processed_count(self) -> int:
-        """N in 「N 条已处理」: sequences written + per-clip write errors."""
         return len(self.written) + len(self.errors)
-
     @property
     def wrote_count(self) -> int:
-        """N in 「N 条已写出代理」: write + frame-count verify passed."""
         return len(self.written)
-
     @property
     def skipped_count(self) -> int:
         return len(self.skipped)
-
     @property
     def failed_count(self) -> int:
-        """K in 「K 条失败」: locked clips that did not become 已写出代理."""
         if self.disk_short:
             return max(int(self.locked_count), 0)
         if self.locked_count:
             return max(0, int(self.locked_count) - len(self.written))
         return len(self.errors)
-
     @property
     def failure_reason_lines(self) -> tuple[str, ...]:
-        """Existing Chinese chips only. No 24×60 dest-disk guess."""
         if self.disk_short:
             return (DISK_SHORT_STATUS,)
         lines = []
@@ -1139,108 +894,36 @@ class BatchWriteReport:
         if self.cancelled:
             lines.append(CANCELLED_NOTE)
         return tuple(lines)
-
     @property
     def last_reveal_paths(self) -> tuple[str, ...]:
-        """Completed ``_proxy`` folders. Empty on cancel (half-folder deleted)."""
         if self.cancelled or self.disk_short:
             return ()
         return self.written_paths
-
     @property
     def processed_status_text(self) -> str:
-        dest = (
-            self.dest
-            if self.written and not self.cancelled and not self.disk_short
-            else None
-        )
-        return batch_summary_text(
-            self.wrote_count,
-            self.skipped_count,
-            self.failed_count,
-            self.failure_reason_lines,
-            dest,
-        )
-
+        dest = self.dest if self.written and not self.cancelled and not self.disk_short else None
+        return batch_summary_text(self.wrote_count, self.skipped_count, self.failed_count, self.failure_reason_lines, dest)
     @property
     def written_paths(self) -> tuple[str, ...]:
         return tuple(w.path for w in self.written if w.path)
 
 
 def process_locked_writes(
-    clips: Sequence[BatchClip],
-    dest,
-    frames: dict[str, np.ndarray | Sequence[np.ndarray]] | None = None,
-    graph: SerialGraph | None = None,
-    write_fn: Callable[[Path, np.ndarray], None] | None = None,
-    should_cancel: Callable[[], bool] | None = None,
-    on_progress: Callable[[str], None] | None = None,
-    free_bytes: int | None = None,
-    ycbcr_tags: dict[str, dict] | None = None,
-    resolve_write_fn: Callable[..., object] | None = None,
-    resolve_lut_size: int = 5,
+    clips: Sequence[BatchClip], dest, frames: dict[str, np.ndarray | Sequence[np.ndarray]] | None = None,
+    graph: SerialGraph | None = None, write_fn: Callable[[Path, np.ndarray], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None, on_progress: Callable[[str], None] | None = None,
+    free_bytes: int | None = None, ycbcr_tags: dict[str, dict] | None = None,
+    resolve_write_fn: Callable[..., object] | None = None, resolve_lut_size: int = 5,
 ) -> BatchWriteReport:
-    """Write an ACES2065-1 proxy EXR sequence for locked clips only.
-
-    Unlocked / pending stay listed and never produce a folder. A mixed bin
-    (some locked, some pending) still writes the locked ones. ``graph`` is
-    the existing serial graph (ODT off = ACES2065-1). ``frames`` maps clip
-    name → one RGB array or a sequence of arrays. Missing pixels or a write
-    failure count as processed (per-clip error), not as a skip reason.
-
-    Output layout (DaVinci image sequence)::
-
-        {stem}_ACES2065-1_proxy/frame_000000.exr
-        {stem}_ACES2065-1_proxy/frame_000001.exr
-        ...
-
-    This is still a **proxy** sequence (source Y′CbCr → float, not
-    preview 8-bit promoted). Not a Rec.709 movie.
-
-    ``should_cancel`` stops the batch. The in-progress ``_proxy`` folder is
-    removed (half sequence is not a finished deliverable). Completed clips
-    stay. Cancelled clips are not 「已处理」.
-
-    ``free_bytes`` mocks dest volume free space (tiny disk). If free space
-    is below the locked-clip estimate + margin, no folder is created and
-    no EXR is written.
-
-    ``ycbcr_tags`` (when passed) is the nclc/colr/vui matrix + range for
-    each clip. Missing tags fail that clip with
-    「无法读取片源 Y′CbCr 矩阵/范围，未写出」 and write no folder.
-    No silent BT.709 + video-range default.
-
-    After at least one verified EXR sequence and no cancel, write the
-    session Resolve package (XML / DCTL / cube / README) into ``dest``.
-    Missing or empty ``graph.xml`` / DCTL / cube / ``README_RESOLVE.md``
-    fail the session with 「达芬奇包不完整，未写出」. The half package
-    and those ``_proxy`` folders are removed so they are not 已写出代理.
-    Empty ``_ACES2065-1_proxy`` / 0 frames fail closed (「帧数对不上」 /
-    「解码失败」) and leave no success folder. ``resolve_write_fn`` is
-    the test hook; default is ``export_locked_resolve_bundle``. Python
-    LUT size defaults to 5 (Swift stays 17). Not a movie. 不是全精度成片.
-    """
     dest = Path(dest)
     plan = plan_locked_batch(clips)
     frames = frames or {}
     estimate = estimate_locked_proxy_bytes(plan.locked, frames=frames)
-    # Nothing to write (decode errors only) is not a dest-size abort.
-    if estimate.bytes > 0 and not dest_has_space(
-        dest, estimate.needed_bytes, free_bytes=free_bytes
-    ):
-        return BatchWriteReport(
-            written=(),
-            skipped=plan.skipped,
-            errors=(),
-            dest=str(dest),
-            disk_short=True,
-            disk_estimate=estimate,
-            locked_count=len(plan.locked),
-        )
+    if estimate.bytes > 0 and not dest_has_space(dest, estimate.needed_bytes, free_bytes=free_bytes):
+        return BatchWriteReport(written=(), skipped=plan.skipped, errors=(), dest=str(dest), disk_short=True, disk_estimate=estimate, locked_count=len(plan.locked))
     dest.mkdir(parents=True, exist_ok=True)
     graph = graph if graph is not None else SerialGraph()
     writer = write_fn or (lambda path, rgb: write_rgb_exr(path, rgb))
-
     written: list[ClipWrite] = []
     errors: list[ClipWrite] = []
     cancelled = False
@@ -1278,8 +961,6 @@ def process_locked_writes(
             if on_progress:
                 on_progress(progress_text(clip_index, clip_total))
             frame_total = len(rgb_frames)
-            # Clip-constant CAT / exposure. One IDT+WB pass per write frame.
-            # Never graph.apply — that bakes preview ODT (709 / HLG / PQ).
             write_setup = graph.ap0_write_setup()
             for index, rgb in enumerate(rgb_frames):
                 if should_cancel and should_cancel():
@@ -1293,24 +974,16 @@ def process_locked_writes(
                 if write_fn is None and not out.is_file():
                     raise OSError(WRITE_FAILED_CHIP)
                 if on_progress:
-                    on_progress(
-                        progress_text(
-                            clip_index, clip_total, index + 1, frame_total
-                        )
-                    )
+                    on_progress(progress_text(clip_index, clip_total, index + 1, frame_total))
             if cancelled:
                 break
             ok, verify_err = verify_locked_proxy_sequence(seq_dir, clip)
             if not ok:
                 remove_failed_proxy_dir(seq_dir)
-                errors.append(
-                    ClipWrite(name=clip.name, error=verify_err or FRAME_MISMATCH_CHIP)
-                )
+                errors.append(ClipWrite(name=clip.name, error=verify_err or FRAME_MISMATCH_CHIP))
                 continue
-            written.append(
-                ClipWrite(name=clip.name, path=str(seq_dir), frame_count=len(rgb_frames))
-            )
-        except Exception as exc:  # noqa: BLE001 — per-clip error, keep going
+            written.append(ClipWrite(name=clip.name, path=str(seq_dir), frame_count=len(rgb_frames)))
+        except Exception as exc:
             remove_failed_proxy_dir(seq_dir)
             errors.append(ClipWrite(name=clip.name, error=str(exc)))
     if written and not cancelled:
@@ -1319,27 +992,15 @@ def process_locked_writes(
                 resolve_write_fn(dest, clips, graph, resolve_lut_size)
             else:
                 from .resolve_export import export_locked_resolve_bundle
-
-                export_locked_resolve_bundle(
-                    dest, clips, graph=graph, lut_size=resolve_lut_size
-                )
+                export_locked_resolve_bundle(dest, clips, graph=graph, lut_size=resolve_lut_size)
             ok, resolve_err = verify_resolve_bundle(dest)
             if not ok:
                 raise OSError(resolve_err or RESOLVE_INCOMPLETE_CHIP)
-        except Exception:  # noqa: BLE001 — session fail-closed, drop half package + _proxy
+        except Exception:
             remove_incomplete_resolve_bundle(dest)
             for item in written:
                 if item.path:
                     remove_failed_proxy_dir(item.path)
-                errors.append(
-                    ClipWrite(name=item.name, error=RESOLVE_INCOMPLETE_CHIP)
-                )
+                errors.append(ClipWrite(name=item.name, error=RESOLVE_INCOMPLETE_CHIP))
             written = []
-    return BatchWriteReport(
-        written=tuple(written),
-        skipped=plan.skipped,
-        errors=tuple(errors),
-        cancelled=cancelled,
-        dest=str(dest),
-        locked_count=len(plan.locked),
-    )
+    return BatchWriteReport(written=tuple(written), skipped=plan.skipped, errors=tuple(errors), cancelled=cancelled, dest=str(dest), locked_count=len(plan.locked))

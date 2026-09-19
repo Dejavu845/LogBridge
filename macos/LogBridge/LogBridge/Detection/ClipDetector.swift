@@ -176,7 +176,7 @@ enum ClipDetector {
         if name.contains("log3g10") || name.contains("redwidegamut") {
             return locked(.redLog3G10RWG, source: .filename, note: "文件名 Log3G10")
         }
-        if name.contains("d-log m") || name.contains("dlog m") || name.contains("dlogm") || name.contains("d-logm") {
+        if filenameIsDLogMStub(name) {
             return DetectionResult(
                 idt: nil, curve: nil, gamut: nil, source: .filename, needsUserPicker: true,
                 note: "D-Log M 暂不支持，请用 D-Log + D-Gamut"
@@ -192,36 +192,40 @@ enum ClipDetector {
             return locked(.arriLogC3EI800AWG3, source: .filename, note: "文件名 AWG3 (LogC3 EI800 + AWG3)")
         }
         if name.contains("c-log2") || name.contains("clog2") {
+            if filenameNeedsCLog2Picker(name) {
+                return DetectionResult(
+                    idt: nil,
+                    curve: "C-Log2",
+                    gamut: nil,
+                    source: .filename,
+                    needsUserPicker: true,
+                    note: "C-Log2 没有色域，先选择成对 IDT"
+                )
+            }
             if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {
                 return locked(.canonCLog2CGamut, source: .filename, note: "文件名 C-Log2 + Cinema Gamut")
             }
             if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
                 return locked(.canonCLog2BT2020, source: .filename, note: "文件名 C-Log2 + BT.2020")
             }
-            return DetectionResult(
-                idt: nil,
-                curve: "C-Log2",
-                gamut: nil,
-                source: .filename,
-                needsUserPicker: true,
-                note: "C-Log2 没有色域，先选择成对 IDT"
-            )
         }
         if name.contains("c-log3") || name.contains("clog3") {
+            if filenameNeedsCLog3Picker(name) {
+                return DetectionResult(
+                    idt: nil,
+                    curve: "C-Log3",
+                    gamut: nil,
+                    source: .filename,
+                    needsUserPicker: true,
+                    note: "C-Log3 没有色域，先选择成对 IDT"
+                )
+            }
             if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") {
                 return locked(.canonCLog3CGamut, source: .filename, note: "文件名 C-Log3 + Cinema Gamut")
             }
             if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
                 return locked(.canonCLog3BT2020, source: .filename, note: "文件名 C-Log3 + BT.2020")
             }
-            return DetectionResult(
-                idt: nil,
-                curve: "C-Log3",
-                gamut: nil,
-                source: .filename,
-                needsUserPicker: true,
-                note: "C-Log3 没有色域，先选择成对 IDT"
-            )
         }
         if name.contains("apple log") || name.contains("applelog") {
             return locked(.appleLogBT2020, source: .filename, note: "文件名 Apple Log")
@@ -229,7 +233,7 @@ enum ClipDetector {
         if name.contains("d-log") || name.contains("dlog") || name.contains("d-gamut") || name.contains("dgamut") {
             return locked(.djiDLogDGamut, source: .filename, note: "文件名 D-Log")
         }
-        if name.contains("s-log3") || name.contains("slog3") {
+        if filenameNeedsSLog3Picker(name) {
             return DetectionResult(
                 idt: nil,
                 curve: "S-Log3",
@@ -245,10 +249,57 @@ enum ClipDetector {
         return nil
     }
 
+    /// Cycle 33: D-Log M tokens never lock D-Log + D-Gamut.
+    static func filenameIsDLogMStub(_ raw: String) -> Bool {
+        let name = raw.lowercased()
+        return name.contains("d-log m")
+            || name.contains("dlog m")
+            || name.contains("dlogm")
+            || name.contains("d-logm")
+    }
+
+    /// Cycle 32: C-Log2 without a gamut token never locks Cinema Gamut.
+    static func filenameNeedsCLog2Picker(_ raw: String) -> Bool {
+        let name = raw.lowercased()
+        if !name.contains("c-log2") && !name.contains("clog2") { return false }
+        if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") { return false }
+        if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
+            return false
+        }
+        return true
+    }
+
+    /// Cycle 32: C-Log3 without a gamut token never locks Cinema Gamut.
+    static func filenameNeedsCLog3Picker(_ raw: String) -> Bool {
+        let name = raw.lowercased()
+        if !name.contains("c-log3") && !name.contains("clog3") { return false }
+        if name.contains("cinema") || name.contains("cgamut") || name.contains("c-gamut") { return false }
+        if name.contains("bt.2020") || name.contains("bt2020") || name.contains("rec2020") || name.contains("rec.2020") {
+            return false
+        }
+        return true
+    }
+
+    /// Cycle 31: S-Log3 without a gamut token never locks Cine.
+    static func filenameNeedsSLog3Picker(_ raw: String) -> Bool {
+        let name = raw.lowercased()
+        if !name.contains("s-log3") && !name.contains("slog3") { return false }
+        let cineTokens = ["sgamut3.cine", "s-gamut3.cine", "sgamut3cine", "sgamut3_cine"]
+        if cineTokens.contains(where: { name.contains($0) }) { return false }
+        if name.contains("sgamut3") || name.contains("s-gamut3") { return false }
+        return true
+    }
+
+    /// Cycle 38: a Venice body name is not an IDT. Gamut still required.
+    static func modelNeedsVenicePicker(_ raw: String?) -> Bool {
+        guard let raw else { return false }
+        return raw.lowercased().contains("venice")
+    }
+
     static func detectModel(_ model: String?) -> DetectionResult? {
         guard let model else { return nil }
         let m = model.lowercased()
-        if m.contains("venice") {
+        if modelNeedsVenicePicker(m) {
             return DetectionResult(
                 idt: nil,
                 curve: "S-Log3",

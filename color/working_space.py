@@ -28,14 +28,14 @@ DI_LOG_CUT = 0.02740668
 DI_18_PERCENT = 0.336043
 
 
-def davinci_intermediate_encode(lin):
+def davinci_intermediate_encode(lin) -> np.ndarray:
     lin = np.asarray(lin, dtype=np.float64)
     log = (np.log2(lin + DI_A) + DI_B) * DI_C
     linear = lin * DI_M
     return np.where(lin > DI_LIN_CUT, log, linear)
 
 
-def davinci_intermediate_decode(enc):
+def davinci_intermediate_decode(enc) -> np.ndarray:
     enc = np.asarray(enc, dtype=np.float64)
     lin = np.power(2.0, enc / DI_C - DI_B) - DI_A
     lo = enc / DI_M
@@ -49,7 +49,7 @@ _ACESCCT_BREAK_LIN = 0.0078125
 _ACESCCT_BREAK_LOG = _ACESCCT_LO_S * _ACESCCT_BREAK_LIN + _ACESCCT_LO_O  # Y_break
 
 
-def acescct_encode(lin_ap1):
+def acescct_encode(lin_ap1) -> np.ndarray:
     lin = np.asarray(lin_ap1, dtype=np.float64)
     return np.where(
         lin <= _ACESCCT_BREAK_LIN,
@@ -58,7 +58,7 @@ def acescct_encode(lin_ap1):
     )
 
 
-def acescct_decode(enc):
+def acescct_decode(enc) -> np.ndarray:
     enc = np.asarray(enc, dtype=np.float64)
     return np.where(
         enc <= _ACESCCT_BREAK_LOG,
@@ -71,26 +71,26 @@ def acescct_decode(enc):
 ACESCCT_18_PERCENT = float(acescct_encode(0.18))
 
 
-def aces2065_to_ap1(aces_ap0):
+def aces2065_to_ap1(aces_ap0) -> np.ndarray:
     """ACES2065-1 (AP0) -> ACEScg (AP1). Same ACES white; no CAT."""
     from .gamuts import rgb_to_rgb_matrix
 
     return np.asarray(aces_ap0, dtype=np.float64) @ rgb_to_rgb_matrix("AP0", "AP1").T
 
 
-def ap1_to_aces2065(ap1):
+def ap1_to_aces2065(ap1) -> np.ndarray:
     """ACEScg (AP1) -> ACES2065-1 (AP0)."""
     from .gamuts import rgb_to_rgb_matrix
 
     return np.asarray(ap1, dtype=np.float64) @ rgb_to_rgb_matrix("AP1", "AP0").T
 
 
-def aces2065_to_acescct(aces_ap0):
+def aces2065_to_acescct(aces_ap0) -> np.ndarray:
     """ACES2065-1 scene-linear -> ACEScct (AP1 log)."""
     return acescct_encode(aces2065_to_ap1(aces_ap0))
 
 
-def acescct_to_aces2065(enc):
+def acescct_to_aces2065(enc) -> np.ndarray:
     """ACEScct -> ACES2065-1 scene-linear."""
     return ap1_to_aces2065(acescct_decode(enc))
 

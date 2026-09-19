@@ -90,11 +90,15 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// Cycle 27: picker copy. Never “supported”. Never the one-click overclaim.
+    static let implementedStatus = "implemented (unverified)"
+    static let stubStatus = "stub, not implemented"
+
     var menuLabel: String {
         if isStub {
-            return "\(pairLabel) — stub, not implemented"
+            return "\(pairLabel) — \(Self.stubStatus)"
         }
-        return "\(pairLabel) — implemented (unverified)"
+        return "\(pairLabel) — \(Self.implementedStatus)"
     }
 
     /// OCIO colorspace name in ocio/config.ocio.
@@ -142,11 +146,16 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         pairs(forCurve: curve, veniceDetected: veniceDetected).map(\.gamut)
     }
 
+    /// Cycle 26: Venice picker / match rows require a detection token.
+    static func allowsVeniceRows(_ veniceDetected: Bool) -> Bool {
+        veniceDetected
+    }
+
     /// Locked pair only. Nil if the curve+gamut combination is not an M1 IDT.
     /// Prefers the non-Venice pair unless `veniceDetected`.
     static func match(curve: String, gamut: String, veniceDetected: Bool = false) -> IDT? {
         let hits = implemented.filter { $0.curve == curve && $0.gamut == gamut }
-        if veniceDetected {
+        if allowsVeniceRows(veniceDetected) {
             return hits.first(where: { $0.isVenice }) ?? hits.first
         }
         return hits.first(where: { !$0.isVenice }) ?? hits.first
@@ -156,9 +165,10 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
     /// S-Log3 needing a pick offers both gamuts — never a silent Cine default.
     /// C-Log2 / C-Log3 needing a pick offer Cinema Gamut and BT.2020 — never a silent Cinema Gamut default.
     static func pickerPairs(curveHint: String?, veniceDetected: Bool, needsPicker: Bool) -> [IDT] {
+        let veniceRows = allowsVeniceRows(veniceDetected)
         let slog3 = Self.isSLog3(curveHint)
         if needsPicker && slog3 {
-            return veniceDetected
+            return veniceRows
                 ? [.sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice]
                 : [.sonySLog3SGamut3, .sonySLog3SGamut3Cine]
         }
@@ -169,7 +179,7 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
             return [.canonCLog3CGamut, .canonCLog3BT2020]
         }
         var pairs = implemented.filter { !$0.isVenice }
-        if veniceDetected {
+        if veniceRows {
             if let idx = pairs.firstIndex(of: .sonySLog3SGamut3Cine) {
                 pairs.insert(contentsOf: [.sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice], at: pairs.index(after: idx))
             } else {
