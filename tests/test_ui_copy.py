@@ -11165,11 +11165,10 @@ def test_add_ellipsis_command_o_opens_same_importer():
     assert '.keyboardShortcut("o", modifiers: .command)' in ui_add
     assert ui_add.count("keyboardShortcut") == 1
     assert ui_view.count("session.showImporter = true") == 2
-    assert ui_view.count("keyboardShortcut") == 1
-    assert ui_sidebar.count("keyboardShortcut") == 1
-    assert _all_swift().count("keyboardShortcut") == 1
+    assert ui_view.count("keyboardShortcut") == 2
+    assert ui_sidebar.count("keyboardShortcut") == 2
+    assert _all_swift().count("keyboardShortcut") == 2
     settings = view.split('Button("设置")')[1].split("DropZone")[0]
-    assert "keyboardShortcut" not in settings
     assert "showImporter" not in settings
     assert "isPresented: $session.showImporter" in content
 
@@ -11372,4 +11371,133 @@ def test_advanced_panel_expanded_persists_in_userdefaults():
     assert "达芬奇已验证" not in content
     assert "达芬奇已验证" not in bar
     assert "达芬奇已验证" not in settings
+    _chengpian_only_honesty(ui_drop)
+
+
+def test_settings_command_comma_opens_same_settings():
+    """60 验法钉死: sidebar「设置」⌘, → 同一 showSettings.
+    ContentView / ProcessLockedBar 仍禁 keyboardShortcut.
+    56/57/58/59 / 主按钮 / Esc / EMPTY_STATE_* 一字不动. 冻㉗–59. #132 旁路.
+    """
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    content = _read(CONTENT)
+    clip = _read(CLIP)
+    app = _read(SWIFT_ROOT / "LogBridge/LogBridge/LogBridgeApp.swift")
+    app_settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Models/AppSettings.swift")
+    view = sidebar.split("struct ClipSidebarView")[1].split("private struct DropZone")[0]
+    drop = sidebar.split("struct DropZone")[1].split("struct ClipRow")[0]
+    ui_view = _code_without_comments(view)
+    ui_drop = _code_without_comments(drop)
+    ui_sidebar = _code_without_comments(sidebar)
+    ui_content = _code_without_comments(content)
+    add = view.split('Button("添加…")')[1].split('Button("设置")')[0]
+    ui_add = _code_without_comments(add)
+    settings_btn = view.split('Button("设置")')[1].split("DropZone")[0]
+    ui_settings_btn = _code_without_comments(settings_btn)
+
+    # 60: 「设置」挂 ⌘,，仍只开同一 showSettings.
+    assert (
+        'Button("设置") { session.showSettings = true }\n'
+        '                    .keyboardShortcut(",", modifiers: .command)'
+    ) in view
+    assert "session.showSettings = true" in ui_settings_btn
+    assert '.keyboardShortcut(",", modifiers: .command)' in ui_settings_btn
+    assert ui_settings_btn.count("keyboardShortcut") == 1
+    assert "showImporter" not in settings_btn
+    assert ui_view.count("session.showSettings = true") == 1
+    assert ui_view.count("keyboardShortcut") == 2
+    assert ui_sidebar.count("keyboardShortcut") == 2
+    assert _all_swift().count("keyboardShortcut") == 2
+    assert "isPresented: $session.showSettings" in content
+
+    # 58: 「添加…」⌘O 仍只开同一 showImporter.
+    assert (
+        'Button("添加…") { session.showImporter = true }\n'
+        '                    .keyboardShortcut("o", modifiers: .command)'
+    ) in view
+    assert "session.showImporter = true" in ui_add
+    assert '.keyboardShortcut("o", modifiers: .command)' in ui_add
+    assert ui_add.count("keyboardShortcut") == 1
+    assert ui_view.count("session.showImporter = true") == 2
+    assert "isPresented: $session.showImporter" in content
+
+    # ContentView / ProcessLockedBar / App 仍禁 keyboardShortcut；不加菜单命令.
+    assert "keyboardShortcut" not in content
+    assert "keyboardShortcut" not in ui_content
+    assert ".commands" not in ui_content
+    assert "onExitCommand" not in content
+    assert 'Button("设置")' not in content
+    assert 'Button("添加…")' not in content
+    assert "keyboardShortcut" not in app
+    assert "CommandGroup(replacing: .newItem) {}" in app
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    ui_bar = _code_without_comments(bar)
+    assert "keyboardShortcut" not in bar
+    assert "keyboardShortcut" not in ui_bar
+    assert 'Button("设置")' not in bar
+    assert 'Button("添加…")' not in bar
+
+    # 主按钮不动.
+    assert PROCESS_BUTTON == "处理已锁定片段"
+    assert PROCESS_BUTTON in bar
+    assert bar.count("Button(") == 1
+    assert "取消" in bar
+    assert "isWritingDeliverables" in bar
+    assert "cancelLockedDeliverables" in bar
+    assert 'Button("一键还原")' not in content
+
+    # 56: 空态 DropZone tap 仍开同一导入器；非空态不 tap 导入.
+    assert "DropZone(targeted: session.dropTargeted, empty: session.clips.isEmpty)" in view
+    assert ".onTapGesture" in ui_drop
+    tap = ui_drop.split(".onTapGesture")[1]
+    assert "if empty" in tap
+    before, gated = tap.split("if empty", 1)
+    assert "onTap()" not in before
+    assert "onTap()" in gated
+    assert "showImporter" not in ui_drop
+    assert ui_drop.count(".onTapGesture") == 1
+
+    # 57: 行 tap 不 reveal；chip 才 reveal.
+    row_tap = ui_view.split(".onTapGesture")[1]
+    assert "revealClipExportInFinder" not in row_tap
+    assert "selectedID" in row_tap
+    assert "refreshPreview" in row_tap
+    assert "showImporter" not in row_tap
+    assert 'onRevealWritten: { session.revealClipExportInFinder(clip) }' in ui_view
+    chip = sidebar.split("if chip == SessionModel.wroteProxyChip")[1].split("} else {")[0]
+    assert "onRevealWritten" in chip
+    assert "Button(" in chip
+
+    # 59: 「高级」展开仍写入 UserDefaults.
+    assert 'static let advancedPanelExpanded = "logbridge.advancedPanelExpanded"' in app_settings
+    assert "@Published var advancedPanelExpanded: Bool" in app_settings
+    assert "$settings.advancedPanelExpanded" in content
+    assert "@State private var showAdvanced = false" not in content
+
+    # EMPTY_STATE_* / Esc 不动.
+    assert EMPTY_STATE_STEP_1 == "把混源文件夹拖进来"
+    assert EMPTY_STATE_STEP_2 == "每条选成对 Log 与色域"
+    assert EMPTY_STATE_STEP_3 == "点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
+    assert EMPTY_STATE_STEPS == (
+        "1 把混源文件夹拖进来  2 每条选成对 Log 与色域  "
+        "3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
+    )
+    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEP_1 in drop
+    assert EMPTY_STATE_STEP_2 in drop
+    fn = clip.split("func cancelWritingFromEscape")[1].split("static func exportProgressText")[0]
+    assert "isWritingDeliverables" in fn
+    assert "cancelLockedDeliverables" in fn
+    assert "showSettings" in fn
+    assert "showImporter" in fn
+    assert "selectedID" not in fn
+    assert "cancelWritingFromEscape" in content
+    assert "case 53" in content
+
+    # #132 旁路；不假称达芬奇已验.
+    assert "ultraThinMaterial" not in sidebar
+    assert "ultraThinMaterial" not in content
+    assert "达芬奇已验证" not in ui_sidebar
+    assert "达芬奇已验证" not in content
+    assert "达芬奇已验证" not in bar
     _chengpian_only_honesty(ui_drop)
