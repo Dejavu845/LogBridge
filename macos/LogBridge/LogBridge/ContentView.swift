@@ -14,7 +14,7 @@ struct ContentView: View {
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             WorkspaceHeader(session: session)
             if session.clips.isEmpty {
                 EmptyPreviewStage(session: session)

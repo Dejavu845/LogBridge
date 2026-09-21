@@ -92,6 +92,8 @@ def test_no_marketing_and_no_resolve_verified_claim():
     design = _read(DESIGN)
     content = _read(CONTENT)
     for chunk in (chrome, design, content):
-        assert "达芬奇已验证" not in chunk
         assert "一键精准" not in chunk
         assert 'Button("一键还原")' not in chunk
+        # Honesty only: 「CI 绿不等于达芬奇已验证」 is allowed; a bare claim is not.
+        bare = chunk.replace("CI 绿不等于达芬奇已验证", "")
+        assert "达芬奇已验证" not in bare
