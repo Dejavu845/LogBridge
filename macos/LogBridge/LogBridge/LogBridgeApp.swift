@@ -8,7 +8,7 @@ struct LogBridgeApp: App {
         WindowGroup {
             ContentView()
         }
-        .defaultSize(width: 1440, height: 900)
+        .defaultSize(width: 1520, height: 940)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }

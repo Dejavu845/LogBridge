@@ -8,26 +8,34 @@ import UniformTypeIdentifiers
 /// (hidden by default). UI copy uses "已实现（未验证）"
 /// — never "supported". Primary action is "处理已锁定片段" — never 一键还原.
 /// Unlocked IDT is skipped, never guessed. Export: "导出 ACEScct / EXR".
+/// Team B shell: empty = full drop canvas; working = header steps + same path.
 struct ContentView: View {
     @StateObject private var session = SessionModel()
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
-        HSplitView {
-            ClipSidebarView(session: session)
-                .frame(minWidth: 196, idealWidth: 228, maxWidth: 280)
-            VStack(spacing: 0) {
-                SplitPreview(session: session)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .layoutPriority(1)
-                PairedIDTBar(session: session)
-                ProcessLockedBar(session: session)
-                AdvancedPanel(session: session, isExpanded: $settings.advancedPanelExpanded)
-                StatusBar(session: session)
+        VStack(spacing: 8) {
+            WorkspaceHeader(session: session)
+            if session.clips.isEmpty {
+                EmptyPreviewStage(session: session)
+            } else {
+                HSplitView {
+                    ClipSidebarView(session: session)
+                        .frame(minWidth: 196, idealWidth: 228, maxWidth: 280)
+                    VStack(spacing: 0) {
+                        SplitPreview(session: session)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .layoutPriority(1)
+                        PairedIDTBar(session: session)
+                        ProcessLockedBar(session: session)
+                        AdvancedPanel(session: session, isExpanded: $settings.advancedPanelExpanded)
+                        StatusBar(session: session)
+                    }
+                    .frame(minWidth: 520)
+                    InspectorView(session: session)
+                        .frame(minWidth: 196, idealWidth: 220, maxWidth: 260)
+                }
             }
-            .frame(minWidth: 520)
-            InspectorView(session: session)
-                .frame(minWidth: 196, idealWidth: 220, maxWidth: 260)
         }
         .onDrop(of: [.fileURL], isTargeted: $session.dropTargeted) { providers in
             session.importProviders(providers)
@@ -189,15 +197,29 @@ struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                Text(session.lockStatusText)
-                    .font(.caption.weight(.semibold))
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("写出代理")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(session.lockStatusText)
+                        .font(.subheadline.weight(.semibold))
+                }
                 if let reason = session.selectedClip?.processSkipReason {
                     Text(reason)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.orange)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                } else if !session.showsProcessLockedButton {
+                    Text(session.processBlockedReason ?? "先选择 Log 与色域")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
                 }
                 Spacer(minLength: 8)
                 if session.showsProcessLockedButton {
@@ -209,24 +231,24 @@ struct ProcessLockedBar: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     .help("写出的是图片序列（EXR），不是 mp4/mov")
                 }
             }
             Text("代理 EXR，不是视频。整段代理，不是全精度成片。")
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if session.showsBatchSummary {
                 Text(session.lastExportNote)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(Color.primary.opacity(0.03))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.accentColor.opacity(0.06))
     }
 }
 
@@ -259,9 +281,9 @@ struct AdvancedPanel: View {
             }
         }
         .help("节点与导出 ACEScct / EXR。默认收起。预览·非成片。")
-        .padding(.horizontal, 10)
-        .padding(.vertical, 2)
-        .background(Color.primary.opacity(0.02))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.025))
     }
 }
 
@@ -270,36 +292,48 @@ struct SplitPreview: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HSplitView {
-                SourcePreviewView(
-                    title: "源（相机 Log）",
-                    caption: "未套 Rec.709。相机编码值。",
-                    image: session.preview.sourceImage
-                )
-                if session.graph.odt.isHDR {
-                    HDRPreviewView(
-                        title: session.odtPreviewTitle,
-                        caption: session.odtPreviewCaption,
-                        image: session.preview.odtImage,
-                        odt: session.graph.odt,
-                        pickingNeutral: session.pickingNeutral && !session.isExporting,
-                        onPick: { nx, ny in
-                            session.handlePreviewPick(nx: nx, ny: ny)
-                        },
-                        onLayerFail: {
-                            session.failClosedHDRPreviewLayer()
-                        }
+            if session.selectedClip == nil {
+                VStack(spacing: 8) {
+                    Text("先点一条素材")
+                        .font(.headline)
+                    Text("读不到元数据就在下面选成对 IDT，不猜。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.primary.opacity(0.03))
+            } else {
+                HSplitView {
+                    SourcePreviewView(
+                        title: "源（相机 Log）",
+                        caption: "未套 Rec.709。相机编码值。",
+                        image: session.preview.sourceImage
                     )
-                } else {
-                    Rec709PreviewView(
-                        title: session.odtPreviewTitle,
-                        caption: session.odtPreviewCaption,
-                        image: session.preview.odtImage,
-                        pickingNeutral: session.pickingNeutral && !session.isExporting,
-                        onPick: { nx, ny in
-                            session.handlePreviewPick(nx: nx, ny: ny)
-                        }
-                    )
+                    if session.graph.odt.isHDR {
+                        HDRPreviewView(
+                            title: session.odtPreviewTitle,
+                            caption: session.odtPreviewCaption,
+                            image: session.preview.odtImage,
+                            odt: session.graph.odt,
+                            pickingNeutral: session.pickingNeutral && !session.isExporting,
+                            onPick: { nx, ny in
+                                session.handlePreviewPick(nx: nx, ny: ny)
+                            },
+                            onLayerFail: {
+                                session.failClosedHDRPreviewLayer()
+                            }
+                        )
+                    } else {
+                        Rec709PreviewView(
+                            title: session.odtPreviewTitle,
+                            caption: session.odtPreviewCaption,
+                            image: session.preview.odtImage,
+                            pickingNeutral: session.pickingNeutral && !session.isExporting,
+                            onPick: { nx, ny in
+                                session.handlePreviewPick(nx: nx, ny: ny)
+                            }
+                        )
+                    }
                 }
             }
             PreviewScrubBar(session: session)
@@ -404,8 +438,8 @@ struct StatusBar: View {
             Spacer()
         }
         .font(.caption)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
         .background(.bar)
         .help("按每一帧出一张图，不是一条视频")
     }

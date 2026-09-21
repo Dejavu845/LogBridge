@@ -155,6 +155,8 @@ final class SessionModel: ObservableObject {
     @Published var previewScrubLastFrame: Int? = nil
     /// 「读不到帧率，未核对」 / 「读不到时长，未核对」. No slider. No 24/30 guess.
     @Published var previewScrubFail: String? = nil
+    /// Sidebar list filter. Does not change process / export rules.
+    @Published var sidebarFilter: ClipSidebarFilter = .all
     private var previewScrubClipID: UUID?
 
     let preview = PreviewEngine()
@@ -232,6 +234,24 @@ final class SessionModel: ObservableObject {
     /// 「N 条已锁定 / M 条待选」
     var lockStatusText: String {
         "\(lockedClipCount) 条已锁定 / \(pendingClipCount) 条待选"
+    }
+
+    /// 1 导入 → 2 选对 → 3 写出代理. Header only; not a second process path.
+    var workspaceStep: Int {
+        if clips.isEmpty { return WorkspaceStep.importFolder.rawValue }
+        if pendingClipCount > 0 { return WorkspaceStep.pickPairs.rawValue }
+        return WorkspaceStep.writeProxy.rawValue
+    }
+
+    var sidebarClips: [Clip] {
+        switch sidebarFilter {
+        case .all:
+            return clips
+        case .pending:
+            return clips.filter { !$0.hasLockedPair }
+        case .locked:
+            return clips.filter(\.hasLockedPair)
+        }
     }
 
     /// Primary button is shown only when at least one paired IDT is locked.
