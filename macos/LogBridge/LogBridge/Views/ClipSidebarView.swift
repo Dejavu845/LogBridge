@@ -16,6 +16,7 @@ struct ClipSidebarView: View {
                     .keyboardShortcut("o", modifiers: .command)
                     .controlSize(.small)
                 Button("设置") { session.showSettings = true }
+                    .keyboardShortcut(",", modifiers: .command)
                     .controlSize(.small)
             }
             .padding(.horizontal, 10)
