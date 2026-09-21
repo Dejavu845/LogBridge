@@ -7,12 +7,12 @@ struct PairedIDTBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("成对 IDT")
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                 Text("先选 Log 与色域，才能处理")
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 8)
@@ -24,6 +24,11 @@ struct PairedIDTBar: View {
                         .background(clip.isPending ? Color.yellow.opacity(0.28) : Color.orange.opacity(0.2))
                         .clipShape(Capsule())
                 }
+            }
+            if session.selectedClip?.isPending == true {
+                Text("这一步：每条选成对 Log 与色域")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
             }
             if let clip = session.selectedClip {
                 // One locked pair per row. Never two independent curve/gamut dropdowns.
@@ -41,8 +46,8 @@ struct PairedIDTBar: View {
                     }
                 }
                 .labelsHidden()
-                .controlSize(.small)
-                .frame(maxWidth: 420)
+                .controlSize(.regular)
+                .frame(maxWidth: 520)
                 .disabled(session.isExporting)
                 // S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。
                 .help("S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。")
@@ -72,10 +77,14 @@ struct PairedIDTBar: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.03))
+        .background(
+            session.selectedClip?.isPending == true
+                ? Color.yellow.opacity(0.10)
+                : Color.primary.opacity(0.03)
+        )
     }
 }
 
@@ -86,14 +95,16 @@ struct InspectorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("调节")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 ExposureInspector(session: session)
-                Divider()
                 WBInspector(session: session)
             }
             .disabled(session.isExporting)
             .opacity(session.isExporting ? 0.45 : 1)
-            .padding(6)
+            .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color.primary.opacity(0.02))
@@ -106,7 +117,7 @@ struct WBInspector: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("白平衡")
-                .font(.caption.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
             Toggle("启用白平衡（可旁路，不烘焙）", isOn: Binding(
                 get: { session.graph.wbEnabled },
                 set: { session.setWBEnabled($0) }
@@ -207,6 +218,10 @@ struct WBInspector: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -309,7 +324,7 @@ struct ExposureInspector: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("曝光")
-                .font(.caption.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
             Toggle("启用曝光（0 档 = 不动）", isOn: Binding(
                 get: { session.graph.exposureEnabled },
                 set: { session.setExposureEnabled($0) }
@@ -345,5 +360,9 @@ struct ExposureInspector: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }

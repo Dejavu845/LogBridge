@@ -19,8 +19,8 @@ struct ClipSidebarView: View {
                     .controlSize(.small)
             }
             .padding(.horizontal, 10)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
 
             DropZone(targeted: session.dropTargeted, empty: session.clips.isEmpty) {
                 session.showImporter = true
@@ -32,7 +32,25 @@ struct ClipSidebarView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
-                .padding(.bottom, 4)
+                .padding(.bottom, 6)
+
+            if !session.clips.isEmpty {
+                Picker("列表", selection: $session.sidebarFilter) {
+                    ForEach(ClipSidebarFilter.allCases) { filter in
+                        Text(filter.title).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .controlSize(.small)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+
+                Text(session.lockStatusText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 4)
+            }
 
             if !session.lastImportNote.isEmpty {
                 Text(session.lastImportNote)
@@ -45,7 +63,7 @@ struct ClipSidebarView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(session.clips) { clip in
+                        ForEach(session.sidebarClips) { clip in
                             ClipRow(
                                 clip: clip,
                                 selected: session.selectedID == clip.id,
@@ -67,6 +85,7 @@ struct ClipSidebarView: View {
                 }
             }
         }
+        .background(Color.primary.opacity(0.02))
     }
 }
 
@@ -123,7 +142,7 @@ struct ClipRow: View {
                 .fill(clip.isPending ? Color.yellow.opacity(0.9) : Color.accentColor)
                 .frame(width: 3)
                 .padding(.vertical, 2)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(clip.filename)
                         .font(clip.isPending ? .callout : .callout.weight(.semibold))
@@ -165,8 +184,8 @@ struct ClipRow: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(selected ? Color.accentColor.opacity(0.10) : Color.clear)
+        .background(selected ? Color.accentColor.opacity(0.12) : Color.clear)
     }
 }
