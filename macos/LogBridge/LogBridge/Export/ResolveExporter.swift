@@ -899,6 +899,31 @@ enum ResolveExporter {
         0.32168, 0.33767,
     ]
 
+    /// IEEE-754 binary16 bits. Xcode 16.4's `Float16` has no `Float` initializer
+    /// and no `bitPattern`, so the half payload is packed by hand.
+    static func floatToHalfBits(_ value: Float) -> UInt16 {
+        let bits = value.bitPattern
+        let sign = UInt16((bits >> 16) & 0x8000)
+        let exp = Int((bits >> 23) & 0xFF)
+        let frac = bits & 0x007F_FFFF
+        if exp == 255 {
+            if frac == 0 { return sign | 0x7C00 }
+            return sign | 0x7E00
+        }
+        let halfExp = exp - 127 + 15
+        if halfExp >= 31 { return sign | 0x7C00 }
+        if halfExp <= 0 {
+            if halfExp < -10 { return sign }
+            let mantissa = (frac | 0x0080_0000) >> UInt32(1 - halfExp)
+            var half = UInt16(mantissa >> 13)
+            if (mantissa & 0x1000) != 0 { half &+= 1 }
+            return sign | half
+        }
+        var half = UInt16(halfExp << 10) | UInt16(frac >> 13)
+        if (frac & 0x1000) != 0 { half &+= 1 }
+        return sign | half
+    }
+
     /// Uncompressed scanline RGB half (float16) EXR. Container only — no color math.
     /// Matches ``color.exr_write.write_rgb_exr``. Writes ST 2065-1 chromaticities
     /// and ACES-white ``adoptedNeutral``. Does not write ``acesImageContainerFlag``.
@@ -986,22 +1011,16 @@ enum ResolveExporter {
         let rowBytes = width * 2
         var scanlines: [Data] = []
         for y in 0..<height {
-            // Array bytes, not Data.withUnsafeMutableBytes: Xcode 16's Data
-            // overload cannot infer ContentType and has no bindMemory.
-            var bPlane = [UInt16](repeating: 0, count: width)
-            var gPlane = [UInt16](repeating: 0, count: width)
-            var rPlane = [UInt16](repeating: 0, count: width)
-            for x in 0..<width {
-                let i = (y * width + x) * 3
-                bPlane[x] = Float16(rgb[i + 2]).bitPattern.littleEndian
-                gPlane[x] = Float16(rgb[i + 1]).bitPattern.littleEndian
-                rPlane[x] = Float16(rgb[i]).bitPattern.littleEndian
-            }
             var planar = Data()
             planar.reserveCapacity(rowBytes * 3)
-            bPlane.withUnsafeBytes { planar.append(contentsOf: $0) }
-            gPlane.withUnsafeBytes { planar.append(contentsOf: $0) }
-            rPlane.withUnsafeBytes { planar.append(contentsOf: $0) }
+            // Planar B, G, R. Half bits stored little-endian.
+            for channel in [2, 1, 0] {
+                for x in 0..<width {
+                    let i = (y * width + x) * 3 + channel
+                    var bits = floatToHalfBits(rgb[i]).littleEndian
+                    planar.append(Data(bytes: &bits, count: 2))
+                }
+            }
             var payload = Data()
             var yi = Int32(y).littleEndian
             var nbytes = UInt32(planar.count).littleEndian

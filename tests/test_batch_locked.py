@@ -586,7 +586,7 @@ def _assert_swift_exr_writer_chromaticities(exporter: str) -> None:
     assert 'putAttr("adoptedNeutral", "v2f"' in writer
     # Proxy container is OpenEXR HALF (pixelType 1), not FLOAT (2).
     assert "var pixelType = Int32(1).littleEndian" in writer
-    assert "Float16(" in writer
+    assert "floatToHalfBits" in exporter
     assert "rowBytes = width * 2" in writer
     assert 'putAttr("acesImageContainerFlag"' not in writer
     assert 'putAttr("acesImageContainerFlag"' not in exporter
