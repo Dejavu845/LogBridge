@@ -290,11 +290,17 @@ enum ResolveExporter {
     private static func decodeLog(_ x: Double, idt: IDT) -> Double {
         switch idt {
         case .arriLogC4AWG4:
+            // Spec CTL: positive log + linear extension for E' < 0 (matches color/curves.py).
             let a = (pow(2.0, 18.0) - 16.0) / 117.45
             let b = (1023.0 - 95.0) / 1023.0
             let c = 95.0 / 1023.0
-            let p = 14.0 * (x - c) / b + 6.0
-            return (pow(2.0, p) - 64.0) / a
+            if x >= 0.0 {
+                let p = 14.0 * (x - c) / b + 6.0
+                return (pow(2.0, p) - 64.0) / a
+            }
+            let s = (7.0 * log(2.0) * pow(2.0, 7.0 - 14.0 * c / b)) / (a * b)
+            let t = (pow(2.0, 14.0 * (-c / b) + 6.0) - 64.0) / a
+            return x * s + t
         case .sonySLog3SGamut3, .sonySLog3SGamut3Cine, .sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice:
             let cut = 171.2102946929 / 1023.0
             let cv = x * 1023.0
@@ -893,7 +899,7 @@ enum ResolveExporter {
         0.32168, 0.33767,
     ]
 
-    /// Uncompressed scanline RGB float32 EXR. Container only — no color math.
+    /// Uncompressed scanline RGB half (float16) EXR. Container only — no color math.
     /// Matches ``color.exr_write.write_rgb_exr``. Writes ST 2065-1 chromaticities
     /// and ACES-white ``adoptedNeutral``. Does not write ``acesImageContainerFlag``.
     static func writeACES2065EXR(rgb: [Float], width: Int, height: Int, to url: URL) throws {
@@ -924,11 +930,12 @@ enum ResolveExporter {
             putI32(Int32(payload.count))
             data.append(payload)
         }
+        // OpenEXR PIXEL_HALF = 1 (not FLOAT=2). 6 bytes / pixel RGB.
         func chlistChannel(_ name: String) -> Data {
             var ch = Data()
             ch.append(contentsOf: name.utf8)
             ch.append(0)
-            var pixelType = Int32(2).littleEndian
+            var pixelType = Int32(1).littleEndian
             ch.append(Data(bytes: &pixelType, count: 4))
             ch.append(contentsOf: [0, 0, 0, 0])
             var samp = Int32(1).littleEndian
@@ -976,17 +983,17 @@ enum ResolveExporter {
         putAttr("screenWindowWidth", "float", Data(bytes: &par, count: 4))
         data.append(0)
 
-        let rowBytes = width * 4
+        let rowBytes = width * 2
         var scanlines: [Data] = []
         for y in 0..<height {
             var planar = Data(count: rowBytes * 3)
             planar.withUnsafeMutableBytes { raw in
-                let dst = raw.bindMemory(to: UInt32.self)
+                let dst = raw.bindMemory(to: UInt16.self)
                 for x in 0..<width {
                     let i = (y * width + x) * 3
-                    dst[x] = rgb[i + 2].bitPattern.littleEndian
-                    dst[width + x] = rgb[i + 1].bitPattern.littleEndian
-                    dst[2 * width + x] = rgb[i].bitPattern.littleEndian
+                    dst[x] = Float16(rgb[i + 2]).bitPattern.littleEndian
+                    dst[width + x] = Float16(rgb[i + 1]).bitPattern.littleEndian
+                    dst[2 * width + x] = Float16(rgb[i]).bitPattern.littleEndian
                 }
             }
             var payload = Data()

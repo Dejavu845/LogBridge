@@ -69,7 +69,7 @@ check), ``lastExportNote`` is one Chinese three-bucket summary:
 Do not reuse the dest-disk 24 fps × 60 s guess in this summary.
 
 Before any EXR is written, estimate dest disk from **locked clips
-only**: frame count × pixel count × 12 bytes (uncompressed float32
+only**: frame count × pixel count × 6 bytes (uncompressed half
 RGB; EXR header / offset table is covered by a small margin). If
 frame count is unknown, use duration×fps, or a conservative 24 fps
 × 60 s guess (said in the note). If free space < estimate + margin,
@@ -132,6 +132,8 @@ NOTE_META_CLOG2_BT2020 = "元数据 C-Log2 + BT.2020"
 NOTE_META_CLOG3_CGAMUT = "元数据 C-Log3 + Cinema Gamut"
 NOTE_META_CLOG3_BT2020 = "元数据 C-Log3 + BT.2020"
 NOTE_META_RED_RMD = "元数据 RED RMD"
+# Sidecar present but color_space not parsed — do not lock Log3G10 silently.
+NOTE_META_RED_RMD_PICK = "检测到 RED RMD，先选择成对 IDT"
 NOTE_META_FUJI = "元数据 Fujifilm"
 NOTE_META_NIKON = "元数据 Nikon"
 NOTE_META_PANA = "元数据 Panasonic"
@@ -249,9 +251,9 @@ RESOLVE_BUNDLE_FILENAMES = (
     "03_WB.cube",
     "04_ODT_Rec709.cube",
 )
-# Uncompressed float32 RGB scanline payload (3 × 4). Not ZIP/PIZ.
+# Uncompressed half (float16) RGB scanline payload (3 × 2). Not ZIP/PIZ.
 # Header + offset table are not per-pixel; DISK_MARGIN covers them.
-BYTES_PER_EXR_PIXEL = 12
+BYTES_PER_EXR_PIXEL = 6
 DISK_MARGIN_RATIO = 0.10
 DISK_MARGIN_MIN_BYTES = 64 * 1024 * 1024
 CONSERVATIVE_FPS = 24.0
@@ -845,7 +847,7 @@ def clip_pixel_count(
 
 @dataclass(frozen=True)
 class ProxyDiskEstimate:
-    """Locked-only dest estimate. Uncompressed float32 RGB EXR."""
+    """Locked-only dest estimate. Uncompressed half RGB EXR (6 bytes / pixel)."""
 
     bytes: int
     used_frame_guess: bool

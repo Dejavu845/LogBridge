@@ -128,7 +128,8 @@ def test_stale_preview_decode_dropped_on_selection_change():
     assert "requestedClipID = clipID" in begin
     assert "pendingPreviewWork?.cancel()" in begin
     assert "exportGradedAP0" in begin
-    assert "queue.sync" in begin
+    assert "exportQueue" in begin
+    assert "queue.sync" not in begin
     assert "精准" not in begin
 
     current = engine.split("func isCurrentPreview")[1].split("func enqueuePreview")[0]
@@ -173,7 +174,7 @@ def test_stale_preview_decode_dropped_on_selection_change():
     export_first = engine.split("func exportGradedAP0(")[1].split(
         "func exportGradedAP0Sequence"
     )[0]
-    assert "queue.sync" in export_first
+    assert "exportQueue.sync" in export_first
     assert "beginPreviewRequest" not in export_first
     assert "pendingPreviewWork" not in export_first
     assert "isCurrentPreview" not in export_first
@@ -181,7 +182,7 @@ def test_stale_preview_decode_dropped_on_selection_change():
     export_seq = engine.split("func exportGradedAP0Sequence")[1].split(
         "func decodeAllSourceFrames"
     )[0]
-    assert "queue.sync" in export_seq
+    assert "exportQueue.sync" in export_seq
     assert "beginPreviewRequest" not in export_seq
     assert "pendingPreviewWork" not in export_seq
     assert "isCurrentPreview" not in export_seq
@@ -499,8 +500,9 @@ def test_export_write_overlaps_next_copynext():
 
     assert "exportWriteQueue" not in engine
     assert 'DispatchQueue(label: "app.logbridge.export.write"' not in engine
-    assert engine.count('DispatchQueue(label:') == 1
+    assert engine.count('DispatchQueue(label:') == 2
     assert 'DispatchQueue(label: "app.logbridge.preview"' in engine
+    assert 'DispatchQueue(label: "app.logbridge.export"' in engine
     assert "one write overlap" in export_seq
     assert "joinExportWrite" in export_seq
     assert "writeFrame" in export_seq
@@ -807,4 +809,53 @@ def test_per_frame_scrubber_odt_only_no_whole_clip_decode():
     assert "预览·非成片" in content
     assert "预览·非成片" in engine
     assert "未验证" in clip
+
+
+def test_preview_color_venice_idt_not_silent_noop():
+    """Write/preview IDT must handle Venice (same SG3/Cine matrices). Nil matrix = raw Log as ACES."""
+    engine = _read(ENGINE)
+    exporter = _read(ROOT / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift")
+    wb = _read(ROOT / "macos/LogBridge/LogBridge/Color/WhiteBalance.swift")
+
+    cam = engine.split("private static func cameraToAP0")[1].split(
+        "private static func decodeLog"
+    )[0]
+    assert ".sonySLog3SGamut3Venice" in cam
+    assert ".sonySLog3SGamut3CineVenice" in cam
+    assert "sonySLog3SGamut3, .sonySLog3SGamut3Venice" in cam or (
+        ".sonySLog3SGamut3, .sonySLog3SGamut3Venice" in cam
+    )
+    # Must not leave Venice only in default → nil.
+    assert "case .sonySLog3SGamut3Venice:" not in cam.split("default:")[-1]
+
+    dec = engine.split("private static func decodeLog")[1].split(
+        "/// Metal applies the same locked"
+    )[0]
+    assert ".sonySLog3SGamut3Venice" in dec
+    assert ".sonySLog3SGamut3CineVenice" in dec
+    assert "x >= 0.0" in dec.split("case .arriLogC4AWG4:")[1].split("case .sonySLog3")[0]
+    assert "x * s + t" in dec.split("case .arriLogC4AWG4:")[1].split("case .sonySLog3")[0]
+
+    exp_cam = exporter.split("private static func cameraToAP0")[1].split(
+        "private static func decodeLog"
+    )[0]
+    assert ".sonySLog3SGamut3Venice" in exp_cam
+    assert ".sonySLog3SGamut3CineVenice" in exp_cam
+    exp_dec = exporter.split("private static func decodeLog")[1].split(
+        "case .panasonicVLogVGamut:"
+    )[0]
+    assert "x * s + t" in exp_dec
+
+    planck = wb.split("Kang 2002 Planckian")[1].split("if tint != 0")[0]
+    assert "t < 2222.0" in planck
+    assert "1.1063814" in planck
+    assert "0.9549476" in planck
+
+
+def test_red_rmd_presence_does_not_lock_in_swift():
+    detector = _read(ROOT / "macos/LogBridge/LogBridge/Detection/ClipDetector.swift")
+    rmd = detector.split("func readREDRMD")[1].split("}")[0]
+    assert "needsUserPicker: true" in rmd
+    assert "检测到 RED RMD，先选择成对 IDT" in rmd
+    assert "locked(.redLog3G10RWG" not in rmd
 

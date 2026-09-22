@@ -1,13 +1,15 @@
-"""Scanline OpenEXR container (RGB float32). No color math.
+"""Scanline OpenEXR container (RGB float16 / half). No color math.
 
 Writes / reads uncompressed single-part scanline EXR so Linux tests can
 assert files on disk without OpenEXR/ImageIO. Pixel values are stored as
 given — this module does not apply an IDT, CAT, exposure, or ODT.
 
-The header writes OpenEXR ``chromaticities`` for SMPTE ST 2065-1 / ACES
-AP0 primaries and ACES white, plus ``adoptedNeutral`` as that same ACES
-white xy. It does not write ``acesImageContainerFlag``. Header only —
-not an ACES container or DaVinci verification claim.
+Proxy default is **half** (OpenEXR PIXEL_HALF): 6 bytes / pixel RGB, still
+uncompressed scanlines. Not ZIP/PIZ. Header writes OpenEXR
+``chromaticities`` for SMPTE ST 2065-1 / ACES AP0 primaries and ACES white,
+plus ``adoptedNeutral`` as that same ACES white xy. It does not write
+``acesImageContainerFlag``. Header only — not an ACES container or DaVinci
+verification claim.
 """
 
 from __future__ import annotations
@@ -19,7 +21,8 @@ import numpy as np
 
 EXR_MAGIC = 20000630
 EXR_VERSION_SCANLINE = 2  # single-part scanline; not tiled / multipart
-PIXEL_FLOAT = 2
+PIXEL_HALF = 1
+PIXEL_FLOAT = 2  # legacy reader only; writers use HALF
 
 # SMPTE ST 2065-1 / ACES AP0 primaries + ACES white (not D65, not AP1).
 # OpenEXR chromaticities: red.xy, green.xy, blue.xy, white.xy
@@ -47,19 +50,19 @@ def _attr(name: str, typ: str, payload: bytes) -> bytes:
     ) + payload
 
 
-def _chlist_channel(name: str) -> bytes:
-    # name, pixelType FLOAT, pLinear, reserved[3], xSampling, ySampling
+def _chlist_channel(name: str, pixel_type: int = PIXEL_HALF) -> bytes:
+    # name, pixelType, pLinear, reserved[3], xSampling, ySampling
     return (
         name.encode("ascii")
         + b"\x00"
-        + struct.pack("<i", PIXEL_FLOAT)
+        + struct.pack("<i", pixel_type)
         + bytes([0, 0, 0, 0])
         + struct.pack("<ii", 1, 1)
     )
 
 
 def as_rgb_image(rgb) -> np.ndarray:
-    """Normalize RGB to (H, W, 3) float32. Vectors become 1×1."""
+    """Normalize RGB to (H, W, 3) float32 working buffer. Vectors become 1×1."""
     arr = np.asarray(rgb, dtype=np.float32)
     if arr.ndim == 1 and arr.shape[0] == 3:
         return arr.reshape(1, 1, 3)
@@ -93,7 +96,7 @@ def _adopted_neutral_payload(
 
 
 def write_rgb_exr(path, rgb) -> Path:
-    """Write uncompressed RGB float32 scanline EXR. Container only."""
+    """Write uncompressed RGB half (float16) scanline EXR. Container only."""
     dest = Path(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     img = as_rgb_image(rgb)
@@ -101,7 +104,12 @@ def write_rgb_exr(path, rgb) -> Path:
     if width < 1 or height < 1:
         raise ValueError("EXR image must have positive width and height")
 
-    channels = _chlist_channel("B") + _chlist_channel("G") + _chlist_channel("R") + b"\x00"
+    channels = (
+        _chlist_channel("B")
+        + _chlist_channel("G")
+        + _chlist_channel("R")
+        + b"\x00"
+    )
     box = struct.pack("<iiii", 0, 0, width - 1, height - 1)
     header = b"".join(
         [
@@ -131,9 +139,9 @@ def write_rgb_exr(path, rgb) -> Path:
     for y in range(height):
         row = img[y]
         planar = (
-            np.ascontiguousarray(row[:, 2]).tobytes()
-            + np.ascontiguousarray(row[:, 1]).tobytes()
-            + np.ascontiguousarray(row[:, 0]).tobytes()
+            np.ascontiguousarray(row[:, 2], dtype="<f2").tobytes()
+            + np.ascontiguousarray(row[:, 1], dtype="<f2").tobytes()
+            + np.ascontiguousarray(row[:, 0], dtype="<f2").tobytes()
         )
         scanlines.append(struct.pack("<iI", y, len(planar)) + planar)
 
@@ -210,8 +218,16 @@ def read_exr_adopted_neutral(path) -> tuple[float, float]:
     return struct.unpack("<ff", payload)
 
 
+def _channel_pixel_type(chlist: bytes) -> int:
+    """First channel's pixelType from a chlist payload (B, G, R order)."""
+    # name\0 + i32 pixelType …
+    nul = chlist.index(b"\x00")
+    (ptype,) = struct.unpack_from("<i", chlist, nul + 1)
+    return int(ptype)
+
+
 def read_rgb_exr(path) -> np.ndarray:
-    """Read an uncompressed RGB float32 EXR written by ``write_rgb_exr``."""
+    """Read an uncompressed RGB scanline EXR (half or float32) from ``write_rgb_exr``."""
     data = Path(path).read_bytes()
     attrs, pos = _parse_exr_header(data)
 
@@ -221,19 +237,31 @@ def read_rgb_exr(path) -> np.ndarray:
     xmin, ymin, xmax, ymax = struct.unpack("<iiii", box[:16])
     width = xmax - xmin + 1
     height = ymax - ymin + 1
+    ch = attrs.get("channels")
+    if not ch:
+        raise ValueError("EXR missing channels")
+    ptype = _channel_pixel_type(ch[1])
+    if ptype == PIXEL_HALF:
+        dtype = np.dtype("<f2")
+        sample_bytes = 2
+    elif ptype == PIXEL_FLOAT:
+        dtype = np.dtype("<f4")
+        sample_bytes = 4
+    else:
+        raise ValueError(f"Unsupported EXR pixelType {ptype}")
     pos += height * 8  # skip offset table
     img = np.empty((height, width, 3), dtype=np.float32)
-    row_bytes = width * 4
+    row_bytes = width * sample_bytes
     for _ in range(height):
         y, nbytes = struct.unpack_from("<iI", data, pos)
         pos += 8
         planar = data[pos : pos + nbytes]
         pos += nbytes
-        b = np.frombuffer(planar[0:row_bytes], dtype=np.float32)
-        g = np.frombuffer(planar[row_bytes : 2 * row_bytes], dtype=np.float32)
-        r = np.frombuffer(planar[2 * row_bytes : 3 * row_bytes], dtype=np.float32)
+        b = np.frombuffer(planar[0:row_bytes], dtype=dtype)
+        g = np.frombuffer(planar[row_bytes : 2 * row_bytes], dtype=dtype)
+        r = np.frombuffer(planar[2 * row_bytes : 3 * row_bytes], dtype=dtype)
         yi = y - ymin
-        img[yi, :, 0] = r
-        img[yi, :, 1] = g
-        img[yi, :, 2] = b
+        img[yi, :, 0] = np.asarray(r, dtype=np.float32)
+        img[yi, :, 1] = np.asarray(g, dtype=np.float32)
+        img[yi, :, 2] = np.asarray(b, dtype=np.float32)
     return img
