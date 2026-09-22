@@ -35,6 +35,9 @@ final class PreviewEngine: ObservableObject {
     @Published var isWorking = false
 
     private let queue = DispatchQueue(label: "app.logbridge.preview", qos: .userInitiated)
+    /// Decode + grade for locked writes. Not the preview queue (preview must stay responsive).
+    /// Per-frame disk write still overlaps on ``DispatchQueue.global`` (not a serial write queue).
+    private let exportQueue = DispatchQueue(label: "app.logbridge.export", qos: .userInitiated)
     private let genLock = NSLock()
     private var generation: UInt64 = 0
     private var requestedClipID: UUID?
@@ -102,12 +105,12 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// Bump generation, remember the selected clip, cancel queued preview work.
-    /// Does not cancel a write (`exportGradedAP0` / sequence stays `queue.sync`).
+    /// Does not cancel a write (`exportGradedAP0` / sequence stays on ``exportQueue``).
     @discardableResult
     private func beginPreviewRequest(clipID: UUID?) -> UInt64 {
         pendingPreviewWork?.cancel()
         pendingPreviewWork = nil
-        // Write stays queue.sync (exportGradedAP0 / sequence). Not this cancel.
+        // Write stays exportQueue.sync (exportGradedAP0 / sequence). Not this cancel.
         genLock.lock()
         generation += 1
         requestedClipID = clipID
@@ -554,7 +557,7 @@ final class PreviewEngine: ObservableObject {
     /// First-frame graded ACES2065-1 (AP0) linear proxy. Reuses PreviewColor.
     /// Movies: same source Y′CbCr → float as the sequence (not preview 8-bit).
     func exportGradedAP0(clip: Clip, graph: SerialGraph) -> (rgb: [Float], width: Int, height: Int)? {
-        queue.sync {
+        exportQueue.sync {
             guard let idt = clip.idt, !idt.isStub, !clip.needsUserPicker else { return nil }
             guard let decoded = Self.decodeFirstSourceRGB(url: clip.url) else {
                 return nil
@@ -581,7 +584,7 @@ final class PreviewEngine: ObservableObject {
         graph: SerialGraph,
         writeFrame: @escaping (Int, [Float], Int, Int) throws -> Void
     ) throws -> Int {
-        try queue.sync {
+        try exportQueue.sync {
             guard let idt = clip.idt, !idt.isStub, !clip.needsUserPicker else {
                 throw NSError(domain: "LogBridge", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: clip.processSkipReason ?? "先选择成对 IDT"
@@ -1609,13 +1612,16 @@ enum PreviewColor {
                 SIMD3(0.001403392600, 1.005384442231, -0.006787834830),
                 SIMD3(-0.000803152607, 0.003263851374, 0.997539301233)
             ])
-        case .sonySLog3SGamut3:
+        // Venice falls back to the matching non-Venice S-Log3 pair (same as
+        // color/pipeline.apply_idt_reference). Do not invent a Venice matrix;
+        // do not leave Venice in default → nil (silent no-op IDT).
+        case .sonySLog3SGamut3, .sonySLog3SGamut3Venice:
             return simd_double3x3(rows: [
                 SIMD3(0.753230840311, 0.141947913791, 0.104821245898),
                 SIMD3(0.022234917350, 1.013293794080, -0.035528711431),
                 SIMD3(-0.009600262790, 0.007505931314, 1.002094331476)
             ])
-        case .sonySLog3SGamut3Cine:
+        case .sonySLog3SGamut3Cine, .sonySLog3SGamut3CineVenice:
             return simd_double3x3(rows: [
                 SIMD3(0.639008308411, 0.270840678932, 0.090151012656),
                 SIMD3(-0.003450727728, 1.085955398170, -0.082504670442),
@@ -1679,12 +1685,19 @@ enum PreviewColor {
     private static func decodeLog(_ x: Double, idt: IDT) -> Double {
         switch idt {
         case .arriLogC4AWG4:
+            // Spec CTL: positive log + linear extension for E' < 0 (matches color/curves.py).
             let a = (pow(2.0, 18.0) - 16.0) / 117.45
             let b = (1023.0 - 95.0) / 1023.0
             let c = 95.0 / 1023.0
-            let p = 14.0 * (x - c) / b + 6.0
-            return (pow(2.0, p) - 64.0) / a
-        case .sonySLog3SGamut3, .sonySLog3SGamut3Cine:
+            if x >= 0.0 {
+                let p = 14.0 * (x - c) / b + 6.0
+                return (pow(2.0, p) - 64.0) / a
+            }
+            let s = (7.0 * log(2.0) * pow(2.0, 7.0 - 14.0 * c / b)) / (a * b)
+            let t = (pow(2.0, 14.0 * (-c / b) + 6.0) - 64.0) / a
+            return x * s + t
+        case .sonySLog3SGamut3, .sonySLog3SGamut3Cine,
+             .sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice:
             let cut = 171.2102946929 / 1023.0
             let cv = x * 1023.0
             if x >= cut {

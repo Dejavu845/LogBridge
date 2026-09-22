@@ -104,7 +104,7 @@ enum DetectionSource: String, Hashable {
     }
 }
 
-/// Locked-clip dest estimate. Uncompressed float32 RGB EXR (12 bytes / pixel).
+/// Locked-clip dest estimate. Uncompressed half RGB EXR (6 bytes / pixel).
 /// Header / offset table is covered by the 10% + 64 MiB margin. 不是成片.
 struct ProxyDiskEstimate {
     var bytes: Int64
@@ -522,8 +522,8 @@ final class SessionModel: ObservableObject {
         "处理已锁定片段 — 已取消。\(processed) 条已处理 / \(skipped) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
     }
 
-    /// Uncompressed float32 RGB (3 × 4). Matches color/batch.py.
-    static let bytesPerEXRPixel: Int64 = 12
+    /// Uncompressed half RGB (3 × 2). Matches color/batch.py.
+    static let bytesPerEXRPixel: Int64 = 6
     static let conservativeFPS = 24.0
     static let conservativeSeconds = 60.0
     static let conservativeWidth = 3840

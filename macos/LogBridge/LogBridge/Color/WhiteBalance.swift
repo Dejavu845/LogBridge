@@ -45,11 +45,17 @@ enum WhiteBalanceNode {
             x = xd
             y = -3.0 * xd * xd + 2.870 * xd - 0.275
         } else {
+            // Kang 2002 Planckian. x formula below 4000 K; y splits at 2222 K
+            // (matches color/wb.py _planckian_xy).
             let inv = 1.0e3 / t
             let inv2 = 1.0e6 / (t * t)
             let inv3 = 1.0e9 / (t * t * t)
             x = -0.2661239 * inv3 - 0.2343580 * inv2 + 0.8776956 * inv + 0.179910
-            y = -0.9549476 * x * x * x - 1.37418593 * x * x + 2.09137015 * x - 0.16748867
+            if t < 2222.0 {
+                y = -1.1063814 * x * x * x - 1.34811020 * x * x + 2.18555832 * x - 0.20219683
+            } else {
+                y = -0.9549476 * x * x * x - 1.37418593 * x * x + 2.09137015 * x - 0.16748867
+            }
         }
         if tint != 0 {
             let denom = -2.0 * x + 12.0 * y + 3.0

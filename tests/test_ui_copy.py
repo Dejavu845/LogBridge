@@ -57,6 +57,7 @@ from color.batch import (
     NOTE_FILENAME_APPLE_LOG2,
     NOTE_MODEL_HINT,
     NOTE_META_RED_RMD,
+    NOTE_META_RED_RMD_PICK,
     short_export_chip,
     user_facing_failure_note,
 )
@@ -140,7 +141,12 @@ def _read(p: Path) -> str:
 
 
 def _all_swift() -> str:
-    return "\n".join(p.read_text(encoding="utf-8") for p in SWIFT_ROOT.rglob("*.swift"))
+    paths = [
+        p
+        for p in SWIFT_ROOT.rglob("*.swift")
+        if not p.name.startswith("._") and "/._" not in str(p)
+    ]
+    return "\n".join(p.read_text(encoding="utf-8") for p in paths)
 
 
 def test_primary_button_is_locked_chinese():
@@ -3255,6 +3261,7 @@ def test_success_path_english_notes_are_chinese():
     assert NOTE_FILENAME_APPLE_LOG2 == "文件名 Apple Log 2 + Apple Wide Gamut"
     assert NOTE_MODEL_HINT == "机型提示"
     assert NOTE_META_RED_RMD == "元数据 RED RMD"
+    assert NOTE_META_RED_RMD_PICK == "检测到 RED RMD，先选择成对 IDT"
     assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。不是成片。"
     assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
     for jargon in ("AVAssetReader", "ImageIO", "copyCGImage", "Y′CbCr", "Y'CbCr", "YpCbCr"):
@@ -3294,7 +3301,9 @@ def test_success_path_english_notes_are_chinese():
     assert f'note: "{NOTE_FILENAME_AWG3}"' in detector
     assert f'note: "{NOTE_FILENAME_APPLE_LOG2}"' in detector
     assert f'note: "{NOTE_MODEL_HINT}"' in detector
-    assert f'note: "{NOTE_META_RED_RMD}"' in detector
+    # Bare .rmd presence must not lock Log3G10 — picker note only.
+    assert f'note: "{NOTE_META_RED_RMD_PICK}"' in detector
+    assert "locked(.redLog3G10RWG, source: .metadata" not in detector
     leftover_en = (
         "filename S-Gamut3",
         "filename S-Gamut3.Cine",
@@ -3350,6 +3359,7 @@ def test_success_path_english_notes_are_chinese():
         NOTE_FILENAME_APPLE_LOG2,
         NOTE_MODEL_HINT,
         NOTE_META_RED_RMD,
+        NOTE_META_RED_RMD_PICK,
         NOTE_STILL_ACCEPT,
         NOTE_MOVIE_ACCEPT,
         WROTE_FILES_NOTE,
@@ -3661,7 +3671,7 @@ def test_disk_estimate_assumption_is_plain_chinese():
     assert DISK_ESTIMATE_ASSUMPTION == "未压缩浮点图"
     for token in banned:
         assert token not in DISK_ESTIMATE_ASSUMPTION
-    assert BYTES_PER_EXR_PIXEL == 12
+    assert BYTES_PER_EXR_PIXEL == 6
     assert int(CONSERVATIVE_FPS) == 24
     assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
 
@@ -3723,7 +3733,7 @@ def test_disk_estimate_assumption_is_plain_chinese():
     assert HONEST_PROXY_NOTE in panel
     assert "float32" not in _code_without_comments(panel)
     assert "bytesPerEXRPixel" in clip
-    assert "12" in clip.split("bytesPerEXRPixel")[1].split("conservativeFPS")[0]
+    assert "6" in clip.split("bytesPerEXRPixel")[1].split("conservativeFPS")[0]
 
     # 验法⑨: user-facing README/ACCEPTANCE dest-disk estimate sentences.
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -3741,8 +3751,8 @@ def test_disk_estimate_assumption_is_plain_chinese():
         assert "float32 RGB 未压缩" not in line
         assert "完善" not in line
         assert "精准" not in line
-    assert "12 bytes" in readme
-    assert "12-byte" in acceptance
+    assert "6 bytes" in readme
+    assert "6-byte" in acceptance
     assert "24 fps × 60 s" in readme
     assert "24 fps × 60 s" in acceptance
     assert "uncompressed float32 RGB" not in readme

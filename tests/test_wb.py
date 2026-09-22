@@ -99,3 +99,17 @@ def test_relative_cat_as_shot_3200_user_5600():
     cooled = apply_white_balance(grey, src_cct=5600.0, dst_cct=3200.0)
     assert warmed[0] / warmed[2] > grey[0] / grey[2]
     assert cooled[0] / cooled[2] < grey[0] / grey[2]
+
+
+def test_planckian_xy_below_2222k_uses_kang_low_branch():
+    """CCT < 2222 must not reuse the 2222–4000 y polynomial."""
+    xy_low = cct_to_xy(1600.0)
+    # Kang 2002 low branch at 1600 K (x from <4000 formula).
+    inv = 1.0e3 / 1600.0
+    inv2 = 1.0e6 / 1600.0**2
+    inv3 = 1.0e9 / 1600.0**3
+    x = -0.2661239 * inv3 - 0.2343580 * inv2 + 0.8776956 * inv + 0.179910
+    y = -1.1063814 * x**3 - 1.34811020 * x**2 + 2.18555832 * x - 0.20219683
+    np.testing.assert_allclose(xy_low, [x, y], atol=1e-12)
+    y_mid_branch = -0.9549476 * x**3 - 1.37418593 * x**2 + 2.09137015 * x - 0.16748867
+    assert abs(float(xy_low[1]) - y_mid_branch) > 1e-4

@@ -304,12 +304,19 @@ enum ClipDetector {
         return nil
     }
 
-    /// RED RMD sidecar / header. Log3G10 + REDWideGamutRGB.
+    /// RED RMD sidecar / header. Presence alone is not a lock — parse later.
+    /// Do not silently assume Log3G10 + REDWideGamutRGB from a bare .rmd file.
     private static func readREDRMD(url: URL) -> DetectionResult? {
         let sidecar = url.deletingPathExtension().appendingPathExtension("rmd")
         if FileManager.default.fileExists(atPath: sidecar.path) {
-            // Presence of RMD is a hint, not a parse. Later slice reads color_space.
-            return locked(.redLog3G10RWG, source: .metadata, note: "元数据 RED RMD")
+            return DetectionResult(
+                idt: nil,
+                curve: "Log3G10",
+                gamut: nil,
+                source: .metadata,
+                needsUserPicker: true,
+                note: "检测到 RED RMD，先选择成对 IDT"
+            )
         }
         return nil
     }

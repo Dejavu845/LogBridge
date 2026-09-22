@@ -229,6 +229,7 @@ def _swift_ui() -> str:
     return "\n".join(
         p.read_text(encoding="utf-8")
         for p in (ROOT / "macos").rglob("*.swift")
+        if not p.name.startswith("._") and "/._" not in str(p)
     )
 
 
@@ -236,6 +237,7 @@ def _python_ui() -> str:
     return "\n".join(
         p.read_text(encoding="utf-8")
         for p in (ROOT / "color").glob("*.py")
+        if not p.name.startswith("._")
     )
 
 
