@@ -986,16 +986,22 @@ enum ResolveExporter {
         let rowBytes = width * 2
         var scanlines: [Data] = []
         for y in 0..<height {
-            var planar = Data(count: rowBytes * 3)
-            planar.withUnsafeMutableBytes { raw in
-                let dst = raw.bindMemory(to: UInt16.self)
-                for x in 0..<width {
-                    let i = (y * width + x) * 3
-                    dst[x] = Float16(rgb[i + 2]).bitPattern.littleEndian
-                    dst[width + x] = Float16(rgb[i + 1]).bitPattern.littleEndian
-                    dst[2 * width + x] = Float16(rgb[i]).bitPattern.littleEndian
-                }
+            // Array bytes, not Data.withUnsafeMutableBytes: Xcode 16's Data
+            // overload cannot infer ContentType and has no bindMemory.
+            var bPlane = [UInt16](repeating: 0, count: width)
+            var gPlane = [UInt16](repeating: 0, count: width)
+            var rPlane = [UInt16](repeating: 0, count: width)
+            for x in 0..<width {
+                let i = (y * width + x) * 3
+                bPlane[x] = Float16(rgb[i + 2]).bitPattern.littleEndian
+                gPlane[x] = Float16(rgb[i + 1]).bitPattern.littleEndian
+                rPlane[x] = Float16(rgb[i]).bitPattern.littleEndian
             }
+            var planar = Data()
+            planar.reserveCapacity(rowBytes * 3)
+            bPlane.withUnsafeBytes { planar.append(contentsOf: $0) }
+            gPlane.withUnsafeBytes { planar.append(contentsOf: $0) }
+            rPlane.withUnsafeBytes { planar.append(contentsOf: $0) }
             var payload = Data()
             var yi = Int32(y).littleEndian
             var nbytes = UInt32(planar.count).littleEndian
