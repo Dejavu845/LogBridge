@@ -258,7 +258,7 @@ struct AdvancedPanel: View {
                 .padding(.bottom, 6)
             }
         }
-        .help("节点与导出 ACEScct / EXR。默认收起。预览·非成片。")
+        .help("节点与导出 ACEScct / EXR。展开状态会记住。预览·非成片。")
         .padding(.horizontal, 10)
         .padding(.vertical, 2)
         .background(Color.primary.opacity(0.02))
