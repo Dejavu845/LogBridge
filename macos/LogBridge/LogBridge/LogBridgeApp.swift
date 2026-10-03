@@ -51,13 +51,13 @@ private struct LogBridgeCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("添加…") {
-                sessionFocus?.session.showImporter = true
+                sessionFocus?.session?.showImporter = true
             }
             .keyboardShortcut("o")
         }
         CommandGroup(replacing: .appSettings) {
             Button("设置…") {
-                sessionFocus?.session.showSettings = true
+                sessionFocus?.session?.showSettings = true
             }
             .keyboardShortcut(",")
         }
