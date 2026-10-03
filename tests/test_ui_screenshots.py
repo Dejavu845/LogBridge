@@ -70,6 +70,18 @@ def test_dropped_awaiting_is_the_not_locked_screenshot_state():
     assert 'Text("先选成对 Log 与色域")' in content
 
 
+def test_snapshot_compile_can_see_session_focus():
+    """LogBridgeApp.swift is excluded (@main). SessionFocus must live in ContentView."""
+    script = SCRIPT.read_text(encoding="utf-8")
+    content = CONTENT.read_text(encoding="utf-8")
+    app = APP.read_text(encoding="utf-8")
+    assert "! -name 'LogBridgeApp.swift'" in script
+    assert "struct SessionFocus" in content
+    assert "var logBridgeSession" in content
+    assert "struct SessionFocus" not in app
+    assert "@main" in app
+
+
 def test_content_view_accepts_injected_session_and_app_uses_default():
     content = CONTENT.read_text(encoding="utf-8")
     app = APP.read_text(encoding="utf-8")
