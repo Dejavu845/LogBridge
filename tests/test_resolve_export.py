@@ -6996,8 +6996,8 @@ def test_combined_preview_cube_matches_serial_nodes(tmp_path: Path):
     assert f"LUT_3D_SIZE {COMBINED_PREVIEW709_LUT_SIZE}" in text
     assert "LUT_3D_SIZE 5" in (tmp_path / f"01_IDT_{idt}.cube").read_text(encoding="utf-8")
     assert "LUT_3D_SIZE 5" in (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
-    assert "DOMAIN_MIN 0.0 0.0 0.0" in text
-    assert "DOMAIN_MAX 1.0 1.0 1.0" in text
+    assert "DOMAIN_" not in text
+    assert "INPUT_RANGE" not in text
     assert COMBINED_PREVIEW709_COMMENT in text
     assert "达芬奇已验证" not in text
     rgb = np.array(
@@ -7033,9 +7033,9 @@ def test_combined_preview_cube_matches_serial_nodes(tmp_path: Path):
     np.testing.assert_allclose(looked, baked, atol=0.30, rtol=0)
     assert baked.min() >= 0.0 and baked.max() <= 1.0
 
-    # IDT cube table is inside the ACEScct allocation, then the node
-    # functions (not a second copy of the analytic IDT) match the preview.
-    from color.resolve_export import ACESCCT_CUBE_MAX, ACESCCT_CUBE_MIN, idt_cube_rgb
+    # IDT cube table keeps the 1e-10 floor (code ≈ 0.0729). Outputs are not
+    # clipped to 1. The node functions then match the preview.
+    from color.resolve_export import ACESCCT_CUBE_MIN, idt_cube_rgb
 
     idt_rgb = np.array(
         [
@@ -7047,7 +7047,6 @@ def test_combined_preview_cube_matches_serial_nodes(tmp_path: Path):
         dtype=np.float64,
     )
     assert idt_rgb.min() >= ACESCCT_CUBE_MIN - 1e-8
-    assert idt_rgb.max() <= ACESCCT_CUBE_MAX + 1e-8
     from_idt_lut = np.clip(
         odt_from_acescct(
             wb_in_acescct(exposure_in_acescct(idt_rgb, stops), cct, tint=tint)
@@ -7063,18 +7062,17 @@ def test_combined_preview_cube_matches_serial_nodes(tmp_path: Path):
     direct_idt = idt_cube_rgb(_sample_grid(size), idt)
     np.testing.assert_allclose(idt_rgb, direct_idt, atol=1e-8, rtol=0)
 
-    # Each per-node cube matches its ranged function on its own lattice.
-    from color.resolve_export import clip_acescct_cube
-
+    # Each per-node cube matches its function on the default [0, 1] lattice.
+    # Exposure and WB outputs are not clipped to 1.
     exp_lines = _cube_rgb_lines(exposure_cube_bytes(stops))
     exp_rgb = np.array([[float(x) for x in ln.split()] for ln in exp_lines])
-    xs = np.linspace(ACESCCT_CUBE_MIN, ACESCCT_CUBE_MAX, len(exp_rgb))
+    xs = np.linspace(0.0, 1.0, len(exp_rgb))
     exp_in = np.stack([xs, xs, xs], axis=-1)
     np.testing.assert_allclose(
-        exp_rgb, clip_acescct_cube(exposure_in_acescct(exp_in, stops)), atol=1e-7, rtol=0
+        exp_rgb, exposure_in_acescct(exp_in, stops), atol=1e-7, rtol=0
     )
-    wb_domain = np.linspace(ACESCCT_CUBE_MIN, ACESCCT_CUBE_MAX, size)
-    b, g, r = np.meshgrid(wb_domain, wb_domain, wb_domain, indexing="ij")
+    unit = np.linspace(0.0, 1.0, size)
+    b, g, r = np.meshgrid(unit, unit, unit, indexing="ij")
     wb_grid = np.stack([r, g, b], axis=-1).reshape(-1, 3)
     wb_rgb = np.array(
         [
@@ -7084,7 +7082,7 @@ def test_combined_preview_cube_matches_serial_nodes(tmp_path: Path):
     )
     np.testing.assert_allclose(
         wb_rgb,
-        clip_acescct_cube(wb_in_acescct(wb_grid, cct, tint=tint)),
+        wb_in_acescct(wb_grid, cct, tint=tint),
         atol=1e-7,
         rtol=0,
     )

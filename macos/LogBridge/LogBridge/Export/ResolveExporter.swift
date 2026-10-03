@@ -425,17 +425,18 @@ enum ResolveExporter {
     }
 
     // MARK: - .cube (Adobe/IRIDAS: R fastest, then G, then B)
+    //
+    // Default 0–1 lattice. No DOMAIN_MIN/MAX and no INPUT_RANGE header.
+    // ACEScct 1.0 is linear 2^7.8 ≈ 223, about 10.3 stops above 18% grey.
+    // A code above 1 is clipped to 1.0 when it enters the next cube.
 
-    private static func domainComponent(_ v: Double) -> String {
-        if v == 0.0 { return "0.0" }
-        if v == 1.0 { return "1.0" }
-        return String(format: "%.10f", v)
-    }
-
-    private static func domainLine(_ key: String, _ v: Double) -> String {
-        let s = domainComponent(v)
-        return "\(key) \(s) \(s) \(s)"
-    }
+    /// Samples the default 0–1 lattice. No DOMAIN or INPUT_RANGE header.
+    private static let cubeLatticeComment =
+        "# Samples the default 0-1 lattice. No DOMAIN or INPUT_RANGE header. "
+        + "ACEScct encode floors linear at 1e-10 (code about 0.0729), inside 0-1. "
+        + "Outputs are not limited to 0-1; an exposure node may exceed 1. "
+        + "ACEScct 1.0 is linear 2^7.8 ≈ 223, about 10.3 stops above 18% grey. "
+        + "The next cube clips an input above 1.0 to 1.0."
 
     private static func clampChannel(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
         min(max(v, lo), hi)
@@ -444,8 +445,6 @@ enum ResolveExporter {
     private static func cubeFile(
         title: String,
         size: Int,
-        domainMin: Double = 0.0,
-        domainMax: Double = 1.0,
         outputMin: Double? = nil,
         outputMax: Double? = nil,
         extraComments: [String] = [],
@@ -456,21 +455,16 @@ enum ResolveExporter {
             "# LogBridge M1 — implemented (unverified). Not a camera-support claim."
         ]
         lines.append(contentsOf: extraComments)
-        lines.append(contentsOf: [
-            "LUT_3D_SIZE \(size)",
-            domainLine("DOMAIN_MIN", domainMin),
-            domainLine("DOMAIN_MAX", domainMax)
-        ])
+        lines.append("LUT_3D_SIZE \(size)")
         if size > 1 {
             let den = Double(size - 1)
-            let span = domainMax - domainMin
             for bi in 0..<size {
                 for gi in 0..<size {
                     for ri in 0..<size {
                         let rgb = SIMD3(
-                            domainMin + Double(ri) / den * span,
-                            domainMin + Double(gi) / den * span,
-                            domainMin + Double(bi) / den * span
+                            Double(ri) / den,
+                            Double(gi) / den,
+                            Double(bi) / den
                         )
                         var o = map(rgb)
                         if let lo = outputMin, let hi = outputMax {
@@ -492,11 +486,7 @@ enum ResolveExporter {
         cubeFile(
             title: "LogBridge IDT \(idt.rawValue) → ACEScct (no WB)",
             size: size,
-            outputMin: ACEScctMath.cubeMin,
-            outputMax: ACEScctMath.cubeMax,
-            extraComments: [
-                "# Input DOMAIN is camera log 0-1. ACEScct encode floors linear at 1e-10 and caps at 65504 so the table stays in the ACEScct allocation."
-            ]
+            extraComments: [cubeLatticeComment]
         ) {
             idtToACEScct($0, idt: idt)
         }
@@ -509,13 +499,7 @@ enum ResolveExporter {
         return cubeFile(
             title: "LogBridge WB AP0 CAT \(titleCCT) tint \(tint) (ACEScct decode→ACES2065-1→encode)",
             size: size,
-            domainMin: ACEScctMath.cubeMin,
-            domainMax: ACEScctMath.cubeMax,
-            outputMin: ACEScctMath.cubeMin,
-            outputMax: ACEScctMath.cubeMax,
-            extraComments: [
-                "# Input DOMAIN is the ACEScct allocation (encode of 1e-10 … 65504), not 0-1."
-            ]
+            extraComments: [cubeLatticeComment]
         ) {
             wbInACEScct($0, matrix: m)
         }
@@ -525,13 +509,11 @@ enum ResolveExporter {
         cubeFile(
             title: "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)",
             size: size,
-            domainMin: ACEScctMath.cubeMin,
-            domainMax: ACEScctMath.cubeMax,
             outputMin: 0.0,
             outputMax: 1.0,
             extraComments: [
                 "# 709 预览，不是 ACES 输出变换。仅预览。默认关。",
-                "# Input DOMAIN is the ACEScct allocation (encode of 1e-10 … 65504), not 0-1."
+                cubeLatticeComment
             ]
         ) {
             odtFromACEScct($0)
@@ -573,10 +555,10 @@ enum ResolveExporter {
             let idtEnc = idtToACEScct(logRGB, idt: idt)
             let expEnc = exposureInACEScct(idtEnc, stops: stops)
             let wbEnc = wbInACEScct(expEnc, matrix: matrix)
-            // Per-node ODT cube is unchanged. This preview file only
-            // clips the final OETF result into [0, 1].
-            // Per-node ODT cube clamps to [0, 1] as well. This preview file
-            // still clips only its final OETF result.
+            // Per-node ODT cube clamps its table to [0, 1]. This preview file
+            // still clips only its final OETF result. Exposure output may
+            // exceed ACEScct 1.0 (linear 2^7.8 ≈ 223); the next cube clips
+            // that input to 1.0. This analytic chain does not.
             let preview = odtFromACEScct(wbEnc)
             return SIMD3(
                 min(max(preview.x, 0.0), 1.0),
@@ -586,25 +568,22 @@ enum ResolveExporter {
         }
     }
 
-    /// 1D cube over the ACEScct allocation. Identity at 0 stops inside it.
+    /// 1D cube on ACEScct [0, 1]. Output is not clipped; +stops can exceed 1.
+    /// ACEScct 1.0 is linear 2^7.8 ≈ 223. The next cube clips that to 1.0.
     private static func exposureCube(stops: Double) -> String {
         let size = 65
         let gain = pow(2.0, stops)
-        let lo = ACEScctMath.cubeMin
-        let hi = ACEScctMath.cubeMax
         var lines: [String] = [
             "TITLE \"LogBridge Exposure \(String(format: "%+.3f", stops)) stops (gain \(String(format: "%.8f", gain)), ACEScct wrap)\"",
             "# ACES2065-1 linear gain rgb*(2**stops). Not a log-code add.",
             "# Own node — not baked into IDT or WB when stops=0.",
-            "# Input DOMAIN is the ACEScct allocation (encode of 1e-10 … 65504), not 0-1.",
-            "LUT_1D_SIZE \(size)",
-            domainLine("DOMAIN_MIN", lo),
-            domainLine("DOMAIN_MAX", hi)
+            cubeLatticeComment,
+            "LUT_1D_SIZE \(size)"
         ]
         let den = Double(size - 1)
         for i in 0..<size {
-            let x = lo + Double(i) / den * (hi - lo)
-            let y = clampChannel(ACEScctMath.exposureChannel(x, stops: stops), lo, hi)
+            let x = Double(i) / den
+            let y = ACEScctMath.exposureChannel(x, stops: stops)
             lines.append(String(format: "%.8f %.8f %.8f", y, y, y))
         }
         return lines.joined(separator: "\n") + "\n"

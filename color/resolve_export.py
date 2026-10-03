@@ -403,77 +403,53 @@ def odt_from_di(di_rgb) -> np.ndarray:
     return apply_odt_rec709(lin, working="DWG")
 
 
-# Code values of the ACEScct allocation (module-level; encode is pure).
+# ACEScct code of the 1e-10 floor. It already sits inside the default 0–1 lattice.
 ACESCCT_CUBE_MIN = float(acescct_encode(ACESCCT_CUBE_LIN_MIN))
+# Half-float max, kept so callers can name the old allocation top. Cubes do
+# not write it as a domain, and node outputs are not clipped to it.
 ACESCCT_CUBE_MAX = float(acescct_encode(ACESCCT_CUBE_LIN_MAX))
 DISPLAY_CUBE_MIN = 0.0
 DISPLAY_CUBE_MAX = 1.0
-# Camera-log cubes. Output is ACEScct inside the allocation above.
-IDT_CUBE_DOMAIN_COMMENT = (
-    "# Input DOMAIN is camera log 0-1. "
-    "ACEScct encode floors linear at 1e-10 and caps at 65504 "
-    "so the table stays in the ACEScct allocation."
-)
-# Exposure / WB / ODT input. Not linear 0-1: ACEScct code 1 is already
-# ~223 scene-linear, and IDT highlights sit slightly above 1.
-SCENE_CUBE_DOMAIN_COMMENT = (
-    "# Input DOMAIN is the ACEScct allocation (encode of 1e-10 … 65504), not 0-1."
+# ACEScct code 1.0 solves (log2(lin) + 9.72) / 17.52 = 1, so lin = 2**7.8
+# ≈ 222.86. That is about 10.3 stops above 18% grey (0.18).
+# Node cubes sample the default [0, 1] lattice and write no DOMAIN or
+# INPUT_RANGE header. A code above 1 is outside the next cube, so it is
+# clipped to 1.0 on the way in. Not a statement about any host.
+CUBE_LATTICE_COMMENT = (
+    "# Samples the default 0-1 lattice. No DOMAIN or INPUT_RANGE header. "
+    "ACEScct encode floors linear at 1e-10 (code about 0.0729), inside 0-1. "
+    "Outputs are not limited to 0-1; an exposure node may exceed 1. "
+    "ACEScct 1.0 is linear 2^7.8 ≈ 223, about 10.3 stops above 18% grey. "
+    "The next cube clips an input above 1.0 to 1.0."
 )
 
 
 def acescct_encode_for_cube(lin_ap1) -> np.ndarray:
-    """ACEScct encode for scene-referred cube tables.
+    """ACEScct encode for cube tables. Floor linear at 1e-10, no ceiling.
 
-    Floors at 1e-10 (same as ``_acescct_encode_lut``) and caps at half-float
-    max. ``acescct_encode`` / ``idt_to_acescct`` stay unbounded so the
-    combined preview still uses the analytic IDT.
+    ``acescct_encode`` / ``idt_to_acescct`` stay on the analytic toe so the
+    combined preview still uses the analytic IDT. The floor only moves
+    non-positive linear into code ≈ 0.0729.
     """
-    lin = np.clip(
-        np.asarray(lin_ap1, dtype=np.float64),
-        ACESCCT_CUBE_LIN_MIN,
-        ACESCCT_CUBE_LIN_MAX,
-    )
+    lin = np.maximum(np.asarray(lin_ap1, dtype=np.float64), ACESCCT_CUBE_LIN_MIN)
     return acescct_encode(lin)
 
 
-def clip_acescct_cube(rgb) -> np.ndarray:
-    """Keep a scene-referred table inside the ACEScct allocation."""
-    return np.clip(np.asarray(rgb, dtype=np.float64), ACESCCT_CUBE_MIN, ACESCCT_CUBE_MAX)
+def clip_to_next_cube(enc) -> np.ndarray:
+    """Clip a code to the next cube's [0, 1] lattice.
+
+    ACEScct 1.0 is linear 2**7.8 ≈ 223, about 10.3 stops above 18% grey.
+    Codes above that are clipped to 1.0 on entry. Codes at or below 1 pass
+    through. This is the lattice edge, not a host claim.
+    """
+    return np.clip(np.asarray(enc, dtype=np.float64), 0.0, 1.0)
 
 
 def _cube_sample_grid(size: int) -> np.ndarray:
     """Adobe/IRIDAS .cube lattice on [0, 1]. R fastest, then G, then B."""
-    return _cube_domain_grid(size, 0.0, 1.0)
-
-
-def _cube_domain_grid(size: int, lo: float, hi: float) -> np.ndarray:
-    """Uniform lattice from ``lo`` to ``hi``. R fastest, then G, then B."""
-    xs = np.linspace(float(lo), float(hi), int(size))
+    xs = np.linspace(0.0, 1.0, int(size))
     b, g, r = np.meshgrid(xs, xs, xs, indexing="ij")
     return np.stack([r, g, b], axis=-1).reshape(-1, 3)
-
-
-def _domain_triple(v) -> tuple[float, float, float]:
-    if isinstance(v, (int, float)):
-        x = float(v)
-        return (x, x, x)
-    xs = tuple(float(x) for x in v)
-    if len(xs) != 3:
-        raise ValueError("cube domain needs 3 components")
-    return xs  # type: ignore[return-value]
-
-
-def _fmt_domain_component(v: float) -> str:
-    """Keep the historical 0.0 / 1.0 spelling. Other edges get 10 decimals."""
-    if v == 0.0:
-        return "0.0"
-    if v == 1.0:
-        return "1.0"
-    return f"{float(v):.10f}"
-
-
-def _fmt_domain_line(key: str, triple: tuple[float, float, float]) -> str:
-    return key + " " + " ".join(_fmt_domain_component(v) for v in triple)
 
 
 def format_cube(
@@ -481,18 +457,13 @@ def format_cube(
     rgb: np.ndarray,
     size: int,
     extra_comments: tuple[str, ...] = (),
-    domain_min: tuple[float, float, float] | float = (0.0, 0.0, 0.0),
-    domain_max: tuple[float, float, float] | float = (1.0, 1.0, 1.0),
 ) -> str:
-    lo = _domain_triple(domain_min)
-    hi = _domain_triple(domain_max)
+    """3D .cube on the default 0–1 lattice. No DOMAIN or INPUT_RANGE lines."""
     lines = [
         f'TITLE "{title}"',
         "# LogBridge M1 — implemented (unverified). Not a camera-support claim.",
         *extra_comments,
         f"LUT_3D_SIZE {size}",
-        _fmt_domain_line("DOMAIN_MIN", lo),
-        _fmt_domain_line("DOMAIN_MAX", hi),
     ]
     rgb = np.asarray(rgb, dtype=np.float64).reshape(-1, 3)
     for row in rgb:
@@ -501,10 +472,10 @@ def format_cube(
 
 
 def idt_cube_rgb(log_01, idt_id: str) -> np.ndarray:
-    """Camera log → ACEScct table. Same IDT as ``idt_to_acescct``, ranged encode.
+    """Camera log → ACEScct table. Same IDT as ``idt_to_acescct``, floored encode.
 
     Analytic ``idt_to_acescct`` is what the combined preview samples. This
-    helper only changes values outside the ACEScct allocation.
+    helper only floors linear at 1e-10 before the encode.
     """
     curve, _gamut = IDT_PAIRS[idt_id]
     log = np.asarray(log_01, dtype=np.float64)
@@ -521,7 +492,7 @@ def idt_cube_bytes(idt_id: str, size: int = DEFAULT_CUBE_SIZE) -> str:
         f"LogBridge IDT {idt_id} → ACEScct (no WB)",
         out,
         size,
-        extra_comments=(IDT_CUBE_DOMAIN_COMMENT,),
+        extra_comments=(CUBE_LATTICE_COMMENT,),
     )
 
 
@@ -532,31 +503,25 @@ def wb_cube_bytes(
     method: str = "bradford",
     src_cct: float | None = None,
 ) -> str:
-    grid = _cube_domain_grid(size, ACESCCT_CUBE_MIN, ACESCCT_CUBE_MAX)
-    out = clip_acescct_cube(
-        wb_in_acescct(grid, cct, tint=tint, method=method, src_cct=src_cct)
-    )
+    grid = _cube_sample_grid(size)
+    out = wb_in_acescct(grid, cct, tint=tint, method=method, src_cct=src_cct)
     return format_cube(
         f"LogBridge WB AP0 CAT {_cct_label(cct)} tint {tint} (ACEScct decode→ACES2065-1→encode)",
         out,
         size,
-        extra_comments=(SCENE_CUBE_DOMAIN_COMMENT,),
-        domain_min=ACESCCT_CUBE_MIN,
-        domain_max=ACESCCT_CUBE_MAX,
+        extra_comments=(CUBE_LATTICE_COMMENT,),
     )
 
 
 def odt_cube_bytes(size: int = DEFAULT_CUBE_SIZE) -> str:
-    """ACEScct allocation → Rec.709 preview, table clamped to [0, 1]."""
-    grid = _cube_domain_grid(size, ACESCCT_CUBE_MIN, ACESCCT_CUBE_MAX)
+    """ACEScct [0, 1] → Rec.709 preview. Display table clamped to [0, 1]."""
+    grid = _cube_sample_grid(size)
     out = np.clip(odt_from_acescct(grid), DISPLAY_CUBE_MIN, DISPLAY_CUBE_MAX)
     return format_cube(
         REC709_CUBE_TITLE,
         out,
         size,
-        extra_comments=(REC709_CUBE_COMMENT, SCENE_CUBE_DOMAIN_COMMENT),
-        domain_min=ACESCCT_CUBE_MIN,
-        domain_max=ACESCCT_CUBE_MAX,
+        extra_comments=(REC709_CUBE_COMMENT, CUBE_LATTICE_COMMENT),
     )
 
 
@@ -580,12 +545,12 @@ def combined_preview709_rgb(
     IDT → exposure → WB → Rec.709 preview. Same operators as the per-node
     cubes (ACEScct wrap between them). Does not replace those files.
 
-    The analytic IDT is not range-limited here. Per-node scene cubes floor
-    linear at 1e-10 when they encode ACEScct; the Rec.709 node clamps its
-    own table to [0, 1]. Those range limits do not move this preview: 18%
-    grey stays on the Rec.709 OETF of 0.18, and a negative AP1 lobe clips
-    to the same display value either way. The written cube still clips
-    only the final OETF result to [0, 1].
+    The analytic IDT is not range-limited here. Per-node cubes floor linear
+    at 1e-10 when they encode ACEScct and sample [0, 1] with no domain
+    header. Exposure output may exceed ACEScct 1.0 (linear 2**7.8 ≈ 223,
+    about 10.3 stops above 18% grey); the next cube clips that input to 1.0.
+    18% grey stays on the Rec.709 OETF of 0.18. The written preview cube
+    still clips only the final OETF result to [0, 1].
     """
     enc = idt_to_acescct(log_01, idt_id)
     enc = exposure_in_acescct(enc, exposure_stops)
@@ -627,11 +592,9 @@ def combined_preview709_cube_bytes(
 def format_1d_cube(
     title: str,
     rgb: np.ndarray,
-    domain_min: tuple[float, float, float] | float = (0.0, 0.0, 0.0),
-    domain_max: tuple[float, float, float] | float = (1.0, 1.0, 1.0),
     extra_comments: tuple[str, ...] = (),
 ) -> str:
-    """IRIDAS 1D cube (uniform gain / ACEScct-wrapped exposure)."""
+    """IRIDAS 1D cube on the default 0–1 lattice. No DOMAIN or INPUT_RANGE lines."""
     rgb = np.asarray(rgb, dtype=np.float64).reshape(-1, 3)
     lines = [
         f'TITLE "{title}"',
@@ -640,8 +603,6 @@ def format_1d_cube(
         "# Implemented (unverified). Own node; not baked into IDT or WB.",
         *extra_comments,
         f"LUT_1D_SIZE {len(rgb)}",
-        _fmt_domain_line("DOMAIN_MIN", _domain_triple(domain_min)),
-        _fmt_domain_line("DOMAIN_MAX", _domain_triple(domain_max)),
     ]
     for row in rgb:
         lines.append(f"{row[0]:.8f} {row[1]:.8f} {row[2]:.8f}")
@@ -649,17 +610,15 @@ def format_1d_cube(
 
 
 def exposure_cube_bytes(stops: float = 0.0, size: int = 65) -> str:
-    """1D LUT over the ACEScct allocation. Identity at 0 stops inside it."""
-    xs = np.linspace(ACESCCT_CUBE_MIN, ACESCCT_CUBE_MAX, int(size))
+    """1D LUT on ACEScct [0, 1]. Output is not clipped; +stops can exceed 1."""
+    xs = np.linspace(0.0, 1.0, int(size))
     grid = np.stack([xs, xs, xs], axis=-1)
-    out = clip_acescct_cube(exposure_in_acescct(grid, stops))
+    out = exposure_in_acescct(grid, stops)
     gain = stops_to_gain(stops)
     return format_1d_cube(
         f"LogBridge Exposure {stops:+.3f} stops (gain {gain:.8f}, ACEScct wrap)",
         out,
-        domain_min=ACESCCT_CUBE_MIN,
-        domain_max=ACESCCT_CUBE_MAX,
-        extra_comments=(SCENE_CUBE_DOMAIN_COMMENT,),
+        extra_comments=(CUBE_LATTICE_COMMENT,),
     )
 
 

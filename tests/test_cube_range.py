@@ -1,22 +1,17 @@
 """Per-node .cube range, lattice size, chain vs combined preview, interpolation.
 
-Scene-referred tables (IDT, exposure, WB) stay inside the ACEScct allocation.
-The Rec.709 table stays inside [0, 1]. Analytic ``idt_to_acescct`` is not
-rewritten; the combined preview of 18% grey stays on the Rec.709 OETF.
+Every node cube samples the default [0, 1] lattice and writes no DOMAIN
+or INPUT_RANGE header. ACEScct encode floors linear at 1e-10 (code about
+0.0729). Exposure output may exceed 1. ACEScct 1.0 is linear 2**7.8 ≈ 223,
+about 10.3 stops above 18% grey; the next cube clips that input to 1.0.
 
-Interpolation tolerances (absolute, Rec.709 or ACEScct code, size 17):
+The neutral axis is r = g = b, uniform, several hundred points, on
+0.15–0.50 (the ACEScct band that approaches the Rec.709 white point).
+That gate is max absolute error. LogC4 18% grey stays a max gate.
 
-- Neutral axis means r = g = b, sampled in the interior of a lattice cell.
-- Overexposed samples sit in the top fifth of that node's input domain.
-- Saturated samples use independent random channels, same seed.
-
-Neutral-axis and LogC4 18% grey gates are max absolute error.
-Saturated and overexposed gates are mean and p99 of the same absolute
-channel error. The max of those groups is printed and not gated.
-
-Saturated and overexposed error on the Rec.709 nodes comes from Rec.709
-hard clipping at [0, 1] (no tone mapping). Tighten the max once 709 tone
-mapping lands.
+Saturated and overexposed gates are mean and p99. Their max is printed
+and not gated. On the Rec.709 node that tail comes from hard clipping at
+[0, 1] (no tone mapping). Tighten the max once 709 tone mapping lands.
 """
 
 from __future__ import annotations
@@ -30,11 +25,11 @@ from color.curves import linear_to_logc4, linear_to_slog3
 from color.gamuts import IDT_PAIRS
 from color.rec709 import rec709_oetf
 from color.resolve_export import (
-    ACESCCT_CUBE_MAX,
     ACESCCT_CUBE_MIN,
     CUBE_SIZE_33,
     DEFAULT_CUBE_SIZE,
-    clip_acescct_cube,
+    clip_to_next_cube,
+    combined_preview709_cube_bytes,
     combined_preview709_rgb,
     exposure_cube_bytes,
     exposure_in_acescct,
@@ -51,71 +46,87 @@ from color.resolve_export import export_resolve_bundle
 # Seed for every random lattice probe in this file.
 INTERP_SEED = 20261003
 
-# Absolute error on size 17. Neutral is r=g=b inside the grading band
-# (camera log 0.15–0.50, or ACEScct 0.18–0.45), and each sample sits
-# inside a lattice cell rather than on a node. Saturated uses independent
-# channels across the whole input domain. Overexposed is the top fifth.
-# Seed INTERP_SEED, LogC4, exposure +0.5 stop, WB 3200 K tint +0.25.
-# The neutral/grey chain is 0 stops and identity WB.
-#
-# Neutral axis and LogC4 18% grey stay on max |Δ|. Measured max:
-#   idt 0.019175  exposure 0.000000  wb 0.004751  odt 0.048723
-#   chain neutral 0.225839  chain grey 0.012877
+# Neutral axis: r=g=b, uniform, on the ACEScct band 0.15–0.50.
+# Several hundred points so the approach to the 709 white point is covered.
+# Gates are measured max + about 15% under the default 0–1 lattice, size 17.
+# LogC4 18% grey keeps its max gate.
+NEUTRAL_LO = 0.15
+NEUTRAL_HI = 0.50
+NEUTRAL_COUNT = 401
+# Measured max on the 401-point axis, then about +15%:
+#   idt 0.023256 → 0.027
+#   exposure 0.000416 → 0.00048
+#   wb 0.004599 → 0.0053
+#   odt 0.029580 → 0.034
+#   chain 0.120331 → 0.138
+# LogC4 18% grey measured max 0.024237; the gate stays 0.04.
 TOL_NEUTRAL_MAX = {
-    "idt": 0.04,
-    "exposure": 0.001,
-    "wb": 0.02,
-    "odt": 0.08,
+    "idt": 0.027,
+    "exposure": 0.00048,
+    "wb": 0.0053,
+    "odt": 0.034,
 }
-TOL_CHAIN_NEUTRAL_MAX = 0.30
+TOL_CHAIN_NEUTRAL_MAX = 0.138
 TOL_CHAIN_GREY_MAX = 0.04
 
 # Saturated / overexposed: mean and p99 of flattened |lookup − direct|.
-# About 15% above the INTERP_SEED measurement. Max is logged, not gated.
+# About 15% above the INTERP_SEED measurement on the 0–1 lattice.
+# Max is logged, not gated.
 # Measured (mean, p99, max):
-#   idt sat       0.003581  0.060945  0.092038
-#   exposure sat  0.000018  0.000648  0.000783
-#   wb sat        0.010665  0.162845  0.314497
-#   odt sat       0.013575  0.383491  0.414236
-#   chain sat     0.025661  0.405312  0.415366
-#   idt over      0.002000  0.019807  0.022275
-#   exposure over 0.000325  0.003987  0.004643
-#   wb over       0.051386  0.611761  0.678737
-#   odt over      0.090785  0.674138  0.722500
-# Saturated and overexposed error on the Rec.709 nodes (ODT and the
-# combined chain) comes from Rec.709 hard clipping at [0, 1] (no tone
-# mapping). Tighten the max once 709 tone mapping lands.
+#   idt sat       0.006955  0.085903  0.293769
+#   exposure sat  0.000086  0.002164  0.003605
+#   wb sat        0.004716  0.044600  0.142387
+#   odt sat       0.004897  0.092700  0.127500
+#   chain sat     0.030640  0.725727  1.000000
+#   idt over      0.002974  0.037435  0.049899
+#   exposure over 0.000000  0.000000  0.000000
+#   wb over       0.001352  0.016914  0.027477
+#   odt over      0.059262  0.523777  0.616791
+# Exposure over measured 0; the gate is a 1e-6 / 1e-5 cushion.
+# Chain saturated p99 includes samples the next cube clips at ACEScct 1.0.
+# Saturated and overexposed error on the Rec.709 node comes from Rec.709
+# hard clipping at [0, 1] (no tone mapping). Tighten the max once 709 tone
+# mapping lands.
 TOL_SATURATED_MEAN = {
-    "idt": 0.0042,
-    "exposure": 0.000030,
-    "wb": 0.013,
-    "odt": 0.016,
+    "idt": 0.0080,
+    "exposure": 0.00010,
+    "wb": 0.0055,
+    "odt": 0.0057,
 }
 TOL_SATURATED_P99 = {
-    "idt": 0.071,
-    "exposure": 0.00080,
-    "wb": 0.19,
-    "odt": 0.45,
+    "idt": 0.099,
+    "exposure": 0.0025,
+    "wb": 0.052,
+    "odt": 0.107,
 }
 TOL_OVER_MEAN = {
-    "idt": 0.0024,
-    "exposure": 0.00040,
-    "wb": 0.060,
-    "odt": 0.11,
+    "idt": 0.0035,
+    "exposure": 1e-6,
+    "wb": 0.0016,
+    "odt": 0.069,
 }
 TOL_OVER_P99 = {
-    "idt": 0.024,
-    "exposure": 0.0048,
-    "wb": 0.71,
-    "odt": 0.78,
+    "idt": 0.044,
+    "exposure": 1e-5,
+    "wb": 0.020,
+    "odt": 0.61,
 }
-TOL_CHAIN_SATURATED_MEAN = 0.030
-TOL_CHAIN_SATURATED_P99 = 0.47
+TOL_CHAIN_SATURATED_MEAN = 0.036
+TOL_CHAIN_SATURATED_P99 = 0.84
+# +3 stops along r=g=b on [0, 1], codes that stay ≤ ACEScct 1.0.
+# Exposure lookup max 0.026724 → 0.031. Graded WB of that output max
+# 0.071833 → 0.083.
+TOL_PLUS3_BELOW_EXPOSURE_MAX = 0.031
+TOL_PLUS3_BELOW_WB_MAX = 0.083
 
-# IRIDAS header keywords the writers emit. Not LUT_3D_INPUT_RANGE.
-# Scene-node input domains, 10 decimal places except the 0/1 edges.
-SCENE_DOMAIN_MIN_LINE = "DOMAIN_MIN 0.0729055352 0.0729055352 0.0729055352"
-SCENE_DOMAIN_MAX_LINE = "DOMAIN_MAX 1.4679963120 1.4679963120 1.4679963120"
+def _assert_no_range_header(text: str) -> None:
+    """No DOMAIN_* header and no *_INPUT_RANGE header. Comments may name them."""
+    for ln in text.splitlines():
+        s = ln.strip()
+        if not s or s.startswith("#") or s.startswith("TITLE") or s.startswith("LUT_"):
+            continue
+        assert not s.startswith("DOMAIN_"), s
+        assert "INPUT_RANGE" not in s, s
 
 
 def _rgb_rows(text: str) -> np.ndarray:
@@ -128,15 +139,6 @@ def _rgb_rows(text: str) -> np.ndarray:
         if len(parts) == 3:
             rows.append([float(x) for x in parts])
     return np.asarray(rows, dtype=np.float64)
-
-
-def _domain(text: str, key: str) -> tuple[float, float, float]:
-    for ln in text.splitlines():
-        if ln.startswith(key + " "):
-            nums = [float(x) for x in ln.split()[1:]]
-            assert len(nums) == 3
-            return (nums[0], nums[1], nums[2])
-    raise AssertionError(f"missing {key}")
 
 
 def as_bgr_table(samples: np.ndarray, size: int) -> np.ndarray:
@@ -183,16 +185,10 @@ def lerp_1d(curve: np.ndarray, x, lo: float, hi: float) -> np.ndarray:
     return curve[i0] * (1.0 - f) + curve[i1] * f
 
 
-def _grading_band(lo: float, hi: float) -> tuple[float, float]:
-    """Where a neutral ramp is still a picture, not the allocation shoulder.
-
-    Camera log is the unit interval, and 18% sits near 0.28–0.41.
-    ACEScct's allocation runs up to ~1.47; 18% grey is code ~0.414, and
-    the Rec.709 OETF is already hard-clipped well before the top.
-    """
-    if hi <= 1.0 + 1e-6 and lo >= -1e-9:
-        return (0.15, 0.50)
-    return (0.18, 0.45)
+def _neutral_axis(count: int = NEUTRAL_COUNT) -> np.ndarray:
+    """Uniform r=g=b on 0.15–0.50. Several hundred points, not a 24-draw sample."""
+    column = np.linspace(NEUTRAL_LO, NEUTRAL_HI, int(count))
+    return np.repeat(column.reshape(-1, 1), 3, axis=1)
 
 
 def _inside_cells(values: np.ndarray, lo: float, hi: float, size: int) -> np.ndarray:
@@ -204,15 +200,10 @@ def _inside_cells(values: np.ndarray, lo: float, hi: float, size: int) -> np.nda
     return lo + (i0 + frac) / ncell * (hi - lo)
 
 
-def _between(rng: np.random.Generator, count: int, size: int, lo: float, hi: float, kind: str) -> np.ndarray:
-    """Points strictly inside a lattice cell (not on a node)."""
-    if kind == "neutral":
-        a, b = _grading_band(lo, hi)
-        a = max(a, lo + 1e-4)
-        b = min(b, hi - 1e-4)
-        column = rng.uniform(a, b, size=(count, 1))
-        values = np.repeat(column, 3, axis=1)
-    elif kind == "over":
+def _between(rng: np.random.Generator, count: int, size: int, kind: str) -> np.ndarray:
+    """Saturated or overexposed points strictly inside a [0, 1] lattice cell."""
+    lo, hi = 0.0, 1.0
+    if kind == "over":
         start = lo + 0.80 * (hi - lo)
         values = rng.uniform(start, hi - 1e-4, size=(count, 3))
     else:
@@ -256,60 +247,50 @@ def test_default_cube_size_is_17_and_33_still_selectable(tmp_path):
     assert "LUT_3D_SIZE 17" in combined
 
 
-def test_per_node_cubes_stay_inside_declared_range():
-    """IDT / exposure / WB inside the ACEScct allocation. Rec.709 inside [0, 1]."""
+def test_per_node_cubes_have_no_domain_header_and_sample_unit_interval():
+    """No DOMAIN or INPUT_RANGE header. Lattice is the default [0, 1].
+
+    The 1e-10 floor keeps ACEScct output at about 0.0729 or above.
+    Exposure output is not limited to 1. The Rec.709 table is.
+    """
     for idt in IDT_PAIRS:
         text = idt_cube_bytes(idt, size=DEFAULT_CUBE_SIZE)
         rgb = _rgb_rows(text)
+        _assert_no_range_header(text)
         assert rgb.min() >= ACESCCT_CUBE_MIN - 1e-8, idt
-        assert rgb.max() <= ACESCCT_CUBE_MAX + 1e-8, idt
-        assert "DOMAIN_MIN 0.0 0.0 0.0" in text
-        assert "DOMAIN_MAX 1.0 1.0 1.0" in text
-        assert "LUT_3D_INPUT_RANGE" not in text
         assert "1e-10" in text
+        assert "LUT_3D_SIZE 17" in text
 
-    for stops in (0.0, -2.0, 2.0, 4.0):
+    for stops in (0.0, -2.0, 2.0, 4.0, 3.0):
         text = exposure_cube_bytes(stops)
         rgb = _rgb_rows(text)
+        _assert_no_range_header(text)
         assert rgb.min() >= ACESCCT_CUBE_MIN - 1e-8
-        assert rgb.max() <= ACESCCT_CUBE_MAX + 1e-8
-        assert SCENE_DOMAIN_MIN_LINE in text
-        assert SCENE_DOMAIN_MAX_LINE in text
-        assert "LUT_1D_INPUT_RANGE" not in text
-        lo = _domain(text, "DOMAIN_MIN")
-        hi = _domain(text, "DOMAIN_MAX")
-        assert lo[0] == pytest.approx(ACESCCT_CUBE_MIN, abs=5e-10)
-        assert hi[0] == pytest.approx(ACESCCT_CUBE_MAX, abs=5e-10)
+        assert "LUT_1D_SIZE" in text
+        if stops > 0.0:
+            assert rgb.max() > 1.0
 
     for cct, tint in ((None, 0.0), (3200.0, 0.4), (6504.0, -0.2)):
         text = wb_cube_bytes(cct, tint, size=DEFAULT_CUBE_SIZE)
         rgb = _rgb_rows(text)
+        _assert_no_range_header(text)
         assert rgb.min() >= ACESCCT_CUBE_MIN - 1e-8
-        assert rgb.max() <= ACESCCT_CUBE_MAX + 1e-8
-        assert SCENE_DOMAIN_MIN_LINE in text
-        assert SCENE_DOMAIN_MAX_LINE in text
-        assert "LUT_3D_INPUT_RANGE" not in text
-        lo = _domain(text, "DOMAIN_MIN")
-        hi = _domain(text, "DOMAIN_MAX")
-        assert lo[0] == pytest.approx(ACESCCT_CUBE_MIN, abs=5e-10)
-        assert hi[0] == pytest.approx(ACESCCT_CUBE_MAX, abs=5e-10)
+        assert np.isfinite(rgb).all()
 
     odt = odt_cube_bytes(size=DEFAULT_CUBE_SIZE)
     odt_rgb = _rgb_rows(odt)
+    _assert_no_range_header(odt)
     assert odt_rgb.min() >= 0.0
     assert odt_rgb.max() <= 1.0
-    assert SCENE_DOMAIN_MIN_LINE in odt
-    assert SCENE_DOMAIN_MAX_LINE in odt
-    assert "LUT_3D_INPUT_RANGE" not in odt
-    assert _domain(odt, "DOMAIN_MIN")[0] == pytest.approx(ACESCCT_CUBE_MIN, abs=5e-10)
-    assert _domain(odt, "DOMAIN_MAX")[0] == pytest.approx(ACESCCT_CUBE_MAX, abs=5e-10)
+
+    _assert_no_range_header(combined_preview709_cube_bytes("arri_logc4_awg4"))
 
 
 def _baked_chain(log, idt, stops, cct, tint):
-    """Per-node cube functions, including the allocation clip."""
+    """Per-node functions. No allocation clip; the 1e-10 floor is inside the IDT cube."""
     enc = idt_cube_rgb(log, idt)
-    enc = clip_acescct_cube(exposure_in_acescct(enc, stops))
-    enc = clip_acescct_cube(wb_in_acescct(enc, cct, tint=tint))
+    enc = exposure_in_acescct(enc, stops)
+    enc = wb_in_acescct(enc, cct, tint=tint)
     return np.clip(odt_from_acescct(enc), 0.0, 1.0)
 
 
@@ -357,60 +338,105 @@ def test_eighteen_percent_grey_stays_near_rec709_oetf():
         np.testing.assert_allclose(combined, ref, atol=0.002, rtol=0)
 
 
+def test_exposure_plus_3_clips_above_acescct_one_into_next_node():
+    """+3 stops, then the next node (WB).
+
+    ACEScct 1.0 is linear 2**7.8 ≈ 222.86, about 10.3 stops above 18% grey.
+    The exposure cube may write a code above 1. The next cube only samples
+    [0, 1], so that code is clipped to 1.0 on entry. Codes that stay at or
+    below 1 are not clipped and stay within the gates.
+    """
+    from color.working_space import acescct_encode
+
+    lin_at_one = 2.0 ** 7.8
+    assert lin_at_one == pytest.approx(222.86, abs=0.02)
+    code = float(np.asarray(acescct_encode(lin_at_one)).reshape(-1)[0])
+    assert code == pytest.approx(1.0, abs=1e-6)
+    assert float(np.log2(lin_at_one / 0.18)) == pytest.approx(10.3, abs=0.05)
+
+    xs = np.linspace(0.0, 1.0, NEUTRAL_COUNT)
+    x = np.repeat(xs.reshape(-1, 1), 3, axis=1)
+    direct = exposure_in_acescct(x, 3.0)
+    looked = lerp_1d(_rgb_rows(exposure_cube_bytes(3.0)), x, 0.0, 1.0)
+    above = direct[:, 0] > 1.0
+    below = ~above
+    assert int(above.sum()) > 50
+    assert int(below.sum()) > 200
+    # Clip point is ACEScct 1.0 on the way into the next cube.
+    entered = clip_to_next_cube(looked)
+    assert np.all(entered[above] == 1.0)
+    assert np.all(entered[below, 0] < 1.0)
+    below_err = float(np.max(np.abs(looked[below] - direct[below])))
+    assert below_err <= TOL_PLUS3_BELOW_EXPOSURE_MAX, below_err
+
+    wb_tab = as_bgr_table(_rgb_rows(wb_cube_bytes(3200.0, 0.25, size=17)), 17)
+    wb_look = trilinear_cube(wb_tab, entered, 0.0, 1.0)
+    wb_direct = wb_in_acescct(direct, 3200.0, tint=0.25)
+    wb_err = float(np.max(np.abs(wb_look[below] - wb_direct[below])))
+    assert wb_err <= TOL_PLUS3_BELOW_WB_MAX, wb_err
+    wb_at_one = wb_in_acescct(np.ones((1, 3)), 3200.0, tint=0.25)
+    np.testing.assert_allclose(wb_look[above], np.broadcast_to(wb_at_one, wb_look[above].shape), atol=1e-6, rtol=0)
+
+
 def _interp_errors(idt: str = "arri_logc4_awg4", size: int = 17, stops: float = 0.5, cct: float = 3200.0, tint: float = 0.25):
-    """Mean, p99, and max |lookup − direct| for each node and sample class."""
+    """Mean, p99, and max |lookup − direct| for each node and sample class.
+
+    Neutral probes are the uniform 0.15–0.50 axis. Saturated and overexposed
+    probes stay inside cells of the default [0, 1] lattice.
+    """
     rng = np.random.default_rng(INTERP_SEED)
     idt_text = idt_cube_bytes(idt, size=size)
     idt_table = as_bgr_table(_rgb_rows(idt_text), size)
     exp_text = exposure_cube_bytes(stops)
     exp_rows = _rgb_rows(exp_text)
-    exp_lo = _domain(exp_text, "DOMAIN_MIN")[0]
-    exp_hi = _domain(exp_text, "DOMAIN_MAX")[0]
     wb_text = wb_cube_bytes(cct, tint, size=size)
     wb_table = as_bgr_table(_rgb_rows(wb_text), size)
-    wb_lo = _domain(wb_text, "DOMAIN_MIN")[0]
-    wb_hi = _domain(wb_text, "DOMAIN_MAX")[0]
     odt_text = odt_cube_bytes(size=size)
     odt_table = as_bgr_table(_rgb_rows(odt_text), size)
-    odt_lo = _domain(odt_text, "DOMAIN_MIN")[0]
-    odt_hi = _domain(odt_text, "DOMAIN_MAX")[0]
 
     def idt_direct(x):
         return idt_cube_rgb(x, idt)
 
     def exp_direct(x):
-        return clip_acescct_cube(exposure_in_acescct(x, stops))
+        return exposure_in_acescct(x, stops)
 
     def wb_direct(x):
-        return clip_acescct_cube(wb_in_acescct(x, cct, tint=tint))
+        return wb_in_acescct(x, cct, tint=tint)
 
     def odt_direct(x):
         return np.clip(odt_from_acescct(x), 0.0, 1.0)
 
     out = {}
-    probes = {}
-    for kind, count in (("neutral", 24), ("saturated", 36), ("over", 24)):
-        cam = _between(rng, count, size, 0.0, 1.0, kind)
+    neutral = _neutral_axis()
+    out[("idt", "neutral")] = _err_stats(trilinear_cube(idt_table, neutral, 0.0, 1.0), idt_direct(neutral))
+    out[("exposure", "neutral")] = _err_stats(lerp_1d(exp_rows, neutral, 0.0, 1.0), exp_direct(neutral))
+    out[("wb", "neutral")] = _err_stats(trilinear_cube(wb_table, neutral, 0.0, 1.0), wb_direct(neutral))
+    out[("odt", "neutral")] = _err_stats(trilinear_cube(odt_table, neutral, 0.0, 1.0), odt_direct(neutral))
+
+    probes = {"neutral": neutral}
+    for kind, count in (("saturated", 36), ("over", 24)):
+        cam = _between(rng, count, size, kind)
         probes[kind] = cam
         out[("idt", kind)] = _err_stats(trilinear_cube(idt_table, cam, 0.0, 1.0), idt_direct(cam))
-        exp_x = _between(rng, count, 65, exp_lo, exp_hi, kind)
-        out[("exposure", kind)] = _err_stats(lerp_1d(exp_rows, exp_x, exp_lo, exp_hi), exp_direct(exp_x))
-        wb_x = _between(rng, count, size, wb_lo, wb_hi, kind)
-        out[("wb", kind)] = _err_stats(trilinear_cube(wb_table, wb_x, wb_lo, wb_hi), wb_direct(wb_x))
-        odt_x = _between(rng, count, size, odt_lo, odt_hi, kind)
-        out[("odt", kind)] = _err_stats(trilinear_cube(odt_table, odt_x, odt_lo, odt_hi), odt_direct(odt_x))
+        exp_x = _between(rng, count, 65, kind)
+        out[("exposure", kind)] = _err_stats(lerp_1d(exp_rows, exp_x, 0.0, 1.0), exp_direct(exp_x))
+        wb_x = _between(rng, count, size, kind)
+        out[("wb", kind)] = _err_stats(trilinear_cube(wb_table, wb_x, 0.0, 1.0), wb_direct(wb_x))
+        odt_x = _between(rng, count, size, kind)
+        out[("odt", kind)] = _err_stats(trilinear_cube(odt_table, odt_x, 0.0, 1.0), odt_direct(odt_x))
 
     def chain_lookup(log, exp_curve, wb_tab):
+        # Each following cube covers [0, 1]. ACEScct 1.0 (linear 2**7.8 ≈ 223)
+        # is clipped to 1.0 on entry.
         enc = trilinear_cube(idt_table, log, 0.0, 1.0)
-        enc = np.clip(enc, exp_lo, exp_hi)
-        enc = lerp_1d(exp_curve, enc, exp_lo, exp_hi)
-        enc = np.clip(enc, wb_lo, wb_hi)
-        enc = trilinear_cube(wb_tab, enc, wb_lo, wb_hi)
-        enc = np.clip(enc, odt_lo, odt_hi)
-        return trilinear_cube(odt_table, enc, odt_lo, odt_hi)
+        enc = clip_to_next_cube(enc)
+        enc = lerp_1d(exp_curve, enc, 0.0, 1.0)
+        enc = clip_to_next_cube(enc)
+        enc = trilinear_cube(wb_tab, enc, 0.0, 1.0)
+        enc = clip_to_next_cube(enc)
+        return trilinear_cube(odt_table, enc, 0.0, 1.0)
 
-    # Neutral axis of the preview: 0 stops, identity WB. Graded WB would
-    # leave the diagonal and is covered by the saturated gate.
+    # Neutral axis of the preview: 0 stops, identity WB.
     exp0 = _rgb_rows(exposure_cube_bytes(0.0))
     wb0 = as_bgr_table(_rgb_rows(wb_cube_bytes(None, 0.0, size=size)), size)
     neutral_log = probes["neutral"]
