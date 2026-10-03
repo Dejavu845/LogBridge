@@ -11730,6 +11730,10 @@ def test_unlocked_hint_is_visible_only_when_none_locked():
     assert 'Text("把混源文件夹拖进来")' in button
     assert ".foregroundStyle(.secondary)" in button
     assert ".font(.caption)" in button
+    assert ".fixedSize()" in button
+    assert ".layoutPriority(1)" in button
+    assert button.count(".layoutPriority(0)") == 2
+    assert ".buttonStyle(.borderedProminent)" in button
     assert ".font(.system(" not in button
     assert ".background(" not in button
     assert ".opacity(" not in button

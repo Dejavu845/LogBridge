@@ -6,8 +6,10 @@ from pathlib import Path
 from PIL import Image
 
 from scripts.check_ui_screenshots import (
+    accent_blue_count,
     analyze_image,
     check_directory,
+    is_accent_blue,
     is_blank_capture,
     is_prohibited_placeholder,
     toolbar_region_present,
@@ -63,6 +65,13 @@ def test_snapshot_tool_covers_sizes_appearances_and_states():
         "cacheDisplay",
         "spinRunLoop",
         "CGWindowListCreateImage",
+        "canBecomeKey",
+        "canBecomeMain",
+        "makeKeyAndOrderFront",
+        "activate(ignoringOtherApps:",
+        "_setForceActiveAppearance:",
+        "isEnabled",
+        "expectPrimaryEnabled",
         "ContentView(session:",
         "sample-a.mov",
         "sample-locked.mov",
@@ -183,6 +192,8 @@ def test_placeholder_colors_fail_and_small_accents_do_not():
     assert toolbar_region_present(960, 900) is True
     assert toolbar_region_present(900, 900) is False
     assert toolbar_region_present(840, 800) is True
+    assert is_accent_blue(0, 122, 255) is True
+    assert is_accent_blue(180, 180, 184) is False
 
 
 def test_after_write_must_not_match_locked_bytes(tmp_path: Path):
@@ -210,6 +221,61 @@ def test_after_write_must_not_match_locked_bytes(tmp_path: Path):
     wrote.write_bytes(locked.read_bytes())
     errors = check_directory(tmp_path)
     assert any("after-write matches locked for 1440x900 light" in line for line in errors)
+
+
+def _shot(path: Path, name: str, color: tuple[int, int, int], blue: bool) -> None:
+    height = int(name.split("-")[-2].split("x")[1])
+    width = int(name.split("-")[-2].split("x")[0])
+    image = Image.new("RGB", (width, height + 52), color)
+    for x in range(40):
+        image.putpixel((x, 80), (20, 20, 20))
+    if blue:
+        for x in range(width - 180, width - 30):
+            for y in range(10, 34):
+                image.putpixel((x, y), (0, 122, 255))
+    image.save(path / name)
+
+
+def test_enabled_button_region_is_accent_blue(tmp_path: Path):
+    """locked / after-write toolbar band is accent blue; empty / awaiting is not."""
+    tool = TOOL.read_text(encoding="utf-8")
+    enabled = tool.split("private func expectPrimaryEnabled")[1].split("private func")[0]
+    assert "case .empty, .droppedAwaiting:" in enabled
+    assert "return false" in enabled
+    assert "case .locked, .afterWrite:" in enabled
+    assert "return true" in enabled
+    content = CONTENT.read_text(encoding="utf-8")
+    button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
+    assert ".buttonStyle(.borderedProminent)" in button
+    assert ".fixedSize()" in button
+    assert ".layoutPriority(1)" in button
+    assert ".layoutPriority(0)" in button
+    assert ".disabled(session.lockedClipCount == 0)" in button
+
+    for size in ("1440x900", "1280x800"):
+        for appearance in ("light", "dark"):
+            _shot(tmp_path, f"empty-{size}-{appearance}.png", (230, 230, 230), False)
+            _shot(tmp_path, f"dropped-awaiting-{size}-{appearance}.png", (220, 220, 225), False)
+            _shot(tmp_path, f"locked-{size}-{appearance}.png", (210, 210, 210), True)
+            _shot(tmp_path, f"after-write-{size}-{appearance}.png", (200, 205, 210), True)
+    assert check_directory(tmp_path, require_primary_accent=True) == []
+    awaiting = tmp_path / "dropped-awaiting-1440x900-light.png"
+    with Image.open(awaiting) as image:
+        assert accent_blue_count(image, 900) == 0
+    locked = tmp_path / "locked-1440x900-light.png"
+    with Image.open(locked) as image:
+        assert accent_blue_count(image, 900) >= 40
+    # A grey enabled button must fail. A blue disabled button must fail.
+    _shot(tmp_path, "locked-1440x900-light.png", (210, 210, 210), False)
+    grey_errors = check_directory(tmp_path, require_primary_accent=True)
+    assert any("locked-1440x900-light.png: enabled primary missing accent blue" in line for line in grey_errors)
+    _shot(tmp_path, "locked-1440x900-light.png", (210, 210, 210), True)
+    _shot(tmp_path, "dropped-awaiting-1280x800-light.png", (220, 220, 225), True)
+    blue_disabled = check_directory(tmp_path, require_primary_accent=True)
+    assert any(
+        "dropped-awaiting-1280x800-light.png: disabled primary shows accent blue" in line
+        for line in blue_disabled
+    )
 
 
 def test_baseline_wire_patches_28066d5_without_committing(tmp_path: Path):

@@ -10,6 +10,7 @@ share a file hash with locked.
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -103,11 +104,74 @@ def toolbar_region_present(pixel_height: int, content_height: int) -> bool:
     return pixel_height > content_height
 
 
+# Filled accentColor button. Disabled / inactive grey does not pass.
+ACCENT_BLUE_MIN = 170
+ACCENT_BLUE_PIXELS = 40
+BUTTON_REGION_WIDTH = 420
+
+
+def is_accent_blue(red: int, green: int, blue: int) -> bool:
+    return (
+        blue >= ACCENT_BLUE_MIN
+        and blue >= red + 70
+        and blue >= green + 40
+    )
+
+
+def accent_blue_count(image: Image.Image, content_height: int) -> int:
+    """Accent-blue pixels in the trailing toolbar band, above the content."""
+    rgb = np.asarray(image.convert("RGB"), dtype=np.int16)
+    height, width, _ = rgb.shape
+    chrome = height - content_height
+    if chrome <= 0 or width <= 0:
+        return 0
+    span = min(BUTTON_REGION_WIDTH, width)
+    region = rgb[:chrome, width - span :]
+    red = region[:, :, 0]
+    green = region[:, :, 1]
+    blue = region[:, :, 2]
+    mask = (blue >= ACCENT_BLUE_MIN) & (blue >= red + 70) & (blue >= green + 40)
+    return int(np.count_nonzero(mask))
+
+
+def primary_accent_errors(out: Path) -> list[str]:
+    """Enabled shots show accent blue in the button band. Disabled shots do not."""
+    errors: list[str] = []
+    enabled = ("locked", "after-write")
+    disabled = ("empty", "dropped-awaiting")
+    for size in SIZES:
+        content_height = int(size.split("x")[1])
+        for appearance in APPEARANCES:
+            for state in enabled:
+                name = f"{state}-{size}-{appearance}.png"
+                path = out / name
+                if not path.is_file():
+                    continue
+                with Image.open(path) as image:
+                    count = accent_blue_count(image, content_height)
+                if count < ACCENT_BLUE_PIXELS:
+                    errors.append(
+                        f"{name}: enabled primary missing accent blue ({count} px)"
+                    )
+            for state in disabled:
+                name = f"{state}-{size}-{appearance}.png"
+                path = out / name
+                if not path.is_file():
+                    continue
+                with Image.open(path) as image:
+                    count = accent_blue_count(image, content_height)
+                if count >= ACCENT_BLUE_PIXELS:
+                    errors.append(
+                        f"{name}: disabled primary shows accent blue ({count} px)"
+                    )
+    return errors
+
+
 def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def check_directory(out: Path) -> list[str]:
+def check_directory(out: Path, *, require_primary_accent: bool = False) -> list[str]:
     errors: list[str] = []
     if not out.is_dir():
         return [f"missing directory {out}"]
@@ -139,6 +203,8 @@ def check_directory(out: Path) -> list[str]:
             if locked.is_file() and wrote.is_file():
                 if file_sha256(locked) == file_sha256(wrote):
                     errors.append(f"after-write matches locked for {size} {appearance}")
+    if require_primary_accent:
+        errors.extend(primary_accent_errors(out))
     return errors
 
 
@@ -146,7 +212,8 @@ def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print("usage: check_ui_screenshots.py OUT_DIR", file=sys.stderr)
         return 2
-    errors = check_directory(Path(argv[1]))
+    require_accent = os.environ.get("SNAPSHOT_REQUIRE_TOOLBAR", "1") != "0"
+    errors = check_directory(Path(argv[1]), require_primary_accent=require_accent)
     if errors:
         print(f"ui-screenshots: {len(errors)} problem(s)", file=sys.stderr)
         for line in errors:

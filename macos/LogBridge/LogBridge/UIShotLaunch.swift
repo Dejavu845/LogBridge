@@ -98,8 +98,10 @@ enum UIShotLaunch {
         window.toolbarStyle = .unified
         window.setContentSize(NSSize(width: shotWidth, height: shotHeight))
         window.setFrameOrigin(NSPoint(x: 40, y: 40))
-        window.orderFrontRegardless()
-        window.makeKey()
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.makeMain()
     }
 
     private static func value(after flag: String) -> String? {

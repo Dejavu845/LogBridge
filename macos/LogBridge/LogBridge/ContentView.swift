@@ -292,10 +292,18 @@ struct ProcessLockedToolbarButton: View {
                 Text("把混源文件夹拖进来")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(minWidth: 0, alignment: .trailing)
+                    .layoutPriority(0)
             } else if session.lockedClipCount == 0 {
                 Text("先选成对 Log 与色域")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(minWidth: 0, alignment: .trailing)
+                    .layoutPriority(0)
             }
             Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
                 if session.isWritingDeliverables {
@@ -305,6 +313,8 @@ struct ProcessLockedToolbarButton: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .fixedSize()
+            .layoutPriority(1)
             .disabled(session.lockedClipCount == 0)
             .modifier(ProcessLockedButtonHelp(
                 importing: session.clips.isEmpty,

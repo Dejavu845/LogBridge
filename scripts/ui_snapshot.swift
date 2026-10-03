@@ -232,8 +232,15 @@ private func renderImage(
         view,
         width: width,
         height: height,
-        appearance: appearance
+        appearance: appearance,
+        state: state
     )
+}
+
+/// Inactive windows draw every toolbar button grey, enabled or not.
+private final class SnapshotWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }
 
 @MainActor
@@ -260,14 +267,15 @@ private func renderWithHostingView<V: View>(
     _ view: V,
     width: Int,
     height: Int,
-    appearance: SampleAppearance
+    appearance: SampleAppearance,
+    state: SampleState
 ) throws -> NSImage {
     let size = NSSize(width: width, height: height)
     // A bare NSHostingView content view does not install .toolbar.
     // NSHostingController does, so the primary button is in the window chrome.
     let controller = NSHostingController(rootView: view)
     controller.view.appearance = NSAppearance(named: appearance.nsAppearance)
-    let window = NSWindow(
+    let window = SnapshotWindow(
         contentRect: NSRect(origin: .zero, size: size),
         styleMask: [.titled, .closable, .miniaturizable, .resizable],
         backing: .buffered,
@@ -279,13 +287,16 @@ private func renderWithHostingView<V: View>(
     window.appearance = controller.view.appearance
     window.contentViewController = controller
     window.setContentSize(size)
-    // On the runner's GUI session so the toolbar and List/Table get a backing store.
+    // May sit off the visible desktop. It still has to be key, or the
+    // primary button draws inactive grey in both enabled and disabled states.
     window.setFrameOrigin(NSPoint(x: 40, y: 40))
-    NSApp.activate(ignoringOtherApps: true)
-    window.makeKeyAndOrderFront(nil)
+    becomeKeyForCapture(window)
 
     let frame = window.contentView?.superview ?? controller.view
     spinRunLoop(host: frame)
+    becomeKeyForCapture(window)
+    frame.needsDisplay = true
+    window.displayIfNeeded()
     var best = wholeWindowRep(window, contentHeight: height)
     if best == nil || !captureShowsChrome(best!, window: window, contentHeight: height) {
         spinRunLoop(host: frame)
@@ -296,6 +307,7 @@ private func renderWithHostingView<V: View>(
     }
     let showsChrome = best.map { captureShowsChrome($0, window: window, contentHeight: height) } ?? false
     let toolbarOK = !requireToolbarItems || toolbarHasItems(window)
+    let enabledOK = !requireToolbarItems || primaryEnabledMatches(window, state: state)
     let usable = best.map { !bitmapIsUnusable($0) } ?? false
     window.orderOut(nil)
     window.close()
@@ -308,6 +320,10 @@ private func renderWithHostingView<V: View>(
     guard toolbarOK else {
         throw SnapshotError.noBitmap("NSWindow.toolbar has no items")
     }
+    guard enabledOK else {
+        let want = expectPrimaryEnabled(state)
+        throw SnapshotError.noBitmap("primary isEnabled expected \(want) for \(state.rawValue)")
+    }
     let image = NSImage(size: NSSize(width: rep.pixelsWide, height: rep.pixelsHigh))
     image.addRepresentation(rep)
     return image
@@ -317,6 +333,75 @@ private func renderWithHostingView<V: View>(
 /// baseline has no window toolbar, so that job sets this to 0.
 private var requireToolbarItems: Bool {
     ProcessInfo.processInfo.environment["SNAPSHOT_REQUIRE_TOOLBAR"] != "0"
+}
+
+/// Key + active, so an enabled borderedProminent button fills with accentColor.
+@MainActor
+private func becomeKeyForCapture(_ window: NSWindow) {
+    NSApp.setActivationPolicy(.regular)
+    if !NSApp.isRunning {
+        NSApp.finishLaunching()
+    }
+    forceActiveAppearance(window)
+    NSApp.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+    window.makeMain()
+    window.toolbar?.validateVisibleItems()
+}
+
+/// Public activate() is not always enough for a short-lived capture process.
+/// Inactive drawing is what made enabled and disabled toolbar buttons match.
+private func forceActiveAppearance(_ window: NSWindow) {
+    let sel = NSSelectorFromString("_setForceActiveAppearance:")
+    guard window.responds(to: sel) else { return }
+    typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+    let imp = unsafeBitCast(window.method(for: sel), to: Setter.self)
+    imp(window, sel, true)
+}
+
+/// empty / dropped-awaiting: disabled. locked / after-write: enabled.
+private func expectPrimaryEnabled(_ state: SampleState) -> Bool {
+    switch state {
+    case .empty, .droppedAwaiting:
+        return false
+    case .locked, .afterWrite:
+        return true
+    }
+}
+
+private func primaryEnabledMatches(_ window: NSWindow, state: SampleState) -> Bool {
+    guard let control = primaryControl(in: window) else { return false }
+    return control.isEnabled == expectPrimaryEnabled(state)
+}
+
+private func primaryControl(in window: NSWindow) -> NSControl? {
+    var found: NSControl?
+    func consider(_ view: NSView) {
+        let titles = [
+            (view as? NSButton)?.title ?? "",
+            (view as? NSButton)?.attributedTitle.string ?? "",
+            view.accessibilityLabel() ?? "",
+        ]
+        if titles.contains(where: isPrimaryTitle), let control = view as? NSControl {
+            found = control
+        }
+        for subview in view.subviews {
+            consider(subview)
+        }
+    }
+    if let root = window.contentView?.superview {
+        consider(root)
+    }
+    for item in window.toolbar?.items ?? [] {
+        if let view = item.view {
+            consider(view)
+        }
+    }
+    return found
+}
+
+private func isPrimaryTitle(_ title: String) -> Bool {
+    title == "处理已锁定片段" || title == "取消" || title.hasPrefix("处理已锁定")
 }
 
 private func toolbarHasItems(_ window: NSWindow) -> Bool {
