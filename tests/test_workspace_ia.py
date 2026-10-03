@@ -24,11 +24,16 @@ def test_design_doc_is_plain_chinese():
     design = _read(DESIGN)
     assert "把混源文件夹拖进来" in design
     assert "处理已锁定片段" in design
-    assert "预览·非成片" in design
-    assert "整段代理，不是全精度成片" in design
+    assert "仅预览" in design
+    assert "整段代理，代理精度" in design
+    assert "预览·非成片" not in design
+    assert "不是全精度成片" not in design
     assert "CI 绿不等于达芬奇已验证" in design
-    assert "一键还原" not in design or "没改" in design
+    assert "一键" not in design
     assert "精准" not in design
+    assert "成片" not in design
+    assert "成品" not in design
+    assert "支持" not in design
     assert "#132" in design
 
 
@@ -42,6 +47,7 @@ def test_empty_window_is_full_canvas_not_three_empty_columns():
     assert ui.index("EmptyPreviewStage") < ui.index("HSplitView")
     assert "把混源文件夹拖进来" in chrome
     assert "点处理已锁定片段。得到的是 EXR 图序列，不是视频。" in chrome
+    assert 'Text("已实现（未验证）。整段代理，代理精度。")' in chrome
     assert "session.showImporter = true" in chrome
     assert 'Button("处理已锁定片段")' not in chrome
     assert 'Button("一键还原")' not in chrome

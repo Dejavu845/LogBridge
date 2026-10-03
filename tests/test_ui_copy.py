@@ -11689,6 +11689,18 @@ def test_combined_preview_lut_readme_row_copy():
 
 
 UNLOCKED_TOOLBAR_HINT = "先选成对 Log 与色域"
+EMPTY_STATE_PROXY_LINE = "已实现（未验证）。整段代理，代理精度。"
+
+
+def test_empty_state_keeps_unverified_proxy_line():
+    """Item ㍊: empty canvas says the proxy is unverified. Do not drop the status."""
+    chrome = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/WorkspaceChrome.swift")
+    assert EMPTY_STATE_PROXY_LINE == "已实现（未验证）。整段代理，代理精度。"
+    assert f'Text("{EMPTY_STATE_PROXY_LINE}")' in chrome
+    assert "已实现（未验证）" in EMPTY_STATE_PROXY_LINE
+    assert HONEST_PROXY_NOTE in EMPTY_STATE_PROXY_LINE
+    for token in _BANNED_USER_COPY:
+        assert token not in EMPTY_STATE_PROXY_LINE
 
 
 def test_toolbar_hint_copy_is_locked():
@@ -11786,6 +11798,7 @@ def _user_facing_copy_paths() -> list[Path]:
         ROOT / "README.md",
         ROOT / "ACCEPTANCE.md",
         ROOT / "FORMULAS.md",
+        ROOT / "DESIGN.md",
         ROOT / "ocio" / "config.ocio",
         ROOT / "tests" / "fixtures" / "grey_card" / "README.md",
     ]
@@ -11827,8 +11840,10 @@ def _generated_readme_outputs() -> str:
 
 def test_banned_substrings_absent_from_user_facing_copy():
     """支持 / 一键 / 精准 / 成片 / 成品 are forbidden, including 不 / 非 / 暂不 forms."""
+    paths = _user_facing_copy_paths()
+    assert ROOT / "DESIGN.md" in paths
     hits: list[str] = []
-    for path in _user_facing_copy_paths():
+    for path in paths:
         text = path.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), 1):
             for token in _BANNED_USER_COPY:
