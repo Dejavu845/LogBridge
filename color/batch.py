@@ -829,6 +829,9 @@ def remove_incomplete_resolve_bundle(dest) -> None:
     for path in folder.glob("01_IDT_*.cube"):
         if path.is_file():
             path.unlink()
+    for path in folder.glob("00_Combined_Preview709_*.cube"):
+        if path.is_file():
+            path.unlink()
 
 
 def remove_failed_proxy_dir(seq_dir) -> None:

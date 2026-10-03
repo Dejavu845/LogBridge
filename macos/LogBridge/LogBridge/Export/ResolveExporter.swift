@@ -10,7 +10,10 @@ import simd
 ///   4. ODT       — Rec.709 preview only (off by default)
 ///
 /// Export ACEScct or ACES2065-1 EXR / ACES workflow. Do not bake DWG.
-/// WB is never baked into the IDT or ODT cubes. Status: implemented (unverified).
+/// WB is never baked into the IDT or ODT cubes.
+/// `00_Combined_Preview709_<idt>.cube` samples the same node functions
+/// (IDT → exposure → WB → Rec.709 preview) and does not replace the per-node files.
+/// Status: implemented (unverified).
 enum ResolveExporter {
     static let lutSize = 17
 
@@ -89,8 +92,21 @@ enum ResolveExporter {
         try write("03_WB.dctl", dctl(cct: matrixCCT, tint: tint, srcCCT: matrixSrc, srcTint: srcTint))
         try write("03_WB.cube", wbCube(cct: matrixCCT, tint: tint, size: lutSize, srcCCT: matrixSrc, srcTint: srcTint))
         try write("04_ODT_Rec709.cube", odtCube(size: lutSize))
+        let expStops = exposureEnabled ? exposureStops : 0
         for idt in idts {
             try write("01_IDT_\(idt.rawValue).cube", idtCube(idt: idt, size: lutSize))
+            try write(
+                combinedPreviewFilename(idt),
+                combinedPreviewCube(
+                    idt: idt,
+                    stops: expStops,
+                    cct: matrixCCT,
+                    tint: tint,
+                    size: ResolveExporter.lutSize,
+                    srcCCT: matrixSrc,
+                    srcTint: srcTint
+                )
+            )
         }
         do {
             try verifyResolveBundle(at: directory)
@@ -472,6 +488,52 @@ enum ResolveExporter {
         }
     }
 
+    /// Same per-channel wrap as ``exposureCube``: ACEScct decode → gain → encode.
+    private static func exposureInACEScct(_ enc: SIMD3<Double>, stops: Double) -> SIMD3<Double> {
+        let gain = pow(2.0, stops)
+        return SIMD3(
+            acescctEncode(acescctDecode(enc.x) * gain),
+            acescctEncode(acescctDecode(enc.y) * gain),
+            acescctEncode(acescctDecode(enc.z) * gain)
+        )
+    }
+
+    private static func combinedPreviewFilename(_ idt: IDT) -> String {
+        "00_Combined_Preview709_\(idt.rawValue).cube"
+    }
+
+    /// Camera log → Rec.709 preview. Same node functions as the per-node cubes.
+    private static func combinedPreviewCube(
+        idt: IDT,
+        stops: Double,
+        cct: Double?,
+        tint: Double,
+        size: Int,
+        srcCCT: Double?,
+        srcTint: Double
+    ) -> String {
+        let matrix = wbRGBMatrix(cct: cct, tint: tint, srcCCT: srcCCT, srcTint: srcTint)
+        return cubeFile(
+            title: "LogBridge combined preview \(idt.rawValue) IDT → Exposure → WB → Rec.709",
+            size: size,
+            extraComments: [
+                "# 预览查找表。已实现（未验证）。"
+            ]
+        ) { logRGB in
+            let idtEnc = idtToACEScct(logRGB, idt: idt)
+            let expEnc = exposureInACEScct(idtEnc, stops: stops)
+            let wbEnc = wbInACEScct(expEnc, matrix: matrix)
+            // Per-node ODT cube is unchanged. This preview file only
+            // clips the final OETF result into [0, 1].
+            let preview = odtFromACEScct(wbEnc)
+            return SIMD3(
+                min(max(preview.x, 0.0), 1.0),
+                min(max(preview.y, 0.0), 1.0),
+                min(max(preview.z, 0.0), 1.0)
+            )
+        }
+    }
+
     /// 1D cube: ACEScct decode → linear gain → encode. Identity at 0 stops.
     private static func exposureCube(stops: Double) -> String {
         let size = 65
@@ -792,6 +854,7 @@ enum ResolveExporter {
         | --- | --- |
         | `graph.xml` | 机器可读节点图（可旁路白平衡） |
         | `graph.dot` | 同一图的 Graphviz |
+        | `00_Combined_Preview709_<idt>.cube` | 预览查找表（IDT → 曝光 → 白平衡 → 709 预览）。已实现（未验证）。 |
         | `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡） |
         | `03_WB.cube` | 白平衡查找表（Bradford CAT，ACEScct 封装） |
         | `03_WB.cdl` / `03_WB.ccc` | 白平衡 ASC CDL 校色器 |
@@ -855,6 +918,9 @@ enum ResolveExporter {
         for url in items {
             let name = url.lastPathComponent
             if name.hasPrefix("01_IDT_"), url.pathExtension.lowercased() == "cube" {
+                try? FileManager.default.removeItem(at: url)
+            }
+            if name.hasPrefix("00_Combined_Preview709_"), url.pathExtension.lowercased() == "cube" {
                 try? FileManager.default.removeItem(at: url)
             }
         }
