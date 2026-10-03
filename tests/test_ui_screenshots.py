@@ -194,7 +194,21 @@ def test_after_write_must_not_match_locked_bytes(tmp_path: Path):
     assert any("after-write matches locked for 1440x900 light" in line for line in errors)
 
 
+def _ensure_git_commit(sha: str) -> None:
+    """Shallow CI checkouts omit older commits. Fetch that one object when needed."""
+    probe = subprocess.run(
+        ["git", "cat-file", "-e", f"{sha}^{{commit}}"],
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if probe.returncode == 0:
+        return
+    subprocess.check_call(["git", "fetch", "--depth=1", "origin", sha], cwd=ROOT)
+
+
 def test_baseline_wire_patches_28066d5_without_committing(tmp_path: Path):
+    _ensure_git_commit("28066d5")
     work = tmp_path / "baseline"
     (work / "macos/LogBridge/LogBridge").mkdir(parents=True)
     project = work / "macos/LogBridge/LogBridge.xcodeproj"
