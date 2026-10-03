@@ -6,7 +6,7 @@ Default language is **ACEScct** / **ACES2065-1**. Rec.709 is preview only. Rec.2
 
 ## 真机达芬奇验收（人话清单）
 
-**CI 绿不等于达芬奇已验证。** 下面是人在自己的 Mac + 达芬奇上要走的一遍，不是算法，也不是 GitHub Actions。**整段代理，代理精度预览。** 不写已经测准。不写 ACES OT 已验。本机怎么编出试用包、Archive 后 `.app` 落哪、怎么拷到另一台、Gatekeeper / 隔离（`xattr`），见 README 的「本机试用」。不要公证。
+**CI 绿不等于达芬奇已验证。** 下面是人在自己的 Mac + 达芬奇上要走的一遍，不是算法，也不是 GitHub Actions。**整段代理，代理精度。** 不写已经测准。不写 ACES OT 已验。本机怎么编出试用包、Archive 后 `.app` 落哪、怎么拷到另一台、Gatekeeper / 隔离（`xattr`），见 README 的「本机试用」。不要公证。
 
 仓库不带厂商样片。用自己的片子。
 
@@ -29,14 +29,15 @@ Default language is **ACEScct** / **ACES2065-1**. Rec.709 is preview only. Rec.2
 - 达芬奇能打开这份包，能把 XML / DCTL / cube 挂上节点。
 - 时间线能挂上 `_ACES2065-1_proxy` 图序列（当图片序列，不当视频）。
 - 抽一帧 EXR 看头：有 `chromaticities`（ST 2065-1 AP0）和 `adoptedNeutral`（ACES 白 0.32168 0.33767）。这只说明头写了 ACES 白，不说明画面已验。
-- 代理仍是代理。**整段代理，代理精度。** 仅预览。
+- 代理仍是代理。**整段代理，代理精度。**
+- 709 / HDR 预览窗的角标是仅预览。
 
 ### 5. 看什么算不对
 
 - 包打不开，或节点挂不上。
 - 半包（缺 XML / DCTL / cube / `README_RESOLVE.md`）。
 - 状态出现「帧数对不上」（夹被删掉，不算已写出代理）。
-- 把代理精度预览当成最终画面。
+- 把代理精度当成最终画面。
 
 ### 6. 有 EDR 屏
 
@@ -44,7 +45,7 @@ Default language is **ACEScct** / **ACES2065-1**. Rec.709 is preview only. Rec.2
 
 ### 7. 到处要记住的诚实句
 
-- **整段代理，代理精度预览。**
+- **整段代理，代理精度。**
 - **CI 绿不等于达芬奇已验证。**
 - 不写已经测准。不写 ACES OT 已验。不要把 709 预览当成输出。
 
@@ -56,7 +57,7 @@ Default language is **ACEScct** / **ACES2065-1**. Rec.709 is preview only. Rec.2
 - 没有自备混源 Log（仓库不带厂商样片）
 
 记账模板（周记/进度，不进产品 UI）：
-`真机达芬奇验收：未跑（缺：Mac.app / Resolve / 自备片）。CI 绿不等于达芬奇已验证。整段代理，代理精度预览。`
+`真机达芬奇验收：未跑（缺：Mac.app / Resolve / 自备片）。CI 绿不等于达芬奇已验证。整段代理，代理精度。`
 
 有前置仍按原 1–7；过了仍「已实现、未验证」。
 
@@ -144,8 +145,8 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 ## Pending IDT / process lock
 
 - Clips without a locked curve+gamut pair stay **pending**.
-- **处理已锁定片段** / **Apply graph** write one **ACES2065-1 AP0 proxy EXR sequence** (`{stem}_ACES2065-1_proxy/frame_000000.exr`) per locked clip. **整段代理，代理精度预览.** Movie write decode uses source 10-bit / native-depth Y′CbCr → float (matrix-only; matrix and full/video from nclc/colr/vui; missing tags fail 「读不出片源色彩标签，没法写出」; no silent 709-video default; video-range 10-bit is 64/876 not /1023; not the preview 8-bit path promoted to float). Movie preview first-frame unpack shares that nclc/colr/vui matrix+range helper (no transfer; missing tags fail the same Chinese; no silent 709-video default), then displays 8-bit / long-edge 1920. Stills (TIFF / DPX / EXR) stay ImageIO — already RGB, no Y′CbCr unpack. Write is source pixels 1:1 and source-native bit depth. 16384 is a refuse ceiling (「片源边长超过 16384，未写出」), not a downsample. Do not scale export to 16384 or 1920. 8-bit Y′CbCr is only the fallback. Still a proxy, not camera-original. Not ACEScct. Not a Rec.709 .mov/.mp4. Pending / unlocked stay in the list with **先选择 Log 与色域** or **先选择成对 IDT** and produce no folder. Never guessed.
-- Primary button is **处理已锁定片段** — 不是一步还原. Shown only when locked-clip count > 0. Status: **N 条已锁定 / M 条待选**. After the batch, **N 条已写出代理 / M 条待选跳过 / K 条失败** plus 失败原因 (not a preview refresh; not a second process button). Status copy must include **整段代理，代理精度**. Before writing, estimate dest disk from locked clips only (frames × pixels × 6-byte 未压缩浮点图, plus a small margin). Unknown frames use duration×fps or a conservative 24 fps × 60 s guess (said in the note). If free space is short, do not write. Status: **磁盘空间不足，未写出** + **整段代理，代理精度**. The folder picker may show the estimate. While writing, status shows **写出代理 i/N · 第 k 帧** (**第 k / 共 m 帧** when total known). The same button becomes **取消**. Escape while writing is that same **取消** (no extra button); idle Escape does nothing. Cancel removes the in-progress `{stem}_ACES2065-1_proxy` folder so a half sequence is not a finished deliverable; completed clips stay. Status after cancel says **已取消** and still **整段代理，代理精度**. Partial output is 未完成. After a successful write, status includes the dest path (short) and **在 Finder 中显示**. Locked sidebar rows show **已写出代理** (or a short Chinese error). Clicking the **已写出代理** chip reveals that clip's `{stem}_ACES2065-1_proxy/` from the last dest. Row tap selects and refreshes preview only. Pending / failed / cancelled do not reveal. Pending stay **待选** / **先选择 Log 与色域** / **先选择成对 IDT**. A cancelled in-progress clip is not 已写出; completed clips keep 已写出代理. Re-export clears or refreshes the chip. The next folder picker starts at the last dest (UserDefaults / AppSettings). Cancelled runs do not treat a deleted half-folder as success. After each locked write, count EXRs in `{stem}_ACES2065-1_proxy/` against source duration × metadata fps (off-by-one allowed: inclusive last frame). Missing fps is **读不到帧率，未核对**; missing duration is **读不到时长，未核对** — this check never guesses 24 or 30 fps and does not reuse the dest-disk 24 fps × 60 s guess. A count mismatch is **帧数对不上**; that folder is removed so it is not **已写出代理**. An empty `_ACES2065-1_proxy` (no EXRs / 0 frames) is **帧数对不上**; decode that wrote nothing is **解码失败** — both leave no success folder / no **已写出代理**. After verified sequences, the same dest also gets the session Resolve package (`graph.xml`, DCTL, cube, `README_RESOLVE.md`) so it is openable. Missing or empty `graph.xml` / DCTL / cube / `README_RESOLVE.md` fail closed with **达芬奇包不完整，未写出**; the half package and those `_proxy` folders are removed so they are not **已写出代理**. **CI 绿不等于达芬奇已验证。** That README does not claim ACES OT and keeps 代理精度预览. When the batch finishes (including cancel / disk abort / frame-check failures), status is one Chinese summary: **N 条已写出代理 / M 条待选跳过 / K 条失败** plus 失败原因 (existing chips only). The summary does not reuse the dest-disk 24 fps × 60 s guess.
+- **处理已锁定片段** / **Apply graph** write one **ACES2065-1 AP0 proxy EXR sequence** (`{stem}_ACES2065-1_proxy/frame_000000.exr`) per locked clip. **整段代理，代理精度.** Movie write decode uses source 10-bit / native-depth Y′CbCr → float (matrix-only; matrix and full/video from nclc/colr/vui; missing tags fail 「读不出片源色彩标签，没法写出」; no silent 709-video default; video-range 10-bit is 64/876 not /1023; not the preview 8-bit path promoted to float). Movie preview first-frame unpack shares that nclc/colr/vui matrix+range helper (no transfer; missing tags fail the same Chinese; no silent 709-video default), then displays 8-bit / long-edge 1920. Stills (TIFF / DPX / EXR) stay ImageIO — already RGB, no Y′CbCr unpack. Write is source pixels 1:1 and source-native bit depth. 16384 is a refuse ceiling (「片源边长超过 16384，未写出」), not a downsample. Do not scale export to 16384 or 1920. 8-bit Y′CbCr is only the fallback. Still a proxy, not camera-original. Not ACEScct. Not a Rec.709 .mov/.mp4. Pending / unlocked stay in the list with **先选择 Log 与色域** or **先选择成对 IDT** and produce no folder. Never guessed.
+- Primary button is **处理已锁定片段** — 不是一步还原. Shown only when locked-clip count > 0. Status: **N 条已锁定 / M 条待选**. After the batch, **N 条已写出代理 / M 条待选跳过 / K 条失败** plus 失败原因 (not a preview refresh; not a second process button). Status copy must include **整段代理，代理精度**. Before writing, estimate dest disk from locked clips only (frames × pixels × 6-byte 未压缩浮点图, plus a small margin). Unknown frames use duration×fps or a conservative 24 fps × 60 s guess (said in the note). If free space is short, do not write. Status: **磁盘空间不足，未写出** + **整段代理，代理精度**. The folder picker may show the estimate. While writing, status shows **写出代理 i/N · 第 k 帧** (**第 k / 共 m 帧** when total known). The same button becomes **取消**. Escape while writing is that same **取消** (no extra button); idle Escape does nothing. Cancel removes the in-progress `{stem}_ACES2065-1_proxy` folder so a half sequence is not a finished deliverable; completed clips stay. Status after cancel says **已取消** and still **整段代理，代理精度**. Partial output is 未完成. After a successful write, status includes the dest path (short) and **在 Finder 中显示**. Locked sidebar rows show **已写出代理** (or a short Chinese error). Clicking the **已写出代理** chip reveals that clip's `{stem}_ACES2065-1_proxy/` from the last dest. Row tap selects and refreshes preview only. Pending / failed / cancelled do not reveal. Pending stay **待选** / **先选择 Log 与色域** / **先选择成对 IDT**. A cancelled in-progress clip is not 已写出; completed clips keep 已写出代理. Re-export clears or refreshes the chip. The next folder picker starts at the last dest (UserDefaults / AppSettings). Cancelled runs do not treat a deleted half-folder as success. After each locked write, count EXRs in `{stem}_ACES2065-1_proxy/` against source duration × metadata fps (off-by-one allowed: inclusive last frame). Missing fps is **读不到帧率，未核对**; missing duration is **读不到时长，未核对** — this check never guesses 24 or 30 fps and does not reuse the dest-disk 24 fps × 60 s guess. A count mismatch is **帧数对不上**; that folder is removed so it is not **已写出代理**. An empty `_ACES2065-1_proxy` (no EXRs / 0 frames) is **帧数对不上**; decode that wrote nothing is **解码失败** — both leave no success folder / no **已写出代理**. After verified sequences, the same dest also gets the session Resolve package (`graph.xml`, DCTL, cube, `README_RESOLVE.md`) so it is openable. Missing or empty `graph.xml` / DCTL / cube / `README_RESOLVE.md` fail closed with **达芬奇包不完整，未写出**; the half package and those `_proxy` folders are removed so they are not **已写出代理**. **CI 绿不等于达芬奇已验证。** That README does not claim ACES OT and keeps 代理精度. When the batch finishes (including cancel / disk abort / frame-check failures), status is one Chinese summary: **N 条已写出代理 / M 条待选跳过 / K 条失败** plus 失败原因 (existing chips only). The summary does not reuse the dest-disk 24 fps × 60 s guess.
 - Locked-clip export works when other clips in the session are still pending. Do not require the whole bin to be locked. **导出 ACEScct / EXR** in **高级** is the same locked-only rule (behind **高级**).
 - Main path: drop → lock IDT → exposure/WB → 处理已锁定片段 (writes proxy EXR sequence + openable Resolve XML/DCTL/cube). One primary process button. Full-precision / camera-original bit-depth is later.
 - WB inspector shows three states: 机内 / 估计确认才写 / 灰卡 (source label 白平衡（估计） still after confirm). Distinct tone/weight. Estimate chip lights only after confirm; proposed estimate is outline-only. Grey-card overrides.

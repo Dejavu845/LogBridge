@@ -982,13 +982,13 @@ def test_honest_proxy_copy_and_filename():
     status = processed_status_text(2, 1)
     assert HONEST_PROXY_NOTE in status
     assert "整段代理，代理精度" in status
-    assert "仅预览" in status
+    assert "仅预览" not in status
     assert "已实现（未验证）" in status
     assert "2 条已处理" in status
     _assert_chengpian_not_a_deliverable_claim(status)
     assert HONEST_PROXY_NOTE in PROCESSED_STATUS_TEMPLATE
     assert HONEST_PROXY_NOTE in FOLDER_PICKER_MESSAGE
-    assert "整段代理，代理精度预览" in FOLDER_PICKER_MESSAGE
+    assert "整段代理，代理精度" in FOLDER_PICKER_MESSAGE
     assert "ACES2065-1" in FOLDER_PICKER_MESSAGE
     assert "ACEScct" not in FOLDER_PICKER_MESSAGE
     assert HONEST_PROXY_NOTE in PROCESS_BUTTON_HELP
@@ -2264,7 +2264,7 @@ def test_locked_success_implies_exr_and_complete_resolve_bundle(tmp_path: Path):
     assert "Not an ACES Output Transform" not in readme.split(
         "## Graph (serial nodes)", 1
     )[1].split("## How to bypass", 1)[0]
-    assert "代理精度预览" in readme
+    assert "代理精度" in readme
     chips = sidebar_export_chips([locked, pending], report)
     assert chips["locked.mov"] == WRITTEN_CHIP
     assert chips["pending.mov"] == REASON_PICK_PAIRED_IDT

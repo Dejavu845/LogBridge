@@ -218,7 +218,7 @@ def test_pending_clips_block_process_and_export():
     assert "待选跳过" in clip
     assert "失败原因" in clip
     assert "writeLockedDeliverables" in clip
-    assert "整段代理，代理精度预览" in clip
+    assert "整段代理，代理精度" in clip
     assert "已写出代理" in clip
     assert "exportChip" in clip
     assert "revealClipExportInFinder" in clip
@@ -257,7 +257,7 @@ def test_docs_name_the_review_locks():
     assert "条已锁定" in blob
     assert "待选" in blob and "已锁定" in blob
     assert "先选择成对 IDT" in blob
-    assert "整段代理，代理精度预览" in blob
+    assert "整段代理，代理精度" in blob
     assert "已写出代理" in blob
     assert "待选跳过" in blob
     assert "失败原因" in blob
@@ -288,7 +288,7 @@ def test_docs_name_resolve_real_machine_checklist():
     assert "chromaticities" in acceptance
     assert "达芬奇包" in acceptance
     assert "HDR 预览建不出" in acceptance
-    assert "整段代理，代理精度预览" in acceptance
+    assert "整段代理，代理精度" in acceptance
     assert "不是视频" in acceptance
     assert "ACEScct 成片" not in blob
     # P2 trial copy: Archive → .app path → another Mac → Gatekeeper / xattr.
@@ -329,7 +329,7 @@ def test_trial_quarantine_script_is_local_xattr_only():
     assert "不是公证" in text
     assert "notarytool" in text  # named so we can say we do not run it
     assert "不要拿去提交 Apple" in text
-    assert "整段代理，代理精度预览" in text
+    assert "整段代理，代理精度" in text
     assert "CI 绿不等于达芬奇已验证" in text
     assert "altool" not in text
     assert "APPLE_ID" not in text
@@ -560,7 +560,7 @@ def test_process_bar_and_advanced_help_are_chinese():
     assert REASON_PICK_LOG_GAMUT == "先选择 Log 与色域"
     assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
     assert PROCESS_DELIVERABLE_NOTE_UI == (
-        "代理 EXR，不是视频。整段代理，代理精度预览。"
+        "代理 EXR，不是视频。整段代理，代理精度。"
     )
     assert PROCESS_BUTTON_HELP_UI == "写出的是图片序列（EXR），不是 mp4/mov"
     assert ADVANCED_EXPORT_HELP == (
@@ -2116,7 +2116,7 @@ def test_write_progress_on_preview_inspector_locks():
     center = content.split("VStack(spacing: 0)")[1].split(".frame(minWidth: 520)")[0]
     assert "PairedIDTBar" in center
     assert center.index("SplitPreview") < center.index("PairedIDTBar")
-    assert "整段代理，代理精度预览" in content
+    assert "整段代理，代理精度" in content
     assert "仅预览" in _all_swift()
 
 
@@ -2427,8 +2427,8 @@ def test_delete_removes_clip_from_session_not_disk():
     assert "already-written `_proxy`" in acceptance
     assert "select next, else previous" in acceptance
     assert "把混源文件夹拖进来" in acceptance
-    assert "整段代理，代理精度预览" in readme
-    assert "整段代理，代理精度预览" in acceptance
+    assert "整段代理，代理精度" in readme
+    assert "整段代理，代理精度" in acceptance
     assert "精准" not in fn
     assert "Escape while writing" in readme
     assert "idle Escape does nothing" in readme
@@ -2516,8 +2516,8 @@ def test_escape_cancels_write_only():
     assert "idle Escape does nothing" in readme
     assert "Escape while writing" in acceptance
     assert "idle Escape does nothing" in acceptance or "Idle Escape does nothing" in acceptance
-    assert "已取消" in readme and "整段代理，代理精度预览" in readme
-    assert "已取消" in acceptance and "整段代理，代理精度预览" in acceptance
+    assert "已取消" in readme and "整段代理，代理精度" in readme
+    assert "已取消" in acceptance and "整段代理，代理精度" in acceptance
 
 
 def test_import_skip_summary_is_human_chinese():
@@ -2672,7 +2672,7 @@ def test_selected_clip_glanceable_on_preview():
     assert 'Button("重试")' not in sidebar
     assert "精准" not in sidebar
 
-    assert "整段代理，代理精度预览" in content
+    assert "整段代理，代理精度" in content
     assert "仅预览" in _all_swift()
     assert PREVIEW_STATUS_ODT_OFF in clip
     assert "成片预览关" not in clip
@@ -2729,7 +2729,7 @@ def test_process_ui_says_proxy_exr_not_mov_and_failures_stay_chinese():
     resolve_fn = clip.split("func exportResolve()")[1]
 
     assert PROCESS_DELIVERABLE_NOTE_UI == (
-        "代理 EXR，不是视频。整段代理，代理精度预览。"
+        "代理 EXR，不是视频。整段代理，代理精度。"
     )
     assert PROCESS_DELIVERABLE_NOTE_UI in bar
     assert PROCESS_BUTTON_HELP_UI in bar
@@ -3002,7 +3002,7 @@ def test_trial_usability_copy_is_locked():
     assert "R3D" not in MISSING_YCBCR_TAGS_CHIP_UI
     assert "BRAW" not in MISSING_YCBCR_TAGS_CHIP_UI
 
-    assert PROCESS_DELIVERABLE_NOTE_UI == "代理 EXR，不是视频。整段代理，代理精度预览。"
+    assert PROCESS_DELIVERABLE_NOTE_UI == "代理 EXR，不是视频。整段代理，代理精度。"
     assert PROCESS_DELIVERABLE_NOTE_UI.startswith("代理 EXR，不是视频")
     assert HONEST_PROXY_NOTE in PROCESS_DELIVERABLE_NOTE_UI
     assert f'Text("{PROCESS_DELIVERABLE_NOTE_UI}")' in bar
@@ -3488,7 +3488,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     ResolveExporter.exportNote. Leave comments, XML attrs, cube TITLE,
     implemented (unverified) alone.
 
-    Wrote N files… / Wrote  → #70 已写出 N 个文件。…整段代理，代理精度预览.
+    Wrote N files… / Wrote  → #70 已写出 N 个文件。…整段代理，代理精度.
     Export failed: / Export failed → 写出失败.
     No clip selected → 没有素材.
     exportNote CCT fallback → 待定 / 单位阵 (not pending / identity).
@@ -3519,7 +3519,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
         "处理已锁定片段 — 已取消。"
         "{processed} 条已处理 / {skipped} 条已跳过"
         "（先选择 Log 与色域 / 先选择成对 IDT）。"
-        "整段代理，代理精度。仅预览。已实现（未验证）。"
+        "整段代理，代理精度。已实现（未验证）。"
     )
     assert f'static let writeFailedChip = "{WRITE_FAILED_CHIP}"' in clip
     assert f'static let cancelledNote = "{CANCELLED_NOTE}"' in clip
@@ -3580,7 +3580,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     assert "条已跳过" in cancel_note
     assert REASON_PICK_LOG_GAMUT in cancel_note
     assert REASON_PICK_PAIRED_IDT in cancel_note
-    assert "仅预览" in cancel_note
+    assert "仅预览" not in cancel_note
     assert "已实现（未验证）" in cancel_note
     assert "Cancelled" not in ui_cancel
     assert "canceled" not in ui_cancel
@@ -3600,7 +3600,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     assert "条失败" in summary
     assert "failedBucket" in summary
     assert HONEST_PROXY_NOTE in summary
-    assert "仅预览" in summary
+    assert "仅预览" not in summary
     assert "已实现（未验证）" in summary
     assert "Cancelled" not in ui_summary
     assert "canceled" not in ui_summary
@@ -3806,7 +3806,7 @@ def test_export_note_is_plain_chinese():
     assert EXPORT_NOTE_TITLE == "LogBridge M1 Resolve 导出（已实现（未验证））"
     assert EXPORT_NOTE_WORKSPACE == "工作空间：ACEScct 时间线 / ACES2065-1 交换。"
     assert EXPORT_NOTE_PROXY == (
-        "主按钮时间线/EXR 是整段代理，代理精度预览"
+        "主按钮时间线/EXR 是整段代理，代理精度"
         "（ACES2065-1 _proxy 序列），不是 ACEScct。"
     )
     assert "ACEScct" in EXPORT_NOTE_WORKSPACE
@@ -11767,3 +11767,157 @@ def test_banned_substrings_absent_from_user_facing_copy():
         if token in generated:
             hits.append(f"generated README/export: {token}")
     assert not hits, "banned user-facing copy:\n" + "\n".join(hits)
+
+
+# New entries need PM approval. Exactly these two, and only these two.
+_PROXY_EXR_PREVIEW_WHITELIST = (
+    # (a) #142 combined cube is a 709 preview LUT by design.
+    # The file name and the log lines that name it may say Preview / 预览.
+    "00_Combined_Preview709_<idt>.cube",
+    # (b) The HDR/709 preview window and its badge are the preview itself,
+    # not a written proxy EXR. They may say 预览 / Preview.
+    "HDR/709 preview window and badge",
+)
+
+
+def _has_preview_word(text: str) -> bool:
+    """Chinese 预览, or English Preview in any capitalization."""
+    lowered = text.lower()
+    return "预览" in text or "preview" in lowered
+
+
+def _quoted_user_strings(src: str) -> str:
+    """String literals only. Identifiers such as refreshPreview are not copy."""
+    import re
+
+    parts = re.findall(r'"((?:\\.|[^"\\])*)"', _code_without_comments(src))
+    return "\n".join(parts)
+
+
+def test_proxy_exr_buttons_names_and_logs_omit_preview_word():
+    """Written proxy EXR labels, file names, and logs omit 预览 and Preview.
+
+    The whitelist has exactly two preview-by-design surfaces. It does not
+    excuse a proxy-EXR button, file name, or log line. New entries need PM approval.
+    """
+    assert _PROXY_EXR_PREVIEW_WHITELIST == (
+        "00_Combined_Preview709_<idt>.cube",
+        "HDR/709 preview window and badge",
+    )
+    assert len(_PROXY_EXR_PREVIEW_WHITELIST) == 2
+
+    from color.batch import (
+        CANCEL_BUTTON,
+        CANCELLED_STATUS_TEMPLATE,
+        DELIVERABLE_DIR_SUFFIX,
+        DISK_SHORT_STATUS,
+        DISK_SHORT_STATUS_TEMPLATE,
+        FOLDER_PICKER_MESSAGE,
+        PROCESS_BUTTON_HELP,
+        PROCESS_DELIVERABLE_NOTE,
+        WRITTEN_CHIP,
+        WRITE_FAILED_CHIP,
+        batch_summary_text,
+        cancelled_status_text,
+        deliverable_name,
+        processed_status_text,
+        progress_text,
+        sequence_frame_name,
+    )
+    from color.resolve_export import EXPORT_NOTE_PROXY
+
+    content = _read(CONTENT)
+    clip = _read(CLIP)
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    swift = _all_swift()
+
+    buttons = {
+        "PROCESS_BUTTON": PROCESS_BUTTON,
+        "CANCEL_BUTTON": CANCEL_BUTTON,
+        "PROCESS_BUTTON_HELP_UI": PROCESS_BUTTON_HELP_UI,
+        "PROCESS_BUTTON_HELP": PROCESS_BUTTON_HELP,
+        "swift process bar": _quoted_user_strings(
+            content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+        ),
+    }
+    names = {
+        "deliverable_name": deliverable_name("clip.mov"),
+        "sequence_frame_name": sequence_frame_name(0),
+        "DELIVERABLE_DIR_SUFFIX": DELIVERABLE_DIR_SUFFIX,
+        "swift sequence dir": _quoted_user_strings(
+            exporter.split("static func deliverableSequenceDirectory")[1].split(
+                "static func sequenceFrameURL"
+            )[0]
+        ),
+        "swift sequence frame": _quoted_user_strings(
+            exporter.split("static func sequenceFrameURL")[1].split("static func ")[0]
+        ),
+    }
+    logs = {
+        "processed": processed_status_text(2, 1),
+        "CANCELLED_STATUS_TEMPLATE": CANCELLED_STATUS_TEMPLATE,
+        "cancelled": cancelled_status_text(1, 2),
+        "DISK_SHORT_STATUS": DISK_SHORT_STATUS,
+        "DISK_SHORT_STATUS_TEMPLATE": DISK_SHORT_STATUS_TEMPLATE,
+        "batch_summary": batch_summary_text(1, 0, 0),
+        "progress": progress_text(2, 5, 120, 240),
+        "FOLDER_PICKER_MESSAGE": FOLDER_PICKER_MESSAGE,
+        "FOLDER_PICKER_MESSAGE_UI": FOLDER_PICKER_MESSAGE_UI,
+        "PROCESS_DELIVERABLE_NOTE": PROCESS_DELIVERABLE_NOTE,
+        "PROCESS_DELIVERABLE_NOTE_UI": PROCESS_DELIVERABLE_NOTE_UI,
+        "EXPORT_NOTE_PROXY": EXPORT_NOTE_PROXY,
+        "WRITTEN_CHIP": WRITTEN_CHIP,
+        "WRITE_FAILED_CHIP": WRITE_FAILED_CHIP,
+        "swift picker": _quoted_user_strings(
+            clip.split("func processLockedClips()")[1].split("func writeLockedDeliverables")[0]
+        ),
+        "swift summary": _quoted_user_strings(
+            clip.split("static func batchSummaryText")[1].split("func exportLockedEXR")[0]
+        ),
+        "swift cancel": _quoted_user_strings(
+            clip.split("static func cancelledExportNote")[1].split("static let bytesPerEXRPixel")[0]
+        ),
+        "swift progress": _quoted_user_strings(
+            clip.split("static func exportProgressText")[1].split("static func cancelledExportNote")[0]
+        ),
+    }
+    proxy_lines = [
+        line
+        for line in exporter.splitlines()
+        if "整段代理，代理精度" in line
+    ]
+    assert proxy_lines, "Swift export log lost the proxy honesty line"
+    for index, line in enumerate(proxy_lines):
+        logs[f"swift proxy line {index}"] = line
+
+    hits = [
+        f"{name}: {text}"
+        for name, text in {**buttons, **names, **logs}.items()
+        if _has_preview_word(text)
+    ]
+    assert not hits, "proxy EXR copy says 预览/Preview:\n" + "\n".join(hits)
+
+    for text in {**buttons, **names, **logs}.values():
+        assert "代理精度预览" not in text
+        if "代理精度" in text:
+            assert "预览" not in text
+            assert "preview" not in text.lower()
+
+    # (a) combined cube file and its log mention. Preview by design.
+    cube = "00_Combined_Preview709_<idt>.cube"
+    assert cube == _PROXY_EXR_PREVIEW_WHITELIST[0]
+    assert "00_Combined_Preview709_" in exporter
+    cube_log = "预览查找表（IDT → 曝光 → 白平衡 → 709 预览）。已实现（未验证）。"
+    assert cube_log in exporter
+    assert _has_preview_word(cube)
+    assert _has_preview_word(cube_log)
+    assert "整段代理" not in cube_log
+
+    # (b) HDR/709 preview window and its badge. Preview by design.
+    assert _PROXY_EXR_PREVIEW_WHITELIST[1] == "HDR/709 preview window and badge"
+    assert 'Text("仅预览")' in swift
+    assert '.help("仅预览")' in swift
+    assert '.accessibilityLabel("仅预览")' in swift
+    assert "HLG 仅预览" in swift
+    assert "PQ 仅预览" in swift
+    assert _has_preview_word('Text("仅预览")')

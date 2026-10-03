@@ -200,7 +200,7 @@ def test_stale_preview_decode_dropped_on_selection_change():
     assert "stale" in session_refresh.lower() or "selected" in session_refresh.lower()
 
     assert "仅预览" in engine
-    assert "整段代理，代理精度预览" in engine
+    assert "整段代理，代理精度" in engine
     assert "精准" not in session_refresh
 
 
@@ -294,7 +294,7 @@ def test_preview_caches_keep_only_selected_clip():
     assert 'DispatchQueue(label: "app.logbridge.preview"' in engine
     assert "not a thread pool" in engine
     assert "仅预览" in engine
-    assert "整段代理，代理精度预览" in engine
+    assert "整段代理，代理精度" in engine
 
     session_refresh = clip.split("func refreshPreview()")[1].split("func refreshODTOnly()")[0]
     assert "preview.refresh(clip: selectedClip" in session_refresh
@@ -321,7 +321,7 @@ def test_preview_decode_stays_8bit_first_and_scrub_odt_only():
     assert "Scrub does not re-run IDT" in engine
     assert "rgbFloatFromLogPixelBuffer" not in cached
     assert "仅预览" in engine
-    assert "整段代理，代理精度预览" in engine
+    assert "整段代理，代理精度" in engine
 
 
 def test_preview_unpack_shares_source_ycbcr_helper():
@@ -414,7 +414,7 @@ def test_preview_unpack_shares_source_ycbcr_helper():
     assert "rgbFloatFromLogPixelBuffer" not in odt_hit
     assert "publishODTOnly" in odt_hit
     assert "仅预览" in engine
-    assert "整段代理，代理精度预览" in engine
+    assert "整段代理，代理精度" in engine
 
 
 def test_preview_stills_imageio_no_ycbcr_unpack():
@@ -477,7 +477,7 @@ def test_preview_stills_imageio_no_ycbcr_unpack():
     )[0]
     assert "requireSourceYCbCrUnpack" in movie_preview
     assert "仅预览" in engine
-    assert "整段代理，代理精度预览" in engine
+    assert "整段代理，代理精度" in engine
 
 
 def test_export_write_overlaps_next_copynext():
@@ -561,7 +561,7 @@ def test_export_write_overlaps_next_copynext():
     assert "OperationQueue" not in engine
     assert "ThreadPool" not in engine
     assert "not a thread pool" in engine
-    assert "整段代理，代理精度预览" in engine
+    assert "整段代理，代理精度" in engine
     assert "仅预览" in engine
     assert "精准" not in export_seq
     assert "精准" not in export_body
@@ -665,9 +665,9 @@ def test_export_write_is_source_pixels_not_preview_1920_8bit():
     assert "var acesOTNote: String" in graph
 
     assert "_ACES2065-1_proxy" in clip
-    assert "整段代理，代理精度预览" in engine
-    assert "整段代理，代理精度预览" in clip
-    assert "整段代理，代理精度预览" in batch
+    assert "整段代理，代理精度" in engine
+    assert "整段代理，代理精度" in clip
+    assert "整段代理，代理精度" in batch
     assert "source pixels 1:1" in readme
     assert "source pixels 1:1" in acceptance
     assert "source pixels 1:1" in batch

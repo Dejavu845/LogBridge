@@ -482,8 +482,8 @@ final class PreviewEngine: ObservableObject {
     /// hardcoded BT.709 + video-range for every clip. No Rec.709 transfer
     /// before IDT. Video-range 10-bit is not /1023. It does not use the
     /// preview 8-bit path and then promote those 8-bit pixels
-    /// (`extractRGB` / 255). Still a proxy — 整段代理，代理精度预览.
-    /// Bit-depth going up is still 整段代理，代理精度预览.
+    /// (`extractRGB` / 255). Still a proxy — 整段代理，代理精度.
+    /// Bit-depth going up is still 整段代理，代理精度.
     /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
     /// Write is source pixels 1:1. ``writeLongEdgeCeiling`` (16384) is refuse
     /// only — do not scale export to 16384 or 1920.

@@ -268,7 +268,7 @@ final class SessionModel: ObservableObject {
     /// Unlocked stay listed with a Chinese reason. After the batch,
     /// lastExportNote is 「N 条已写出代理 / M 条待选跳过 / K 条失败」.
     /// Never guess an IDT. 不是一步还原. One process entry point.
-    /// Mixed bins are allowed. 整段代理，代理精度预览.
+    /// Mixed bins are allowed. 整段代理，代理精度.
     func processLockedClips() {
         if isWritingDeliverables { return }
         let locked = clips.filter(\.hasLockedPair)
@@ -286,8 +286,8 @@ final class SessionModel: ObservableObject {
         panel.canCreateDirectories = true
         panel.prompt = "写出"
         let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
-        // Python copy-lock (test_batch_locked): 已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，代理精度预览。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。仅预览。已实现（未验证）。
-        panel.message = "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。整段代理，代理精度预览。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。仅预览。已实现（未验证）。" + estimate.pickerSuffix
+        // Python copy-lock (test_batch_locked): 已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，代理精度。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。
+        panel.message = "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。整段代理，代理精度。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。" + estimate.pickerSuffix
         if let remembered = settings.lastExportDirectoryURL {
             panel.directoryURL = remembered
         }
@@ -433,7 +433,7 @@ final class SessionModel: ObservableObject {
         if !reasons.isEmpty {
             note += "。\(failedBucket) " + reasons.joined(separator: " ")
         }
-        note += "。整段代理，代理精度。仅预览。已实现（未验证）。"
+        note += "。整段代理，代理精度。已实现（未验证）。"
         if let dest, wrote > 0 {
             note += " " + shortExportPath(dest)
         }
@@ -444,7 +444,7 @@ final class SessionModel: ObservableObject {
     /// After write, count EXRs against duration × metadata fps only.
     /// Empty folder / 0 frames / mismatch / missing timing is a Chinese failure;
     /// the folder is removed so it is not 已写出代理.
-    /// Not ACEScct. Not a Rec.709 movie. 整段代理，代理精度预览.
+    /// Not ACEScct. Not a Rec.709 movie. 整段代理，代理精度.
     func exportLockedEXR(
         clip: Clip,
         graph: SerialGraph,
@@ -519,7 +519,7 @@ final class SessionModel: ObservableObject {
 
     /// Cancelled batch. 已取消 + honesty. Partial output is 未完成.
     static func cancelledExportNote(processed: Int, skipped: Int) -> String {
-        "处理已锁定片段 — 已取消。\(processed) 条已处理 / \(skipped) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，代理精度。仅预览。已实现（未验证）。"
+        "处理已锁定片段 — 已取消。\(processed) 条已处理 / \(skipped) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，代理精度。已实现（未验证）。"
     }
 
     /// Uncompressed half RGB (3 × 2). Matches color/batch.py.
@@ -1248,7 +1248,7 @@ final class SessionModel: ObservableObject {
                     cct: self.graph.wbCCT,
                     tint: self.graph.wbTint
                 )
-                note += "\n已写出 \(written.count) 个文件。\(locked.count) 条已锁定 / \(skipped.count) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。仅预览。已实现（未验证）。整段代理，代理精度预览。"
+                note += "\n已写出 \(written.count) 个文件。\(locked.count) 条已锁定 / \(skipped.count) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。整段代理，代理精度。"
                 self.lastExportNote = note
             } catch {
                 self.lastExportNote = Self.shortExportChip(for: error)

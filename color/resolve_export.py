@@ -184,7 +184,7 @@ EXPORT_NOTE_WORKSPACE = "工作空间：ACEScct 时间线 / ACES2065-1 交换。
 EXPORT_NOTE_REC709 = "Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换。仅预览。"
 EXPORT_NOTE_WB_BYPASS = "关闭白平衡时写出旁路（不改颜色），不写进查找表。"
 EXPORT_NOTE_PROXY = (
-    "主按钮时间线/EXR 是整段代理，代理精度预览（ACES2065-1 _proxy 序列），不是 ACEScct。"
+    "主按钮时间线/EXR 是整段代理，代理精度（ACES2065-1 _proxy 序列），不是 ACEScct。"
 )
 EXPORT_NOTE_IN_CAMERA = (
     "机内色温只填旋钮，默认是单位阵。"
@@ -249,7 +249,7 @@ RESOLVE_README_HONESTY = f"""## 诚实说明
 
 - {EXPORT_NOTE_REC709}
 - {EXPORT_NOTE_WB_BYPASS}
-- 主按钮时间线/EXR 是 **整段代理，代理精度预览**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
+- 主按钮时间线/EXR 是 **整段代理，代理精度**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
 - {EXPORT_NOTE_IN_CAMERA}
 """
 
