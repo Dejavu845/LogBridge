@@ -43,7 +43,7 @@ FIXTURES = ROOT / "tests" / "fixtures" / "sidecar"
 DETECTOR = ROOT / "macos/LogBridge/LogBridge/Detection/ClipDetector.swift"
 DETECT_PY = ROOT / "color/detect.py"
 
-_BANNED_COPY = ("支持", "一键", "精准", "成片")
+_BANNED_COPY = ("支持", "一键", "精准", "成片", "成品")
 
 
 def _read(path: Path) -> str:
@@ -140,8 +140,6 @@ def test_metadata_notes_match_python_and_skip_banned_words():
         assert note in detector
     literals = re.findall(r'note: "([^"]+)"', detector)
     for note in literals:
-        if note == NOTE_DLOG_M:
-            continue
         for word in _BANNED_COPY:
             assert word not in note, note
 

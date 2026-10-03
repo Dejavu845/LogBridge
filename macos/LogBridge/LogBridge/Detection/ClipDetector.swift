@@ -500,7 +500,7 @@ enum ClipDetector {
                 gamut: nil,
                 source: .metadata,
                 needsUserPicker: true,
-                note: "D-Log M 暂不支持，请用 D-Log + D-Gamut"
+                note: "D-Log M 暂不能处理，请用 D-Log + D-Gamut"
             )
         }
         if dji.contains("d-log") || dji.contains("dlog") {
