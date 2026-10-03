@@ -607,7 +607,10 @@ def test_process_bar_and_advanced_help_are_chinese():
         assert "whole bin" not in help_text
         _chengpian_only_honesty(help_text)
 
-    assert _help_literals(bar) == [PROCESS_BUTTON_HELP_UI]
+    assert _help_literals(bar) == [
+        "先选成对 Log 与色域",
+        PROCESS_BUTTON_HELP_UI,
+    ]
     assert ADVANCED_EXPORT_HELP in _help_literals(advanced)
     assert ADVANCED_DISCLOSURE_HELP in _help_literals(advanced)
     assert _help_literals(strip) == []
@@ -11682,6 +11685,75 @@ def test_combined_preview_lut_readme_row_copy():
     swift = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
     assert COMBINED_PREVIEW709_README_ROLE in swift
     assert "00_Combined_Preview709_<idt>.cube" in swift
+
+
+UNLOCKED_TOOLBAR_HINT = "先选成对 Log 与色域"
+
+
+def test_toolbar_hint_copy_is_locked():
+    """Disabled primary action and the visible not-locked line share one phrase."""
+    assert PROCESS_BUTTON == "处理已锁定片段"
+    assert UNLOCKED_TOOLBAR_HINT == "先选成对 Log 与色域"
+    assert UNLOCKED_TOOLBAR_HINT != REASON_PICK_LOG_GAMUT
+    content = _read(CONTENT)
+    hint = content.split("struct UnlockedPairHint")[1].split("struct AdvancedPanel")[0]
+    assert f'Text("{UNLOCKED_TOOLBAR_HINT}")' in hint
+    assert f'.help("{UNLOCKED_TOOLBAR_HINT}")' in content
+    assert f'.accessibilityLabel("{UNLOCKED_TOOLBAR_HINT}")' in content
+    assert f'Button(session.isWritingDeliverables ? "取消" : "{PROCESS_BUTTON}")' in content
+    for token in _BANNED_USER_COPY:
+        assert token not in UNLOCKED_TOOLBAR_HINT
+        assert token not in PROCESS_BUTTON
+    assert "预览" not in UNLOCKED_TOOLBAR_HINT
+    assert "Preview" not in UNLOCKED_TOOLBAR_HINT
+
+
+def test_unlocked_hint_is_visible_only_when_none_locked():
+    """Not-locked state view. The line is in layout only while lockedClipCount == 0."""
+    content = _read(CONTENT)
+    window = content.split("struct ContentView")[1].split("struct ClipListArrowMonitor")[0]
+    hint = content.split("struct UnlockedPairHint")[1].split("struct AdvancedPanel")[0]
+    assert 'Text("先选成对 Log 与色域")' in hint
+    assert ".foregroundStyle(.secondary)" in hint
+    assert ".font(.caption)" in hint
+    assert ".font(.system(" not in hint
+    assert ".background(" not in hint
+    assert ".opacity(" not in hint
+    assert ".hidden(" not in hint
+    assert window.count("UnlockedPairHint()") == 1
+    call = window.split("if session.lockedClipCount == 0")[1].split("}")[0]
+    assert "UnlockedPairHint()" in call
+    assert ".opacity" not in call
+    assert ".hidden" not in call
+    button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
+    assert ".disabled(session.lockedClipCount == 0)" in button
+    assert "ToolbarItem(placement: .primaryAction)" in window
+    assert window.count("ToolbarItem(") == 1
+    assert window.count(".primaryAction") == 1
+    assert _all_swift().count("ToolbarItem(placement: .primaryAction)") == 1
+
+
+def test_system_toolbar_has_one_primary_button():
+    """Window toolbar: one primary action. Import and settings stay in the menus."""
+    content = _read(CONTENT)
+    app = _read(SWIFT_ROOT / "LogBridge/LogBridge/LogBridgeApp.swift")
+    swift = _all_swift()
+    assert swift.count("ToolbarItem(placement: .primaryAction)") == 1
+    assert swift.count("ToolbarItem(") == 1
+    toolbar = content.split(".toolbar {")[1].split("}")[0]
+    assert toolbar.count("ToolbarItem") == 1
+    assert "ProcessLockedToolbarButton(session: session)" in toolbar
+    assert 'Button("添加…")' not in toolbar
+    assert 'Button("设置…")' not in toolbar
+    assert "keyboardShortcut" not in toolbar
+    assert 'Button("添加…")' in app
+    assert 'Button("设置…")' in app
+    button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ")[0]
+    assert button.count("Button(") == 1
+    assert "处理已锁定片段" in button
+    assert "取消" in button
+    assert "processLockedClips" in button
+    assert "cancelLockedDeliverables" in button
 
 
 def test_command_o_and_comma_each_appear_once():

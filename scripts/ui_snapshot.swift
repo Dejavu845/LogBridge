@@ -356,6 +356,8 @@ private func makeSampleSession(_ state: SampleState) -> SessionModel {
     case .empty:
         break
     case .droppedAwaiting:
+        // Not locked. Neither sample has a paired IDT, so the window
+        // keeps the visible line 先选成对 Log 与色域.
         let unresolved = sampleClip(
             name: "sample-a.mov",
             idt: nil,

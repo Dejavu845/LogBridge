@@ -55,6 +55,21 @@ def test_snapshot_tool_covers_sizes_appearances_and_states():
     assert TOOL.relative_to(ROOT).parts[0] == "scripts"
 
 
+def test_dropped_awaiting_is_the_not_locked_screenshot_state():
+    """Clips imported, none locked: the visible hint is in that render."""
+    tool = TOOL.read_text(encoding="utf-8")
+    content = CONTENT.read_text(encoding="utf-8")
+    awaiting = tool.split("case .droppedAwaiting:")[1].split("case .locked:")[0]
+    locked = tool.split("case .locked:")[1].split("case .afterWrite:")[0]
+    assert "idt: nil" in awaiting
+    assert "先选成对 Log 与色域" in awaiting
+    assert "lockedSample" in locked
+    assert "sonySLog3SGamut3" in tool.split("private func lockedSample")[1]
+    assert "if session.lockedClipCount == 0" in content
+    assert "UnlockedPairHint()" in content.split("if session.lockedClipCount == 0")[1]
+    assert 'Text("先选成对 Log 与色域")' in content
+
+
 def test_content_view_accepts_injected_session_and_app_uses_default():
     content = CONTENT.read_text(encoding="utf-8")
     app = APP.read_text(encoding="utf-8")

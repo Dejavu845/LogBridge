@@ -21,6 +21,12 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 8) {
             WorkspaceHeader(session: session)
+            if session.lockedClipCount == 0 {
+                UnlockedPairHint()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+            }
             if session.clips.isEmpty {
                 EmptyPreviewStage(session: session)
             } else {
@@ -40,6 +46,11 @@ struct ContentView: View {
                     InspectorView(session: session)
                         .frame(minWidth: 196, idealWidth: 220, maxWidth: 260)
                 }
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                ProcessLockedToolbarButton(session: session)
             }
         }
         .onDrop(of: [.fileURL], isTargeted: $session.dropTargeted) { providers in
@@ -193,7 +204,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     }
 }
 
-/// Center column action. Shown only when locked-clip count > 0.
+/// Center column status. The primary button lives in the window toolbar.
 /// Write progress lives on SplitPreview (WriteProgressLine), not here.
 /// Not a second process button — StatusBar has no process control.
 /// 不是一步还原. Hover/help is Chinese locked phrases.
@@ -203,9 +214,9 @@ struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("写出代理")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -213,6 +224,7 @@ struct ProcessLockedBar: View {
                         .font(.subheadline.weight(.semibold))
                 }
                 if let reason = session.selectedClip?.processSkipReason {
+                    // Warning: skip reason. Orange is only for this warning.
                     Text(reason)
                         .font(.caption)
                         .foregroundStyle(.orange)
@@ -222,24 +234,13 @@ struct ProcessLockedBar: View {
                         .background(Color.orange.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 } else if !session.showsProcessLockedButton {
+                    // Warning: nothing locked yet. Orange is only for this warning.
                     Text(session.processBlockedReason ?? "先选择 Log 与色域")
                         .font(.caption)
                         .foregroundStyle(.orange)
                         .lineLimit(2)
                 }
                 Spacer(minLength: 8)
-                if session.showsProcessLockedButton {
-                    Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
-                        if session.isWritingDeliverables {
-                            session.cancelLockedDeliverables()
-                        } else {
-                            session.processLockedClips()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-                    .help("写出的是图片序列（EXR），不是 mp4/mov")
-                }
             }
             Text("代理 EXR，不是视频。整段代理，代理精度。")
                 .font(.caption)
@@ -252,9 +253,54 @@ struct ProcessLockedBar: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
         .background(Color.accentColor.opacity(0.06))
+    }
+}
+
+/// The window toolbar's only primary action.
+/// Disabled until at least one clip is locked. Same button cancels a write.
+struct ProcessLockedToolbarButton: View {
+    @ObservedObject var session: SessionModel
+
+    var body: some View {
+        Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
+            if session.isWritingDeliverables {
+                session.cancelLockedDeliverables()
+            } else {
+                session.processLockedClips()
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(session.lockedClipCount == 0)
+        .modifier(ProcessLockedButtonHelp(unlocked: session.lockedClipCount == 0))
+    }
+}
+
+/// Unlocked help is the visible hint's same phrase. Locked help stays the EXR line.
+private struct ProcessLockedButtonHelp: ViewModifier {
+    var unlocked: Bool
+
+    func body(content: Content) -> some View {
+        if unlocked {
+            content
+                .help("先选成对 Log 与色域")
+                .accessibilityLabel("先选成对 Log 与色域")
+        } else {
+            content
+                .help("写出的是图片序列（EXR），不是 mp4/mov")
+        }
+    }
+}
+
+/// Not-locked state view. Call sites use `if session.lockedClipCount == 0`
+/// so the line leaves the layout once a clip is locked.
+struct UnlockedPairHint: View {
+    var body: some View {
+        Text("先选成对 Log 与色域")
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 }
 
