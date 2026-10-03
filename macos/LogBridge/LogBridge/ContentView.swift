@@ -247,7 +247,7 @@ struct AdvancedPanel: View {
                     }
                     .controlSize(.small)
                     .disabled(!session.canProcess)
-                    .help("只处理已锁定片段。待选跳过。709 预览。仅预览。不必全部锁定。")
+                    .help("只处理已锁定片段。待选跳过。写出整段代理，代理精度 EXR，以及 cube 节点。不必全部锁定。")
                     if let reason = session.processBlockedReason {
                         Text(reason)
                             .font(.caption2)
@@ -259,7 +259,7 @@ struct AdvancedPanel: View {
                 .padding(.bottom, 6)
             }
         }
-        .help("节点与导出 ACEScct / EXR。展开状态会记住。仅预览。")
+        .help("节点与导出 ACEScct / EXR。展开状态会记住。整段代理，代理精度。")
         .padding(.horizontal, 10)
         .padding(.vertical, 2)
         .background(Color.primary.opacity(0.02))

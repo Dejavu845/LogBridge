@@ -296,7 +296,7 @@ struct ODTInspector: View {
             Text("工作空间：\(session.graph.workingSpace.rawValue)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("导出 ACEScct / EXR，709 / HLG / PQ 窗是仅预览")
+            Text("导出 ACEScct / EXR：整段代理，代理精度，并写出 cube 节点。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -337,7 +337,7 @@ struct ExposureInspector: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
             }
-            Text("单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。")
+            Text("单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .lineLimit(2)
