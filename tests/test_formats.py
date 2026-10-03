@@ -1,4 +1,4 @@
-"""Container / codec policy. No color numbers. Never 全格式已支持."""
+"""Container / codec policy. No color numbers. Never 全格式都能处理."""
 
 from pathlib import Path
 
@@ -40,7 +40,7 @@ def _read(p: Path) -> str:
 
 
 def test_mov_mp4_prores_h264_hevc_accept():
-    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。仅预览。"
     assert "AVAssetReader" not in NOTE_MOVIE_ACCEPT
     assert "copyCGImage" not in NOTE_MOVIE_ACCEPT
     assert "Y′CbCr" not in NOTE_MOVIE_ACCEPT
@@ -57,17 +57,19 @@ def test_mov_mp4_prores_h264_hevc_accept():
 
 
 def test_stills_tiff_dpx_exr_accept():
-    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。不是成片。"
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。仅预览。"
     assert "ImageIO" not in NOTE_STILL_ACCEPT
-    assert "不是成片" in NOTE_STILL_ACCEPT
-    assert "静帧 \\(ext.uppercased()) 按图片导入。不是成片。" in _read(MEDIA)
+    assert "仅预览" in NOTE_STILL_ACCEPT
+    assert "成片" not in NOTE_STILL_ACCEPT
+    assert "静帧 \\(ext.uppercased()) 按图片导入。仅预览。" in _read(MEDIA)
     for name in ("plate.tif", "plate.tiff", "plate.dpx", "plate.exr"):
         d = classify(name)
         assert d.action == ACCEPT
         assert d.kind == "still"
         assert "按图片导入" in d.note
         assert "ImageIO" not in d.note
-        assert "不是成片" in d.note
+        assert "仅预览" in d.note
+        assert "成片" not in d.note
         assert d.note == NOTE_STILL_ACCEPT.format(ext=name.rsplit(".", 1)[-1].upper())
 
 
@@ -103,7 +105,7 @@ def test_stills_preview_and_write_skip_ycbcr_unpack():
 def test_arri_mxf_refused():
     d = classify("A001C001.mxf", "ARRIRAW")
     assert d.action == REFUSE
-    assert d.note == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert d.note == "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
     for codec in ("ari", "arx", "arri", "ARRIRAW"):
         d = classify("A001C001.mxf", codec)
         assert d.action == REFUSE, codec
@@ -124,8 +126,8 @@ def test_mxf_known_codec_is_try_not_claim():
     assert "ARRI MXF" not in d2.note
 
 
-NOTE_RAW = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
-NOTE_ARRI = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+NOTE_RAW = "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR"
+NOTE_ARRI = "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
 
 
 def test_refused_containers():
@@ -184,7 +186,7 @@ def test_never_claim_all_formats():
     )
     # Phrase is named so reviewers can grep. Only allowed as a prohibition.
     for i, line in enumerate(blob.splitlines()):
-        if "全格式已支持" in line:
+        if "全格式都能处理" in line:
             assert any(tok in line for tok in ("不写", "Not ", "never", "Never", "Do **not**", "Claiming")), line
     assert "ARRI MXF" in blob
     assert "不接" in blob
@@ -196,12 +198,12 @@ def test_swift_probe_and_decode_locks():
     clip = _read(CLIP)
     detector = _read(DETECTOR)
     assert "enum MediaFormat" in media
-    assert "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入" in media
+    assert "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入" in media
     assert "MXF：系统认不出可解轨道，未导入" in media
     assert "MXF 只试系统认得出的 ProRes / AVC / HEVC。" in media
     assert "+ noteARRIMxf" not in media
     assert "+ NOTE_ARRI_MXF" not in _read(ROOT / "color/formats.py")
-    assert "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR" in media
+    assert "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR" in media
     assert "aprn" in media
     assert "这个编码不接。能试的是 ProRes / H.264 / HEVC。" in media
     assert "ImageIO" in media
@@ -249,8 +251,8 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
     """
     assert GENERIC_PARSE_FAILED == "解析失败"
     assert DECODE_FAILED_CHIP == "解码失败"
-    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
-    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
     assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
     assert empty_metadata_note() == "先选择 Log 与色域"
@@ -379,11 +381,11 @@ def test_failure_notes_name_the_class_not_bare_parse_failed():
 def test_import_skip_summary_header_and_chips():
     """Mixed r3d / rejects: lastImportNote starts with 未导入 N 条：. Chips stay."""
     assert IMPORT_SKIP_HEADER == "未导入 {n} 条："
-    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
-    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
     assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
-    assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式已支持」。"
+    assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式都能处理」。"
     assert classify("clip.r3d").note == NOTE_CAMERA_RAW
     assert classify("A001.mxf", "ARRIRAW").note == NOTE_ARRI_MXF
     assert classify("clip.mxf").note == NOTE_MXF_NO_TRACK

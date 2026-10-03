@@ -130,7 +130,7 @@ REC709_CUBE_TITLE = (
     "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
 )
 # Graph / dot / XML Description / cube # comment (knife ⑭). TITLE stays.
-GRAPH_ODT_USER = "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+GRAPH_ODT_USER = "709 预览，不是 ACES 输出变换。仅预览。默认关。"
 REC709_CUBE_COMMENT = f"# {GRAPH_ODT_USER}"
 GRAPH_ODT_XML_DESC = GRAPH_ODT_USER
 # Graph WB summary (knife ㉕). Placeholders {cctLabel} / {tint}. Copy only.
@@ -167,10 +167,10 @@ GRAPH_DOT_TIMELINE_LABEL = "时间线\\nACEScct"
 # User-visible Resolve exportNote (UI). Package TITLE / XML stay as-is.
 EXPORT_NOTE_TITLE = "LogBridge M1 Resolve 导出（已实现（未验证））"
 EXPORT_NOTE_WORKSPACE = "工作空间：ACEScct 时间线 / ACES2065-1 交换。"
-EXPORT_NOTE_REC709 = "Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换，不是成片。"
+EXPORT_NOTE_REC709 = "Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换。仅预览。"
 EXPORT_NOTE_WB_BYPASS = "关闭白平衡时写出旁路（不改颜色），不写进查找表。"
 EXPORT_NOTE_PROXY = (
-    "主按钮时间线/EXR 是整段代理，不是全精度成片（ACES2065-1 _proxy 序列），不是 ACEScct。"
+    "主按钮时间线/EXR 是整段代理，不是全精度成品（ACES2065-1 _proxy 序列），不是 ACEScct。"
 )
 EXPORT_NOTE_IN_CAMERA = (
     "机内色温只填旋钮，默认是单位阵。"
@@ -179,7 +179,7 @@ EXPORT_NOTE_IN_CAMERA = (
 )
 EXPORT_NOTE_WB_ON = "开（按色温/绿品校正，{cctLabel}，绿品 {tint}）"
 EXPORT_NOTE_WB_OFF = "已写出但默认旁路（不改颜色）"
-EXPORT_NOTE_ODT = "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+EXPORT_NOTE_ODT = "预览输出：709 预览（不是 ACES 输出变换），默认关。仅预览。"
 EXPORT_NOTE_FILES = (
     "文件：graph.xml, graph.dot, 01_IDT_*.cube, 02_Exposure.{cube,dctl}, "
     "03_WB.{cube,cdl,ccc,dctl}, 04_ODT_Rec709.cube, README_RESOLVE.md"
@@ -235,7 +235,7 @@ RESOLVE_README_HONESTY = f"""## 诚实说明
 
 - {EXPORT_NOTE_REC709}
 - {EXPORT_NOTE_WB_BYPASS}
-- 主按钮时间线/EXR 是 **整段代理，不是全精度成片**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
+- 主按钮时间线/EXR 是 **整段代理，不是全精度成品**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
 - {EXPORT_NOTE_IN_CAMERA}
 """
 
@@ -884,7 +884,7 @@ def format_readme(
     wb_summary = GRAPH_WB_SUMMARY.format(cctLabel=_cct_label(cct), tint=tint)
     return f"""# LogBridge Resolve 导出
 
-状态：**已实现（未验证）**。不是相机支持声明。
+状态：**已实现（未验证）**。并不表示相机已经可用。
 
 {RESOLVE_README_HONESTY}
 ## Graph (serial nodes)
@@ -892,7 +892,7 @@ def format_readme(
 Timeline color management: **ACEScct**, ACES workflow. Scene-linear interchange: **ACES2065-1**.
 Do not set DaVinci Wide Gamut Intermediate as the default deliverable.
 
-Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 / HLG / PQ 是预览·非成片。
+Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 / HLG / PQ 是仅预览。
 
 1. **IDT** — `01_IDT_<idt>.cube` or Color Space Transform
    - 输入：相机 Log / 相机色域 (`{idt_list}`)
@@ -923,7 +923,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
 - 应用 **IDT**（节点 1：LUT `01_IDT_*.cube`，或 CST 相机 → ACEScct，ACES 工作流）。
 - 应用 **曝光**（节点 2：LUT `02_Exposure.cube` 或 DCTL `02_Exposure.dctl`）。0 档或旁路 = 单位阵。
 - 应用 **白平衡**（节点 3：LUT `03_WB.cube`，**或** DCTL `03_WB.dctl`，**或** 把 `03_WB.cdl` 导入校色器）。
-- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。
+- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。
 
 旁路曝光：关掉节点 2（或勾 DCTL **Bypass Exposure**，或停在 0 档）。旁路白平衡：关掉节点 3（或勾 DCTL **Bypass WB**，或跳过 CDL/LUT）。剩余图：**IDT →（可选曝光）→ ACEScct → 可选 Rec.709 ODT**。
 

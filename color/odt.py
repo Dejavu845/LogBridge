@@ -8,7 +8,7 @@ HLG or PQ curve — this module does not implement ITU-R BT.2100 math.
 When PyOpenColorIO is importable, apply() uses the ACES OT + DISPLAY
 BuiltinTransform chain. When it is not, HDR apply raises: no homemade
 fallback. Status of every ODT: implemented (unverified). Not supported.
-Not 一键精准.
+No one-step automatic restore.
 """
 
 from __future__ import annotations

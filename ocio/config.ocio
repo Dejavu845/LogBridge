@@ -131,7 +131,7 @@ colorspaces:
       config-aces: Output - Rec.2100-HLG - 1000 nit
       ACES 2.0 alias (if registry has it):
       ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - Rec.2100-HLG-1000nit_2.0
-      Implemented (unverified). Not supported. Not 一键精准.
+      Implemented (unverified). Not supported. No one-step automatic restore.
       No homemade HLG curve.
     from_scene_reference: !<GroupTransform>
       children:
@@ -151,7 +151,7 @@ colorspaces:
       config-aces: Output - Rec.2100-Rec.2020-ST2084 - 1000 nit
       ACES 2.0 alias (if registry has it):
       ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - Rec.2100-Rec.2020-ST2084-1000nit_2.0
-      Implemented (unverified). Not supported. Not 一键精准.
+      Implemented (unverified). Not supported. No one-step automatic restore.
       No homemade PQ / ST.2084 curve.
     from_scene_reference: !<GroupTransform>
       children:

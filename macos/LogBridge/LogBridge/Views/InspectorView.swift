@@ -284,19 +284,19 @@ struct ODTInspector: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if session.graph.odt == .rec709 {
-                Text("Rec.709 只是预览，不是成片")
+                Text("Rec.709 仅预览")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             if session.graph.odt.isHDR {
-                Text("系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。")
+                Text("系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Text("工作空间：\(session.graph.workingSpace.rawValue)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("导出 ACEScct / EXR，709 / HLG / PQ 窗是预览·非成片")
+            Text("导出 ACEScct / EXR，709 / HLG / PQ 窗是仅预览")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -337,11 +337,11 @@ struct ExposureInspector: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
             }
-            Text("单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。")
+            Text("单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .lineLimit(2)
-            Text("预览·非成片")
+            Text("仅预览")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }

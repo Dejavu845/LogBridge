@@ -4,7 +4,7 @@ import Combine
 /// User-facing settings. Chinese copy. No color-number changes.
 ///
 /// Defaults (调研):
-///   - Preview ODT: Rec.709 (DIY OETF, 预览·非成片)
+///   - Preview ODT: Rec.709 (DIY OETF, 仅预览)
 ///   - Prompt estimate WB after import: off (on = prompt only, never write CAT)
 ///   - Block process when IDT unlocked: always on, not user-toggleable
 final class AppSettings: ObservableObject {

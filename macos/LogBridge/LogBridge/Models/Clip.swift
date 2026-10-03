@@ -24,7 +24,7 @@ struct Clip: Identifiable, Hashable {
     var wbTint: Double
     var formatNote: String
     /// Sidebar chip after 「处理已锁定片段」. `已写出代理`, a short Chinese error, or nil.
-    /// Cleared on re-export. Cancelled in-progress stays nil. 不是成片.
+    /// Cleared on re-export. Cancelled in-progress stays nil. 未完成.
     var exportChip: String? = nil
 
     var filename: String { url.lastPathComponent }
@@ -105,7 +105,7 @@ enum DetectionSource: String, Hashable {
 }
 
 /// Locked-clip dest estimate. Uncompressed half RGB EXR (6 bytes / pixel).
-/// Header / offset table is covered by the 10% + 64 MiB margin. 不是成片.
+/// Header / offset table is covered by the 10% + 64 MiB margin. 未完成.
 struct ProxyDiskEstimate {
     var bytes: Int64
     var usedFrameGuess: Bool
@@ -267,8 +267,8 @@ final class SessionModel: ObservableObject {
     /// and the session Resolve package (XML / DCTL / cube / README).
     /// Unlocked stay listed with a Chinese reason. After the batch,
     /// lastExportNote is 「N 条已写出代理 / M 条待选跳过 / K 条失败」.
-    /// Never guess an IDT. Never 一键还原. One process entry point.
-    /// Mixed bins are allowed. 整段代理，不是全精度成片.
+    /// Never guess an IDT. 不是一步还原. One process entry point.
+    /// Mixed bins are allowed. 整段代理，不是全精度成品.
     func processLockedClips() {
         if isWritingDeliverables { return }
         let locked = clips.filter(\.hasLockedPair)
@@ -286,8 +286,8 @@ final class SessionModel: ObservableObject {
         panel.canCreateDirectories = true
         panel.prompt = "写出"
         let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
-        // Python copy-lock (test_batch_locked): 已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。
-        panel.message = "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。整段代理，不是全精度成片。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。预览·非成片。已实现（未验证）。" + estimate.pickerSuffix
+        // Python copy-lock (test_batch_locked): 已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成品。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。仅预览。已实现（未验证）。
+        panel.message = "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。整段代理，不是全精度成品。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。仅预览。已实现（未验证）。" + estimate.pickerSuffix
         if let remembered = settings.lastExportDirectoryURL {
             panel.directoryURL = remembered
         }
@@ -433,7 +433,7 @@ final class SessionModel: ObservableObject {
         if !reasons.isEmpty {
             note += "。\(failedBucket) " + reasons.joined(separator: " ")
         }
-        note += "。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+        note += "。整段代理，不是全精度成品。仅预览。已实现（未验证）。"
         if let dest, wrote > 0 {
             note += " " + shortExportPath(dest)
         }
@@ -444,7 +444,7 @@ final class SessionModel: ObservableObject {
     /// After write, count EXRs against duration × metadata fps only.
     /// Empty folder / 0 frames / mismatch / missing timing is a Chinese failure;
     /// the folder is removed so it is not 已写出代理.
-    /// Not ACEScct. Not a Rec.709 movie. 整段代理，不是全精度成片.
+    /// Not ACEScct. Not a Rec.709 movie. 整段代理，不是全精度成品.
     func exportLockedEXR(
         clip: Clip,
         graph: SerialGraph,
@@ -517,9 +517,9 @@ final class SessionModel: ObservableObject {
         return note
     }
 
-    /// Cancelled batch. 已取消 + honesty. Partial output is 不是成片.
+    /// Cancelled batch. 已取消 + honesty. Partial output is 未完成.
     static func cancelledExportNote(processed: Int, skipped: Int) -> String {
-        "处理已锁定片段 — 已取消。\(processed) 条已处理 / \(skipped) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+        "处理已锁定片段 — 已取消。\(processed) 条已处理 / \(skipped) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，不是全精度成品。仅预览。已实现（未验证）。"
     }
 
     /// Uncompressed half RGB (3 × 2). Matches color/batch.py.
@@ -602,9 +602,9 @@ final class SessionModel: ObservableObject {
         return nil
     }
 
-    /// 「磁盘空间不足，未写出」 + honesty. Did not write. No 精准.
+    /// 「磁盘空间不足，未写出」 + honesty. Did not write. 不写已经测准.
     static func diskShortExportNote(estimate: ProxyDiskEstimate) -> String {
-        "\(diskShortStatus)。\(estimate.note)。整段代理，不是全精度成片。"
+        "\(diskShortStatus)。\(estimate.note)。整段代理，不是全精度成品。"
     }
 
     /// Locked row after a proxy sequence write. Not a finished picture.
@@ -652,7 +652,7 @@ final class SessionModel: ObservableObject {
             || desc == MediaFormat.noteUnknownCodec {
             return desc
         }
-        if desc.contains("不接") || desc.contains("暂不支持") || desc.contains("无法读取") {
+        if desc.contains("不接") || desc.contains("暂不能处理") || desc.contains("无法读取") {
             return desc
         }
         return nil
@@ -762,7 +762,7 @@ final class SessionModel: ObservableObject {
     }
 
     /// Last dest + `{stem}_ACES2065-1_proxy`. Success chip only.
-    /// Pending / failed / cancelled do not reveal. 不是成片.
+    /// Pending / failed / cancelled do not reveal. 未完成.
     static func clipSequenceRevealURL(for clip: Clip, dest: URL) -> URL? {
         guard clip.exportChip == wroteProxyChip else { return nil }
         return ResolveExporter.deliverableSequenceDirectory(for: clip, in: dest)
@@ -786,12 +786,12 @@ final class SessionModel: ObservableObject {
         }
     }
 
-    /// Primary action alias. Label is "处理已锁定片段" — never 一键还原.
+    /// Primary action alias. Label is "处理已锁定片段" — 不是一步还原.
     func processSelected() {
         processLockedClips()
     }
 
-    /// Same batch as processLockedClips. Never 一键还原. Not a second button.
+    /// Same batch as processLockedClips. 不是一步还原. Not a second button.
     func applyGraph() {
         processLockedClips()
     }
@@ -810,11 +810,11 @@ final class SessionModel: ObservableObject {
         case .off:
             return "709 预览关"
         case .rec709:
-            return "Rec.709 预览·非成片"
+            return "Rec.709 仅预览"
         case .hlg:
-            return "HLG 预览·非成片（未匹配 709）"
+            return "HLG 仅预览（未匹配 709）"
         case .pq:
-            return "PQ 预览·非成片（未匹配 709）"
+            return "PQ 仅预览（未匹配 709）"
         }
     }
 
@@ -832,7 +832,7 @@ final class SessionModel: ObservableObject {
         case .off:
             return "709 预览关"
         case .rec709, .hlg, .pq:
-            return "预览·非成片"
+            return "仅预览"
         }
     }
 
@@ -1210,7 +1210,7 @@ final class SessionModel: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "导出"
-        panel.message = "已锁定片段写出 Resolve 节点图（XML / DCTL / .cube）。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。预览·非成片。已实现（未验证）。"
+        panel.message = "已锁定片段写出 Resolve 节点图（XML / DCTL / .cube）。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。仅预览。已实现（未验证）。"
         panel.begin { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
             do {
@@ -1234,7 +1234,7 @@ final class SessionModel: ObservableObject {
                     cct: self.graph.wbCCT,
                     tint: self.graph.wbTint
                 )
-                note += "\n已写出 \(written.count) 个文件。\(locked.count) 条已锁定 / \(skipped.count) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。预览·非成片。已实现（未验证）。整段代理，不是全精度成片。"
+                note += "\n已写出 \(written.count) 个文件。\(locked.count) 条已锁定 / \(skipped.count) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。仅预览。已实现（未验证）。整段代理，不是全精度成品。"
                 self.lastExportNote = note
             } catch {
                 self.lastExportNote = Self.shortExportChip(for: error)

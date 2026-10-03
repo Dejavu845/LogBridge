@@ -22,13 +22,13 @@ enum ResolveExporter {
         var lines: [String] = []
         lines.append("LogBridge M1 Resolve 导出（已实现（未验证））")
         lines.append("工作空间：ACEScct 时间线 / ACES2065-1 交换。")
-        lines.append("Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换，不是成片。")
+        lines.append("Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换。仅预览。")
         lines.append("关闭白平衡时写出旁路（不改颜色），不写进查找表。")
-        lines.append("主按钮时间线/EXR 是整段代理，不是全精度成片（ACES2065-1 _proxy 序列），不是 ACEScct。")
+        lines.append("主按钮时间线/EXR 是整段代理，不是全精度成品（ACES2065-1 _proxy 序列），不是 ACEScct。")
         lines.append("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。")
         let cctLabel = cct.map { "\(Int($0)) K" } ?? "待定 / 单位阵（不猜 5600 或 6504）"
         lines.append("WB 节点：\(includeWBNode ? "开（按色温/绿品校正，\(cctLabel)，绿品 \(tint)）" : "已写出但默认旁路（不改颜色）")")
-        lines.append("预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。")
+        lines.append("预览输出：709 预览（不是 ACES 输出变换），默认关。仅预览。")
         lines.append("文件：graph.xml, graph.dot, 01_IDT_*.cube, 02_Exposure.{cube,dctl}, 03_WB.{cube,cdl,ccc,dctl}, 04_ODT_Rec709.cube, README_RESOLVE.md")
         lines.append("仅已锁定成对 IDT 片段。待选仍列出（先选择成对 IDT / 先选择 Log 与色域）。")
         lines.append("曝光是独立节点（以档为单位；0 档不写进 IDT/白平衡）。旁路白平衡：关掉白平衡节点。")
@@ -465,7 +465,7 @@ enum ResolveExporter {
             title: "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)",
             size: size,
             extraComments: [
-                "# 709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+                "# 709 预览，不是 ACES 输出变换。仅预览。默认关。"
             ]
         ) {
             odtFromACEScct($0)
@@ -708,7 +708,7 @@ enum ResolveExporter {
             <File role="dctl">03_WB.dctl</File>
           </Node>
           <Node index="4" name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="\(odtOn)">
-            <Description>709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。</Description>
+            <Description>709 预览，不是 ACES 输出变换。仅预览。默认关。</Description>
             <File role="lut">04_ODT_Rec709.cube</File>
             <ResolveCST inputColorSpace="ACEScct" inputGamma="ACEScct" outputColorSpace="Rec.709" outputGamma="Rec.709"/>
           </Node>
@@ -732,7 +732,7 @@ enum ResolveExporter {
           idt  [label="IDT\\n\(idtLabel)\\n01_IDT_<idt>.cube\\n或 ACES IDT / CST → ACEScct"];
           exp  [label="曝光（可归零）\\n\(String(format: "%+.2f", exposureStops)) 档\\n02_Exposure.cube / .dctl"];
           wb   [label="白平衡（可旁路）\\n色温 \(cctLabel(cct))  绿品 \(tint)\\n03_WB.cube / .cdl / .ccc / .dctl", style="filled,\(wbStyle)", fillcolor="\(wbFill)"];
-          odt  [label="709 预览（后续节点）\\n04_ODT_Rec709.cube\\n或 CST ACEScct → Rec.709\\n709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"];
+          odt  [label="709 预览（后续节点）\\n04_ODT_Rec709.cube\\n或 CST ACEScct → Rec.709\\n709 预览，不是 ACES 输出变换。仅预览。默认关。"];
           timeline [shape=oval, label="时间线\\nACEScct"];
 
           clip -> idt -> exp -> wb -> odt;
@@ -748,13 +748,13 @@ enum ResolveExporter {
         return """
         # LogBridge Resolve 导出
 
-        状态：**已实现（未验证）**。不是相机支持声明。
+        状态：**已实现（未验证）**。并不表示相机已经可用。
 
         ## 诚实说明
 
-        - Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换，不是成片。
+        - Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换。仅预览。
         - 关闭白平衡时写出旁路（不改颜色），不写进查找表。
-        - 主按钮时间线/EXR 是 **整段代理，不是全精度成片**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
+        - 主按钮时间线/EXR 是 **整段代理，不是全精度成品**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
         - 机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。
 
         ## Graph (serial nodes)
@@ -774,7 +774,7 @@ enum ResolveExporter {
 
         3. **709 预览** — `04_ODT_Rec709.cube` or CST
            - Optional preview node, off by default. Off = ACEScct deliverable.
-           - 709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。
+           - 709 预览，不是 ACES 输出变换。仅预览。默认关。
 
         ## How to bypass WB in Resolve
 
@@ -782,7 +782,7 @@ enum ResolveExporter {
 
         - 应用 **IDT**（节点 1：LUT `01_IDT_*.cube`，或 ACES IDT / CST 相机 → ACEScct）。
         - 应用 **白平衡**（节点 3：LUT `03_WB.cube`，**或** DCTL `03_WB.dctl`，**或** 把 `03_WB.cdl` 导入校色器）。
-        - 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。
+        - 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。
 
         旁路白平衡：关掉节点 2（或勾 DCTL **Bypass WB**，或跳过 CDL/LUT）。剩余图：**IDT → ACEScct**，不烘焙。
 
@@ -868,7 +868,7 @@ enum ResolveExporter {
     }
 
     /// Proxy sequence folder. Mirrors ``color.batch.deliverable_dir_name``.
-    /// ``{stem}_ACES2065-1_proxy/frame_000000.exr``. Name must say proxy so it is not a 成片 claim.
+    /// ``{stem}_ACES2065-1_proxy/frame_000000.exr``. Name must say proxy so it is not a finished-master claim.
     static func deliverableSequenceDirectory(for clip: Clip, in directory: URL) -> URL {
         let stem = clip.url.deletingPathExtension().lastPathComponent
         return directory.appendingPathComponent("\(stem)_ACES2065-1_proxy")

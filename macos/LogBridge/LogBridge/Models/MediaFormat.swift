@@ -7,7 +7,7 @@ import ImageIO
 ///
 /// Tried: MOV/MP4 ProRes / H.264 / HEVC; stills TIFF/DPX/EXR via ImageIO.
 /// MXF: try if the system recognizes ProRes/AVC/HEVC. ARRI MXF (ARRIRAW) is refused.
-/// Never claim 全格式已支持.
+/// Never claim 全格式都能处理.
 enum MediaDecision: String {
     case accept
     case tryDecode = "try"
@@ -52,10 +52,10 @@ enum MediaFormat {
     static let h264FourCC: Set<String> = ["avc1", "avc3", "ai5p", "ai5q"]
     static let hevcFourCC: Set<String> = ["hvc1", "hev1", "dvhe", "dvh1"]
     /// Locked refuse copy (沟通).
-    static let noteARRIMxf = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    static let noteARRIMxf = "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
     static let noteMxfNoTrack = "MXF：系统认不出可解轨道，未导入"
     static let noteMxfTry = "MXF 只试系统认得出的 ProRes / AVC / HEVC。"
-    static let noteCameraRaw = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+    static let noteCameraRaw = "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR"
     static let noteUnknownCodec = "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
 
     static func probe(url: URL) -> MediaProbe {
@@ -115,7 +115,7 @@ enum MediaFormat {
                 container: ext,
                 codec: codecN,
                 kind: .still,
-                note: "静帧 \(ext.uppercased()) 按图片导入。不是成片。"
+                note: "静帧 \(ext.uppercased()) 按图片导入。仅预览。"
             )
         }
         if movieExt.contains(ext) {
@@ -142,7 +142,7 @@ enum MediaFormat {
                 container: ext,
                 codec: codecN,
                 kind: .movie,
-                note: "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
+                note: "MOV/MP4：可试 ProRes / H.264 / HEVC。仅预览。"
             )
         }
         if ext == mxfExt {
@@ -196,7 +196,7 @@ enum MediaFormat {
             container: ext.isEmpty ? "unknown" : ext,
             codec: codecN,
             kind: .refuse,
-            note: "这个容器不接。不写「全格式已支持」。"
+            note: "这个容器不接。不写「全格式都能处理」。"
         )
     }
 
@@ -252,7 +252,7 @@ enum MediaFormat {
         switch ext {
         case "ari", "arx", "r3d", "braw", "bmd", "crm", "nev", "nraw", "xocn", "dng": return noteCameraRaw
         case "avi", "mkv": return "\(ext.uppercased()) 不接。请用 MOV/MP4。"
-        default: return ".\(ext) 不接。不写「全格式已支持」。"
+        default: return ".\(ext) 不接。不写「全格式都能处理」。"
         }
     }
 }

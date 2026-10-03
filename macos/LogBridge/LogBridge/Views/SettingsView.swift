@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 设置页。中文。不写精准 / 一键还原 / 全自动校准。
+/// 设置页。中文。不写已经测准 / 自动还原 / 全自动校准。
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var session: SessionModel
@@ -15,11 +15,11 @@ struct SettingsView: View {
                         session.setODT(newValue)
                     }
                 )) {
-                    Text("Rec.709 预览·非成片").tag(ODTMode.rec709)
-                    Text("Rec.2100 HLG 预览·非成片").tag(ODTMode.hlg)
-                    Text("Rec.2100 PQ 预览·非成片").tag(ODTMode.pq)
+                    Text("Rec.709 仅预览").tag(ODTMode.rec709)
+                    Text("Rec.2100 HLG 仅预览").tag(ODTMode.hlg)
+                    Text("Rec.2100 PQ 仅预览").tag(ODTMode.pq)
                 }
-                Text("默认 Rec.709（角标预览·非成片）。不是成片，未与 HDR 匹配。导出仍是 ACEScct / EXR。")
+                Text("默认 Rec.709（角标仅预览）。只作预览，未与 HDR 匹配。导出仍是 ACEScct / EXR。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
@@ -45,7 +45,7 @@ struct SettingsView: View {
                 Text("处理")
             }
 
-            Text("已实现（未验证）。不写精准 / 一键还原 / 全自动校准。")
+            Text("已实现（未验证）。不写已经测准 / 自动还原 / 全自动校准。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
