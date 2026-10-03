@@ -194,41 +194,17 @@ def test_after_write_must_not_match_locked_bytes(tmp_path: Path):
     assert any("after-write matches locked for 1440x900 light" in line for line in errors)
 
 
-def _ensure_git_commit(sha: str) -> None:
-    """Shallow CI checkouts omit older commits. Fetch that one object when needed."""
-    probe = subprocess.run(
-        ["git", "cat-file", "-e", f"{sha}^{{commit}}"],
-        cwd=ROOT,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    if probe.returncode == 0:
-        return
-    subprocess.check_call(["git", "fetch", "--depth=1", "origin", sha], cwd=ROOT)
-
-
 def test_baseline_wire_patches_28066d5_without_committing(tmp_path: Path):
-    _ensure_git_commit("28066d5")
+    """Uses files copied from 28066d5. A shallow CI clone does not contain that commit."""
     work = tmp_path / "baseline"
     (work / "macos/LogBridge/LogBridge").mkdir(parents=True)
     project = work / "macos/LogBridge/LogBridge.xcodeproj"
     scheme_dir = project / "xcshareddata/xcschemes"
     scheme_dir.mkdir(parents=True)
-    project_text = subprocess.check_output(
-        ["git", "show", "28066d5:macos/LogBridge/LogBridge.xcodeproj/project.pbxproj"],
-        cwd=ROOT,
-        text=True,
-    )
-    scheme_text = subprocess.check_output(
-        ["git", "show", "28066d5:macos/LogBridge/LogBridge.xcodeproj/xcshareddata/xcschemes/LogBridge.xcscheme"],
-        cwd=ROOT,
-        text=True,
-    )
-    app_text = subprocess.check_output(
-        ["git", "show", "28066d5:macos/LogBridge/LogBridge/LogBridgeApp.swift"],
-        cwd=ROOT,
-        text=True,
-    )
+    fixture = ROOT / "tests/fixtures/ui_baseline_28066d5"
+    project_text = (fixture / "project.pbxproj").read_text(encoding="utf-8")
+    scheme_text = (fixture / "LogBridge.xcscheme").read_text(encoding="utf-8")
+    app_text = (fixture / "LogBridgeApp.swift").read_text(encoding="utf-8")
     (project / "project.pbxproj").write_text(project_text, encoding="utf-8")
     (scheme_dir / "LogBridge.xcscheme").write_text(scheme_text, encoding="utf-8")
     (work / "macos/LogBridge/LogBridge/LogBridgeApp.swift").write_text(app_text, encoding="utf-8")
@@ -255,5 +231,7 @@ def test_baseline_wire_patches_28066d5_without_committing(tmp_path: Path):
     )
     again = (project / "project.pbxproj").read_text(encoding="utf-8")
     assert again.count("isa = PBXNativeTarget") == 2
-    head = subprocess.check_output(["git", "status", "--short"], cwd=ROOT, text=True)
-    assert "28066d5" not in head
+    # The real tree stays on the current app entry. The fixture checkout is disposable.
+    real_app = (ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift").read_text(encoding="utf-8")
+    assert "UIShotLaunch.isActive" in real_app
+    assert "LogBridgeCommands" in real_app
