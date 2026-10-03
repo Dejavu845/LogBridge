@@ -313,6 +313,7 @@ struct ProcessLockedToolbarButton: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(.accentColor)
             .fixedSize()
             .layoutPriority(1)
             .disabled(session.lockedClipCount == 0)
