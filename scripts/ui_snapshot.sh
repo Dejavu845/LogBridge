@@ -7,6 +7,14 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${ROOT}/ui-screenshots"
 mkdir -p "$OUT"
+SHA="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+cat > "${OUT}/README.txt" <<EOF
+CI 离屏渲染·假数据·非真机
+
+这些 PNG 是 macOS CI runner 上的离屏渲染（SwiftUI ImageRenderer / NSHostingView），使用注入的样例状态，没有真机素材。不能当成真机外观。
+
+commit: ${SHA}
+EOF
 
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
 ARCH="$(uname -m)"

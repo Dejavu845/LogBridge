@@ -17,6 +17,7 @@ def test_macos_workflow_uploads_ui_screenshots_artifact():
     assert "uses: actions/upload-artifact@v4" in macos
     assert "name: ui-screenshots" in macos
     assert "ui-screenshots/*.png" in macos
+    assert "ui-screenshots/README.txt" in macos
     assert "if-no-files-found: warn" in macos
     assert "if: always()" in macos
 
@@ -40,8 +41,13 @@ def test_snapshot_tool_covers_sizes_appearances_and_states():
         "ContentView(session:",
         "sample-a.mov",
         "sample-locked.mov",
+        "CI 离屏渲染·假数据·非真机",
+        ".overlay(alignment: .bottomTrailing)",
     ):
         assert token in tool
+    assert "CI 离屏渲染·假数据·非真机" in script
+    assert "README.txt" in script
+    assert "commit:" in script
     assert "return 0" in tool
     assert "LogBridgeApp.swift" in script
     assert "exit 0" in script

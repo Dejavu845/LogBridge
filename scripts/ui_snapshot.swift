@@ -43,6 +43,9 @@ let shotSizes = [
     ShotSize(width: 1280, height: 800),
 ]
 
+/// Corner caption baked into every PNG at render time. Not a real-device capture.
+let offscreenCaption = "CI 离屏渲染·假数据·非真机"
+
 enum SnapshotError: Error, CustomStringConvertible {
     case noBitmap(String)
 
@@ -241,6 +244,16 @@ private func snapshotRoot(session: SessionModel, width: Int, height: Int, appear
         .background(Color(nsColor: .windowBackgroundColor))
         .preferredColorScheme(appearance.colorScheme)
         .environment(\.colorScheme, appearance.colorScheme)
+        .overlay(alignment: .bottomTrailing) {
+            Text(offscreenCaption)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 4))
+                .padding(8)
+                .allowsHitTesting(false)
+        }
 }
 
 @MainActor

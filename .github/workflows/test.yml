@@ -58,4 +58,5 @@ jobs:
           path: |
             ui-screenshots/*.png
             ui-screenshots/manifest.txt
+            ui-screenshots/README.txt
           if-no-files-found: warn
