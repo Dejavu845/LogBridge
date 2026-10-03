@@ -658,9 +658,19 @@ final class SessionModel: ObservableObject {
         return nil
     }
 
-    /// Expected EXR count: duration × metadata fps only. Never invent a frame rate.
-    /// Missing fps / duration fail closed.
-    static func expectedSourceFrames(_ ext: MediaExtent) -> (Int?, String?) {
+    /// Expected EXR count: duration × metadata fps. Never invent a frame rate.
+    /// A still (MediaFormat kind `.still`: tif / tiff / dpx / exr) with exactly
+    /// one written frame expects 1. A still sequence (written > 1) keeps
+    /// duration × fps. Missing fps / duration fail closed.
+    static func expectedSourceFrames(
+        _ ext: MediaExtent,
+        clipURL: URL? = nil,
+        written: Int? = nil
+    ) -> (Int?, String?) {
+        if written == 1, let clipURL,
+           MediaFormat.probe(url: clipURL).kind == .still {
+            return (1, nil)
+        }
         let duration: Double? = {
             guard let d = ext.durationSeconds, d.isFinite, d > 0 else { return nil }
             return d
@@ -710,7 +720,11 @@ final class SessionModel: ObservableObject {
                 NSLocalizedDescriptionKey: frameMismatchChip
             ])
         }
-        let (expected, timingErr) = expectedSourceFrames(MediaFormat.extent(url: clip.url))
+        let (expected, timingErr) = expectedSourceFrames(
+            MediaFormat.extent(url: clip.url),
+            clipURL: clip.url,
+            written: written
+        )
         if let timingErr {
             throw NSError(domain: "LogBridge", code: 4, userInfo: [
                 NSLocalizedDescriptionKey: timingErr
