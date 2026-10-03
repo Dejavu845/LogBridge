@@ -3,8 +3,12 @@ import SwiftUI
 
 // Screenshot baseline for the macOS CI runner.
 // Renders the real ContentView with injected sample clips (no footage, no personal info).
-// ImageRenderer first; NSHostingView if that returns no bitmap.
-// One state is one child process. A failed state is logged and does not fail the parent.
+// Capture is an NSHostingView in an NSWindow: layout, several runloop turns
+// (~0.5s), then bitmapImageRepForCachingDisplay + cacheDisplay.
+// If that bitmap is still the prohibited placeholder or a blank field, try
+// CGWindowListCreateImage on the same window. The shell falls back to XCUITest
+// when every AppKit capture is still unusable.
+// One state is one child process. The shell's checker fails the job.
 
 enum SampleState: String, CaseIterable {
     case empty
@@ -127,7 +131,9 @@ private func renderAll(_ args: [String]) -> Int32 {
             print("  \(name)")
         }
     }
-    // A state that cannot render must not fail the macOS job.
+    if !failed.isEmpty {
+        return 1
+    }
     return 0
 }
 
@@ -156,7 +162,7 @@ private func runChild(
         fputs("ui-screenshots: failed to start \(dest.lastPathComponent): \(error)\n", stderr)
         return false
     }
-    let wait = sem.wait(timeout: .now() + 30)
+    let wait = sem.wait(timeout: .now() + 45)
     if wait == .timedOut {
         process.terminate()
         _ = sem.wait(timeout: .now() + 5)
@@ -222,19 +228,12 @@ private func renderImage(
 
     let session = makeSampleSession(state)
     let view = snapshotRoot(session: session, width: width, height: height, appearance: appearance)
-    if let image = renderWithImageRenderer(view, width: width, height: height), imageHasPixels(image, width: width, height: height) {
-        return image
-    }
-    let hosted = try renderWithHostingView(
+    return try renderWithHostingView(
         view,
         width: width,
         height: height,
         appearance: appearance
     )
-    guard imageHasPixels(hosted, width: width, height: height) else {
-        throw SnapshotError.noBitmap("ImageRenderer and NSHostingView produced no \(width)x\(height) bitmap")
-    }
-    return hosted
 }
 
 @MainActor
@@ -257,15 +256,6 @@ private func snapshotRoot(session: SessionModel, width: Int, height: Int, appear
 }
 
 @MainActor
-private func renderWithImageRenderer<V: View>(_ view: V, width: Int, height: Int) -> NSImage? {
-    let renderer = ImageRenderer(content: view)
-    renderer.proposedSize = ProposedViewSize(width: CGFloat(width), height: CGFloat(height))
-    renderer.scale = 1
-    renderer.isOpaque = true
-    return renderer.nsImage
-}
-
-@MainActor
 private func renderWithHostingView<V: View>(
     _ view: V,
     width: Int,
@@ -273,35 +263,156 @@ private func renderWithHostingView<V: View>(
     appearance: SampleAppearance
 ) throws -> NSImage {
     let host = NSHostingView(rootView: view)
-    let frame = NSRect(x: 0, y: 0, width: width, height: height)
-    host.frame = frame
+    let size = NSSize(width: width, height: height)
+    host.frame = NSRect(origin: .zero, size: size)
     host.appearance = NSAppearance(named: appearance.nsAppearance)
     let window = NSWindow(
-        contentRect: frame,
+        contentRect: NSRect(origin: .zero, size: size),
         styleMask: [.borderless],
         backing: .buffered,
         defer: false
     )
+    window.isReleasedWhenClosed = false
+    window.isOpaque = true
+    window.backgroundColor = .windowBackgroundColor
     window.appearance = host.appearance
     window.contentView = host
-    window.setFrame(frame, display: true)
-    host.needsLayout = true
-    host.layoutSubtreeIfNeeded()
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-    guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
-        throw SnapshotError.noBitmap("NSHostingView bitmapImageRepForCachingDisplay returned nil")
+    host.autoresizingMask = [.width, .height]
+    // Off the visible desktop first. List/Table still need a real window
+    // and several runloop turns before cacheDisplay has their cells.
+    window.setFrame(NSRect(x: -20000, y: -20000, width: width, height: height), display: true)
+    window.orderFrontRegardless()
+
+    spinRunLoop(host: host)
+    var best = cacheDisplayRep(host: host)
+    if best == nil || bitmapIsUnusable(best!) {
+        window.setFrameOrigin(NSPoint(x: 40, y: 40))
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        spinRunLoop(host: host)
+        if let again = cacheDisplayRep(host: host), betterCapture(again, than: best) {
+            best = again
+        }
     }
-    host.cacheDisplay(in: host.bounds, to: rep)
-    let image = NSImage(size: NSSize(width: width, height: height))
+    if best == nil || bitmapIsUnusable(best!) {
+        if let windowRep = windowImageRep(window: window), betterCapture(windowRep, than: best) {
+            best = windowRep
+        }
+    }
+    window.orderOut(nil)
+    window.close()
+    guard let rep = best else {
+        throw SnapshotError.noBitmap("NSHostingView cacheDisplay and CGWindowListCreateImage produced no bitmap")
+    }
+    let image = NSImage(size: NSSize(width: rep.pixelsWide, height: rep.pixelsHigh))
     image.addRepresentation(rep)
     return image
 }
 
-private func imageHasPixels(_ image: NSImage, width: Int, height: Int) -> Bool {
-    guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else {
-        return false
+/// Ten turns, 0.05s each: about 0.5s total, so lazy Table/List can fill in.
+@MainActor
+private func spinRunLoop(host: NSView) {
+    for _ in 0..<10 {
+        host.needsLayout = true
+        host.needsDisplay = true
+        host.layoutSubtreeIfNeeded()
+        host.displayIfNeeded()
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.025))
+        RunLoop.current.run(mode: .common, before: Date().addingTimeInterval(0.025))
     }
-    return rep.pixelsWide >= width / 2 && rep.pixelsHigh >= height / 2
+}
+
+@MainActor
+private func cacheDisplayRep(host: NSView) -> NSBitmapImageRep? {
+    guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
+    host.cacheDisplay(in: host.bounds, to: rep)
+    return rep
+}
+
+@MainActor
+private func windowImageRep(window: NSWindow) -> NSBitmapImageRep? {
+    let windowID = CGWindowID(window.windowNumber)
+    guard windowID != 0 else { return nil }
+    guard let image = CGWindowListCreateImage(
+        CGRect.null,
+        .optionIncludingWindow,
+        windowID,
+        [.boundsIgnoreFraming, .nominalResolution]
+    ) else { return nil }
+    return NSBitmapImageRep(cgImage: image)
+}
+
+/// Matches scripts/check_ui_screenshots.py: yellow #FFCC00 and red #FF3B30
+/// together above 2%, or a flat field. Stride keeps the child inside its timeout.
+private func bitmapIsUnusable(_ rep: NSBitmapImageRep) -> Bool {
+    let stats = bitmapStats(rep)
+    guard stats.total > 0 else { return true }
+    let yellowFrac = Double(stats.yellow) / Double(stats.total)
+    let redFrac = Double(stats.red) / Double(stats.total)
+    if yellowFrac > 0, redFrac > 0, yellowFrac + redFrac > 0.02 {
+        return true
+    }
+    let mean = stats.sum / Double(stats.total)
+    let variance = max(0, stats.sumSq / Double(stats.total) - mean * mean)
+    return variance.squareRoot() < 1
+}
+
+private func betterCapture(_ candidate: NSBitmapImageRep, than current: NSBitmapImageRep?) -> Bool {
+    guard let current else { return true }
+    if bitmapIsUnusable(current), !bitmapIsUnusable(candidate) { return true }
+    if !bitmapIsUnusable(current), bitmapIsUnusable(candidate) { return false }
+    return bitmapStats(candidate).yellow + bitmapStats(candidate).red
+        < bitmapStats(current).yellow + bitmapStats(current).red
+}
+
+private struct BitmapStats {
+    var yellow: Int
+    var red: Int
+    var total: Int
+    var sum: Double
+    var sumSq: Double
+}
+
+private func bitmapStats(_ rep: NSBitmapImageRep) -> BitmapStats {
+    var stats = BitmapStats(yellow: 0, red: 0, total: 0, sum: 0, sumSq: 0)
+    let width = rep.pixelsWide
+    let height = rep.pixelsHigh
+    guard
+        width > 0,
+        height > 0,
+        rep.bitsPerSample == 8,
+        rep.samplesPerPixel >= 3,
+        let raw = rep.bitmapData
+    else { return stats }
+    let spp = rep.samplesPerPixel
+    let bpr = rep.bytesPerRow
+    guard bpr >= width * spp else { return stats }
+    let channel = rep.bitmapFormat.contains(.alphaFirst) ? 1 : 0
+    let stride = 4
+    var y = 0
+    while y < height {
+        let row = raw.advanced(by: y * bpr)
+        var x = 0
+        while x < width {
+            let px = row.advanced(by: x * spp)
+            let ri = Int(px[channel])
+            let gi = Int(px[channel + 1])
+            let bi = Int(px[channel + 2])
+            if abs(ri - 255) <= 8, abs(gi - 204) <= 8, abs(bi - 0) <= 8 {
+                stats.yellow += 1
+            }
+            if abs(ri - 255) <= 8, abs(gi - 59) <= 8, abs(bi - 48) <= 8 {
+                stats.red += 1
+            }
+            let lum = Double(ri + gi + bi) / 3
+            stats.sum += lum
+            stats.sumSq += lum * lum
+            stats.total += 1
+            x += stride
+        }
+        y += stride
+    }
+    return stats
 }
 
 private func writePNG(_ image: NSImage, to url: URL) throws {
@@ -359,6 +470,7 @@ private func makeSampleSession(_ state: SampleState) -> SessionModel {
         // Not locked. Neither sample has a paired IDT, so the window
         // keeps the visible line 先选成对 Log 与色域.
         let unresolved = sampleClip(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000001")!,
             name: "sample-a.mov",
             idt: nil,
             curve: nil,
@@ -369,6 +481,7 @@ private func makeSampleSession(_ state: SampleState) -> SessionModel {
             chip: nil
         )
         let hinted = sampleClip(
+            id: UUID(uuidString: "00000000-0000-4000-8000-000000000002")!,
             name: "sample-b.mov",
             idt: nil,
             curve: "S-Log3",
@@ -403,6 +516,7 @@ private func makeSampleSession(_ state: SampleState) -> SessionModel {
 private func lockedSample(chip: String?) -> Clip {
     let idt = IDT.sonySLog3SGamut3
     return sampleClip(
+        id: UUID(uuidString: "00000000-0000-4000-8000-000000000003")!,
         name: "sample-locked.mov",
         idt: idt,
         curve: idt.curve,
@@ -415,6 +529,7 @@ private func lockedSample(chip: String?) -> Clip {
 }
 
 private func sampleClip(
+    id: UUID,
     name: String,
     idt: IDT?,
     curve: String?,
@@ -425,7 +540,7 @@ private func sampleClip(
     chip: String?
 ) -> Clip {
     Clip(
-        id: UUID(),
+        id: id,
         url: URL(fileURLWithPath: "/tmp/logbridge-ui-sample/\(name)", isDirectory: false),
         idt: idt,
         detectedCurve: curve,

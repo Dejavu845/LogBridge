@@ -6,9 +6,18 @@ import SwiftUI
 
 @main
 struct LogBridgeApp: App {
+    init() {
+        UIShotLaunch.prepareProcessIfNeeded()
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if UIShotLaunch.isActive {
+                ContentView(session: UIShotLaunch.sessionIfRequested())
+                    .modifier(UIShotChrome())
+            } else {
+                ContentView()
+            }
         }
         .defaultSize(width: 1520, height: 940)
         .commands {

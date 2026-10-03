@@ -15,6 +15,7 @@ DerivedData/
 
 # macOS CI screenshot baseline output. Not source.
 ui-screenshots/
+ui-screenshots-baseline/
 
 # Local grey-card samples / numeric goldens stay out of the tree.
 tests/fixtures/grey_card/*

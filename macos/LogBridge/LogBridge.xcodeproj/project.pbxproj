@@ -32,6 +32,8 @@
 		A10000000000000000000017 /* HDRPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* HDRPreview.swift */; };
 		A10000000000000000000018 /* WorkspaceChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* WorkspaceChrome.swift */; };
 		A10000000000000000000019 /* ACEScctMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* ACEScctMath.swift */; };
+		A1000000000000000000001A /* UIShotLaunch.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001C /* UIShotLaunch.swift */; };
+		B10000000000000000000001 /* LogBridgeUIShots.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* LogBridgeUIShots.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -61,8 +63,11 @@
 		A20000000000000000000019 /* HDRPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDRPreview.swift; sourceTree = "<group>"; };
 		A2000000000000000000001A /* WorkspaceChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceChrome.swift; sourceTree = "<group>"; };
 		A2000000000000000000001B /* ACEScctMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACEScctMath.swift; sourceTree = "<group>"; };
+		A2000000000000000000001C /* UIShotLaunch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIShotLaunch.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* LogBridge.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LogBridge.entitlements; sourceTree = "<group>"; };
 		A30000000000000000000001 /* LogBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LogBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000001 /* LogBridgeUIShots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogBridgeUIShots.swift; sourceTree = "<group>"; };
+		B30000000000000000000001 /* LogBridgeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LogBridgeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +82,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B40000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -84,6 +96,7 @@
 			isa = PBXGroup;
 			children = (
 				A50000000000000000000002 /* LogBridge */,
+				B50000000000000000000002 /* LogBridgeUITests */,
 				A50000000000000000000008 /* Frameworks */,
 				A50000000000000000000009 /* Products */,
 			);
@@ -94,6 +107,7 @@
 			children = (
 				A20000000000000000000001 /* LogBridgeApp.swift */,
 				A20000000000000000000002 /* ContentView.swift */,
+				A2000000000000000000001C /* UIShotLaunch.swift */,
 				A50000000000000000000003 /* Models */,
 				A50000000000000000000004 /* Detection */,
 				A50000000000000000000005 /* Color */,
@@ -190,8 +204,17 @@
 			isa = PBXGroup;
 			children = (
 				A30000000000000000000001 /* LogBridge.app */,
+				B30000000000000000000001 /* LogBridgeUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B50000000000000000000002 /* LogBridgeUITests */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000001 /* LogBridgeUIShots.swift */,
+			);
+			path = LogBridgeUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -214,7 +237,42 @@
 			productReference = A30000000000000000000001 /* LogBridge.app */;
 			productType = "com.apple.product-type.application";
 		};
+		B60000000000000000000001 /* LogBridgeUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B80000000000000000000003 /* Build configuration list for PBXNativeTarget "LogBridgeUITests" */;
+			buildPhases = (
+				B70000000000000000000001 /* Sources */,
+				B40000000000000000000002 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B10000000000000000000003 /* PBXTargetDependency */,
+			);
+			name = LogBridgeUITests;
+			productName = LogBridgeUITests;
+			productReference = B30000000000000000000001 /* LogBridgeUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		B10000000000000000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A90000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A60000000000000000000001;
+			remoteInfo = LogBridge;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		B10000000000000000000003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A60000000000000000000001 /* LogBridge */;
+			targetProxy = B10000000000000000000002 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		A90000000000000000000001 /* Project object */ = {
@@ -226,6 +284,10 @@
 				TargetAttributes = {
 					A60000000000000000000001 = {
 						CreatedOnToolsVersion = 15.4;
+					};
+					B60000000000000000000001 = {
+						CreatedOnToolsVersion = 15.4;
+						TestTargetID = A60000000000000000000001;
 					};
 				};
 			};
@@ -243,6 +305,7 @@
 			projectRoot = "";
 			targets = (
 				A60000000000000000000001 /* LogBridge */,
+				B60000000000000000000001 /* LogBridgeUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -283,6 +346,15 @@
 				A10000000000000000000017 /* HDRPreview.swift in Sources */,
 				A10000000000000000000018 /* WorkspaceChrome.swift in Sources */,
 				A10000000000000000000019 /* ACEScctMath.swift in Sources */,
+				A1000000000000000000001A /* UIShotLaunch.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B70000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000001 /* LogBridgeUIShots.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -365,6 +437,50 @@
 			};
 			name = Release;
 		};
+		BA0000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.logbridge.LogBridgeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = LogBridge;
+			};
+			name = Debug;
+		};
+		BA0000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.logbridge.LogBridgeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = LogBridge;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -382,6 +498,15 @@
 			buildConfigurations = (
 				AA0000000000000000000003 /* Debug */,
 				AA0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B80000000000000000000003 /* Build configuration list for PBXNativeTarget "LogBridgeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BA0000000000000000000005 /* Debug */,
+				BA0000000000000000000006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
