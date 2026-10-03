@@ -3304,9 +3304,10 @@ def test_success_path_english_notes_are_chinese():
     assert f'note: "{NOTE_FILENAME_AWG3}"' in detector
     assert f'note: "{NOTE_FILENAME_APPLE_LOG2}"' in detector
     assert f'note: "{NOTE_MODEL_HINT}"' in detector
-    # Bare .rmd presence must not lock Log3G10 — picker note only.
+    # JSON sidecar saying log3g10 locks (same as Python detect.py); a bare .rmd file does not lock.
     assert f'note: "{NOTE_META_RED_RMD_PICK}"' in detector
-    assert "locked(.redLog3G10RWG, source: .metadata" not in detector
+    rmd = detector.split("func readREDRMD")[1].split("}")[0]
+    assert "locked(.redLog3G10RWG" not in rmd
     leftover_en = (
         "filename S-Gamut3",
         "filename S-Gamut3.Cine",
