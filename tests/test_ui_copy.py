@@ -90,9 +90,9 @@ WB_CHIP_USER = "手调"
 WB_CHIP_UNKNOWN = "机内未知"
 WB_CHIP_ESTIMATE_PENDING = "估计确认才写"
 INSPECTOR_REC709_NOTE = "Rec.709 仅预览"
-INSPECTOR_EXPORT_NOTE = "导出 ACEScct / EXR，709 / HLG / PQ 窗是仅预览"
+INSPECTOR_EXPORT_NOTE = "导出 ACEScct / EXR：整段代理，代理精度，并写出 cube 节点。"
 INSPECTOR_EXPOSURE_HELP = (
-    "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+    "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
 )
 INSPECTOR_WB_HELP = (
     "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
@@ -564,9 +564,11 @@ def test_process_bar_and_advanced_help_are_chinese():
     )
     assert PROCESS_BUTTON_HELP_UI == "写出的是图片序列（EXR），不是 mp4/mov"
     assert ADVANCED_EXPORT_HELP == (
-        "只处理已锁定片段。待选跳过。709 预览。仅预览。不必全部锁定。"
+        "只处理已锁定片段。待选跳过。写出整段代理，代理精度 EXR，以及 cube 节点。不必全部锁定。"
     )
-    assert ADVANCED_DISCLOSURE_HELP == "节点与导出 ACEScct / EXR。展开状态会记住。仅预览。"
+    assert ADVANCED_DISCLOSURE_HELP == (
+        "节点与导出 ACEScct / EXR。展开状态会记住。整段代理，代理精度。"
+    )
     assert "默认收起" not in ADVANCED_DISCLOSURE_HELP
     assert "展开状态会记住" in ADVANCED_DISCLOSURE_HELP
 
@@ -585,9 +587,13 @@ def test_process_bar_and_advanced_help_are_chinese():
     assert REASON_PICK_PAIRED_IDT in content
     assert PROCESS_BUTTON in ADVANCED_EXPORT_HELP
     assert SKIPPED_BUCKET in ADVANCED_EXPORT_HELP
-    assert "709 预览" in ADVANCED_EXPORT_HELP
-    assert "仅预览" in ADVANCED_EXPORT_HELP
-    assert "仅预览" in ADVANCED_DISCLOSURE_HELP
+    assert "整段代理，代理精度" in ADVANCED_EXPORT_HELP
+    assert "cube 节点" in ADVANCED_EXPORT_HELP
+    assert "预览" not in ADVANCED_EXPORT_HELP
+    assert "preview" not in ADVANCED_EXPORT_HELP.lower()
+    assert "整段代理，代理精度" in ADVANCED_DISCLOSURE_HELP
+    assert "预览" not in ADVANCED_DISCLOSURE_HELP
+    assert "preview" not in ADVANCED_DISCLOSURE_HELP.lower()
 
     english_leftovers = (
         "Unlocked stay listed",
@@ -1036,7 +1042,7 @@ def test_inspector_exposure_wb_help_no_formula_stack():
     wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
 
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_WB_HELP == (
         "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
@@ -1132,7 +1138,7 @@ def test_inspector_exposure_readout_unit_dang():
 
     # 验法⑰-3: ⑮ three help sentences + ⑯ two .help strings 一字不差.
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1199,7 +1205,7 @@ def test_inspector_wb_cct_label_sewen():
 
     # 验法⑱-3: ⑮ three helps / ⑯ two .helps / ⑰ %+ .2f 档 一字不差.
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1288,7 +1294,7 @@ def test_inspector_exposure_unit_label_dang():
 
     # 验法⑲-3: ⑮ three helps / ⑯ two .helps / ⑰ %+ .2f 档 / ⑱ 色温 一字不差.
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1386,7 +1392,7 @@ def test_node_strip_exposure_detail_unit_dang():
 
     # 验法⑳-3: ⑮–⑲ frozen. Do not touch Inspector Text("档").
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1499,7 +1505,7 @@ def test_odt_inspector_preview_output_zh():
 
     # 验法㉑-3: ⑮–⑳ frozen. Keep Rec.709 / acesOTNote / mode.title.
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1534,7 +1540,7 @@ def test_odt_inspector_preview_output_zh():
     )
     assert INSPECTOR_REC709_NOTE == "Rec.709 仅预览"
     assert f'Text("{INSPECTOR_REC709_NOTE}")' in odt
-    assert INSPECTOR_EXPORT_NOTE == "导出 ACEScct / EXR，709 / HLG / PQ 窗是仅预览"
+    assert INSPECTOR_EXPORT_NOTE == "导出 ACEScct / EXR：整段代理，代理精度，并写出 cube 节点。"
     assert f'Text("{INSPECTOR_EXPORT_NOTE}")' in odt
     assert ACES_OT_NOTE_OFF == "导出 ACEScct / EXR"
     assert ACES_OT_NOTE_REC709 == "DIY 仅预览"
@@ -1631,7 +1637,7 @@ def test_settings_wb_help_no_cat_jargon():
     assert 'Picker("ODT"' not in odt
     assert "ColorSync itur_2100" not in odt
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1732,7 +1738,7 @@ def test_inspector_wb_cat_picker_shiying_fangfa():
     assert _text_literals(wb).count("Bradford") == 1
     assert _text_literals(wb).count("CAT02") == 1
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1879,7 +1885,7 @@ def test_preview_odt_cache_hit_preview_output_zh():
     assert 'Text("Bradford")' in wb
     assert 'Text("CAT02")' in wb
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -4189,7 +4195,7 @@ def test_readme_resolve_graph_wb_plain_chinese():
 
     # 验法㉕-3: ⑮–㉔ locked copy 一字不动.
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -4350,7 +4356,7 @@ def test_export_note_odt_preview_output_zh():
     assert honesty_to in honesty_fn
     assert graph_wb_swift in graph_fn
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -4556,7 +4562,7 @@ def test_graph_dot_xml_exposure_wb_zh():
     assert honesty_to in honesty_fn
     assert graph_wb_swift in graph_fn
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -4762,7 +4768,7 @@ def test_graph_dot_xml_clip_working_space_idt_zh():
     assert honesty_to in note_fn
     assert honesty_to in honesty_fn
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -4991,7 +4997,7 @@ def test_graph_dot_idt_odt_timeline_zh():
     assert honesty_to in note_fn
     assert honesty_to in honesty_fn
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -5188,7 +5194,7 @@ def test_graph_dot_odt_cst_zh():
     assert honesty_to in note_fn
     assert honesty_to in honesty_fn
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。整段代理，代理精度。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -11547,13 +11553,16 @@ def test_advanced_disclosure_help_remembers_expanded_state():
     advanced = content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
 
     # 61: help 一字锁；禁「默认收起」.
-    assert ADVANCED_DISCLOSURE_HELP == "节点与导出 ACEScct / EXR。展开状态会记住。仅预览。"
+    assert ADVANCED_DISCLOSURE_HELP == (
+        "节点与导出 ACEScct / EXR。展开状态会记住。整段代理，代理精度。"
+    )
     assert "默认收起" not in ADVANCED_DISCLOSURE_HELP
     assert "展开状态会记住" in ADVANCED_DISCLOSURE_HELP
     assert "默认收起" not in advanced
     assert f'.help("{ADVANCED_DISCLOSURE_HELP}")' in advanced
     assert ADVANCED_DISCLOSURE_HELP in _help_literals(advanced)
-    assert "仅预览" in ADVANCED_DISCLOSURE_HELP
+    assert "整段代理，代理精度" in ADVANCED_DISCLOSURE_HELP
+    assert "预览" not in ADVANCED_DISCLOSURE_HELP
     assert "精准" not in ADVANCED_DISCLOSURE_HELP
 
     # 59: persistence 一字不动（只改 help，不改 binding / UserDefaults）.
@@ -11972,36 +11981,481 @@ def test_banned_substrings_absent_from_user_facing_copy():
     assert not hits, "banned user-facing copy:\n" + "\n".join(hits)
 
 
+import re
+
 # New entries need PM approval. Exactly these two, and only these two.
+# (a) is matched by the file-name token ``00_Combined_Preview709_`` (and the
+# cube's own log/role symbols). (b) is matched by the preview-window file or
+# the Swift/Python symbol that draws the HDR/709 window and its badge.
+# Neither entry is a free pass for a new proxy-EXR help/log string.
 _PROXY_EXR_PREVIEW_WHITELIST = (
-    # (a) #142 combined cube is a 709 preview LUT by design.
-    # The file name and the log lines that name it may say Preview / 预览.
     "00_Combined_Preview709_<idt>.cube",
-    # (b) The HDR/709 preview window and its badge are the preview itself,
-    # not a written proxy EXR. They may say 预览 / Preview.
     "HDR/709 preview window and badge",
+)
+
+# (a) Log/role/filename writers for the combined cube. They may say 预览.
+_CUBE_PREVIEW_SYMBOLS = frozenset(
+    {
+        "COMBINED_PREVIEW709_FILE_PATTERN",
+        "COMBINED_PREVIEW709_README_ROLE",
+        "COMBINED_PREVIEW709_README_ROW",
+        "COMBINED_PREVIEW709_COMMENT",
+        "combinedPreviewFilename",
+        "combinedPreviewCube",
+        "combined_preview709_filename",
+        "combined_preview709_cube_bytes",
+        "combined_preview709_rgb",
+    }
+)
+
+# (b) Files whose user-visible strings are the HDR/709 window or its badge.
+_PREVIEW_WINDOW_FILES = frozenset(
+    {
+        "macos/LogBridge/LogBridge/Color/Rec709PreviewView.swift",
+        "macos/LogBridge/LogBridge/Color/HDRPreview.swift",
+        "macos/LogBridge/LogBridge/Preview/PreviewEngine.swift",
+        "macos/LogBridge/LogBridge/Views/SettingsView.swift",
+    }
+)
+
+# (b) Enclosing struct/func/constant. ``body`` is not used; the struct name is.
+_PREVIEW_WINDOW_SYMBOLS = frozenset(
+    {
+        "PreviewNotDeliverableBadge",
+        "Rec709PreviewView",
+        "HDRPreviewView",
+        "SourcePreviewView",
+        "PreviewPaneTitle",
+        "HDRPreviewColor",
+        "SplitPreview",
+        "PreviewScrubBar",
+        "ODTMode",
+        "odtPreviewTitle",
+        "odtPreviewCaption",
+        "acesOTNote",
+        "ODTInspector",
+        "WBInspector",
+        # Header control for the preview window. The written EXR is not a preview.
+        "WorkspaceHeader",
+        # 709 preview node inside the Resolve package (not the written EXR).
+        "odtCube",
+        "odt_cube_bytes",
+        "exportNote",
+        "export_note",
+        "graphXML",
+        "format_graph_xml",
+        "graphDOT",
+        "format_dot",
+        "REC709_PREVIEW_LABEL",
+        "REC709_CUBE_TITLE",
+        "REC709_CUBE_COMMENT",
+        "GRAPH_ODT_USER",
+        "GRAPH_ODT_XML_DESC",
+        "GRAPH_DOT_ODT_HEAD",
+        "EXPORT_NOTE_REC709",
+        "EXPORT_NOTE_ODT",
+        "odt_descriptor",
+        "dctl",
+        "format_dctl",
+    }
+)
+
+# Doc lines may name the preview window. A span of 预览/Preview must sit inside
+# one of these phrases. Bare "preview" is not enough, so 「导出预览 EXR」 fails.
+_DOC_PREVIEW_PHRASES = (
+    "00_combined_preview709_",
+    "combined preview",
+    "仅预览",
+    "709 预览",
+    "hdr 预览",
+    "默认预览",
+    "预览窗",
+    "预览输出",
+    "预览代理",
+    "预览查找表",
+    "预览帧",
+    "解码预览",
+    "线性预览",
+    "在预览上",
+    "预览上",
+    "预览被压",
+    "预览关",
+    "重跑预览",
+    "colorsync 预览",
+    "preview 8-bit",
+    "preview path",
+    "the preview",
+    "not preview",
+    "not the preview",
+    "movie preview",
+    "split preview",
+    "preview vs",
+    "preview only",
+    "preview odt",
+    "preview pane",
+    "preview node",
+    "preview pixels",
+    "preview titles",
+    "preview performance",
+    "preview first-frame",
+    "preview/scrub",
+    "from the preview",
+    "rec.709 preview",
+    "oetf preview",
+    "optional preview",
+    "tagged preview",
+    "default preview",
+    "preview cache",
+    "preview and",
+    "in preview",
+    "preview (",
+    "preview.",
+    "a preview",
+    "the macOS split preview",
+    "viewing proxy",
+    "preview sit",
+    "preview-only",
+    "preview framebuffer",
+    "preview badge",
+    "preview /",
+    "/ preview",
+    "preview is",
+    "preview applies",
+    "preview +",
+    "preview panes",
+    "preview linear",
+    "preview curve",
+    "split preview",
 )
 
 
 def _has_preview_word(text: str) -> bool:
     """Chinese 预览, or English Preview in any capitalization."""
+    return "预览" in text or "preview" in text.lower()
+
+
+def _strip_interpolation(text: str) -> str:
+    """Drop Swift \\( ... ) so identifiers such as previewFrameIndex are not copy."""
+    return re.sub(r"\\\((?:[^()]|\([^()]*\))*\)", "", text)
+
+
+def _forbidden_proxy_preview(text: str) -> bool:
+    """Claims that the written proxy EXR itself is a preview. Whitelist cannot save these."""
     lowered = text.lower()
-    return "预览" in text or "preview" in lowered
+    if "导出预览" in text or "预览exr" in lowered.replace(" ", ""):
+        return True
+    if "预览 exr" in lowered or "preview exr" in lowered:
+        return True
+    if "代理精度预览" in text or "代理预览" in text:
+        return True
+    for sentence in re.split(r"[。\n.]", text):
+        # Chinese 预览 next to the proxy honesty line calls the written EXR a preview.
+        # English "not the preview 8-bit path" in the same sentence does not.
+        if "整段代理" in sentence and "预览" in sentence:
+            return True
+    return False
 
 
-def _quoted_user_strings(src: str) -> str:
-    """String literals only. Identifiers such as refreshPreview are not copy."""
-    import re
+def _doc_preview_phrases_cover(text: str) -> bool:
+    """Every 预览/Preview span sits inside a preview-window or cube-name phrase."""
+    lowered = text.lower()
+    phrases = tuple(phrase.lower() for phrase in _DOC_PREVIEW_PHRASES)
+    spans = [
+        (match.start(), match.end())
+        for match in re.finditer(r"预览|preview", text, flags=re.IGNORECASE)
+    ]
+    if not spans:
+        return True
+    for start, end in spans:
+        covered = False
+        for phrase in phrases:
+            idx = 0
+            while True:
+                found = lowered.find(phrase, idx)
+                if found < 0:
+                    break
+                if found <= start and end <= found + len(phrase):
+                    covered = True
+                    break
+                idx = found + 1
+            if covered:
+                break
+        if not covered:
+            return False
+    return True
 
-    parts = re.findall(r'"((?:\\.|[^"\\])*)"', _code_without_comments(src))
-    return "\n".join(parts)
+
+class _VisibleCopy:
+    """One user-visible string. Identifiers and comments never become records."""
+
+    __slots__ = ("path", "symbol", "text", "kind")
+
+    def __init__(self, path: str, symbol: str, text: str, kind: str) -> None:
+        self.path = path
+        self.symbol = symbol
+        self.text = text
+        self.kind = kind
+
+    @property
+    def where(self) -> str:
+        return f"{self.path}:{self.symbol}"
+
+
+_SWIFT_DECL = re.compile(
+    r"^\s*(?:(?:public|private|internal|fileprivate|open|final|override|static|"
+    r"class|mutating|unowned)\s+)*"
+    r"(struct|class|enum|func|var)\s+([A-Za-z_][A-Za-z0-9_]*)"
+)
+
+
+def _swift_visible_records(path: str, src: str) -> list[_VisibleCopy]:
+    """UI literals, status/log strings, and output file-name templates.
+
+    Skips // and /* */ comments, #Preview / PreviewProvider as syntax, and
+    identifier-shaped literals (UserDefaults keys, logger subsystems).
+    """
+    records: list[_VisibleCopy] = []
+    struct_name = "<file>"
+    func_name = ""
+    line_buf: list[str] = []
+    i = 0
+    n = len(src)
+
+    def symbol_now() -> str:
+        if func_name and func_name not in {"body", "init"}:
+            return func_name
+        return struct_name
+
+    def flush_line() -> None:
+        nonlocal struct_name, func_name
+        line = "".join(line_buf)
+        line_buf.clear()
+        match = _SWIFT_DECL.match(line)
+        if not match:
+            return
+        kind, name = match.group(1), match.group(2)
+        if kind in {"struct", "class", "enum"}:
+            struct_name = name
+            func_name = ""
+        elif kind == "func":
+            func_name = name
+        elif kind == "var" and name not in {"body"} and "{" in line:
+            # Computed property. Local `var lines = []` has no brace and must
+            # not hide the enclosing function (exportNote, graphXML, …).
+            func_name = name
+
+    def keep(literal: str, kind: str) -> None:
+        visible = _strip_interpolation(literal).strip()
+        if not _has_preview_word(visible):
+            return
+        if re.fullmatch(r"[A-Za-z0-9_.]+", visible):
+            return
+        records.append(_VisibleCopy(path, symbol_now(), literal, kind))
+
+    while i < n:
+        if src.startswith("//", i):
+            nl = src.find("\n", i)
+            i = n if nl < 0 else nl
+            continue
+        if src.startswith("/*", i):
+            end = src.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+            continue
+        ch = src[i]
+        if ch == "\n":
+            flush_line()
+            i += 1
+            continue
+        if src.startswith('"""', i):
+            end = src.find('"""', i + 3)
+            if end < 0:
+                break
+            keep(src[i + 3 : end], "log")
+            i = end + 3
+            continue
+        if ch == '"':
+            j = i + 1
+            chars: list[str] = []
+            while j < n:
+                if src[j] == "\\" and j + 1 < n:
+                    chars.append(src[j + 1])
+                    j += 2
+                    continue
+                if src[j] == '"':
+                    break
+                chars.append(src[j])
+                j += 1
+            keep("".join(chars), "ui")
+            i = j + 1 if j < n else n
+            continue
+        line_buf.append(ch)
+        i += 1
+    flush_line()
+    return records
+
+
+def _python_visible_records(path: str, src: str) -> list[_VisibleCopy]:
+    """CLI / log / file-name string constants. Docstrings and identifiers are out."""
+    import ast
+
+    records: list[_VisibleCopy] = []
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return records
+    docstring_ids: set[int] = set()
+
+    def _mark_doc(body: list) -> None:
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(getattr(body[0], "value", None), ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            docstring_ids.add(id(body[0].value))
+
+    _mark_doc(tree.body)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            _mark_doc(node.body)
+
+    parents: dict[int, ast.AST] = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[id(child)] = node
+
+    def _symbol(node: ast.AST) -> str:
+        cur: ast.AST | None = node
+        while cur is not None:
+            if isinstance(cur, ast.Assign) and cur.targets:
+                target = cur.targets[0]
+                if isinstance(target, ast.Name):
+                    return target.id
+            if isinstance(cur, ast.AnnAssign) and isinstance(cur.target, ast.Name):
+                return cur.target.id
+            if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                return cur.name
+            cur = parents.get(id(cur))
+        return "<module>"
+
+    def _keep(node: ast.AST, text: str) -> None:
+        visible = text.strip()
+        if not _has_preview_word(visible):
+            return
+        if re.fullmatch(r"[A-Za-z0-9_.]+", visible):
+            return
+        records.append(_VisibleCopy(path, _symbol(node), text, "log"))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if id(node) in docstring_ids:
+                continue
+            _keep(node, node.value)
+        elif isinstance(node, ast.JoinedStr):
+            parts: list[str] = []
+            for part in node.values:
+                if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                    parts.append(part.value)
+            if parts:
+                _keep(node, "".join(parts))
+    return records
+
+
+def _markdown_visible_records(path: str, src: str) -> list[_VisibleCopy]:
+    records: list[_VisibleCopy] = []
+    heading = "<doc>"
+    for line in src.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            heading = stripped.lstrip("#").strip() or heading
+        if _has_preview_word(line):
+            records.append(_VisibleCopy(path, heading, line, "doc"))
+    return records
+
+
+def _user_visible_preview_records() -> list[_VisibleCopy]:
+    """Swift UI/log/file-name literals, Python CLI/log strings, README-family docs."""
+    records: list[_VisibleCopy] = []
+    swift_root = ROOT / "macos"
+    if swift_root.is_dir():
+        for path in swift_root.rglob("*.swift"):
+            if path.name.startswith("._"):
+                continue
+            rel = path.relative_to(ROOT).as_posix()
+            records.extend(
+                _swift_visible_records(rel, path.read_text(encoding="utf-8"))
+            )
+    for base in (ROOT / "color", ROOT / "scripts"):
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*.py"):
+            if path.name.startswith("._"):
+                continue
+            rel = path.relative_to(ROOT).as_posix()
+            records.extend(
+                _python_visible_records(rel, path.read_text(encoding="utf-8"))
+            )
+    for name in ("README.md", "ACCEPTANCE.md", "FORMULAS.md"):
+        path = ROOT / name
+        if path.is_file():
+            records.extend(
+                _markdown_visible_records(name, path.read_text(encoding="utf-8"))
+            )
+    return records
+
+
+def _whitelisted_preview(rec: _VisibleCopy, visible: str) -> bool:
+    """True only for the two whitelist contexts, matched by file, symbol, or phrase."""
+    if "00_Combined_Preview709_" in visible or rec.symbol in _CUBE_PREVIEW_SYMBOLS:
+        return True
+    if rec.symbol.startswith("PREVIEW_STATUS"):
+        return True
+    if visible.strip() == "仅预览":
+        return True
+    if rec.path in _PREVIEW_WINDOW_FILES:
+        return True
+    if rec.symbol in _PREVIEW_WINDOW_SYMBOLS:
+        # Export caption lives in the same inspector as the preview picker.
+        # 预览 there would again call the written EXR a preview.
+        if rec.symbol == "ODTInspector" and "导出" in visible:
+            return False
+        if rec.symbol == "WBInspector" and (
+            "导出" in visible or "整段代理" in visible or "EXR" in visible
+        ):
+            return False
+        return True
+    if rec.symbol == "title" and rec.path.endswith("NodeGraph.swift"):
+        return True
+    if rec.kind == "doc" or rec.path.endswith("generate_ocio_assets.py"):
+        return _doc_preview_phrases_cover(visible)
+    if rec.symbol in {"readme", "format_readme"}:
+        return _doc_preview_phrases_cover(visible)
+    return False
+
+
+def _preview_word_violations(records: list[_VisibleCopy]) -> list[str]:
+    """User-visible 预览/Preview outside the two whitelist contexts."""
+    hits: list[str] = []
+    for rec in records:
+        visible = _strip_interpolation(rec.text)
+        if not _has_preview_word(visible):
+            continue
+        if _forbidden_proxy_preview(visible) or not _whitelisted_preview(rec, visible):
+            snippet = " ".join(visible.split())
+            if len(snippet) > 180:
+                snippet = snippet[:180] + "…"
+            hits.append(f"{rec.where}: {snippet}")
+    return hits
 
 
 def test_proxy_exr_buttons_names_and_logs_omit_preview_word():
-    """Written proxy EXR labels, file names, and logs omit 预览 and Preview.
+    """User-visible copy may say 预览 only in the two whitelisted contexts.
 
-    The whitelist has exactly two preview-by-design surfaces. It does not
-    excuse a proxy-EXR button, file name, or log line. New entries need PM approval.
+    Scan UI literals (Text/Label/Button/.help/accessibility/alerts), log and
+    status strings, output file-name templates, and README. Comments,
+    ``#Preview`` / ``PreviewProvider``, and identifiers such as ``previewWindow``
+    are not copy. The whitelist is the exclusion list: a new proxy-EXR string
+    that says 预览 fails even if it merely sits near an allowed badge.
     """
     assert _PROXY_EXR_PREVIEW_WHITELIST == (
         "00_Combined_Preview709_<idt>.cube",
@@ -12009,118 +12463,114 @@ def test_proxy_exr_buttons_names_and_logs_omit_preview_word():
     )
     assert len(_PROXY_EXR_PREVIEW_WHITELIST) == 2
 
+    hits = _preview_word_violations(_user_visible_preview_records())
+    assert not hits, "预览/Preview outside the whitelist:\n" + "\n".join(hits)
+
     from color.batch import (
-        CANCEL_BUTTON,
-        CANCELLED_STATUS_TEMPLATE,
-        DELIVERABLE_DIR_SUFFIX,
-        DISK_SHORT_STATUS,
-        DISK_SHORT_STATUS_TEMPLATE,
-        FOLDER_PICKER_MESSAGE,
-        PROCESS_BUTTON_HELP,
-        PROCESS_DELIVERABLE_NOTE,
-        WRITTEN_CHIP,
-        WRITE_FAILED_CHIP,
-        batch_summary_text,
-        cancelled_status_text,
-        deliverable_name,
-        processed_status_text,
-        progress_text,
-        sequence_frame_name,
+        ADVANCED_DISCLOSURE_HELP,
+        ADVANCED_EXPORT_HELP,
+        HONEST_PROXY_NOTE,
     )
-    from color.resolve_export import EXPORT_NOTE_PROXY
 
-    content = _read(CONTENT)
-    clip = _read(CLIP)
-    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
-    swift = _all_swift()
+    for label, text in (
+        ("ADVANCED_EXPORT_HELP", ADVANCED_EXPORT_HELP),
+        ("ADVANCED_DISCLOSURE_HELP", ADVANCED_DISCLOSURE_HELP),
+        ("INSPECTOR_EXPORT_NOTE", INSPECTOR_EXPORT_NOTE),
+        ("INSPECTOR_EXPOSURE_HELP", INSPECTOR_EXPOSURE_HELP),
+    ):
+        assert "整段代理，代理精度" in text, label
+        assert "预览" not in text, label
+        assert "preview" not in text.lower(), label
+        _chengpian_only_honesty(text)
+    assert "cube 节点" in ADVANCED_EXPORT_HELP
+    assert "cube 节点" in INSPECTOR_EXPORT_NOTE
+    assert HONEST_PROXY_NOTE == "整段代理，代理精度"
 
-    buttons = {
-        "PROCESS_BUTTON": PROCESS_BUTTON,
-        "CANCEL_BUTTON": CANCEL_BUTTON,
-        "PROCESS_BUTTON_HELP_UI": PROCESS_BUTTON_HELP_UI,
-        "PROCESS_BUTTON_HELP": PROCESS_BUTTON_HELP,
-        "swift process bar": _quoted_user_strings(
-            content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
-        ),
-    }
-    names = {
-        "deliverable_name": deliverable_name("clip.mov"),
-        "sequence_frame_name": sequence_frame_name(0),
-        "DELIVERABLE_DIR_SUFFIX": DELIVERABLE_DIR_SUFFIX,
-        "swift sequence dir": _quoted_user_strings(
-            exporter.split("static func deliverableSequenceDirectory")[1].split(
-                "static func sequenceFrameURL"
-            )[0]
-        ),
-        "swift sequence frame": _quoted_user_strings(
-            exporter.split("static func sequenceFrameURL")[1].split("static func ")[0]
-        ),
-    }
-    logs = {
-        "processed": processed_status_text(2, 1),
-        "CANCELLED_STATUS_TEMPLATE": CANCELLED_STATUS_TEMPLATE,
-        "cancelled": cancelled_status_text(1, 2),
-        "DISK_SHORT_STATUS": DISK_SHORT_STATUS,
-        "DISK_SHORT_STATUS_TEMPLATE": DISK_SHORT_STATUS_TEMPLATE,
-        "batch_summary": batch_summary_text(1, 0, 0),
-        "progress": progress_text(2, 5, 120, 240),
-        "FOLDER_PICKER_MESSAGE": FOLDER_PICKER_MESSAGE,
-        "FOLDER_PICKER_MESSAGE_UI": FOLDER_PICKER_MESSAGE_UI,
-        "PROCESS_DELIVERABLE_NOTE": PROCESS_DELIVERABLE_NOTE,
-        "PROCESS_DELIVERABLE_NOTE_UI": PROCESS_DELIVERABLE_NOTE_UI,
-        "EXPORT_NOTE_PROXY": EXPORT_NOTE_PROXY,
-        "WRITTEN_CHIP": WRITTEN_CHIP,
-        "WRITE_FAILED_CHIP": WRITE_FAILED_CHIP,
-        "swift picker": _quoted_user_strings(
-            clip.split("func processLockedClips()")[1].split("func writeLockedDeliverables")[0]
-        ),
-        "swift summary": _quoted_user_strings(
-            clip.split("static func batchSummaryText")[1].split("func exportLockedEXR")[0]
-        ),
-        "swift cancel": _quoted_user_strings(
-            clip.split("static func cancelledExportNote")[1].split("static let bytesPerEXRPixel")[0]
-        ),
-        "swift progress": _quoted_user_strings(
-            clip.split("static func exportProgressText")[1].split("static func cancelledExportNote")[0]
-        ),
-    }
-    proxy_lines = [
-        line
-        for line in exporter.splitlines()
-        if "整段代理，代理精度" in line
-    ]
-    assert proxy_lines, "Swift export log lost the proxy honesty line"
-    for index, line in enumerate(proxy_lines):
-        logs[f"swift proxy line {index}"] = line
-
-    hits = [
-        f"{name}: {text}"
-        for name, text in {**buttons, **names, **logs}.items()
-        if _has_preview_word(text)
-    ]
-    assert not hits, "proxy EXR copy says 预览/Preview:\n" + "\n".join(hits)
-
-    for text in {**buttons, **names, **logs}.values():
-        assert "代理精度预览" not in text
-        if "代理精度" in text:
-            assert "预览" not in text
-            assert "preview" not in text.lower()
-
-    # (a) combined cube file and its log mention. Preview by design.
+    # (a) combined cube file name, matched by the exact token.
     cube = "00_Combined_Preview709_<idt>.cube"
     assert cube == _PROXY_EXR_PREVIEW_WHITELIST[0]
-    assert "00_Combined_Preview709_" in exporter
-    cube_log = "预览查找表（IDT → 曝光 → 白平衡 → 709 预览）。已实现（未验证）。"
-    assert cube_log in exporter
-    assert _has_preview_word(cube)
-    assert _has_preview_word(cube_log)
-    assert "整段代理" not in cube_log
+    cube_hits = _preview_word_violations(
+        [_VisibleCopy("color/resolve_export.py", "COMBINED_PREVIEW709_FILE_PATTERN", cube, "log")]
+    )
+    assert cube_hits == []
 
-    # (b) HDR/709 preview window and its badge. Preview by design.
+    # (b) badge on the HDR/709 window, matched by file + symbol and the exact badge.
+    badge_src = (
+        "struct PreviewNotDeliverableBadge: View {\n"
+        '    var body: some View {\n'
+        '        Text("仅预览")\n'
+        '            .help("仅预览")\n'
+        '            .accessibilityLabel("仅预览")\n'
+        "    }\n"
+        "}\n"
+    )
+    badge_recs = _swift_visible_records(
+        "macos/LogBridge/LogBridge/Color/Rec709PreviewView.swift", badge_src
+    )
+    assert badge_recs, "badge literals were not treated as user-visible"
+    assert _preview_word_violations(badge_recs) == []
     assert _PROXY_EXR_PREVIEW_WHITELIST[1] == "HDR/709 preview window and badge"
-    assert 'Text("仅预览")' in swift
-    assert '.help("仅预览")' in swift
-    assert '.accessibilityLabel("仅预览")' in swift
-    assert "HLG 仅预览" in swift
-    assert "PQ 仅预览" in swift
-    assert _has_preview_word('Text("仅预览")')
+
+
+def test_preview_whitelist_catches_planted_proxy_exr_and_ignores_identifiers():
+    """Negative self-test: 「导出预览 EXR」 in a user-visible string is caught.
+
+    ``#Preview``, ``PreviewProvider``, and ``previewWindow`` are identifiers,
+    not copy, and must not trip the scan. A comment that says 预览 must not either.
+    """
+    planted_swift = (
+        "struct AdvancedPanel: View {\n"
+        "    var body: some View {\n"
+        '        Button("导出 ACEScct / EXR") { export() }\n'
+        '            .help("导出预览 EXR")\n'
+        "    }\n"
+        "}\n"
+        "let previewWindow = 1\n"
+        "#Preview { EmptyView() }\n"
+        "struct PreviewProvider {}\n"
+        "// 这行注释里的预览不是文案\n"
+    )
+    planted_hits = _preview_word_violations(
+        _swift_visible_records("SyntheticExport.swift", planted_swift)
+    )
+    assert any("导出预览 EXR" in hit for hit in planted_hits), planted_hits
+    assert all("previewWindow" not in hit for hit in planted_hits)
+    assert all("#Preview" not in hit for hit in planted_hits)
+    assert all("PreviewProvider" not in hit for hit in planted_hits)
+
+    ident_only = (
+        "let previewWindow = 1\n"
+        "func previewWindow() {}\n"
+        "#Preview { Text(\"整段代理，代理精度\") }\n"
+        "struct PreviewProvider {}\n"
+        "// 预览\n"
+        "/* Preview */\n"
+    )
+    assert _preview_word_violations(
+        _swift_visible_records("SyntheticIdent.swift", ident_only)
+    ) == []
+
+    planted_py = (
+        "def write_proxy_log():\n"
+        "    print(\"导出预览 EXR\")\n"
+        "\n"
+        "previewWindow = 1\n"
+        "# 预览\n"
+    )
+    py_hits = _preview_word_violations(
+        _python_visible_records("color/synthetic_log.py", planted_py)
+    )
+    assert any("导出预览 EXR" in hit for hit in py_hits), py_hits
+    assert all("previewWindow" not in hit for hit in py_hits)
+
+    readme_hit = _preview_word_violations(
+        [
+            _VisibleCopy(
+                "README.md",
+                "Export",
+                "写出的文件是导出预览 EXR，给达芬奇用。",
+                "doc",
+            )
+        ]
+    )
+    assert any("导出预览 EXR" in hit for hit in readme_hit), readme_hit

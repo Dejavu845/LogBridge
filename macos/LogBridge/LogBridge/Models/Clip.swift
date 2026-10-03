@@ -1244,7 +1244,7 @@ final class SessionModel: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "导出"
-        panel.message = "已锁定片段写出 Resolve 节点图（XML / DCTL / .cube）。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。709 预览。仅预览。已实现（未验证）。"
+        panel.message = "已锁定片段写出 Resolve 节点图（XML / DCTL / .cube）。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，代理精度。已实现（未验证）。"
         panel.begin { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
             do {

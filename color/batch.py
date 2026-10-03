@@ -204,9 +204,11 @@ EMPTY_STATE_STEPS = (
 USER_PICKED_IDT_NOTE = "用户选择成对 IDT"
 MISSING_YCBCR_TAGS_CHIP_UI = "读不出片源色彩标签，没法写出"
 ADVANCED_EXPORT_HELP = (
-    "只处理已锁定片段。待选跳过。709 预览。仅预览。不必全部锁定。"
+    "只处理已锁定片段。待选跳过。写出整段代理，代理精度 EXR，以及 cube 节点。不必全部锁定。"
 )
-ADVANCED_DISCLOSURE_HELP = "节点与导出 ACEScct / EXR。展开状态会记住。仅预览。"
+ADVANCED_DISCLOSURE_HELP = (
+    "节点与导出 ACEScct / EXR。展开状态会记住。整段代理，代理精度。"
+)
 CANCEL_BUTTON = "取消"
 CANCELLED_NOTE = "已取消"
 PROGRESS_PREFIX = "写出代理"
