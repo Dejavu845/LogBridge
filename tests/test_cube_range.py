@@ -10,8 +10,13 @@ Interpolation tolerances (absolute, Rec.709 or ACEScct code, size 17):
 - Overexposed samples sit in the top fifth of that node's input domain.
 - Saturated samples use independent random channels, same seed.
 
-The numbers below are the gates. The test also records the max error it
-saw; keep the gate above that max.
+Neutral-axis and LogC4 18% grey gates are max absolute error.
+Saturated and overexposed gates are mean and p99 of the same absolute
+channel error. The max of those groups is printed and not gated.
+
+Saturated and overexposed error on the Rec.709 nodes comes from Rec.709
+hard clipping at [0, 1] (no tone mapping). Tighten the max once 709 tone
+mapping lands.
 """
 
 from __future__ import annotations
@@ -46,45 +51,71 @@ from color.resolve_export import export_resolve_bundle
 # Seed for every random lattice probe in this file.
 INTERP_SEED = 20261003
 
-# Absolute gates on size 17. Neutral is r=g=b inside the grading band
+# Absolute error on size 17. Neutral is r=g=b inside the grading band
 # (camera log 0.15–0.50, or ACEScct 0.18–0.45), and each sample sits
 # inside a lattice cell rather than on a node. Saturated uses independent
 # channels across the whole input domain. Overexposed is the top fifth.
-# Gates sit above the max error measured with INTERP_SEED (LogC4, size 17,
-# exposure +0.5 stop, WB 3200 K tint +0.25 except the neutral/grey chain,
-# which is 0 stops and identity WB):
-#   idt       n 0.019175  s 0.092038  o 0.022275
-#   exposure  n 0.000000  s 0.000783  o 0.004643
-#   wb        n 0.004751  s 0.314497  o 0.678737
-#   odt       n 0.048723  s 0.414236  o 0.722500
-# The IDT overexposed sample happened to be easy for this seed; its gate
-# stays loose because the log shoulder of a saturated primary is not flat.
-TOL_NEUTRAL = {
+# Seed INTERP_SEED, LogC4, exposure +0.5 stop, WB 3200 K tint +0.25.
+# The neutral/grey chain is 0 stops and identity WB.
+#
+# Neutral axis and LogC4 18% grey stay on max |Δ|. Measured max:
+#   idt 0.019175  exposure 0.000000  wb 0.004751  odt 0.048723
+#   chain neutral 0.225839  chain grey 0.012877
+TOL_NEUTRAL_MAX = {
     "idt": 0.04,
     "exposure": 0.001,
     "wb": 0.02,
     "odt": 0.08,
 }
-TOL_SATURATED = {
-    "idt": 0.25,
-    "exposure": 0.006,
-    "wb": 0.55,
-    "odt": 0.85,
+TOL_CHAIN_NEUTRAL_MAX = 0.30
+TOL_CHAIN_GREY_MAX = 0.04
+
+# Saturated / overexposed: mean and p99 of flattened |lookup − direct|.
+# About 15% above the INTERP_SEED measurement. Max is logged, not gated.
+# Measured (mean, p99, max):
+#   idt sat       0.003581  0.060945  0.092038
+#   exposure sat  0.000018  0.000648  0.000783
+#   wb sat        0.010665  0.162845  0.314497
+#   odt sat       0.013575  0.383491  0.414236
+#   chain sat     0.025661  0.405312  0.415366
+#   idt over      0.002000  0.019807  0.022275
+#   exposure over 0.000325  0.003987  0.004643
+#   wb over       0.051386  0.611761  0.678737
+#   odt over      0.090785  0.674138  0.722500
+# Saturated and overexposed error on the Rec.709 nodes (ODT and the
+# combined chain) comes from Rec.709 hard clipping at [0, 1] (no tone
+# mapping). Tighten the max once 709 tone mapping lands.
+TOL_SATURATED_MEAN = {
+    "idt": 0.0042,
+    "exposure": 0.000030,
+    "wb": 0.013,
+    "odt": 0.016,
 }
-TOL_OVEREXPOSED = {
-    "idt": 0.40,
-    "exposure": 0.008,
-    "wb": 0.75,
-    "odt": 0.85,
+TOL_SATURATED_P99 = {
+    "idt": 0.071,
+    "exposure": 0.00080,
+    "wb": 0.19,
+    "odt": 0.45,
 }
-# Trilinear chain vs the analytic combined preview. The exact (non-interpolated)
-# node functions match that preview to 1e-6; these gates are the lattice error
-# of a size-17 chain. Neutral is the camera-log grading band (0.15–0.50) at
-# 0 stops and identity WB. Measured max with INTERP_SEED: neutral 0.226,
-# grey (LogC4 18%) 0.013, saturated (graded WB) 0.415.
-TOL_CHAIN_NEUTRAL = 0.30
-TOL_CHAIN_SATURATED = 0.80
-TOL_CHAIN_GREY = 0.04
+TOL_OVER_MEAN = {
+    "idt": 0.0024,
+    "exposure": 0.00040,
+    "wb": 0.060,
+    "odt": 0.11,
+}
+TOL_OVER_P99 = {
+    "idt": 0.024,
+    "exposure": 0.0048,
+    "wb": 0.71,
+    "odt": 0.78,
+}
+TOL_CHAIN_SATURATED_MEAN = 0.030
+TOL_CHAIN_SATURATED_P99 = 0.47
+
+# IRIDAS header keywords the writers emit. Not LUT_3D_INPUT_RANGE.
+# Scene-node input domains, 10 decimal places except the 0/1 edges.
+SCENE_DOMAIN_MIN_LINE = "DOMAIN_MIN 0.0729055352 0.0729055352 0.0729055352"
+SCENE_DOMAIN_MAX_LINE = "DOMAIN_MAX 1.4679963120 1.4679963120 1.4679963120"
 
 
 def _rgb_rows(text: str) -> np.ndarray:
@@ -189,8 +220,18 @@ def _between(rng: np.random.Generator, count: int, size: int, lo: float, hi: flo
     return _inside_cells(values, lo, hi, size)
 
 
-def _max_abs(a, b) -> float:
-    return float(np.max(np.abs(np.asarray(a) - np.asarray(b))))
+def _err_stats(a, b) -> dict[str, float]:
+    """Mean, p99, and max of flattened absolute channel error.
+
+    p99 uses NumPy's default linear quantile. Max is the same number the
+    old max-error gate used.
+    """
+    err = np.abs(np.asarray(a, dtype=np.float64) - np.asarray(b, dtype=np.float64)).reshape(-1)
+    return {
+        "mean": float(np.mean(err)),
+        "p99": float(np.quantile(err, 0.99)),
+        "max": float(np.max(err)),
+    }
 
 
 def test_default_cube_size_is_17_and_33_still_selectable(tmp_path):
@@ -222,8 +263,9 @@ def test_per_node_cubes_stay_inside_declared_range():
         rgb = _rgb_rows(text)
         assert rgb.min() >= ACESCCT_CUBE_MIN - 1e-8, idt
         assert rgb.max() <= ACESCCT_CUBE_MAX + 1e-8, idt
-        assert _domain(text, "DOMAIN_MIN") == (0.0, 0.0, 0.0)
-        assert _domain(text, "DOMAIN_MAX") == (1.0, 1.0, 1.0)
+        assert "DOMAIN_MIN 0.0 0.0 0.0" in text
+        assert "DOMAIN_MAX 1.0 1.0 1.0" in text
+        assert "LUT_3D_INPUT_RANGE" not in text
         assert "1e-10" in text
 
     for stops in (0.0, -2.0, 2.0, 4.0):
@@ -231,6 +273,9 @@ def test_per_node_cubes_stay_inside_declared_range():
         rgb = _rgb_rows(text)
         assert rgb.min() >= ACESCCT_CUBE_MIN - 1e-8
         assert rgb.max() <= ACESCCT_CUBE_MAX + 1e-8
+        assert SCENE_DOMAIN_MIN_LINE in text
+        assert SCENE_DOMAIN_MAX_LINE in text
+        assert "LUT_1D_INPUT_RANGE" not in text
         lo = _domain(text, "DOMAIN_MIN")
         hi = _domain(text, "DOMAIN_MAX")
         assert lo[0] == pytest.approx(ACESCCT_CUBE_MIN, abs=5e-10)
@@ -241,6 +286,9 @@ def test_per_node_cubes_stay_inside_declared_range():
         rgb = _rgb_rows(text)
         assert rgb.min() >= ACESCCT_CUBE_MIN - 1e-8
         assert rgb.max() <= ACESCCT_CUBE_MAX + 1e-8
+        assert SCENE_DOMAIN_MIN_LINE in text
+        assert SCENE_DOMAIN_MAX_LINE in text
+        assert "LUT_3D_INPUT_RANGE" not in text
         lo = _domain(text, "DOMAIN_MIN")
         hi = _domain(text, "DOMAIN_MAX")
         assert lo[0] == pytest.approx(ACESCCT_CUBE_MIN, abs=5e-10)
@@ -250,6 +298,9 @@ def test_per_node_cubes_stay_inside_declared_range():
     odt_rgb = _rgb_rows(odt)
     assert odt_rgb.min() >= 0.0
     assert odt_rgb.max() <= 1.0
+    assert SCENE_DOMAIN_MIN_LINE in odt
+    assert SCENE_DOMAIN_MAX_LINE in odt
+    assert "LUT_3D_INPUT_RANGE" not in odt
     assert _domain(odt, "DOMAIN_MIN")[0] == pytest.approx(ACESCCT_CUBE_MIN, abs=5e-10)
     assert _domain(odt, "DOMAIN_MAX")[0] == pytest.approx(ACESCCT_CUBE_MAX, abs=5e-10)
 
@@ -307,7 +358,7 @@ def test_eighteen_percent_grey_stays_near_rec709_oetf():
 
 
 def _interp_errors(idt: str = "arri_logc4_awg4", size: int = 17, stops: float = 0.5, cct: float = 3200.0, tint: float = 0.25):
-    """Max |lookup - direct| for each node and sample class. Also the chain."""
+    """Mean, p99, and max |lookup − direct| for each node and sample class."""
     rng = np.random.default_rng(INTERP_SEED)
     idt_text = idt_cube_bytes(idt, size=size)
     idt_table = as_bgr_table(_rgb_rows(idt_text), size)
@@ -341,13 +392,13 @@ def _interp_errors(idt: str = "arri_logc4_awg4", size: int = 17, stops: float = 
     for kind, count in (("neutral", 24), ("saturated", 36), ("over", 24)):
         cam = _between(rng, count, size, 0.0, 1.0, kind)
         probes[kind] = cam
-        out[("idt", kind)] = _max_abs(trilinear_cube(idt_table, cam, 0.0, 1.0), idt_direct(cam))
+        out[("idt", kind)] = _err_stats(trilinear_cube(idt_table, cam, 0.0, 1.0), idt_direct(cam))
         exp_x = _between(rng, count, 65, exp_lo, exp_hi, kind)
-        out[("exposure", kind)] = _max_abs(lerp_1d(exp_rows, exp_x, exp_lo, exp_hi), exp_direct(exp_x))
+        out[("exposure", kind)] = _err_stats(lerp_1d(exp_rows, exp_x, exp_lo, exp_hi), exp_direct(exp_x))
         wb_x = _between(rng, count, size, wb_lo, wb_hi, kind)
-        out[("wb", kind)] = _max_abs(trilinear_cube(wb_table, wb_x, wb_lo, wb_hi), wb_direct(wb_x))
+        out[("wb", kind)] = _err_stats(trilinear_cube(wb_table, wb_x, wb_lo, wb_hi), wb_direct(wb_x))
         odt_x = _between(rng, count, size, odt_lo, odt_hi, kind)
-        out[("odt", kind)] = _max_abs(trilinear_cube(odt_table, odt_x, odt_lo, odt_hi), odt_direct(odt_x))
+        out[("odt", kind)] = _err_stats(trilinear_cube(odt_table, odt_x, odt_lo, odt_hi), odt_direct(odt_x))
 
     def chain_lookup(log, exp_curve, wb_tab):
         enc = trilinear_cube(idt_table, log, 0.0, 1.0)
@@ -363,19 +414,19 @@ def _interp_errors(idt: str = "arri_logc4_awg4", size: int = 17, stops: float = 
     exp0 = _rgb_rows(exposure_cube_bytes(0.0))
     wb0 = as_bgr_table(_rgb_rows(wb_cube_bytes(None, 0.0, size=size)), size)
     neutral_log = probes["neutral"]
-    out[("chain", "neutral")] = _max_abs(
+    out[("chain", "neutral")] = _err_stats(
         chain_lookup(neutral_log, exp0, wb0),
         combined_preview709_rgb(neutral_log, idt, exposure_stops=0.0, cct=None),
     )
     sat_log = probes["saturated"]
-    out[("chain", "saturated")] = _max_abs(
+    out[("chain", "saturated")] = _err_stats(
         chain_lookup(sat_log, exp_rows, wb_table),
         combined_preview709_rgb(
             sat_log, idt, exposure_stops=stops, cct=cct, tint=tint
         ),
     )
     grey = np.full((1, 3), float(linear_to_logc4(0.18)))
-    out[("chain", "grey")] = _max_abs(
+    out[("chain", "grey")] = _err_stats(
         chain_lookup(grey, exp0, wb0),
         combined_preview709_rgb(grey, idt, exposure_stops=0.0, cct=None),
     )
@@ -385,28 +436,55 @@ def _interp_errors(idt: str = "arri_logc4_awg4", size: int = 17, stops: float = 
 def test_cube_trilinear_matches_direct_function_between_nodes():
     """Real lattice lookup, not the function compared with itself.
 
-    Tolerances are absolute. Neutral (r=g=b) is tighter than saturated or
-    overexposed samples. Size is the default 17.
+    Neutral (r=g=b) and LogC4 18% grey are gated on max absolute error.
+    Saturated and overexposed groups are gated on mean and p99. Their max
+    is logged and not gated.
+
+    Saturated and overexposed error on the Rec.709 nodes comes from Rec.709
+    hard clipping at [0, 1] (no tone mapping). Tighten the max once 709
+    tone mapping lands. Size stays the default 17.
     """
     err = _interp_errors()
-    gates = {
-        "neutral": TOL_NEUTRAL,
-        "saturated": TOL_SATURATED,
-        "over": TOL_OVEREXPOSED,
-    }
-    for kind, table in gates.items():
-        for node, tol in table.items():
-            seen = err[(node, kind)]
-            assert seen <= tol, f"{node} {kind}: max {seen:.6f} > tol {tol}"
-    assert err[("chain", "neutral")] <= TOL_CHAIN_NEUTRAL
-    assert err[("chain", "saturated")] <= TOL_CHAIN_SATURATED
-    assert err[("chain", "grey")] <= TOL_CHAIN_GREY
+    logged = []
+    for node, tol in TOL_NEUTRAL_MAX.items():
+        seen = err[(node, "neutral")]["max"]
+        assert seen <= tol, f"{node} neutral: max {seen:.6f} > tol {tol}"
+    assert err[("chain", "neutral")]["max"] <= TOL_CHAIN_NEUTRAL_MAX
+    assert err[("chain", "grey")]["max"] <= TOL_CHAIN_GREY_MAX
+
+    # Saturated / overexposed: mean and p99 only. Max is recorded below.
+    for node, tol in TOL_SATURATED_MEAN.items():
+        seen = err[(node, "saturated")]
+        assert seen["mean"] <= tol, f"{node} saturated mean {seen['mean']:.6f} > {tol}"
+        p99 = TOL_SATURATED_P99[node]
+        assert seen["p99"] <= p99, f"{node} saturated p99 {seen['p99']:.6f} > {p99}"
+        logged.append(
+            f"{node} saturated mean={seen['mean']:.6f} p99={seen['p99']:.6f} max={seen['max']:.6f}"
+        )
+    for node, tol in TOL_OVER_MEAN.items():
+        seen = err[(node, "over")]
+        assert seen["mean"] <= tol, f"{node} over mean {seen['mean']:.6f} > {tol}"
+        p99 = TOL_OVER_P99[node]
+        assert seen["p99"] <= p99, f"{node} over p99 {seen['p99']:.6f} > {p99}"
+        logged.append(
+            f"{node} over mean={seen['mean']:.6f} p99={seen['p99']:.6f} max={seen['max']:.6f}"
+        )
+    chain_sat = err[("chain", "saturated")]
+    assert chain_sat["mean"] <= TOL_CHAIN_SATURATED_MEAN
+    assert chain_sat["p99"] <= TOL_CHAIN_SATURATED_P99
+    logged.append(
+        "chain saturated mean={mean:.6f} p99={p99:.6f} max={max:.6f}".format(**chain_sat)
+    )
+    # Logged, not gated. pytest -s shows these lines; a failure of mean/p99
+    # does not depend on max.
+    print("\n".join(logged))
 
 
 def test_interpolation_tolerances_are_documented():
-    """The gates live next to the test, and neutral is stricter than saturated."""
-    for node in TOL_NEUTRAL:
-        assert TOL_NEUTRAL[node] < TOL_SATURATED[node]
-        assert TOL_NEUTRAL[node] <= TOL_OVEREXPOSED[node]
-    assert TOL_CHAIN_NEUTRAL < TOL_CHAIN_SATURATED
-    assert TOL_CHAIN_GREY <= TOL_CHAIN_NEUTRAL
+    """Mean and p99 gates sit just above the measured tail. Neutral stays max."""
+    for node in TOL_SATURATED_MEAN:
+        assert TOL_SATURATED_MEAN[node] < TOL_SATURATED_P99[node]
+        assert TOL_OVER_MEAN[node] < TOL_OVER_P99[node]
+        assert node in TOL_NEUTRAL_MAX
+    assert TOL_CHAIN_SATURATED_MEAN < TOL_CHAIN_SATURATED_P99
+    assert TOL_CHAIN_GREY_MAX <= TOL_CHAIN_NEUTRAL_MAX
