@@ -70,6 +70,21 @@ def test_logc4_idt_18_percent():
     np.testing.assert_allclose(lin, 0.18, rtol=1e-6)
 
 
+def test_venice_idt_matches_non_venice_reference_18_percent():
+    """Venice reference falls back to the matching SG3 / Cine matrix (no silent no-op)."""
+    from color.pipeline import apply_idt_reference
+
+    log = np.full(3, float(linear_to_slog3(0.18)))
+    for venice, base in (
+        ("sony_slog3_sgamut3_venice", "sony_slog3_sgamut3"),
+        ("sony_slog3_sgamut3cine_venice", "sony_slog3_sgamut3cine"),
+    ):
+        a = apply_idt_reference(log, venice)
+        b = apply_idt_reference(log, base)
+        np.testing.assert_allclose(a, b, rtol=1e-12)
+        np.testing.assert_allclose(a, 0.18, rtol=1e-6)
+
+
 def test_process_to_rec709_neutral_grey_positive():
     log = np.full(3, float(linear_to_slog3(0.18)))
     out = process_to_rec709(log, "sony_slog3_sgamut3", apply_wb=False)

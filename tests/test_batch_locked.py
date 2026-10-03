@@ -139,7 +139,13 @@ def _read(p: Path) -> str:
 
 
 def _all_swift() -> str:
-    return "\n".join(p.read_text(encoding="utf-8") for p in SWIFT_ROOT.rglob("*.swift"))
+    # Skip AppleDouble `._*.swift` on exFAT / networked volumes.
+    paths = [
+        p
+        for p in SWIFT_ROOT.rglob("*.swift")
+        if not p.name.startswith("._") and "/._" not in str(p)
+    ]
+    return "\n".join(p.read_text(encoding="utf-8") for p in paths)
 
 
 def test_batch_walks_locked_only_skips_unlocked():
@@ -347,7 +353,7 @@ def test_exr_writers_lock_st2065_1_ap0_chromaticities(tmp_path: Path):
     direct = tmp_path / "direct.exr"
     write_rgb_exr(direct, rgb)
     _assert_st2065_1_chromaticities_on_disk(direct)
-    np.testing.assert_allclose(read_rgb_exr(direct)[0, 0], rgb[0, 0])
+    np.testing.assert_allclose(read_rgb_exr(direct)[0, 0], rgb[0, 0], rtol=1e-3, atol=1e-4)
 
     clips = [BatchClip("clip.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0)]
     report = process_locked_writes(
@@ -578,6 +584,10 @@ def _assert_swift_exr_writer_chromaticities(exporter: str) -> None:
     assert "aces2065_1AdoptedNeutral" in writer
     assert 'putAttr("chromaticities", "chromaticities"' in writer
     assert 'putAttr("adoptedNeutral", "v2f"' in writer
+    # Proxy container is OpenEXR HALF (pixelType 1), not FLOAT (2).
+    assert "var pixelType = Int32(1).littleEndian" in writer
+    assert "floatToHalfBits" in exporter
+    assert "rowBytes = width * 2" in writer
     assert 'putAttr("acesImageContainerFlag"' not in writer
     assert 'putAttr("acesImageContainerFlag"' not in exporter
     for number in (
@@ -1452,7 +1462,7 @@ def test_sidebar_chip_row_reveals_clip_sequence_folder(tmp_path: Path):
 
 def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     """Too-small dest: do not start writing. No EXR / no _proxy folder."""
-    assert BYTES_PER_EXR_PIXEL == 12
+    assert BYTES_PER_EXR_PIXEL == 6
     assert DISK_ESTIMATE_ASSUMPTION == "未压缩浮点图"
     assert "float32" not in DISK_ESTIMATE_ASSUMPTION
     assert "float32 RGB 未压缩" not in DISK_ESTIMATE_ASSUMPTION
@@ -1626,7 +1636,7 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
         assert token not in "\n".join(line.split("//", 1)[0] for line in note_fn.splitlines())
     assert HONEST_PROXY_NOTE in clip.split("func diskShortExportNote")[1]
     assert "bytesPerEXRPixel" in clip
-    assert "12" in clip.split("bytesPerEXRPixel")[1].split("conservativeFPS")[0]
+    assert "6" in clip.split("bytesPerEXRPixel")[1].split("conservativeFPS")[0]
     assert "destFreeBytesOverride" in clip
     assert "MediaFormat.extent" in clip
     assert "func extent(url:" in media
@@ -1651,8 +1661,8 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
                 assert "float32" not in line
                 assert "完善" not in line
                 assert "精准" not in line
-    assert "12 bytes" in readme
-    assert "12-byte" in acceptance
+    assert "6 bytes" in readme
+    assert "6-byte" in acceptance
     assert "24 fps × 60 s" in readme
     assert "24 fps × 60 s" in acceptance
     _assert_chengpian_not_a_deliverable_claim(write_body)

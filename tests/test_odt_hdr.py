@@ -122,6 +122,8 @@ def test_no_homemade_hlg_pq_curve_in_color_package():
     )
     blob = ""
     for path in (ROOT / "color").glob("*.py"):
+        if path.name.startswith("._"):
+            continue
         blob += path.read_text(encoding="utf-8")
     for token in forbidden:
         assert token not in blob, token

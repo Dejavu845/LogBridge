@@ -103,8 +103,7 @@ def cct_to_xy(cct: float, tint: float = 0.0) -> np.ndarray:
     # Isotherm is perpendicular to the locus; a +tint increases v (green).
     v = v + tint * 1.0e-3
     d = 2.0 * u - 8.0 * v + 4.0
-    x = 1.5 * u / d * 2.0  # inverse UCS
-    # Standard inverse: x = 3u / (2u - 8v + 4), y = 2v / (2u - 8v + 4)
+    # CIE 1960 UCS inverse: x = 3u / d, y = 2v / d with d = 2u - 8v + 4.
     x = 3.0 * u / d
     y = 2.0 * v / d
     return np.array([x, y], dtype=np.float64)
