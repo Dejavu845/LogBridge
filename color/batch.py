@@ -46,7 +46,9 @@ A cancelled in-progress clip is not 已写出; completed clips keep
 「在 Finder 中显示」 stays.
 
 After a locked write, count EXRs in ``{stem}_ACES2065-1_proxy/`` and
-compare to source duration × metadata fps only. Off-by-one is accepted
+compare to source duration × metadata fps. A still (tif/tiff/dpx/exr)
+with exactly one written EXR expects 1. A still sequence (more than one
+EXR) keeps duration × fps. Off-by-one is accepted
 (inclusive last frame). An empty ``_ACES2065-1_proxy`` (no EXRs /
 0 frames) is 「帧数对不上」; the folder is removed. Decode that wrote
 nothing is 「解码失败」 (no folder). Missing fps is 「读不到帧率，未核对」;
@@ -92,7 +94,13 @@ import numpy as np
 
 from .as_shot import WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from .exr_write import write_rgb_exr
-from .formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_MXF_NO_TRACK, NOTE_UNKNOWN_CODEC
+from .formats import (
+    NOTE_ARRI_MXF,
+    NOTE_CAMERA_RAW,
+    NOTE_MXF_NO_TRACK,
+    NOTE_UNKNOWN_CODEC,
+    classify,
+)
 from .graph import SerialGraph
 
 REASON_PICK_LOG_GAMUT = "先选择 Log 与色域"
@@ -714,11 +722,18 @@ def clip_frame_count(
     return max(1, int(ceil(CONSERVATIVE_SECONDS * CONSERVATIVE_FPS))), "guess"
 
 
-def expected_source_frames(clip: BatchClip) -> tuple[int | None, str | None]:
-    """Expected EXR count: duration × metadata fps only. Never invent fps.
+def expected_source_frames(
+    clip: BatchClip, *, written: int | None = None
+) -> tuple[int | None, str | None]:
+    """Expected EXR count: duration × metadata fps. Never invent fps.
 
-    Missing fps → 「读不到帧率，未核对」. Missing duration → 「读不到时长，未核对」.
+    A still (``classify`` kind ``still``: tif / tiff / dpx / exr) with
+    exactly one written EXR expects 1. A still sequence (more than one
+    written EXR) keeps duration × fps. Missing fps → 「读不到帧率，未核对」.
+    Missing duration → 「读不到时长，未核对」.
     """
+    if written == 1 and classify(clip.name).kind == "still":
+        return 1, None
     duration = _positive_float(clip.duration_seconds)
     fps = _positive_float(clip.fps)
     if duration is not None and fps is not None:
@@ -763,7 +778,7 @@ def verify_locked_proxy_sequence(seq_dir, clip: BatchClip) -> tuple[bool, str | 
     written = count_proxy_exrs(folder)
     if written < 1:
         return False, FRAME_MISMATCH_CHIP
-    expected, timing_err = expected_source_frames(clip)
+    expected, timing_err = expected_source_frames(clip, written=written)
     if timing_err is not None:
         return False, timing_err
     if expected is None or not frames_count_matches(written, expected):

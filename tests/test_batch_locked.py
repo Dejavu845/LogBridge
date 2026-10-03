@@ -1904,6 +1904,146 @@ def test_verify_missing_fps_fails_and_never_guesses_24_or_30(tmp_path: Path):
     assert "精准" not in verify_swift
 
 
+def test_still_one_written_frame_expects_one_without_fps(tmp_path: Path):
+    """Still plate, one EXR, no fps: expected frames is 1 and the proxy stays.
+
+    ``plate.tiff`` (also tif / dpx / exr) is kind ``still``. Extent has no
+    fps or duration. Exactly one written frame verifies; status includes
+    「1 条已写出代理」 and ``frame_000000.exr`` remains.
+
+    Still sequence (written > 1) is not that plate. It keeps duration × fps.
+    Without fps the chip is 「读不到帧率，未核对」 and the folder is removed.
+    Two written frames are not accepted by off-by-one against an expected 1.
+    With duration and fps, the sequence count is checked the same way as a
+    movie. A movie with no fps still fails, including when one frame was
+    written and ``frame_count`` is set. Never guess a rate.
+    """
+    grey = _slog3_grey()
+    plate = BatchClip(
+        "plate.tiff",
+        idt="sony_slog3_sgamut3",
+        frame_count=1,
+    )
+    expected, err = expected_source_frames(plate, written=1)
+    assert expected == 1
+    assert err is None
+    # No written count: do not assume the plate produced one EXR.
+    bare, bare_err = expected_source_frames(plate)
+    assert bare is None
+    assert bare_err == MISSING_FPS_CHIP
+
+    dest = tmp_path / "plate"
+    report = process_locked_writes(
+        [plate],
+        dest,
+        frames={"plate.tiff": grey},
+    )
+    seq = dest / deliverable_dir_name("plate.tiff")
+    assert (seq / sequence_frame_name(0)).is_file()
+    assert report.written != ()
+    assert report.wrote_count == 1
+    assert "1 条已写出代理" in report.processed_status_text
+    assert list(seq.glob("*.exr")) == [seq / sequence_frame_name(0)]
+
+    for name in ("plate.tif", "plate.dpx", "plate.exr"):
+        clip = BatchClip(name, idt="sony_slog3_sgamut3", frame_count=1)
+        n, why = expected_source_frames(clip, written=1)
+        assert (n, why) == (1, None)
+        one = process_locked_writes(
+            [clip],
+            tmp_path / name,
+            frames={name: grey},
+        )
+        folder = tmp_path / name / deliverable_dir_name(name)
+        assert (folder / sequence_frame_name(0)).is_file()
+        assert "1 条已写出代理" in one.processed_status_text
+
+    # One written still wins over a duration × fps that would expect more.
+    tagged = BatchClip(
+        "plate.tiff",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=2.0,
+        fps=12.0,
+    )
+    tagged_n, tagged_err = expected_source_frames(tagged, written=1)
+    assert (tagged_n, tagged_err) == (1, None)
+
+    # Still sequence: written != 1 does not become expected 1.
+    sequence = BatchClip("seq.exr", idt="sony_slog3_sgamut3", frame_count=3)
+    seq_n, seq_err = expected_source_frames(sequence, written=3)
+    assert seq_n is None
+    assert seq_err == MISSING_FPS_CHIP
+    two_n, two_err = expected_source_frames(
+        BatchClip("seq.dpx", idt="sony_slog3_sgamut3"), written=2
+    )
+    assert two_n is None
+    assert two_err == MISSING_FPS_CHIP
+    dest_seq = tmp_path / "still_seq"
+    report_seq = process_locked_writes(
+        [sequence],
+        dest_seq,
+        frames={"seq.exr": [grey, grey, grey]},
+    )
+    assert report_seq.written == ()
+    assert report_seq.errors[0].error == MISSING_FPS_CHIP
+    assert not (dest_seq / deliverable_dir_name("seq.exr")).exists()
+    assert "0 条已写出代理" in report_seq.processed_status_text
+
+    # Timing present: still sequence uses duration × fps (off-by-one allowed).
+    timed = BatchClip(
+        "seq.tiff",
+        idt="sony_slog3_sgamut3",
+        duration_seconds=2.0,
+        fps=1.0,
+    )
+    timed_n, timed_err = expected_source_frames(timed, written=2)
+    assert (timed_n, timed_err) == (2, None)
+    dest_timed = tmp_path / "timed_seq"
+    report_timed = process_locked_writes(
+        [timed],
+        dest_timed,
+        frames={"seq.tiff": [grey, grey]},
+    )
+    assert report_timed.wrote_count == 1
+    assert (dest_timed / deliverable_dir_name("seq.tiff") / sequence_frame_name(1)).is_file()
+    assert "1 条已写出代理" in report_timed.processed_status_text
+
+    movie = BatchClip("no_fps.mov", idt="sony_slog3_sgamut3", frame_count=1)
+    movie_n, movie_err = expected_source_frames(movie, written=1)
+    assert movie_n is None
+    assert movie_err == MISSING_FPS_CHIP
+    dest_mov = tmp_path / "movie"
+    report_mov = process_locked_writes(
+        [movie],
+        dest_mov,
+        frames={"no_fps.mov": grey},
+    )
+    assert report_mov.written == ()
+    assert report_mov.errors[0].error == MISSING_FPS_CHIP
+    assert not (dest_mov / deliverable_dir_name("no_fps.mov")).exists()
+
+    py = inspect.getsource(expected_source_frames)
+    assert 'kind == "still"' in py
+    assert "written == 1" in py
+    assert "expected_source_frames(clip, written=written)" in inspect.getsource(
+        verify_locked_proxy_sequence
+    )
+    clip_src = _read(CLIP)
+    swift_fn = clip_src.split("static func expectedSourceFrames")[1].split(
+        "static func countProxyEXRs"
+    )[0]
+    assert "kind == .still" in swift_fn
+    assert "written == 1" in swift_fn
+    verify_swift = clip_src.split("static func verifyLockedProxySequence")[1].split(
+        "private func clearExportChips"
+    )[0]
+    assert "clipURL: clip.url" in verify_swift
+    assert "written: written" in verify_swift
+    for banned in ("支持", "一键", "精准"):
+        assert banned not in report.processed_status_text
+        assert banned not in report_seq.processed_status_text
+
+
 def test_verify_unlocked_still_skipped(tmp_path: Path):
     """Unlocked clips are not verified and produce no folder."""
     clips = [
