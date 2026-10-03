@@ -11,18 +11,17 @@ struct PairedIDTBar: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("成对 IDT")
                     .font(.subheadline.weight(.semibold))
-                Text("先选 Log 与色域，才能处理")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
                 Spacer(minLength: 8)
                 if let clip = session.selectedClip {
-                    Text(clip.verificationBadge)
-                        .font(.caption2.weight(clip.isPending ? .regular : .semibold))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 4)
-                        .background(clip.isPending ? Color.accentColor.opacity(0.12) : Color.accentColor.opacity(0.72))
-                        .clipShape(Capsule())
+                    if clip.verificationBadge == "已实现（未验证）" {
+                        Text("已实现（未验证）")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(clip.verificationBadge)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             if let clip = session.selectedClip {
@@ -54,12 +53,6 @@ struct PairedIDTBar: View {
                         Text("检测到 Venice")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                    }
-                    if let reason = clip.processSkipReason {
-                        Text(reason)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
                     }
                 }
                 Text(clip.detectionNote)

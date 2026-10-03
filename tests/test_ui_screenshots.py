@@ -8,6 +8,7 @@ from PIL import Image
 from scripts.check_ui_screenshots import (
     analyze_image,
     check_directory,
+    contrast_ratio,
     is_blank_capture,
     is_prohibited_placeholder,
     toolbar_region_present,
@@ -131,7 +132,8 @@ def test_dropped_awaiting_is_the_not_locked_screenshot_state():
     assert "if session.clips.isEmpty" in button
     assert 'Text("把混源文件夹拖进来")' in button
     pair = button.split("else if session.lockedClipCount == 0")[1]
-    assert 'Text("先选成对 Log 与色域")' in pair
+    assert "Text(UICopy.nextStepPairHint)" in pair
+    assert 'accessibilityIdentifier("nextStepHint")' in pair
     window = content.split("struct ContentView")[1].split("struct ClipListArrowMonitor")[0]
     assert "UnlockedPairHint()" not in window
 
@@ -258,7 +260,7 @@ def test_primary_button_enabled_is_asserted_not_painted(tmp_path: Path):
     assert ".fixedSize()" in button
     assert ".layoutPriority(1)" in button
     assert ".layoutPriority(0)" in button
-    assert ".disabled(session.lockedClipCount == 0)" in button
+    assert ".disabled(!session.canProcessLocked)" in button
     assert "以 isEnabled 断言为准" in tool
     design = (ROOT / "DESIGN.md").read_text(encoding="utf-8")
     assert "禁止自定义填充的按钮" in design
@@ -279,6 +281,46 @@ def test_primary_button_enabled_is_asserted_not_painted(tmp_path: Path):
             _shot(tmp_path, f"after-write-{size}-{appearance}.png", (200, 205, 210))
     # Grey enabled and grey disabled shots both pass. Color is not the assertion.
     assert check_directory(tmp_path) == []
+
+
+def test_can_process_locked_truth_table():
+    """Same predicate as session.canProcessLocked, for the four sample states."""
+    clip = (ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift").read_text(encoding="utf-8")
+    body = clip.split("var canProcessLocked: Bool {", 1)[1].split("}", 1)[0].strip()
+    assert body == "lockedClipCount > 0"
+    content = CONTENT.read_text(encoding="utf-8")
+    button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
+    assert ".disabled(!session.canProcessLocked)" in button
+
+    def can_process_locked(locked_clip_count: int) -> bool:
+        return locked_clip_count > 0
+
+    samples = {
+        "empty": 0,
+        "dropped-awaiting": 0,
+        "locked": 1,
+        "after-write": 1,
+    }
+    assert can_process_locked(samples["empty"]) is False
+    assert can_process_locked(samples["dropped-awaiting"]) is False
+    assert can_process_locked(samples["locked"]) is True
+    assert can_process_locked(samples["after-write"]) is True
+    tool = TOOL.read_text(encoding="utf-8")
+    assert "idt: nil" in tool.split("case .droppedAwaiting:")[1].split("case .locked:")[0]
+    assert "lockedSample" in tool.split("case .locked:")[1].split("case .afterWrite:")[0]
+    assert "lockedSample" in tool.split("case .afterWrite:")[1]
+    assert "case .empty:" in tool
+
+
+def test_badge_contrast_ratio_matches_wcag():
+    """White on the measured system blue is under 4.5. Black on white clears it."""
+    assert contrast_ratio((255, 255, 255), (0, 122, 255)) < 4.5
+    assert contrast_ratio((0, 0, 0), (255, 255, 255)) >= 4.5
+    checker = CHECK.read_text(encoding="utf-8")
+    assert "MIN_BADGE_CONTRAST = 4.5" in checker
+    assert "badge_contrast_errors" in checker
+    assert "LOGBRIDGE_BADGE_CONTRAST" in checker
+    assert "LOGBRIDGE_BADGE_CONTRAST" in SCRIPT.read_text(encoding="utf-8")
 
 
 def test_baseline_wire_patches_28066d5_without_committing(tmp_path: Path):

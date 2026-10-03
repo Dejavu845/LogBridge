@@ -244,21 +244,6 @@ struct ProcessLockedBar: View {
                     Text(session.lockStatusText)
                         .font(.subheadline.weight(.semibold))
                 }
-                if let reason = session.selectedClip?.processSkipReason {
-                    Text(reason)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.accentColor.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                } else if !session.showsProcessLockedButton {
-                    Text(session.processBlockedReason ?? "先选择 Log 与色域")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
                 Spacer(minLength: 8)
             }
             Text("代理 EXR，不是视频。整段代理，代理精度。")
@@ -278,6 +263,11 @@ struct ProcessLockedBar: View {
     }
 }
 
+/// The only next-step pair hint. One visible Text, identifier nextStepHint.
+enum UICopy {
+    static let nextStepPairHint = "先选成对 Log 与色域"
+}
+
 /// The window toolbar's only primary action.
 /// Disabled until at least one clip is locked. Same button cancels a write.
 /// The caption sits in this item, next to the button. No second row under the header.
@@ -295,9 +285,10 @@ struct ProcessLockedToolbarButton: View {
                     .frame(minWidth: 0, alignment: .trailing)
                     .layoutPriority(0)
             } else if session.lockedClipCount == 0 {
-                Text("先选成对 Log 与色域")
+                Text(UICopy.nextStepPairHint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("nextStepHint")
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(minWidth: 0, alignment: .trailing)
@@ -313,7 +304,7 @@ struct ProcessLockedToolbarButton: View {
             .buttonStyle(.borderedProminent)
             .fixedSize()
             .layoutPriority(1)
-            .disabled(session.lockedClipCount == 0)
+            .disabled(!session.canProcessLocked)
             .modifier(ProcessLockedButtonHelp(
                 importing: session.clips.isEmpty,
                 unlocked: session.lockedClipCount == 0
@@ -334,7 +325,7 @@ private struct ProcessLockedButtonHelp: ViewModifier {
                 .help("把混源文件夹拖进来")
         } else if unlocked {
             content
-                .help("先选成对 Log 与色域")
+                .help(UICopy.nextStepPairHint)
         } else {
             content
                 .help("写出的是图片序列（EXR），不是 mp4/mov")
@@ -359,11 +350,6 @@ struct AdvancedPanel: View {
                     .controlSize(.small)
                     .disabled(!session.canProcess)
                     .help("只处理已锁定片段。待选跳过。写出整段代理，代理精度 EXR，以及 cube 节点。不必全部锁定。")
-                    if let reason = session.processBlockedReason {
-                        Text(reason)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
                     Spacer()
                 }
                 .padding(.horizontal, 12)
@@ -498,6 +484,8 @@ struct StatusBar: View {
     var body: some View {
         HStack(spacing: 12) {
             Text("LogBridge · 已实现（未验证）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             if session.preview.isWorking {
                 ProgressView()
                     .controlSize(.small)

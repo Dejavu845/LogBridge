@@ -133,7 +133,7 @@ INSPECTOR_GREY_WB_HELP_BANNED = (
 SOURCE_LABEL_METADATA = "元数据"
 SOURCE_LABEL_FILENAME = "文件名"
 SOURCE_LABEL_MODEL = "机型"
-SOURCE_LABEL_UNRESOLVED = "读不到"
+SOURCE_LABEL_UNRESOLVED = "无法读取"
 
 
 def _read(p: Path) -> str:
@@ -206,7 +206,7 @@ def test_pending_clips_block_process_and_export():
     assert "func processLockedClips()" in clip
     assert "pending" in clip
     content = _read(CONTENT)
-    assert "showsProcessLockedButton" in content
+    assert "canProcessLocked" in content
     assert ".disabled(!session.canProcess)" in content
     assert "lockedClipCount" in clip
     assert "processSkipReason" in clip
@@ -382,9 +382,9 @@ def test_no_bundled_manufacturer_demos():
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
     assert "no bundled manufacturer demos" not in sidebar.lower()
     assert EMPTY_STATE_STEP_1 in sidebar
-    assert EMPTY_STATE_STEP_2 in sidebar
+    assert EMPTY_STATE_STEP_2 not in sidebar
     assert EMPTY_STATE_STEP_3 in sidebar
-    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEPS not in sidebar
     assert "选出对数" not in sidebar
 
 
@@ -615,9 +615,9 @@ def test_process_bar_and_advanced_help_are_chinese():
 
     assert _help_literals(bar) == [
         "把混源文件夹拖进来",
-        "先选成对 Log 与色域",
         PROCESS_BUTTON_HELP_UI,
     ]
+    assert bar.count(".help(UICopy.nextStepPairHint)") == 1
     assert ADVANCED_EXPORT_HELP in _help_literals(advanced)
     assert ADVANCED_DISCLOSURE_HELP in _help_literals(advanced)
     assert _help_literals(strip) == []
@@ -2025,7 +2025,7 @@ def test_preview_large_inspector_thin_wb_glanceable():
 
     bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
     assert bar.count("Button(") == 1
-    assert "showsProcessLockedButton" in bar
+    assert "canProcessLocked" in bar
     assert "处理已锁定片段" in bar
     assert "lockedClipCount" in clip
     assert "showsProcessLockedButton" in clip
@@ -2415,11 +2415,11 @@ def test_delete_removes_clip_from_session_not_disk():
     assert 'Button("锁定")' not in sidebar
     assert 'Button("删除")' not in sidebar
     assert 'Button("移出")' not in sidebar
-    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEPS not in sidebar
     assert "精准" not in sidebar
     drop = sidebar.split("struct DropZone")[1].split("struct ClipRow")[0]
     assert EMPTY_STATE_STEP_1 in drop
-    assert EMPTY_STATE_STEP_2 in drop
+    assert EMPTY_STATE_STEP_2 not in drop
     assert "选出对数" not in drop
     assert "把文件夹拖进来" in drop
 
@@ -2672,7 +2672,7 @@ def test_selected_clip_glanceable_on_preview():
 
     bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
     assert bar.count("Button(") == 1
-    assert "showsProcessLockedButton" in bar
+    assert "canProcessLocked" in bar
     assert "lockedClipCount" in clip
     assert "重试" not in bar
 
@@ -2994,9 +2994,9 @@ def test_trial_usability_copy_is_locked():
     assert EMPTY_STATE_STEP_1 == "把混源文件夹拖进来"
     assert EMPTY_STATE_STEP_2 == "每条选成对 Log 与色域"
     assert EMPTY_STATE_STEP_3 == "点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
-    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEPS not in sidebar
     assert EMPTY_STATE_STEP_1 in drop
-    assert EMPTY_STATE_STEP_2 in drop
+    assert EMPTY_STATE_STEP_2 not in drop
     assert "选出对数" not in ui_sidebar
     assert "选出对数" not in EMPTY_STATE_STEP_2
     assert "选出对数" not in EMPTY_STATE_STEPS
@@ -3095,7 +3095,7 @@ def test_inspector_source_and_locked_pair_labels_are_chinese():
     assert SOURCE_LABEL_METADATA == "元数据"
     assert SOURCE_LABEL_FILENAME == "文件名"
     assert SOURCE_LABEL_MODEL == "机型"
-    assert SOURCE_LABEL_UNRESOLVED == "读不到"
+    assert SOURCE_LABEL_UNRESOLVED == "无法读取"
     assert USER_PICKED_IDT_NOTE == "用户选择成对 IDT"
     assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
 
@@ -11111,12 +11111,9 @@ def test_empty_dropzone_tap_opens_same_importer():
     assert "Button(" in chip
     assert "已写出代理" in sidebar
 
-    pending = sidebar.split("if let reason = clip.processSkipReason")[1].split(
-        "} else if let chip"
-    )[0]
-    assert "onRevealWritten" not in pending
-    assert "revealClipExportInFinder" not in pending
-    assert "Button(" not in pending
+    row = sidebar.split("struct ClipRow")[1]
+    assert "processSkipReason" not in row
+    assert "先选择 Log 与色域" not in row
     fail = (
         sidebar.split("if chip == SessionModel.wroteProxyChip")[1]
         .split("} else {")[1]
@@ -11134,9 +11131,9 @@ def test_empty_dropzone_tap_opens_same_importer():
         "1 把混源文件夹拖进来  2 每条选成对 Log 与色域  "
         "3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
     )
-    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEPS not in sidebar
     assert EMPTY_STATE_STEP_1 in drop
-    assert EMPTY_STATE_STEP_2 in drop
+    assert EMPTY_STATE_STEP_2 not in drop
     assert "把文件夹拖进来" in drop
     assert "选出对数" not in ui_sidebar
     assert "选出对数" not in EMPTY_STATE_STEP_2
@@ -11269,9 +11266,9 @@ def test_add_ellipsis_command_o_opens_same_importer():
         "1 把混源文件夹拖进来  2 每条选成对 Log 与色域  "
         "3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
     )
-    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEPS not in sidebar
     assert EMPTY_STATE_STEP_1 in drop
-    assert EMPTY_STATE_STEP_2 in drop
+    assert EMPTY_STATE_STEP_2 not in drop
     fn = clip.split("func cancelWritingFromEscape")[1].split("static func exportProgressText")[0]
     assert "isWritingDeliverables" in fn
     assert "cancelLockedDeliverables" in fn
@@ -11391,9 +11388,9 @@ def test_advanced_panel_expanded_persists_in_userdefaults():
         "1 把混源文件夹拖进来  2 每条选成对 Log 与色域  "
         "3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
     )
-    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEPS not in sidebar
     assert EMPTY_STATE_STEP_1 in drop
-    assert EMPTY_STATE_STEP_2 in drop
+    assert EMPTY_STATE_STEP_2 not in drop
     fn = clip.split("func cancelWritingFromEscape")[1].split("static func exportProgressText")[0]
     assert "isWritingDeliverables" in fn
     assert "cancelLockedDeliverables" in fn
@@ -11511,9 +11508,9 @@ def test_settings_command_comma_opens_same_settings():
         "1 把混源文件夹拖进来  2 每条选成对 Log 与色域  "
         "3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
     )
-    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEPS not in sidebar
     assert EMPTY_STATE_STEP_1 in drop
-    assert EMPTY_STATE_STEP_2 in drop
+    assert EMPTY_STATE_STEP_2 not in drop
     fn = clip.split("func cancelWritingFromEscape")[1].split("static func exportProgressText")[0]
     assert "isWritingDeliverables" in fn
     assert "cancelLockedDeliverables" in fn
@@ -11650,9 +11647,9 @@ def test_advanced_disclosure_help_remembers_expanded_state():
         "1 把混源文件夹拖进来  2 每条选成对 Log 与色域  "
         "3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
     )
-    assert EMPTY_STATE_STEPS in sidebar
+    assert EMPTY_STATE_STEPS not in sidebar
     assert EMPTY_STATE_STEP_1 in drop
-    assert EMPTY_STATE_STEP_2 in drop
+    assert EMPTY_STATE_STEP_2 not in drop
     fn = clip.split("func cancelWritingFromEscape")[1].split("static func exportProgressText")[0]
     assert "isWritingDeliverables" in fn
     assert "cancelLockedDeliverables" in fn
@@ -11713,6 +11710,45 @@ def test_empty_state_keeps_unverified_proxy_line():
         assert token not in EMPTY_STATE_PROXY_LINE
 
 
+def test_unverified_phrase_has_no_background():
+    """「已实现（未验证）」 stays caption + secondary, with no fill behind it."""
+    phrase = "已实现（未验证）"
+    seen: list[str] = []
+    filled: list[str] = []
+    for path in (SWIFT_ROOT / "LogBridge" / "LogBridge").rglob("*.swift"):
+        if path.name.startswith("._"):
+            continue
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(lines):
+            code = line.split("//", 1)[0]
+            if phrase not in code or "Text(" not in code:
+                continue
+            seen.append(f"{path.name}:{index + 1}")
+            chain = [code]
+            cursor = index + 1
+            while cursor < len(lines):
+                nxt = lines[cursor].split("//", 1)[0].strip()
+                if not nxt:
+                    cursor += 1
+                    continue
+                if nxt.startswith("."):
+                    chain.append(nxt)
+                    cursor += 1
+                    continue
+                break
+            blob = "\n".join(chain)
+            if ".background" in blob or ".fill(" in blob:
+                filled.append(f"{path.name}:{index + 1}")
+            if "读不到机内色温" in code:
+                assert ".foregroundStyle(Color.orange)" in blob
+                assert ".background" not in blob
+            else:
+                assert ".font(.caption)" in blob, f"{path.name}:{index + 1}"
+                assert ".foregroundStyle(.secondary)" in blob, f"{path.name}:{index + 1}"
+    assert seen
+    assert filled == []
+
+
 def test_toolbar_hint_copy_is_locked():
     """Disabled primary action and the visible caption beside it share one phrase."""
     assert PROCESS_BUTTON == "处理已锁定片段"
@@ -11720,8 +11756,10 @@ def test_toolbar_hint_copy_is_locked():
     assert UNLOCKED_TOOLBAR_HINT != REASON_PICK_LOG_GAMUT
     content = _read(CONTENT)
     button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
-    assert f'Text("{UNLOCKED_TOOLBAR_HINT}")' in button
-    assert f'.help("{UNLOCKED_TOOLBAR_HINT}")' in content
+    assert f'static let nextStepPairHint = "{UNLOCKED_TOOLBAR_HINT}"' in content
+    assert "Text(UICopy.nextStepPairHint)" in button
+    assert ".accessibilityIdentifier(\"nextStepHint\")" in button
+    assert ".help(UICopy.nextStepPairHint)" in content
     assert f'Button(session.isWritingDeliverables ? "取消" : "{PROCESS_BUTTON}")' in content
     for token in _BANNED_USER_COPY:
         assert token not in UNLOCKED_TOOLBAR_HINT
@@ -11735,7 +11773,7 @@ def test_unlocked_hint_is_visible_only_when_none_locked():
     content = _read(CONTENT)
     window = content.split("struct ContentView")[1].split("struct ClipListArrowMonitor")[0]
     button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
-    assert 'Text("先选成对 Log 与色域")' in button
+    assert "Text(UICopy.nextStepPairHint)" in button
     assert 'Text("把混源文件夹拖进来")' in button
     assert ".foregroundStyle(.secondary)" in button
     assert ".font(.caption)" in button
@@ -11751,10 +11789,11 @@ def test_unlocked_hint_is_visible_only_when_none_locked():
     assert "UnlockedPairHint()" not in window
     assert "if session.clips.isEmpty" in button
     pair = button.split("else if session.lockedClipCount == 0")[1].split("}")[0]
-    assert 'Text("先选成对 Log 与色域")' in pair
+    assert "Text(UICopy.nextStepPairHint)" in pair
+    assert 'accessibilityIdentifier("nextStepHint")' in pair
     assert ".opacity" not in pair
     assert ".hidden" not in pair
-    assert ".disabled(session.lockedClipCount == 0)" in button
+    assert ".disabled(!session.canProcessLocked)" in button
     assert "ToolbarItem(placement: .primaryAction)" in window
     assert window.count("ToolbarItem(") == 1
     assert window.count(".primaryAction") == 1
@@ -11766,40 +11805,47 @@ def test_pair_hint_appears_once_in_dropped_awaiting():
     import re
 
     hint = UNLOCKED_TOOLBAR_HINT
-    text_hits: list[str] = []
-    help_hits: list[str] = []
-    other_hits: list[str] = []
-    for path in (SWIFT_ROOT / "LogBridge").rglob("*.swift"):
+    pattern = re.compile(r"先选(?:成对|择)?\s*Log\s*与色域")
+    literal_hits: list[str] = []
+    for path in (SWIFT_ROOT / "LogBridge" / "LogBridge").rglob("*.swift"):
         if path.name.startswith("._"):
+            continue
+        if "Views" not in path.parts and path.name != "ContentView.swift":
             continue
         rel = path.relative_to(SWIFT_ROOT).as_posix()
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             code = line.split("//", 1)[0]
-            if f'Text("{hint}")' in code:
-                text_hits.append(f"{rel}:{lineno}")
-            if f'.help("{hint}")' in code:
-                help_hits.append(f"{rel}:{lineno}")
-            for kind in ("Button", "Label", "Toggle", "Picker"):
-                if f'{kind}("{hint}"' in code:
-                    other_hits.append(f"{rel}:{lineno}:{kind}")
-    assert len(text_hits) == 1
-    assert text_hits[0].startswith("LogBridge/LogBridge/ContentView.swift:")
-    assert len(help_hits) == 1
-    assert help_hits[0].startswith("LogBridge/LogBridge/ContentView.swift:")
-    assert other_hits == []
+            for literal in re.findall(r'"([^"]*)"', code):
+                if pattern.search(literal):
+                    literal_hits.append(f"{rel}:{lineno}:{literal}")
+    assert literal_hits == [
+        f'LogBridge/LogBridge/ContentView.swift:{_hint_line()}:{hint}'
+    ]
 
     content = _read(CONTENT)
     button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
     empty = button.split("if session.clips.isEmpty")[1].split("else if session.lockedClipCount == 0")[0]
     pair = button.split("else if session.lockedClipCount == 0")[1].split("Button(")[0]
-    assert f'Text("{hint}")' not in empty
-    assert f'Text("{hint}")' in pair
+    assert "nextStepHint" not in empty
+    assert "Text(UICopy.nextStepPairHint)" in pair
+    assert pair.count('accessibilityIdentifier("nextStepHint")') == 1
+    assert "nextStepHint" not in button.split("Button(", 1)[1]
     inspector = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/InspectorView.swift")
     assert hint not in _code_without_comments(inspector)
     assert "这一步：每条选成对 Log 与色域" not in inspector
+    assert "先选 Log 与色域，才能处理" not in inspector
 
     visible = _dropped_awaiting_user_visible_strings()
     assert visible.count(hint) == 1
+    assert sum(1 for item in visible if pattern.search(item)) == 1
+
+
+def _hint_line() -> int:
+    content = _read(CONTENT)
+    for lineno, line in enumerate(content.splitlines(), 1):
+        if 'static let nextStepPairHint = "先选成对 Log 与色域"' in line:
+            return lineno
+    raise AssertionError("nextStepPairHint constant missing")
 
 
 def _dropped_awaiting_user_visible_strings() -> list[str]:
@@ -11857,6 +11903,8 @@ def _dropped_awaiting_user_visible_strings() -> list[str]:
             return
         seen.add(name)
         texts.extend(_text_literals(body))
+        if "Text(UICopy.nextStepPairHint)" in body:
+            texts.append(UNLOCKED_TOOLBAR_HINT)
         for child in re.findall(r"\b([A-Z][A-Za-z0-9]*)\(", body):
             if child in skip or child not in bodies or child in seen:
                 continue

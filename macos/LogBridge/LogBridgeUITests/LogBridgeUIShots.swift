@@ -45,11 +45,16 @@ final class LogBridgeUIShots: XCTestCase {
                         } else {
                             XCTAssertTrue(primary.isEnabled)
                         }
+                        let identified = app.staticTexts.matching(identifier: "nextStepHint")
                         if state == "dropped-awaiting" {
                             let hints = app.staticTexts.matching(
                                 NSPredicate(format: "label == %@", "先选成对 Log 与色域")
                             )
                             XCTAssertEqual(hints.count, 1, "pair hint once in \(state)")
+                            XCTAssertEqual(identified.count, 1, "nextStepHint once in \(state)")
+                        }
+                        if state == "locked" || state == "after-write" || state == "empty" {
+                            XCTAssertEqual(identified.count, 0, "nextStepHint absent in \(state)")
                         }
                         if state == "empty" {
                             XCTAssertTrue(app.staticTexts["把混源文件夹拖进来"].exists)

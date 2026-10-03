@@ -14,6 +14,12 @@ export SNAPSHOT_REQUIRE_TOOLBAR="${SNAPSHOT_REQUIRE_TOOLBAR:-1}"
 PROJECT_DIR="${SNAPSHOT_PROJECT_DIR:-${SRC_ROOT}/macos/LogBridge}"
 SHA="${SNAPSHOT_SHA:-$(git -C "$SRC_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}"
 CHECK="${ROOT}/scripts/check_ui_screenshots.py"
+# 28066d5 still draws the old badges. Contrast is enforced on the current UI only.
+if [ "$SHA" = "28066d5" ]; then
+  export LOGBRIDGE_BADGE_CONTRAST=0
+else
+  export LOGBRIDGE_BADGE_CONTRAST=1
+fi
 
 mkdir -p "$OUT"
 cat > "${OUT}/README.txt" <<EOF

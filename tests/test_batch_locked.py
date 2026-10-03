@@ -232,7 +232,7 @@ def test_swift_mirrors_locked_batch_and_one_button():
     assert "先选择 Log 与色域" in clip
     assert "条已锁定" in clip and "条待选" in clip
     assert "处理已锁定片段" in content
-    assert "showsProcessLockedButton" in content
+    assert "canProcessLocked" in content
     assert "ProcessLockedBar" in content
     assert content.count("处理已锁定片段") >= 1
     bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
@@ -259,7 +259,7 @@ def test_swift_mirrors_locked_batch_and_one_button():
     assert "on: session.graph.wbSource == .estimate" in inspector
     assert "proposeAutoWB" in inspector
     assert "确认估计" in inspector
-    assert "processSkipReason" in sidebar
+    assert "processSkipReason" not in sidebar
     assert "exportChip" in sidebar
     assert WRITTEN_CHIP in sidebar
     assert "一键" not in content
@@ -1355,7 +1355,7 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
     assert "解码失败" in clip
     assert "写出失败" in clip
     assert "exportChip" in sidebar
-    assert "processSkipReason" in sidebar
+    assert "processSkipReason" not in sidebar
     assert "待选" in clip
     assert HONEST_PROXY_NOTE in clip
     assert "精准" not in clip.split("static let wroteProxyChip")[1].split("private func clearExportChips")[0]
@@ -1434,9 +1434,10 @@ def test_sidebar_chip_row_reveals_clip_sequence_folder(tmp_path: Path):
     chip = sidebar.split("if chip == SessionModel.wroteProxyChip")[1].split("} else {")[0]
     assert "onRevealWritten" in chip
     assert "Button(" in chip
-    assert WRITTEN_CHIP not in sidebar.split("if let reason = clip.processSkipReason")[1].split(
-        "} else if let chip"
-    )[0]
+    assert "processSkipReason" not in sidebar.split("struct ClipRow")[1]
+    assert WRITTEN_CHIP not in sidebar.split("if chip == SessionModel.wroteProxyChip")[1].split(
+        "} else {"
+    )[1].split("}")[0]
     status = content.split("struct StatusBar")[1]
     assert REVEAL_IN_FINDER in status
     assert "revealLastExportInFinder" in status

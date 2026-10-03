@@ -25,8 +25,8 @@ struct NodeStripView: View {
             }
             Spacer(minLength: 8)
             Text("已实现（未验证）")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 12)

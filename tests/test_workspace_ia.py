@@ -58,11 +58,11 @@ def test_header_has_three_steps_and_preview_output():
     clip = _read(CLIP)
     assert "struct WorkspaceHeader" in chrome
     assert "struct WorkspaceStepStrip" in chrome
-    assert 'return "导入"' in chrome
-    assert 'return "选对"' in chrome
-    assert 'return "写出代理"' in chrome
+    assert 'return "拖入"' in chrome
+    assert 'return "配对"' in chrome
+    assert 'return "处理"' in chrome
     assert "把混源文件夹拖进来" in chrome
-    assert "每条选成对 Log 与色域" in chrome
+    assert "每条选成对 Log 与色域" not in chrome
     assert "点处理已锁定片段" in chrome
     assert 'Picker("预览输出"' in chrome
     assert "session.setODT" in chrome
@@ -85,7 +85,7 @@ def test_core_path_still_one_process_button():
     assert bar.count("Button(") == 1
     assert "处理已锁定片段" in bar
     assert "取消" in bar
-    assert "showsProcessLockedButton" in bar
+    assert "canProcessLocked" in bar
     assert "这一步：每条选成对 Log 与色域" not in inspector
     assert "先选成对 Log 与色域" not in inspector
     assert 'Picker("用户选择成对 IDT"' in inspector

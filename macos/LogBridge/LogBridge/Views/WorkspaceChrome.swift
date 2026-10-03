@@ -10,16 +10,16 @@ enum WorkspaceStep: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .importFolder: return "导入"
-        case .pickPairs: return "选对"
-        case .writeProxy: return "写出代理"
+        case .importFolder: return "拖入"
+        case .pickPairs: return "配对"
+        case .writeProxy: return "处理"
         }
     }
 
     var detail: String {
         switch self {
         case .importFolder: return "把混源文件夹拖进来"
-        case .pickPairs: return "每条选成对 Log 与色域"
+        case .pickPairs: return ""
         case .writeProxy: return "点处理已锁定片段"
         }
     }
@@ -52,7 +52,7 @@ struct WorkspaceHeader: View {
                 Text("LogBridge")
                     .font(.headline)
                 Text("已实现（未验证）")
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .frame(minWidth: 88, alignment: .leading)
@@ -126,10 +126,12 @@ private struct WorkspaceStepChip: View {
                     .font(.subheadline.weight(active ? .semibold : .regular))
                     .foregroundStyle(active ? Color.primary : Color.secondary)
             }
-            Text(step.detail)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            if !step.detail.isEmpty {
+                Text(step.detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -156,14 +158,14 @@ struct EmptyPreviewStage: View {
                     .multilineTextAlignment(.center)
             }
             HStack(alignment: .top, spacing: 16) {
-                EmptyStepCard(index: 1, title: "导入", detail: "把混源文件夹拖进来")
-                EmptyStepCard(index: 2, title: "选对", detail: "每条选成对 Log 与色域")
-                EmptyStepCard(index: 3, title: "写出代理", detail: "点处理已锁定片段。得到的是 EXR 图序列，不是视频。")
+                EmptyStepCard(index: 1, title: "拖入", detail: "把混源文件夹拖进来")
+                EmptyStepCard(index: 2, title: "配对", detail: "")
+                EmptyStepCard(index: 3, title: "处理", detail: "点处理已锁定片段。得到的是 EXR 图序列，不是视频。")
             }
             .frame(maxWidth: 720)
             Text("已实现（未验证）。整段代理，代理精度。")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -202,10 +204,12 @@ private struct EmptyStepCard: View {
                 .clipShape(Capsule())
             Text(title)
                 .font(.headline)
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)

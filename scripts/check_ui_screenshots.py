@@ -10,6 +10,7 @@ share a file hash with locked.
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -138,6 +139,80 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+MIN_BADGE_CONTRAST = 4.5
+
+
+def _linear_channel(value: float) -> float:
+    channel = value / 255.0
+    if channel <= 0.04045:
+        return channel / 12.92
+    return ((channel + 0.055) / 1.055) ** 2.4
+
+
+def relative_luminance(rgb: tuple[float, float, float]) -> float:
+    red, green, blue = (_linear_channel(float(channel)) for channel in rgb)
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+
+def contrast_ratio(foreground: tuple[float, float, float], background: tuple[float, float, float]) -> float:
+    """WCAG contrast of a glyph color against its local background."""
+    lighter = relative_luminance(foreground)
+    darker = relative_luminance(background)
+    if darker > lighter:
+        lighter, darker = darker, lighter
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def measure_badge_contrast(image: Image.Image, appearance: str) -> tuple[float, tuple[int, int, int], tuple[int, int, int]]:
+    """Sidebar trailing band: 待选 / 已锁定 glyphs versus the row behind them."""
+    rgb = np.asarray(image.convert("RGB"), dtype=np.float64)
+    height, width, _ = rgb.shape
+    side = min(280, max(196, int(width * 0.16)))
+    top = int(height * 0.18)
+    bottom = int(height * 0.72)
+    if bottom <= top or side < 64 or width < side:
+        return 0.0, (0, 0, 0), (0, 0, 0)
+    band = rgb[top:bottom, side - 56 : side]
+    background = np.median(band.reshape(-1, 3), axis=0)
+    luminance = band.mean(axis=2)
+    mask = np.abs(luminance - float(background.mean())) >= 18
+    count = int(np.count_nonzero(mask))
+    if count < 12:
+        bg = tuple(int(round(channel)) for channel in background)
+        return 0.0, (0, 0, 0), bg  # type: ignore[return-value]
+    glyphs = band[mask]
+    order = np.argsort(glyphs.mean(axis=1))
+    # Light: secondary sits lighter than primary. Dark: secondary sits darker.
+    if appearance == "dark":
+        chosen = glyphs[order[: max(1, count // 3)]]
+    else:
+        chosen = glyphs[order[-(max(1, count // 3)) :]]
+    foreground = np.median(chosen, axis=0)
+    fg = tuple(int(round(channel)) for channel in foreground)
+    bg = tuple(int(round(channel)) for channel in background)
+    return contrast_ratio(fg, bg), fg, bg  # type: ignore[return-value]
+
+
+def badge_contrast_errors(out: Path) -> list[str]:
+    """已锁定 and 待选, one light shot and one dark shot each."""
+    errors: list[str] = []
+    for state in ("dropped-awaiting", "locked"):
+        for appearance in APPEARANCES:
+            name = f"{state}-1440x900-{appearance}.png"
+            path = out / name
+            if not path.is_file():
+                errors.append(f"{name}: missing badge contrast shot")
+                continue
+            with Image.open(path) as image:
+                ratio, foreground, background = measure_badge_contrast(image, appearance)
+            if ratio < MIN_BADGE_CONTRAST:
+                errors.append(
+                    f"{name}: badge contrast {ratio:.2f}:1 "
+                    f"fg={foreground} bg={background} need {MIN_BADGE_CONTRAST}:1"
+                )
+    return errors
+
+
 def check_directory(out: Path) -> list[str]:
     errors: list[str] = []
     if not out.is_dir():
@@ -178,7 +253,11 @@ def main(argv: list[str]) -> int:
         print("usage: check_ui_screenshots.py OUT_DIR", file=sys.stderr)
         return 2
     # Enabled vs disabled is an isEnabled assertion, not a pixel color.
-    errors = check_directory(Path(argv[1]))
+    # Badge contrast is glyph versus local background, light and dark.
+    out = Path(argv[1])
+    errors = check_directory(out)
+    if os.environ.get("LOGBRIDGE_BADGE_CONTRAST", "1") != "0":
+        errors.extend(badge_contrast_errors(out))
     if errors:
         print(f"ui-screenshots: {len(errors)} problem(s)", file=sys.stderr)
         for line in errors:

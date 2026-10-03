@@ -35,6 +35,14 @@ WARNING_MARK = ("警告", "错误")
 # Stated review baseline for 28066d5. Not recomputed from that commit.
 STATED_BEFORE = "non-grid 79/115, hues 3, grey blocks 20, opacity levels 9"
 
+# The only user-visible pair hint. Picker labels may be named even when they
+# do not match 选 together with Log/色域.
+NEXT_STEP_PAIR_HINT = "先选成对 Log 与色域"
+PICKER_LABEL_WHITELIST = (
+    "用户选择成对 IDT",
+    "— 先选择成对 IDT —",
+)
+
 
 def _swift_files() -> list[Path]:
     return sorted(p for p in UI_ROOT.rglob("*.swift") if p.is_file() and not p.name.startswith("._"))
@@ -164,6 +172,34 @@ def measure() -> dict[str, object]:
     }
 
 
+def _view_files() -> list[Path]:
+    files = sorted(p for p in (UI_ROOT / "Views").rglob("*.swift") if p.is_file() and not p.name.startswith("._"))
+    content = UI_ROOT / "ContentView.swift"
+    if content.is_file():
+        files.append(content)
+    return files
+
+
+def _quoted(code: str) -> list[str]:
+    return [match.group(1) for match in re.finditer(r'"((?:[^"\\]|\\.)*)"', code)]
+
+
+def guidance_hits() -> list[str]:
+    """User-visible literals that say 选/选择 and also Log or 色域."""
+    hits: list[str] = []
+    for path in _view_files():
+        for index, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for literal in _quoted(_code(raw)):
+                if "选" not in literal:
+                    continue
+                if "Log" not in literal and "色域" not in literal:
+                    continue
+                if literal == NEXT_STEP_PAIR_HINT or literal in PICKER_LABEL_WHITELIST:
+                    continue
+                hits.append(f"{path.name}:{index}:{literal}")
+    return hits
+
+
 def main() -> int:
     stats = measure()
     print(f"ui-metrics: before 28066d5 stated: {STATED_BEFORE}")
@@ -183,6 +219,14 @@ def main() -> int:
         problems.append(f"grey fill blocks {stats['grey']}")
     if stats["uncommented"]:
         problems.append("uncommented orange/yellow: " + ", ".join(stats["uncommented"]))
+    extra = guidance_hits()
+    whitelist = "、".join(f"「{item}」" for item in PICKER_LABEL_WHITELIST)
+    print(
+        "ui-metrics: guidance allow "
+        f"「{NEXT_STEP_PAIR_HINT}」; picker whitelist {whitelist}"
+    )
+    if extra:
+        problems.append("extra pair guidance: " + ", ".join(extra))
     if problems:
         print("ui-metrics: fail", file=sys.stderr)
         for problem in problems:
