@@ -10,8 +10,13 @@ import UniformTypeIdentifiers
 /// Unlocked IDT is skipped, never guessed. Export: "导出 ACEScct / EXR".
 /// Team B shell: empty = full drop canvas; working = header steps + same path.
 struct ContentView: View {
-    @StateObject private var session = SessionModel()
+    @StateObject private var session: SessionModel
     @ObservedObject private var settings = AppSettings.shared
+
+    /// Live window uses a fresh session. The macOS screenshot baseline passes sample state.
+    init(session: SessionModel? = nil) {
+        _session = StateObject(wrappedValue: session ?? SessionModel())
+    }
 
     var body: some View {
         VStack(spacing: 8) {
