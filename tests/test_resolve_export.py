@@ -20,6 +20,7 @@ from color.batch import (
     RESOLVE_REQUIRED_XML,
     WRITTEN_CHIP,
     BatchClip,
+    remove_incomplete_resolve_bundle,
     verify_resolve_bundle,
 )
 from color.graph import SerialGraph
@@ -50,9 +51,19 @@ from color.resolve_export import (
     REC709_PREVIEW_LABEL,
     RESOLVE_README_HONESTY,
     cdl_slope_offset_power,
+    COMBINED_PREVIEW709_COMMENT,
+    COMBINED_PREVIEW709_FILE_PATTERN,
+    COMBINED_PREVIEW709_LUT_SIZE,
+    COMBINED_PREVIEW709_README_ROLE,
+    COMBINED_PREVIEW709_README_ROW,
+    combined_preview709_cube_bytes,
+    combined_preview709_filename,
+    combined_preview709_rgb,
     export_locked_resolve_bundle,
     export_note,
     export_resolve_bundle,
+    exposure_cube_bytes,
+    exposure_in_acescct,
     format_ccc,
     format_cdl,
     format_dctl,
@@ -6934,4 +6945,255 @@ def test_readme_deliverable_warn_py_plain_chinese(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(py_src_bypass)
     _assert_chengpian_not_a_deliverable_claim(README_BYPASS_WB_PY_TO)
     _assert_chengpian_not_a_deliverable_claim(README_BYPASS_WB_SWIFT_TO)
+
+
+def _sample_grid(n: int) -> np.ndarray:
+    """Camera-log sample grid in [0, 1]. R varies fastest, then G, then B."""
+    xs = np.linspace(0.0, 1.0, n)
+    b, g, r = np.meshgrid(xs, xs, xs, indexing="ij")
+    return np.stack([r, g, b], axis=-1).reshape(-1, 3)
+
+
+def _serial_preview709(log_rgb, idt_id, *, stops, cct, tint, src_cct=None):
+    """IDT → exposure → WB → Rec.709 preview, using the per-node functions."""
+    enc = idt_to_acescct(log_rgb, idt_id)
+    enc = exposure_in_acescct(enc, stops)
+    enc = wb_in_acescct(enc, cct, tint=tint, src_cct=src_cct)
+    return odt_from_acescct(enc)
+
+
+def test_combined_preview_cube_matches_serial_nodes(tmp_path: Path):
+    """00_Combined_Preview709 bakes IDT → exposure → WB → Rec.709 preview.
+
+    The file sits beside the per-node cubes. Lattice samples match those
+    node functions (the same math the individual LUTs are built from).
+    """
+    idt = "arri_logc4_awg4"
+    stops = 0.5
+    cct = 3200.0
+    tint = 0.25
+    size = 5
+    name = combined_preview709_filename(idt)
+    written = export_resolve_bundle(
+        tmp_path,
+        idt_ids=[idt, "sony_slog3_sgamut3"],
+        cct=cct,
+        tint=tint,
+        include_wb=True,
+        exposure_stops=stops,
+        exposure_enabled=True,
+        lut_size=size,
+    )
+    names = {p.name for p in written}
+    assert name in names
+    assert combined_preview709_filename("sony_slog3_sgamut3") in names
+    assert "01_IDT_arri_logc4_awg4.cube" in names
+    assert "02_Exposure.cube" in names
+    assert "03_WB.cube" in names
+    assert "04_ODT_Rec709.cube" in names
+
+    text = (tmp_path / name).read_text(encoding="utf-8")
+    assert f"LUT_3D_SIZE {COMBINED_PREVIEW709_LUT_SIZE}" in text
+    assert "LUT_3D_SIZE 5" in (tmp_path / f"01_IDT_{idt}.cube").read_text(encoding="utf-8")
+    assert "LUT_3D_SIZE 5" in (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
+    assert "DOMAIN_MIN 0.0 0.0 0.0" in text
+    assert "DOMAIN_MAX 1.0 1.0 1.0" in text
+    assert COMBINED_PREVIEW709_COMMENT in text
+    assert "达芬奇已验证" not in text
+    rgb = np.array(
+        [[float(x) for x in ln.split()] for ln in _cube_rgb_lines(text)],
+        dtype=np.float64,
+    )
+    assert rgb.shape == (COMBINED_PREVIEW709_LUT_SIZE ** 3, 3)
+    assert np.isfinite(rgb).all()
+    assert rgb.min() >= 0.0
+    assert rgb.max() <= 1.0
+
+    grid = _sample_grid(COMBINED_PREVIEW709_LUT_SIZE)
+    chain = np.clip(
+        _serial_preview709(grid, idt, stops=stops, cct=cct, tint=tint), 0.0, 1.0
+    )
+    np.testing.assert_allclose(rgb, chain, atol=1e-7, rtol=0)
+
+    # Off-lattice sample grid: same node functions, then the final [0, 1] clip.
+    samples = _sample_grid(4) * 0.8 + 0.1
+    baked = combined_preview709_rgb(
+        samples, idt, exposure_stops=stops, cct=cct, tint=tint
+    )
+    again = np.clip(
+        _serial_preview709(samples, idt, stops=stops, cct=cct, tint=tint), 0.0, 1.0
+    )
+    np.testing.assert_allclose(baked, again, atol=0, rtol=0)
+    assert baked.min() >= 0.0 and baked.max() <= 1.0
+
+    # IDT cube table (still unclamped), then exposure / WB / ODT, then [0, 1].
+    idt_rgb = np.array(
+        [
+            [float(x) for x in ln.split()]
+            for ln in _cube_rgb_lines(
+                (tmp_path / f"01_IDT_{idt}.cube").read_text(encoding="utf-8")
+            )
+        ],
+        dtype=np.float64,
+    )
+    assert idt_rgb.min() < -1.0
+    from_idt_lut = np.clip(
+        odt_from_acescct(
+            wb_in_acescct(exposure_in_acescct(idt_rgb, stops), cct, tint=tint)
+        ),
+        0.0,
+        1.0,
+    )
+    small = combined_preview709_rgb(
+        _sample_grid(size), idt, exposure_stops=stops, cct=cct, tint=tint
+    )
+    # 8-decimal IDT cube text, then the rest of the chain.
+    np.testing.assert_allclose(small, from_idt_lut, atol=2e-6, rtol=0)
+
+    # Each per-node cube still matches its own function on its lattice.
+    exp_lines = _cube_rgb_lines(exposure_cube_bytes(stops))
+    exp_rgb = np.array([[float(x) for x in ln.split()] for ln in exp_lines])
+    xs = np.linspace(0.0, 1.0, len(exp_rgb))
+    exp_in = np.stack([xs, xs, xs], axis=-1)
+    np.testing.assert_allclose(
+        exp_rgb, exposure_in_acescct(exp_in, stops), atol=1e-7, rtol=0
+    )
+    wb_rgb = np.array(
+        [
+            [float(x) for x in ln.split()]
+            for ln in _cube_rgb_lines(wb_cube_bytes(cct, tint, size=size))
+        ]
+    )
+    np.testing.assert_allclose(
+        wb_rgb, wb_in_acescct(_sample_grid(size), cct, tint=tint), atol=1e-7, rtol=0
+    )
+    odt_rgb = np.array(
+        [
+            [float(x) for x in ln.split()]
+            for ln in _cube_rgb_lines(odt_cube_bytes(size=size))
+        ]
+    )
+    np.testing.assert_allclose(
+        odt_rgb, odt_from_acescct(_sample_grid(size)), atol=1e-7, rtol=0
+    )
+    assert odt_rgb.max() > 1.0
+
+    first = combined_preview709_cube_bytes(
+        idt, exposure_stops=stops, cct=cct, tint=tint
+    )
+    second = combined_preview709_cube_bytes(
+        idt, exposure_stops=stops, cct=cct, tint=tint
+    )
+    assert "LUT_3D_SIZE 17" in first
+    assert first == second
+    assert first == text
+
+    identity = combined_preview709_cube_bytes(
+        idt, exposure_stops=0.0, cct=None, tint=0.0
+    )
+    assert _cube_rgb_lines(identity) != _cube_rgb_lines(text)
+
+
+def test_combined_preview_respects_bypass_and_readme(tmp_path: Path):
+    """WB off / exposure bypass bake the identity node, same as the per-node files."""
+    idt = "sony_slog3_sgamut3"
+    export_resolve_bundle(
+        tmp_path,
+        idt_ids=[idt],
+        cct=4500.0,
+        tint=0.4,
+        include_wb=False,
+        exposure_stops=1.25,
+        exposure_enabled=False,
+        lut_size=5,
+    )
+    name = combined_preview709_filename(idt)
+    text = (tmp_path / name).read_text(encoding="utf-8")
+    expect = combined_preview709_cube_bytes(
+        idt, exposure_stops=0.0, cct=None, tint=0.4
+    )
+    assert "LUT_3D_SIZE 17" in text
+    assert "LUT_3D_SIZE 5" in (tmp_path / "04_ODT_Rec709.cube").read_text(
+        encoding="utf-8"
+    )
+    parsed = np.array(
+        [[float(x) for x in ln.split()] for ln in _cube_rgb_lines(text)]
+    )
+    assert parsed.min() >= 0.0 and parsed.max() <= 1.0
+    assert _cube_rgb_lines(text) == _cube_rgb_lines(expect)
+    assert (tmp_path / "01_IDT_sony_slog3_sgamut3.cube").is_file()
+    assert (tmp_path / "02_Exposure.cube").is_file()
+    assert (tmp_path / "03_WB.cube").is_file()
+    assert (tmp_path / "04_ODT_Rec709.cube").is_file()
+
+    readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
+    assert COMBINED_PREVIEW709_README_ROW in readme
+    assert COMBINED_PREVIEW709_FILE_PATTERN in readme
+    assert "已实现（未验证）" in COMBINED_PREVIEW709_README_ROLE
+    assert "预览查找表" in COMBINED_PREVIEW709_README_ROLE
+    for banned in ("支持", "一键精准", "成片", "达芬奇已验证"):
+        assert banned not in COMBINED_PREVIEW709_README_ROLE
+    _assert_chengpian_not_a_deliverable_claim(COMBINED_PREVIEW709_README_ROLE)
+
+    remove_incomplete_resolve_bundle(tmp_path)
+    assert not (tmp_path / name).exists()
+    assert not (tmp_path / "01_IDT_sony_slog3_sgamut3.cube").exists()
+
+
+def test_combined_preview_copy_locked_in_readme_sources():
+    """Files table row is the same Chinese sentence in Python and Swift."""
+    root = Path(__file__).resolve().parents[1]
+    py = (root / "color/resolve_export.py").read_text(encoding="utf-8")
+    swift = (
+        root / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift"
+    ).read_text(encoding="utf-8")
+    assert COMBINED_PREVIEW709_README_ROW == (
+        "| `00_Combined_Preview709_<idt>.cube` | "
+        "预览查找表（IDT → 曝光 → 白平衡 → 709 预览）。已实现（未验证）。 |"
+    )
+    py_readme = py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
+    swift_readme = swift.split("private static func readme")[1].split(
+        "/// XML / DCTL"
+    )[0]
+    rendered = format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True)
+    assert COMBINED_PREVIEW709_README_ROW in rendered
+    assert "00_Combined_Preview709_<idt>.cube" in rendered
+    assert "COMBINED_PREVIEW709_FILE_PATTERN" in py_readme
+    assert "COMBINED_PREVIEW709_README_ROLE" in py_readme
+    assert COMBINED_PREVIEW709_README_ROLE in swift_readme
+    assert "00_Combined_Preview709_" in swift
+    assert "combinedPreviewCube" in swift
+    body = swift.split("func combinedPreviewCube")[1].split("func exposureCube")[0]
+    assert "idtToACEScct" in body
+    assert "exposureInACEScct" in body
+    assert "wbInACEScct" in body
+    assert "odtFromACEScct" in body
+    assert "min(max(preview" in body
+    export_fn = swift.split("static func export(")[1].split("static func writeSidecar")[0]
+    assert "size: ResolveExporter.lutSize" in export_fn
+    for banned in ("支持", "一键精准", "成片", "达芬奇已验证"):
+        assert banned not in COMBINED_PREVIEW709_README_ROLE
+        assert banned not in COMBINED_PREVIEW709_COMMENT
+
+
+def test_combined_preview_mid_grey_near_rec709_oetf():
+    """Exposure 0 and identity WB keep 18% grey near the Rec.709 OETF of 0.18.
+
+    The final clip is [0, 1]. 0.409 sits inside that interval, so the clip
+    does not move it. Per-node cubes are not part of this check.
+    """
+    from color.rec709 import rec709_oetf
+
+    ref = float(np.asarray(rec709_oetf(0.18)).reshape(-1)[0])
+    assert ref == pytest.approx(0.409, abs=0.002)
+    for idt, code in (
+        ("arri_logc4_awg4", float(linear_to_logc4(0.18))),
+        ("sony_slog3_sgamut3", float(linear_to_slog3(0.18))),
+    ):
+        log = np.full(3, code)
+        out = combined_preview709_rgb(
+            log, idt, exposure_stops=0.0, cct=None, tint=0.0
+        )
+        np.testing.assert_allclose(out, ref, atol=2e-2, rtol=0)
+        assert np.all((out >= 0.0) & (out <= 1.0))
 
