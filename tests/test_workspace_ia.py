@@ -86,7 +86,8 @@ def test_core_path_still_one_process_button():
     assert "处理已锁定片段" in bar
     assert "取消" in bar
     assert "showsProcessLockedButton" in bar
-    assert "这一步：每条选成对 Log 与色域" in inspector
+    assert "这一步：每条选成对 Log 与色域" not in inspector
+    assert "先选成对 Log 与色域" not in inspector
     assert 'Picker("用户选择成对 IDT"' in inspector
     assert 'Button("锁 IDT")' not in sidebar
     assert "sidebarClips" in sidebar

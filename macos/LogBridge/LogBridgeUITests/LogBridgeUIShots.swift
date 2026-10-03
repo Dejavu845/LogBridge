@@ -19,6 +19,10 @@ final class LogBridgeUIShots: XCTestCase {
         for state in states {
             for appearance in appearances {
                 for size in sizes {
+                    let name = "\(state)-\(size.0)x\(size.1)-\(appearance).png"
+                    if let only = onlyShotName, name != only {
+                        continue
+                    }
                     let app = XCUIApplication()
                     app.launchArguments = [
                         "--logbridge-ui-shot", state,
@@ -42,7 +46,10 @@ final class LogBridgeUIShots: XCTestCase {
                             XCTAssertTrue(primary.isEnabled)
                         }
                         if state == "dropped-awaiting" {
-                            XCTAssertTrue(app.staticTexts["先选成对 Log 与色域"].exists)
+                            let hints = app.staticTexts.matching(
+                                NSPredicate(format: "label == %@", "先选成对 Log 与色域")
+                            )
+                            XCTAssertEqual(hints.count, 1, "pair hint once in \(state)")
                         }
                         if state == "empty" {
                             XCTAssertTrue(app.staticTexts["把混源文件夹拖进来"].exists)
@@ -54,13 +61,21 @@ final class LogBridgeUIShots: XCTestCase {
                         settled.fulfill()
                     }
                     wait(for: [settled], timeout: 2)
-                    let name = "\(state)-\(size.0)x\(size.1)-\(appearance).png"
                     let url = out.appendingPathComponent(name)
                     try window.screenshot().pngRepresentation.write(to: url)
                     app.terminate()
                 }
             }
         }
+    }
+
+    /// Shell probe writes one filename here so the first launch can fail fast.
+    private var onlyShotName: String? {
+        let marker = "/tmp/logbridge-ui-shot-only.txt"
+        guard let text = try? String(contentsOfFile: marker, encoding: .utf8) else { return nil }
+        let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// HEAD requires the window-toolbar button. Baseline sets this marker to 0.

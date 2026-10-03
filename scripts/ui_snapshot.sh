@@ -67,8 +67,131 @@ if [ -f "${OUT}/manifest.txt" ]; then
   cat "${OUT}/manifest.txt"
 fi
 
+# One foreground launch. If borderedProminent is actually blue, keep those
+# shots. If launch fails or the button stays grey, keep the hosting PNGs.
+# Hosting already stamps 「以 isEnabled 断言为准」 because offscreen pixels
+# cannot show the enabled state.
+try_foreground_prominent() {
+  if [ "$XCTEST" != "1" ] || [ "${SNAPSHOT_REQUIRE_TOOLBAR}" = "0" ]; then
+    return 1
+  fi
+  local probe full
+  probe="$(mktemp -d)"
+  printf '%s\n' "$probe" > /tmp/logbridge-ui-screenshot-out.txt
+  printf '%s\n' "locked-1440x900-light.png" > /tmp/logbridge-ui-shot-only.txt
+  export UI_SCREENSHOT_OUT="$probe"
+  echo "ui-screenshots: XCUITest probe (locked 1440 light)"
+  if ! python3 - "$PROJECT_DIR" <<'PY'
+import subprocess
+import sys
+
+project = sys.argv[1]
+cmd = [
+    "xcodebuild",
+    "-project", f"{project}/LogBridge.xcodeproj",
+    "-scheme", "LogBridge",
+    "-destination", "platform=macOS",
+    "-configuration", "Debug",
+    "CODE_SIGNING_ALLOWED=YES",
+    "CODE_SIGNING_REQUIRED=NO",
+    "CODE_SIGN_IDENTITY=-",
+    "ENABLE_HARDENED_RUNTIME=NO",
+    "test",
+    "-only-testing:LogBridgeUITests",
+]
+try:
+    result = subprocess.run(cmd, timeout=200)
+except subprocess.TimeoutExpired:
+    print("ui-screenshots: XCUITest probe timed out", file=sys.stderr)
+    sys.exit(1)
+sys.exit(result.returncode)
+PY
+  then
+    echo "ui-screenshots: XCUITest probe did not launch"
+    rm -f /tmp/logbridge-ui-shot-only.txt
+    rm -rf "$probe"
+    return 1
+  fi
+  if ! python3 - "$ROOT" "$probe" <<'PY'
+import sys
+from pathlib import Path
+
+from PIL import Image
+
+sys.path.insert(0, sys.argv[1])
+from scripts.check_ui_screenshots import ACCENT_BLUE_PIXELS, accent_blue_count
+
+path = Path(sys.argv[2]) / "locked-1440x900-light.png"
+if not path.is_file():
+    print("ui-screenshots: XCUITest probe wrote no locked shot", file=sys.stderr)
+    sys.exit(1)
+with Image.open(path) as image:
+    count = accent_blue_count(image, 900)
+print(f"ui-screenshots: probe accent-blue {count}")
+sys.exit(0 if count >= ACCENT_BLUE_PIXELS else 1)
+PY
+  then
+    echo "ui-screenshots: foreground button was not accent blue"
+    rm -f /tmp/logbridge-ui-shot-only.txt
+    rm -rf "$probe"
+    return 1
+  fi
+  rm -f /tmp/logbridge-ui-shot-only.txt
+  rm -rf "$probe"
+  full="$(mktemp -d)"
+  printf '%s\n' "$full" > /tmp/logbridge-ui-screenshot-out.txt
+  export UI_SCREENSHOT_OUT="$full"
+  echo "ui-screenshots: XCUITest foreground set"
+  if ! python3 - "$PROJECT_DIR" <<'PY'
+import subprocess
+import sys
+
+project = sys.argv[1]
+cmd = [
+    "xcodebuild",
+    "-project", f"{project}/LogBridge.xcodeproj",
+    "-scheme", "LogBridge",
+    "-destination", "platform=macOS",
+    "-configuration", "Debug",
+    "CODE_SIGNING_ALLOWED=YES",
+    "CODE_SIGNING_REQUIRED=NO",
+    "CODE_SIGN_IDENTITY=-",
+    "ENABLE_HARDENED_RUNTIME=NO",
+    "test",
+    "-only-testing:LogBridgeUITests",
+]
+try:
+    result = subprocess.run(cmd, timeout=900)
+except subprocess.TimeoutExpired:
+    print("ui-screenshots: XCUITest set timed out", file=sys.stderr)
+    sys.exit(1)
+sys.exit(result.returncode)
+PY
+  then
+    echo "ui-screenshots: XCUITest set failed; keeping hosting"
+    rm -rf "$full"
+    return 1
+  fi
+  if ! python3 "$CHECK" "$full"; then
+    echo "ui-screenshots: XCUITest set rejected by checker; keeping hosting"
+    rm -rf "$full"
+    return 1
+  fi
+  rm -f "$OUT"/*.png
+  cp -f "$full"/*.png "$OUT"/
+  rm -rf "$full"
+  printf '\ncapture: XCUITest foreground\n' >> "${OUT}/README.txt"
+  return 0
+}
+
 if python3 "$CHECK" "$OUT"; then
   echo "ui-screenshots: hosting capture accepted"
+  if try_foreground_prominent; then
+    echo "ui-screenshots: using XCUITest foreground shots"
+  else
+    echo "ui-screenshots: offscreen hosting kept; 以 isEnabled 断言为准"
+    printf '\ncapture: hosting\nenabled-state: 以 isEnabled 断言为准\n' >> "${OUT}/README.txt"
+  fi
   exit 0
 fi
 

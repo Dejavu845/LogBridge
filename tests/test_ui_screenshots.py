@@ -6,10 +6,8 @@ from pathlib import Path
 from PIL import Image
 
 from scripts.check_ui_screenshots import (
-    accent_blue_count,
     analyze_image,
     check_directory,
-    is_accent_blue,
     is_blank_capture,
     is_prohibited_placeholder,
     toolbar_region_present,
@@ -69,10 +67,9 @@ def test_snapshot_tool_covers_sizes_appearances_and_states():
         "canBecomeMain",
         "makeKeyAndOrderFront",
         "activate(ignoringOtherApps:",
-        "_setForceActiveAppearance:",
         "isEnabled",
         "expectPrimaryEnabled",
-        "controlActiveState",
+        "以 isEnabled 断言为准",
         "ContentView(session:",
         "sample-a.mov",
         "sample-locked.mov",
@@ -88,6 +85,12 @@ def test_snapshot_tool_covers_sizes_appearances_and_states():
     assert "commit:" in script
     assert "return 0" in tool
     assert "return 1" in tool
+    assert "_setForceActiveAppearance:" not in tool
+    assert "_setForceActiveControls:" not in tool
+    assert "controlActiveState" not in tool
+    assert "AccentProminentButtonStyle" not in tool
+    shot = SHOT.read_text(encoding="utf-8")
+    assert "controlActiveState" not in shot
     assert "LogBridgeApp.swift" in script
     assert "check_ui_screenshots.py" in script
     assert "exit 1" in script
@@ -95,6 +98,9 @@ def test_snapshot_tool_covers_sizes_appearances_and_states():
     assert "XCUITest fallback" in script
     assert "SNAPSHOT_REQUIRE_TOOLBAR" in script
     assert "logbridge-ui-shot-require-toolbar.txt" in script
+    assert "logbridge-ui-shot-only.txt" in script
+    assert "以 isEnabled 断言为准" in script
+    assert "try_foreground_prominent" in script
     assert TOOL.relative_to(ROOT).parts[0] == "scripts"
     xctest = XCTEST.read_text(encoding="utf-8")
     assert "windows.firstMatch" in xctest
@@ -193,8 +199,6 @@ def test_placeholder_colors_fail_and_small_accents_do_not():
     assert toolbar_region_present(960, 900) is True
     assert toolbar_region_present(900, 900) is False
     assert toolbar_region_present(840, 800) is True
-    assert is_accent_blue(0, 122, 255) is True
-    assert is_accent_blue(180, 180, 184) is False
 
 
 def test_after_write_must_not_match_locked_bytes(tmp_path: Path):
@@ -224,63 +228,57 @@ def test_after_write_must_not_match_locked_bytes(tmp_path: Path):
     assert any("after-write matches locked for 1440x900 light" in line for line in errors)
 
 
-def _shot(path: Path, name: str, color: tuple[int, int, int], blue: bool) -> None:
+def _shot(path: Path, name: str, color: tuple[int, int, int]) -> None:
     height = int(name.split("-")[-2].split("x")[1])
     width = int(name.split("-")[-2].split("x")[0])
     image = Image.new("RGB", (width, height + 52), color)
-    for x in range(40):
+    for x in range(240):
         image.putpixel((x, 80), (20, 20, 20))
-    if blue:
-        for x in range(width - 180, width - 30):
-            for y in range(10, 34):
-                image.putpixel((x, y), (0, 122, 255))
+        image.putpixel((x, 81), (80, 80, 80))
     image.save(path / name)
 
 
-def test_enabled_button_region_is_accent_blue(tmp_path: Path):
-    """locked / after-write toolbar band is accent blue; empty / awaiting is not."""
+def test_primary_button_enabled_is_asserted_not_painted(tmp_path: Path):
+    """System borderedProminent. Enabled state is isEnabled, not a custom fill or blue pixels."""
     tool = TOOL.read_text(encoding="utf-8")
     enabled = tool.split("private func expectPrimaryEnabled")[1].split("private func")[0]
     assert "case .empty, .droppedAwaiting:" in enabled
     assert "return false" in enabled
     assert "case .locked, .afterWrite:" in enabled
     assert "return true" in enabled
+    match = tool.split("private func primaryEnabledMatches")[1].split("private func")[0]
+    assert "button.isEnabled" in tool
+    assert "enabled == want" in match
+    assert "primary NSButton not found" in match
     content = CONTENT.read_text(encoding="utf-8")
     button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
-    assert "AccentProminentButtonStyle()" in button
-    style = content.split("struct AccentProminentButtonStyle")[1].split("struct AdvancedPanel")[0]
-    assert "Color.accentColor" in style
-    assert "quaternarySystemFill" in style
-    assert "@Environment(\\.isEnabled)" in style
+    assert ".buttonStyle(.borderedProminent)" in button
+    assert "AccentProminentButtonStyle" not in content
+    assert "controlActiveState" not in content
     assert ".fixedSize()" in button
     assert ".layoutPriority(1)" in button
     assert ".layoutPriority(0)" in button
     assert ".disabled(session.lockedClipCount == 0)" in button
+    assert "以 isEnabled 断言为准" in tool
+    design = (ROOT / "DESIGN.md").read_text(encoding="utf-8")
+    assert "禁止自定义填充的按钮" in design
+    assert ".borderedProminent" in design
+    assert "accentColor 实心" not in design
+    xctest = XCTEST.read_text(encoding="utf-8")
+    assert "XCTAssertFalse(primary.isEnabled)" in xctest
+    assert "XCTAssertTrue(primary.isEnabled)" in xctest
+    checker = CHECK.read_text(encoding="utf-8")
+    assert "require_primary_accent" not in checker
+    assert "primary_accent_errors" not in checker
 
     for size in ("1440x900", "1280x800"):
         for appearance in ("light", "dark"):
-            _shot(tmp_path, f"empty-{size}-{appearance}.png", (230, 230, 230), False)
-            _shot(tmp_path, f"dropped-awaiting-{size}-{appearance}.png", (220, 220, 225), False)
-            _shot(tmp_path, f"locked-{size}-{appearance}.png", (210, 210, 210), True)
-            _shot(tmp_path, f"after-write-{size}-{appearance}.png", (200, 205, 210), True)
-    assert check_directory(tmp_path, require_primary_accent=True) == []
-    awaiting = tmp_path / "dropped-awaiting-1440x900-light.png"
-    with Image.open(awaiting) as image:
-        assert accent_blue_count(image, 900) == 0
-    locked = tmp_path / "locked-1440x900-light.png"
-    with Image.open(locked) as image:
-        assert accent_blue_count(image, 900) >= 40
-    # A grey enabled button must fail. A blue disabled button must fail.
-    _shot(tmp_path, "locked-1440x900-light.png", (210, 210, 210), False)
-    grey_errors = check_directory(tmp_path, require_primary_accent=True)
-    assert any("locked-1440x900-light.png: enabled primary missing accent blue" in line for line in grey_errors)
-    _shot(tmp_path, "locked-1440x900-light.png", (210, 210, 210), True)
-    _shot(tmp_path, "dropped-awaiting-1280x800-light.png", (220, 220, 225), True)
-    blue_disabled = check_directory(tmp_path, require_primary_accent=True)
-    assert any(
-        "dropped-awaiting-1280x800-light.png: disabled primary shows accent blue" in line
-        for line in blue_disabled
-    )
+            _shot(tmp_path, f"empty-{size}-{appearance}.png", (230, 230, 230))
+            _shot(tmp_path, f"dropped-awaiting-{size}-{appearance}.png", (220, 220, 225))
+            _shot(tmp_path, f"locked-{size}-{appearance}.png", (210, 210, 210))
+            _shot(tmp_path, f"after-write-{size}-{appearance}.png", (200, 205, 210))
+    # Grey enabled and grey disabled shots both pass. Color is not the assertion.
+    assert check_directory(tmp_path) == []
 
 
 def test_baseline_wire_patches_28066d5_without_committing(tmp_path: Path):

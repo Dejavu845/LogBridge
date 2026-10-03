@@ -49,6 +49,8 @@ let shotSizes = [
 
 /// Corner caption baked into every PNG at render time. Not a real-device capture.
 let offscreenCaption = "CI 离屏渲染·假数据·非真机"
+/// Hosting capture cannot show whether borderedProminent is enabled. Pixels are not the check.
+let enabledStateCaption = "以 isEnabled 断言为准"
 
 enum SnapshotError: Error, CustomStringConvertible {
     case noBitmap(String)
@@ -250,17 +252,18 @@ private func snapshotRoot(session: SessionModel, width: Int, height: Int, appear
         .background(Color(nsColor: .windowBackgroundColor))
         .preferredColorScheme(appearance.colorScheme)
         .environment(\.colorScheme, appearance.colorScheme)
-        // Inactive windows draw borderedProminent grey whether or not it is enabled.
-        .environment(\.controlActiveState, .active)
         .overlay(alignment: .bottomTrailing) {
-            Text(offscreenCaption)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 4))
-                .padding(8)
-                .allowsHitTesting(false)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(offscreenCaption)
+                Text(enabledStateCaption)
+            }
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 4))
+            .padding(8)
+            .allowsHitTesting(false)
         }
 }
 
@@ -299,29 +302,15 @@ private func renderWithHostingView<V: View>(
     becomeKeyForCapture(window)
     frame.needsDisplay = true
     window.displayIfNeeded()
-    let preferAccent = requireToolbarItems && expectPrimaryEnabled(state)
-    var best = wholeWindowRep(
-        window,
-        contentHeight: height,
-        contentWidth: width,
-        preferAccent: preferAccent
-    )
-    if best == nil || !captureShowsChrome(best!, window: window, contentHeight: height)
-        || (preferAccent && accentCount(best!, contentHeight: height, contentWidth: width) < 40) {
+    var best = wholeWindowRep(window, contentHeight: height)
+    if best == nil || !captureShowsChrome(best!, window: window, contentHeight: height) {
         spinRunLoop(host: frame)
-        if let again = wholeWindowRep(
-            window,
-            contentHeight: height,
-            contentWidth: width,
-            preferAccent: preferAccent
-        ),
+        if let again = wholeWindowRep(window, contentHeight: height),
            betterWindowCapture(
                again,
                than: best,
                window: window,
-               contentHeight: height,
-               contentWidth: width,
-               preferAccent: preferAccent
+               contentHeight: height
            ) {
             best = again
         }
@@ -330,13 +319,10 @@ private func renderWithHostingView<V: View>(
     let toolbarOK = !requireToolbarItems || toolbarHasItems(window)
     let enabledOK = !requireToolbarItems || primaryEnabledMatches(window, state: state)
     let usable = best.map { !bitmapIsUnusable($0) } ?? false
-    if let rep = best {
-        let blue = accentCount(rep, contentHeight: height, contentWidth: width)
-        fputs(
-            "ui-screenshots: \(state.rawValue) \(width)x\(height) accent-blue \(blue)\n",
-            stderr
-        )
-    }
+    fputs(
+        "ui-screenshots: \(state.rawValue) \(width)x\(height) 以 isEnabled 断言为准\n",
+        stderr
+    )
     window.orderOut(nil)
     window.close()
     guard let rep = best, showsChrome else {
@@ -363,30 +349,19 @@ private var requireToolbarItems: Bool {
     ProcessInfo.processInfo.environment["SNAPSHOT_REQUIRE_TOOLBAR"] != "0"
 }
 
-/// Key + active, so an enabled borderedProminent button fills with accentColor.
+/// Key window so the system button style can draw. Do not force the active
+/// control state: that fights inactive-window dimming, and pixels are not
+/// how enabled vs disabled is checked.
 @MainActor
 private func becomeKeyForCapture(_ window: NSWindow) {
     NSApp.setActivationPolicy(.regular)
     if !NSApp.isRunning {
         NSApp.finishLaunching()
     }
-    forceActiveAppearance(window)
     NSApp.activate(ignoringOtherApps: true)
     window.makeKeyAndOrderFront(nil)
     window.makeMain()
     window.toolbar?.validateVisibleItems()
-}
-
-/// Public activate() is not always enough for a short-lived capture process.
-/// Inactive drawing is what made enabled and disabled toolbar buttons match.
-private func forceActiveAppearance(_ window: NSWindow) {
-    for name in ["_setForceActiveAppearance:", "_setForceActiveControls:"] {
-        let sel = NSSelectorFromString(name)
-        guard window.responds(to: sel) else { continue }
-        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
-        let imp = unsafeBitCast(window.method(for: sel), to: Setter.self)
-        imp(window, sel, true)
-    }
 }
 
 /// empty / dropped-awaiting: disabled. locked / after-write: enabled.
@@ -400,8 +375,7 @@ private func expectPrimaryEnabled(_ state: SampleState) -> Bool {
 }
 
 /// SwiftUI may draw the toolbar button without an NSButton. A missing control
-/// does not fail the shot; the pixel check still requires accent blue only
-/// when the button is enabled. A found NSButton must match isEnabled.
+/// does not fail the shot. A found NSButton must match isEnabled.
 private func primaryEnabledMatches(_ window: NSWindow, state: SampleState) -> Bool {
     guard let enabled = primaryButtonEnabled(in: window) else {
         fputs("ui-screenshots: primary NSButton not found for \(state.rawValue)\n", stderr)
@@ -449,14 +423,11 @@ private func toolbarHasItems(_ window: NSWindow) -> Bool {
 }
 
 /// Frame-view cacheDisplay plus the composited window image. Keep whichever
-/// is tall enough to include the title bar / toolbar. Enabled shots prefer
-/// the bitmap whose toolbar band actually contains accent blue.
+/// is tall enough to include the title bar / toolbar.
 @MainActor
 private func wholeWindowRep(
     _ window: NSWindow,
-    contentHeight: Int,
-    contentWidth: Int,
-    preferAccent: Bool
+    contentHeight: Int
 ) -> NSBitmapImageRep? {
     var best: NSBitmapImageRep?
     if let frame = window.contentView?.superview, let rep = cacheDisplayRep(host: frame) {
@@ -467,9 +438,7 @@ private func wholeWindowRep(
            rep,
            than: best,
            window: window,
-           contentHeight: contentHeight,
-           contentWidth: contentWidth,
-           preferAccent: preferAccent
+           contentHeight: contentHeight
        ) {
         best = rep
     }
@@ -485,9 +454,7 @@ private func betterWindowCapture(
     _ candidate: NSBitmapImageRep,
     than current: NSBitmapImageRep?,
     window: NSWindow,
-    contentHeight: Int,
-    contentWidth: Int,
-    preferAccent: Bool
+    contentHeight: Int
 ) -> Bool {
     guard let current else { return true }
     let candChrome = captureShowsChrome(candidate, window: window, contentHeight: contentHeight)
@@ -496,52 +463,7 @@ private func betterWindowCapture(
     if !candChrome, currChrome { return false }
     if bitmapIsUnusable(current), !bitmapIsUnusable(candidate) { return true }
     if !bitmapIsUnusable(current), bitmapIsUnusable(candidate) { return false }
-    if preferAccent {
-        let candBlue = accentCount(candidate, contentHeight: contentHeight, contentWidth: contentWidth)
-        let currBlue = accentCount(current, contentHeight: contentHeight, contentWidth: contentWidth)
-        if candBlue != currBlue { return candBlue > currBlue }
-    }
     return candidate.pixelsHigh > current.pixelsHigh
-}
-
-/// Accent-blue pixels in the trailing toolbar band. Checks both edges because
-/// bitmap row 0 is sometimes the bottom of the window.
-private func accentCount(_ rep: NSBitmapImageRep, contentHeight: Int, contentWidth: Int) -> Int {
-    guard
-        rep.pixelsWide > 0,
-        rep.pixelsHigh > 0,
-        contentWidth > 0,
-        rep.bitsPerSample == 8,
-        rep.samplesPerPixel >= 3,
-        let raw = rep.bitmapData
-    else { return 0 }
-    let scale = max(1, rep.pixelsWide / contentWidth)
-    let chrome = rep.pixelsHigh - contentHeight * scale
-    if chrome <= 0 { return 0 }
-    let span = min(420 * scale, rep.pixelsWide)
-    let x0 = rep.pixelsWide - span
-    let spp = rep.samplesPerPixel
-    let channel = rep.bitmapFormat.contains(.alphaFirst) ? 1 : 0
-    func count(_ yRange: Range<Int>) -> Int {
-        var hits = 0
-        for y in yRange {
-            let row = raw.advanced(by: y * rep.bytesPerRow)
-            for x in x0..<rep.pixelsWide {
-                let px = row.advanced(by: x * spp)
-                let red = Int(px[channel])
-                let green = Int(px[channel + 1])
-                let blue = Int(px[channel + 2])
-                if blue >= 170, blue >= red + 70, blue >= green + 40 {
-                    hits += 1
-                }
-            }
-        }
-        return hits
-    }
-    let top = count(0..<min(chrome, rep.pixelsHigh))
-    let bottomStart = max(0, rep.pixelsHigh - chrome)
-    let bottom = count(bottomStart..<rep.pixelsHigh)
-    return max(top, bottom)
 }
 
 /// Ten turns, 0.05s each: about 0.5s total, so lazy Table/List can fill in.

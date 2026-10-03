@@ -25,11 +25,6 @@ struct PairedIDTBar: View {
                         .clipShape(Capsule())
                 }
             }
-            if session.selectedClip?.isPending == true {
-                Text("这一步：每条选成对 Log 与色域")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange)
-            }
             if let clip = session.selectedClip {
                 // One locked pair per row. Never two independent curve/gamut dropdowns.
                 Picker("用户选择成对 IDT", selection: Binding(

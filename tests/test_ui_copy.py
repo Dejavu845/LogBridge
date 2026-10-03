@@ -11733,7 +11733,8 @@ def test_unlocked_hint_is_visible_only_when_none_locked():
     assert ".fixedSize()" in button
     assert ".layoutPriority(1)" in button
     assert button.count(".layoutPriority(0)") == 2
-    assert "AccentProminentButtonStyle()" in button
+    assert ".buttonStyle(.borderedProminent)" in button
+    assert "AccentProminentButtonStyle" not in content
     assert ".font(.system(" not in button
     assert ".background(" not in button
     assert ".opacity(" not in button
@@ -11749,6 +11750,115 @@ def test_unlocked_hint_is_visible_only_when_none_locked():
     assert window.count("ToolbarItem(") == 1
     assert window.count(".primaryAction") == 1
     assert _all_swift().count("ToolbarItem(placement: .primaryAction)") == 1
+
+
+def test_pair_hint_appears_once_in_dropped_awaiting():
+    """「先选成对 Log 与色域」 is one visible Text, beside the toolbar button."""
+    import re
+
+    hint = UNLOCKED_TOOLBAR_HINT
+    text_hits: list[str] = []
+    help_hits: list[str] = []
+    other_hits: list[str] = []
+    for path in (SWIFT_ROOT / "LogBridge").rglob("*.swift"):
+        if path.name.startswith("._"):
+            continue
+        rel = path.relative_to(SWIFT_ROOT).as_posix()
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            code = line.split("//", 1)[0]
+            if f'Text("{hint}")' in code:
+                text_hits.append(f"{rel}:{lineno}")
+            if f'.help("{hint}")' in code:
+                help_hits.append(f"{rel}:{lineno}")
+            for kind in ("Button", "Label", "Toggle", "Picker"):
+                if f'{kind}("{hint}"' in code:
+                    other_hits.append(f"{rel}:{lineno}:{kind}")
+    assert len(text_hits) == 1
+    assert text_hits[0].startswith("LogBridge/LogBridge/ContentView.swift:")
+    assert len(help_hits) == 1
+    assert help_hits[0].startswith("LogBridge/LogBridge/ContentView.swift:")
+    assert other_hits == []
+
+    content = _read(CONTENT)
+    button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
+    empty = button.split("if session.clips.isEmpty")[1].split("else if session.lockedClipCount == 0")[0]
+    pair = button.split("else if session.lockedClipCount == 0")[1].split("Button(")[0]
+    assert f'Text("{hint}")' not in empty
+    assert f'Text("{hint}")' in pair
+    inspector = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/InspectorView.swift")
+    assert hint not in _code_without_comments(inspector)
+    assert "这一步：每条选成对 Log 与色域" not in inspector
+
+    visible = _dropped_awaiting_user_visible_strings()
+    assert visible.count(hint) == 1
+
+
+def _dropped_awaiting_user_visible_strings() -> list[str]:
+    """Static Text literals from the views mounted when clips exist and none are locked."""
+    import re
+
+    bodies: dict[str, str] = {}
+    for path in (SWIFT_ROOT / "LogBridge").rglob("*.swift"):
+        if path.name.startswith("._"):
+            continue
+        src = path.read_text(encoding="utf-8")
+        for part in re.split(r"\n(?:private |fileprivate |public )?(?:struct|class) ", src)[1:]:
+            name = part.split(":", 1)[0].split("{", 1)[0].split("<", 1)[0].strip()
+            if name:
+                bodies[name] = part
+    roots = (
+        "WorkspaceHeader",
+        "ClipSidebarView",
+        "SplitPreview",
+        "PairedIDTBar",
+        "ProcessLockedBar",
+        "AdvancedPanel",
+        "StatusBar",
+        "InspectorView",
+        "ProcessLockedToolbarButton",
+    )
+    skip = {
+        "Text",
+        "Button",
+        "HStack",
+        "VStack",
+        "ZStack",
+        "Spacer",
+        "Color",
+        "Image",
+        "Toggle",
+        "Picker",
+        "ScrollView",
+        "Group",
+        "ForEach",
+        "Binding",
+        "RoundedRectangle",
+        "Capsule",
+        "Divider",
+        "Label",
+        "Slider",
+        "DisclosureGroup",
+        "EmptyView",
+    }
+    seen: set[str] = set()
+    texts: list[str] = []
+
+    def walk(name: str, body: str) -> None:
+        if name in seen:
+            return
+        seen.add(name)
+        texts.extend(_text_literals(body))
+        for child in re.findall(r"\b([A-Z][A-Za-z0-9]*)\(", body):
+            if child in skip or child not in bodies or child in seen:
+                continue
+            walk(child, bodies[child])
+
+    for root in roots:
+        body = bodies.get(root, "")
+        if root == "ProcessLockedToolbarButton":
+            body = body.split("else if session.lockedClipCount == 0", 1)[-1].split("Button(", 1)[0]
+        walk(root, body)
+    return texts
 
 
 def test_system_toolbar_has_one_primary_button():
