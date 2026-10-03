@@ -7,7 +7,7 @@ struct PairedIDTBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("成对 IDT")
                     .font(.subheadline.weight(.semibold))
@@ -19,9 +19,9 @@ struct PairedIDTBar: View {
                 if let clip = session.selectedClip {
                     Text(clip.verificationBadge)
                         .font(.caption2.weight(clip.isPending ? .regular : .semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(clip.isPending ? Color.yellow.opacity(0.28) : Color.orange.opacity(0.2))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 4)
+                        .background(clip.isPending ? Color.accentColor.opacity(0.12) : Color.accentColor.opacity(0.72))
                         .clipShape(Capsule())
                 }
             }
@@ -46,7 +46,7 @@ struct PairedIDTBar: View {
                 .disabled(session.isExporting)
                 // S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。
                 .help("S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。")
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Text("来源：\(clip.detectionSource.title)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -58,7 +58,7 @@ struct PairedIDTBar: View {
                     if let reason = clip.processSkipReason {
                         Text(reason)
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                 }
@@ -72,13 +72,13 @@ struct PairedIDTBar: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             session.selectedClip?.isPending == true
-                ? Color.yellow.opacity(0.10)
-                : Color.primary.opacity(0.03)
+                ? Color.accentColor.opacity(0.12)
+                : Color.clear
         )
     }
 }
@@ -90,7 +90,7 @@ struct InspectorView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("调节")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -98,11 +98,10 @@ struct InspectorView: View {
                 WBInspector(session: session)
             }
             .disabled(session.isExporting)
-            .opacity(session.isExporting ? 0.45 : 1)
-            .padding(10)
+            .opacity(session.isExporting ? 0.72 : 1)
+            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color.primary.opacity(0.02))
     }
 }
 
@@ -132,15 +131,16 @@ struct WBInspector: View {
             if session.graph.asShotUnknown {
                 Text("机内未知")
                     .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(Color.yellow.opacity(0.28))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 4)
+                    .background(Color.accentColor.opacity(0.12))
                     .clipShape(Capsule())
                 Text("读不到机内色温。保持未填、单位阵，不猜 5600 或 6504。点灰卡或手填。已实现（未验证）。")
                     .font(.caption2)
-                    .foregroundStyle(.orange)
+                    // 警告：读不到机内色温，不猜。
+                    .foregroundStyle(Color.orange)
             }
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Button(session.pickingNeutral ? "在预览上点灰卡…" : "点灰卡") {
                     session.pickingNeutral.toggle()
                 }
@@ -153,7 +153,7 @@ struct WBInspector: View {
                 .help("白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。")
             }
             if session.graph.autoWBCCT != nil {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Text("白平衡（估计） \(Int(session.graph.autoWBCCT ?? 0)) K — 确认后才写入，一点不会写入")
                         .font(.caption2)
                         .lineLimit(2)
@@ -213,9 +213,8 @@ struct WBInspector: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
@@ -237,14 +236,14 @@ private struct WBStateChip: View {
             .font(.caption2.weight(on || pending ? .semibold : .regular))
             .lineLimit(1)
             .minimumScaleFactor(0.85)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity)
             .background(fill)
             .foregroundStyle(ink)
             .overlay(
                 Capsule()
-                    .strokeBorder(pending && !on ? Color.orange.opacity(0.85) : Color.clear, lineWidth: 1)
+                    .strokeBorder(pending && !on ? Color.accentColor.opacity(0.72) : Color.clear, lineWidth: 1)
             )
             .clipShape(Capsule())
     }
@@ -252,24 +251,24 @@ private struct WBStateChip: View {
     private var fill: Color {
         if on {
             switch kind {
-            case .asShot: return Color.primary.opacity(0.14)
-            case .estimate: return Color.orange.opacity(0.22)
-            case .grey: return Color.accentColor.opacity(0.18)
+            case .asShot: return Color.accentColor.opacity(0.72)
+            case .estimate: return Color.accentColor.opacity(0.12)
+            case .grey: return Color.accentColor.opacity(0.12)
             }
         }
-        if pending { return Color.orange.opacity(0.08) }
-        return Color.primary.opacity(0.05)
+        if pending { return Color.accentColor.opacity(0.12) }
+        return Color.clear
     }
 
     private var ink: Color {
         if on {
             switch kind {
             case .asShot: return Color.primary
-            case .estimate: return Color.orange
+            case .estimate: return Color.accentColor
             case .grey: return Color.accentColor
             }
         }
-        if pending { return Color.orange }
+        if pending { return Color.accentColor }
         return Color.secondary
     }
 }
@@ -278,7 +277,7 @@ struct ODTInspector: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("输出")
                 .font(.subheadline.weight(.semibold))
             Picker("预览输出", selection: Binding(
@@ -326,7 +325,7 @@ struct ExposureInspector: View {
             ))
             .controlSize(.small)
             if session.graph.exposureEnabled {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Text("档")
                         .font(.caption)
                         .frame(width: 56, alignment: .leading)
@@ -355,9 +354,8 @@ struct ExposureInspector: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }

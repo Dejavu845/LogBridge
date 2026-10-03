@@ -48,7 +48,7 @@ struct WorkspaceHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("LogBridge")
                     .font(.headline)
                 Text("已实现（未验证）")
@@ -79,12 +79,11 @@ struct WorkspaceHeader: View {
                 .help("仅预览")
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color.primary.opacity(0.04))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Color.primary.opacity(0.08))
+                .fill(Color.accentColor.opacity(0.12))
                 .frame(height: 1)
         }
     }
@@ -98,7 +97,7 @@ struct WorkspaceStepStrip: View {
             ForEach(WorkspaceStep.allCases, id: \.rawValue) { step in
                 if step != .importFolder {
                     Rectangle()
-                        .fill(step.rawValue <= current ? Color.accentColor.opacity(0.55) : Color.primary.opacity(0.12))
+                        .fill(step.rawValue <= current ? Color.accentColor.opacity(0.72) : Color.accentColor.opacity(0.12))
                         .frame(width: 28, height: 2)
                         .padding(.horizontal, 4)
                 }
@@ -115,12 +114,12 @@ private struct WorkspaceStepChip: View {
     var body: some View {
         let active = step.rawValue == current
         let done = step.rawValue < current
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
                 Text("\(step.rawValue)")
                     .font(.caption2.monospacedDigit().weight(.bold))
                     .frame(width: 18, height: 18)
-                    .background(active || done ? Color.accentColor : Color.primary.opacity(0.12))
+                    .background(active || done ? Color.accentColor : Color.accentColor.opacity(0.12))
                     .foregroundStyle(active || done ? Color.white : Color.secondary)
                     .clipShape(Circle())
                 Text(step.title)
@@ -134,8 +133,8 @@ private struct WorkspaceStepChip: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(active ? Color.accentColor.opacity(0.10) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(active ? Color.accentColor.opacity(0.12) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -144,7 +143,7 @@ struct EmptyPreviewStage: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: 24) {
             Image(systemName: "film.stack")
                 .font(.system(size: 42, weight: .regular))
                 .foregroundStyle(Color.accentColor)
@@ -166,20 +165,20 @@ struct EmptyPreviewStage: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
-        .padding(36)
+        .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(session.dropTargeted ? Color.accentColor.opacity(0.10) : Color.primary.opacity(0.03))
+            RoundedRectangle(cornerRadius: 10)
+                .fill(session.dropTargeted ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.12))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(
                     style: StrokeStyle(lineWidth: session.dropTargeted ? 2 : 1, dash: [7])
                 )
-                .foregroundStyle(session.dropTargeted ? Color.accentColor : Color.secondary.opacity(0.35))
+                .foregroundStyle(session.dropTargeted ? Color.accentColor : Color.secondary.opacity(0.72))
         )
-        .padding(18)
+        .padding(16)
         .contentShape(Rectangle())
         .onTapGesture {
             session.showImporter = true
@@ -193,12 +192,12 @@ private struct EmptyStepCard: View {
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("\(index)")
                 .font(.caption.monospacedDigit().weight(.bold))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color.accentColor.opacity(0.16))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.accentColor.opacity(0.12))
                 .foregroundStyle(Color.accentColor)
                 .clipShape(Capsule())
             Text(title)
@@ -210,7 +209,6 @@ private struct EmptyStepCard: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
@@ -225,9 +223,8 @@ struct InspectorCard<Content: View>: View {
                 .font(.subheadline.weight(.semibold))
             content()
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }

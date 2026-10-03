@@ -259,9 +259,9 @@ private func snapshotRoot(session: SessionModel, width: Int, height: Int, appear
             }
             .font(.caption2.weight(.semibold))
             .foregroundStyle(Color.white)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 4))
+            .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 4))
             .padding(8)
             .allowsHitTesting(false)
         }

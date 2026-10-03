@@ -17,21 +17,21 @@ struct ClipSidebarView: View {
                 Button("设置") { session.showSettings = true }
                     .controlSize(.small)
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 10)
-            .padding(.bottom, 6)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
 
             DropZone(targeted: session.dropTargeted, empty: session.clips.isEmpty) {
                 session.showImporter = true
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 6)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
 
             Text("1 把混源文件夹拖进来  2 每条选成对 Log 与色域  3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 6)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
 
             if !session.clips.isEmpty {
                 Picker("列表", selection: $session.sidebarFilter) {
@@ -41,13 +41,13 @@ struct ClipSidebarView: View {
                 }
                 .pickerStyle(.segmented)
                 .controlSize(.small)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 6)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
 
                 Text(session.lockStatusText)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12)
                     .padding(.bottom, 4)
             }
 
@@ -55,7 +55,7 @@ struct ClipSidebarView: View {
                 Text(session.lastImportNote)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12)
                     .padding(.bottom, 4)
             }
 
@@ -84,7 +84,7 @@ struct ClipSidebarView: View {
                 }
             }
         }
-        .background(Color.primary.opacity(0.02))
+        .background(Color.primary.opacity(0.12))
     }
 }
 
@@ -107,19 +107,19 @@ private struct DropZone: View {
                     .multilineTextAlignment(.center)
                 Text("已实现（未验证）")
                     .font(.caption2)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.orange.opacity(0.2))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.accentColor.opacity(0.12))
                     .clipShape(Capsule())
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(empty ? 22 : 6)
-        .background(targeted ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.04))
+        .padding(empty ? 24 : 8)
+        .background(targeted ? Color.accentColor.opacity(0.12) : Color.clear)
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5]))
-                .foregroundStyle(targeted ? Color.accentColor : Color.secondary.opacity(0.4))
+                .foregroundStyle(targeted ? Color.accentColor : Color.secondary.opacity(0.72))
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -138,11 +138,11 @@ struct ClipRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             RoundedRectangle(cornerRadius: 1)
-                .fill(clip.isPending ? Color.yellow.opacity(0.9) : Color.accentColor)
+                .fill(clip.isPending ? Color.accentColor.opacity(0.72) : Color.accentColor)
                 .frame(width: 3)
-                .padding(.vertical, 2)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+                .padding(.vertical, 4)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
                     Text(clip.filename)
                         .font(clip.isPending ? .callout : .callout.weight(.semibold))
                         .foregroundStyle(clip.isPending ? Color.secondary : Color.primary)
@@ -150,9 +150,9 @@ struct ClipRow: View {
                     Spacer(minLength: 4)
                     Text(clip.isPending ? "待选" : "已锁定")
                         .font(.caption2.weight(clip.isPending ? .regular : .semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(clip.isPending ? Color.yellow.opacity(0.28) : Color.accentColor.opacity(0.16))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 4)
+                        .background(clip.isPending ? Color.accentColor.opacity(0.12) : Color.accentColor.opacity(0.72))
                         .foregroundStyle(clip.isPending ? Color.primary : Color.accentColor)
                         .clipShape(Capsule())
                 }
@@ -163,7 +163,7 @@ struct ClipRow: View {
                 if let reason = clip.processSkipReason {
                     Text(reason)
                         .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 } else if let chip = clip.exportChip {
                     // 已写出代理 after a proxy write; failed write is a short Chinese error
@@ -174,6 +174,7 @@ struct ClipRow: View {
                             .foregroundStyle(Color.secondary)
                             .lineLimit(1)
                     } else {
+                        // 错误：写出失败。
                         Text(chip)
                             .font(.caption2)
                             .foregroundStyle(Color.orange)
@@ -182,8 +183,8 @@ struct ClipRow: View {
                 }
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(selected ? Color.accentColor.opacity(0.12) : Color.clear)
     }

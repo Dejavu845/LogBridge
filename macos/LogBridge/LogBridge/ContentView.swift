@@ -245,20 +245,18 @@ struct ProcessLockedBar: View {
                         .font(.subheadline.weight(.semibold))
                 }
                 if let reason = session.selectedClip?.processSkipReason {
-                    // Warning: skip reason. Orange is only for this warning.
                     Text(reason)
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.orange.opacity(0.12))
+                        .background(Color.accentColor.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 } else if !session.showsProcessLockedButton {
-                    // Warning: nothing locked yet. Orange is only for this warning.
                     Text(session.processBlockedReason ?? "先选择 Log 与色域")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
                 Spacer(minLength: 8)
@@ -276,7 +274,7 @@ struct ProcessLockedBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.accentColor.opacity(0.06))
+        .background(Color.accentColor.opacity(0.12))
     }
 }
 
@@ -352,7 +350,7 @@ struct AdvancedPanel: View {
 
     var body: some View {
         DisclosureGroup("高级", isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 NodeStripView(session: session)
                 HStack {
                     Button("导出 ACEScct / EXR") {
@@ -364,18 +362,17 @@ struct AdvancedPanel: View {
                     if let reason = session.processBlockedReason {
                         Text(reason)
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
                 }
-                .padding(.horizontal, 10)
-                .padding(.bottom, 6)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
             }
         }
         .help("节点与导出 ACEScct / EXR。展开状态会记住。整段代理，代理精度。")
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(Color.primary.opacity(0.025))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 }
 
@@ -393,7 +390,6 @@ struct SplitPreview: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.primary.opacity(0.03))
             } else {
                 HSplitView {
                     SourcePreviewView(
@@ -447,12 +443,13 @@ struct PreviewScrubBar: View {
         if session.isExporting {
             EmptyView()
         } else if let fail = session.previewScrubFail {
+            // 警告：读不到帧范围，不造进度。
             Text(fail)
                 .font(.caption)
-                .foregroundStyle(.orange)
+                .foregroundStyle(Color.orange)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+                .padding(.vertical, 4)
         } else if let last = session.previewScrubLastFrame {
             HStack(spacing: 8) {
                 Slider(
@@ -471,7 +468,7 @@ struct PreviewScrubBar: View {
                     .frame(minWidth: 88, alignment: .trailing)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.vertical, 4)
         }
     }
 }
@@ -488,8 +485,8 @@ struct WriteProgressLine: View {
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color.accentColor.opacity(0.08))
+            .padding(.vertical, 4)
+            .background(Color.accentColor.opacity(0.12))
             .help("按每一帧出一张图，不是一条视频")
     }
 }
@@ -499,7 +496,7 @@ struct StatusBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Text("LogBridge · 已实现（未验证）")
             if session.preview.isWorking {
                 ProgressView()
@@ -530,8 +527,8 @@ struct StatusBar: View {
             Spacer()
         }
         .font(.caption)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
         .background(.bar)
         .help("按每一帧出一张图，不是一条视频")
     }
