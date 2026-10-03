@@ -230,7 +230,7 @@ enum ClipDetector {
         if name.contains("d-log m") || name.contains("dlog m") || name.contains("dlogm") || name.contains("d-logm") {
             return DetectionResult(
                 idt: nil, curve: nil, gamut: nil, source: .filename, needsUserPicker: true,
-                note: "D-Log M 暂不支持，请用 D-Log + D-Gamut"
+                note: "D-Log M 暂不能处理，请用 D-Log + D-Gamut"
             )
         }
         if name.contains("apple log 2") || name.contains("applelog2") || name.contains("apple-log-2") {

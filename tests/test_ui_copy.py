@@ -73,7 +73,7 @@ GRAPH = SWIFT_ROOT / "LogBridge/LogBridge/Models/NodeGraph.swift"
 NODE_STRIP = SWIFT_ROOT / "LogBridge/LogBridge/Views/NodeStripView.swift"
 
 SETTINGS_PREVIEW_HELP = (
-    "默认 Rec.709（角标预览·非成片）。不是成片，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
+    "默认 Rec.709（角标仅预览）。只作预览，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
 )
 SETTINGS_WB_HELP = (
     "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
@@ -82,17 +82,17 @@ SETTINGS_WB_HELP_BANNED = (
     "不写入 CAT",
 )
 ACES_OT_NOTE_OFF = "导出 ACEScct / EXR"
-ACES_OT_NOTE_REC709 = "DIY 预览·非成片"
-ACES_OT_NOTE_HDR = "ColorSync 预览·非成片，不是 ACES OT"
+ACES_OT_NOTE_REC709 = "DIY 仅预览"
+ACES_OT_NOTE_HDR = "ColorSync 仅预览，不是 ACES OT"
 WB_CHIP_AS_SHOT = "机内"
 WB_CHIP_GREY = "灰卡"
 WB_CHIP_USER = "手调"
 WB_CHIP_UNKNOWN = "机内未知"
 WB_CHIP_ESTIMATE_PENDING = "估计确认才写"
-INSPECTOR_REC709_NOTE = "Rec.709 只是预览，不是成片"
-INSPECTOR_EXPORT_NOTE = "导出 ACEScct / EXR，709 / HLG / PQ 窗是预览·非成片"
+INSPECTOR_REC709_NOTE = "Rec.709 仅预览"
+INSPECTOR_EXPORT_NOTE = "导出 ACEScct / EXR，709 / HLG / PQ 窗是仅预览"
 INSPECTOR_EXPOSURE_HELP = (
-    "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+    "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
 )
 INSPECTOR_WB_HELP = (
     "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
@@ -104,10 +104,10 @@ NODE_STRIP_EXPOSURE_DETAIL = "%+.2f 档"
 INSPECTOR_WB_CCT_LABEL = "色温"
 INSPECTOR_EXPOSURE_UNIT_LABEL = "档"
 INSPECTOR_ODT_PICKER_TITLE = "预览输出"
-EXPORT_NOTE_ODT_LOCKED = "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+EXPORT_NOTE_ODT_LOCKED = "预览输出：709 预览（不是 ACES 输出变换），默认关。仅预览。"
 INSPECTOR_WB_CAT_PICKER_TITLE = "适应方法"
 INSPECTOR_HDR_PREVIEW_NOTE = (
-    "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+    "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
 )
 INSPECTOR_HELP_FORMULA_BANNED = (
     "CAT(user→D65)",
@@ -154,10 +154,11 @@ def test_primary_button_is_locked_chinese():
     assert "处理已锁定片段" in content
     assert "先选择 Log 与色域" in content
     assert "导出 ACEScct / EXR" in content
-    assert "预览·非成片" in _all_swift()
+    assert "仅预览" in _all_swift()
     assert 'Button("一键还原")' not in content
     assert 'Button("一键还原")' not in _all_swift()
-    assert "一键精准" not in _all_swift() or "Not 一键精准" in _all_swift()
+    for token in _BANNED_USER_COPY:
+        assert token not in _all_swift(), token
     swift = _all_swift()
     assert "处理已锁定片段" in swift
     assert "先选择 Log 与色域" in swift
@@ -173,12 +174,12 @@ def test_primary_button_is_locked_chinese():
 
 def test_preview_overlay_badge_feichengpian():
     preview = _read(PREVIEW)
-    assert "预览·非成片" in preview
+    assert "仅预览" in preview
     assert "PreviewNotDeliverableBadge" in preview
     badge = preview.split("struct PreviewNotDeliverableBadge")[1].split("struct Rec709TaggedHost")[0]
-    assert 'Text("预览·非成片")' in badge
-    assert '.help("预览·非成片")' in badge
-    assert '.accessibilityLabel("预览·非成片")' in badge
+    assert 'Text("仅预览")' in badge
+    assert '.help("仅预览")' in badge
+    assert '.accessibilityLabel("仅预览")' in badge
     assert "8-bit thumbnail is not a deliverable" not in badge
     assert 'Text("8-bit thumbnail is not a deliverable")' not in badge
 
@@ -217,7 +218,7 @@ def test_pending_clips_block_process_and_export():
     assert "待选跳过" in clip
     assert "失败原因" in clip
     assert "writeLockedDeliverables" in clip
-    assert "整段代理，不是全精度成片" in clip
+    assert "整段代理，代理精度" in clip
     assert "已写出代理" in clip
     assert "exportChip" in clip
     assert "revealClipExportInFinder" in clip
@@ -237,13 +238,17 @@ def test_docs_name_the_review_locks():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     acceptance = (ROOT / "ACCEPTANCE.md").read_text(encoding="utf-8")
     blob = readme + "\n" + acceptance
-    assert "预览·非成片" in blob
+    assert "仅预览" in blob
     assert "8-bit thumbnail is not a deliverable" in blob
     assert "处理已锁定片段" in blob
     assert "先选择 Log 与色域" in blob
     assert "导出 ACEScct / EXR" in blob
     assert "Apply graph" in blob
-    assert "一键还原" in blob  # forbidden label is named so reviewers can grep
+    assert "一键" not in blob
+    assert "精准" not in blob
+    assert "成片" not in blob
+    assert "支持" not in blob
+    assert "一步还原" in blob
     assert "pending" in blob.lower()
     assert "paired IDT" in blob or "paired IDT" in blob
     assert "Rec.2100 HLG" in blob
@@ -252,7 +257,7 @@ def test_docs_name_the_review_locks():
     assert "条已锁定" in blob
     assert "待选" in blob and "已锁定" in blob
     assert "先选择成对 IDT" in blob
-    assert "整段代理，不是全精度成片" in blob
+    assert "整段代理，代理精度" in blob
     assert "已写出代理" in blob
     assert "待选跳过" in blob
     assert "失败原因" in blob
@@ -283,7 +288,7 @@ def test_docs_name_resolve_real_machine_checklist():
     assert "chromaticities" in acceptance
     assert "达芬奇包" in acceptance
     assert "HDR 预览建不出" in acceptance
-    assert "整段代理，不是全精度成片" in acceptance
+    assert "整段代理，代理精度" in acceptance
     assert "不是视频" in acceptance
     assert "ACEScct 成片" not in blob
     # P2 trial copy: Archive → .app path → another Mac → Gatekeeper / xattr.
@@ -324,7 +329,7 @@ def test_trial_quarantine_script_is_local_xattr_only():
     assert "不是公证" in text
     assert "notarytool" in text  # named so we can say we do not run it
     assert "不要拿去提交 Apple" in text
-    assert "整段代理，不是全精度成片" in text
+    assert "整段代理，代理精度" in text
     assert "CI 绿不等于达芬奇已验证" in text
     assert "altool" not in text
     assert "APPLE_ID" not in text
@@ -361,8 +366,11 @@ def test_exposure_inspector_and_preview_not_finished_picture():
     assert "applyExposure" in swift
     assert "02_Exposure" in swift
     assert "not a finished" not in inspector.lower()
-    assert "预览·非成片" in inspector
-    assert "不是成片" in inspector
+    assert "仅预览" in inspector
+    assert "支持" not in inspector
+    assert "一键" not in inspector
+    assert "精准" not in inspector
+    assert "成片" not in inspector
 
 
 def test_no_bundled_manufacturer_demos():
@@ -399,7 +407,7 @@ def test_as_shot_wb_copy_and_no_5600_guess():
     assert "CAT(user→D65)" not in inspector
     assert "单位阵" in inspector
     assert "不猜 5600" in inspector
-    assert "预览·非成片" in inspector
+    assert "仅预览" in inspector
     assert "3200→5600 变暖" in inspector
     swift = _all_swift()
     assert "pickNeutral" in swift or "Pick neutral" in swift
@@ -470,11 +478,12 @@ def test_user_visible_english_leftovers_are_chinese():
     assert "implemented (unverified)" not in settings.lower()
     assert SETTINGS_PREVIEW_HELP in settings
     assert SETTINGS_WB_HELP in settings
-    assert "预览·非成片" in settings
+    assert "仅预览" in settings
     assert "DIY OETF" not in _code_without_comments(settings)
     assert "DIY" not in _code_without_comments(settings)
     assert "完善" not in settings
-    assert "精准" not in settings or "不写精准" in settings
+    for token in _BANNED_USER_COPY:
+        assert token not in settings, token
     assert "达芬奇已验证" not in settings
 
     export_fn = clip.split("func exportResolve()")[1]
@@ -528,14 +537,13 @@ def _picker_literals(src: str) -> list[str]:
     return found
 
 
+_BANNED_USER_COPY = ("支持", "一键", "精准", "成片", "成品")
+
+
 def _chengpian_only_honesty(text: str) -> None:
-    stripped = (
-        text.replace("不是全精度成片", "")
-        .replace("预览·非成片", "")
-        .replace("不是成片", "")
-    )
-    assert "成片" not in stripped
-    assert "精准" not in text
+    """支持 / 一键 / 精准 / 成片 / 成品 are forbidden even after a negation."""
+    for token in _BANNED_USER_COPY:
+        assert token not in text, (token, text)
 
 
 def test_process_bar_and_advanced_help_are_chinese():
@@ -547,18 +555,18 @@ def test_process_bar_and_advanced_help_are_chinese():
     advanced = content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
 
     assert PROCESS_BUTTON == "处理已锁定片段"
-    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
+    assert HONEST_PROXY_NOTE == "整段代理，代理精度"
     assert SKIPPED_BUCKET == "待选跳过"
     assert REASON_PICK_LOG_GAMUT == "先选择 Log 与色域"
     assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
     assert PROCESS_DELIVERABLE_NOTE_UI == (
-        "代理 EXR，不是视频。整段代理，不是全精度成片。"
+        "代理 EXR，不是视频。整段代理，代理精度。"
     )
     assert PROCESS_BUTTON_HELP_UI == "写出的是图片序列（EXR），不是 mp4/mov"
     assert ADVANCED_EXPORT_HELP == (
-        "只处理已锁定片段。待选跳过。709 预览。预览·非成片。不必全部锁定。"
+        "只处理已锁定片段。待选跳过。709 预览。仅预览。不必全部锁定。"
     )
-    assert ADVANCED_DISCLOSURE_HELP == "节点与导出 ACEScct / EXR。展开状态会记住。预览·非成片。"
+    assert ADVANCED_DISCLOSURE_HELP == "节点与导出 ACEScct / EXR。展开状态会记住。仅预览。"
     assert "默认收起" not in ADVANCED_DISCLOSURE_HELP
     assert "展开状态会记住" in ADVANCED_DISCLOSURE_HELP
 
@@ -578,8 +586,8 @@ def test_process_bar_and_advanced_help_are_chinese():
     assert PROCESS_BUTTON in ADVANCED_EXPORT_HELP
     assert SKIPPED_BUCKET in ADVANCED_EXPORT_HELP
     assert "709 预览" in ADVANCED_EXPORT_HELP
-    assert "预览·非成片" in ADVANCED_EXPORT_HELP
-    assert "预览·非成片" in ADVANCED_DISCLOSURE_HELP
+    assert "仅预览" in ADVANCED_EXPORT_HELP
+    assert "仅预览" in ADVANCED_DISCLOSURE_HELP
 
     english_leftovers = (
         "Unlocked stay listed",
@@ -637,8 +645,8 @@ def test_preview_status_is_locked_chinese():
     assert PREVIEW_STATUS_ODT_CACHE_HIT == "只重跑预览输出"
     assert "只重跑 ODT" not in PREVIEW_STATUS_ODT_CACHE_HIT
     assert "ODT" not in PREVIEW_STATUS_ODT_CACHE_HIT
-    assert PREVIEW_STATUS_PROXY == "预览代理，不是成片"
-    assert PREVIEW_STATUS_NOT_DELIVERABLE == "预览·非成片"
+    assert PREVIEW_STATUS_PROXY == "预览代理，仅预览"
+    assert PREVIEW_STATUS_NOT_DELIVERABLE == "仅预览"
     assert PREVIEW_STATUS_ODT_OFF == "709 预览关"
     assert PREVIEW_STATUS_HDR_BUILD_FAIL == "HDR 预览建不出"
     assert PREVIEW_STATUS_HDR_NO_EDR == "屏幕无 EDR，预览被压到 SDR"
@@ -714,13 +722,8 @@ def test_preview_status_is_locked_chinese():
     for lit in _preview_status_literals(engine):
         for token in banned:
             assert token not in lit, (token, lit)
-        assert "精准" not in lit
-        cleaned = (
-            lit.replace("预览·非成片", "")
-            .replace("不是全精度成片", "")
-            .replace("不是成片", "")
-        )
-        assert "成片" not in cleaned, lit
+        for token in _BANNED_USER_COPY:
+            assert token not in lit, (token, lit)
 
     assert "Button(" not in odt
     assert "Button(" not in build
@@ -784,7 +787,7 @@ def _odt_preview_caption_literals(src: str) -> list[str]:
 
 
 def test_odt_preview_caption_is_locked_chinese():
-    """odtPreviewCaption (and strings that feed it) reuse 预览·非成片 / 709 预览关."""
+    """odtPreviewCaption (and strings that feed it) reuse 仅预览 / 709 预览关."""
     import re
 
     clip = _read(CLIP)
@@ -792,7 +795,7 @@ def test_odt_preview_caption_is_locked_chinese():
     preview = _read(PREVIEW)
     engine = _read(ENGINE)
 
-    assert PREVIEW_STATUS_NOT_DELIVERABLE == "预览·非成片"
+    assert PREVIEW_STATUS_NOT_DELIVERABLE == "仅预览"
     assert PREVIEW_STATUS_ODT_OFF == "709 预览关"
     assert "成片" not in PREVIEW_STATUS_ODT_OFF
     assert "精准" not in PREVIEW_STATUS_ODT_OFF
@@ -885,7 +888,7 @@ def test_hdr_preview_colorsync_fail_closed_no_709_fallback():
 
     assert PREVIEW_STATUS_HDR_BUILD_FAIL == "HDR 预览建不出"
     assert PREVIEW_STATUS_HDR_NO_EDR == "屏幕无 EDR，预览被压到 SDR"
-    assert PREVIEW_STATUS_NOT_DELIVERABLE == "预览·非成片"
+    assert PREVIEW_STATUS_NOT_DELIVERABLE == "仅预览"
     assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in engine
     assert f'"{PREVIEW_STATUS_HDR_NO_EDR}"' in engine
     assert f'"{PREVIEW_STATUS_HDR_BUILD_FAIL}"' in hdr
@@ -940,7 +943,8 @@ def test_hdr_preview_colorsync_fail_closed_no_709_fallback():
     assert "0.17883277" not in hdr
     assert "78.84375" not in hdr
     assert "完善" not in hdr
-    assert "精准" not in hdr or "Not 一键精准" in hdr
+    for token in _BANNED_USER_COPY:
+        assert token not in hdr, token
     _chengpian_only_honesty(hdr)
 
     assert "itur_2100" not in preview_709
@@ -995,7 +999,7 @@ def test_hdr_preview_colorsync_fail_closed_no_709_fallback():
     assert "屏幕无 EDR，预览被压到 SDR" in blob
     assert "ColorSync" in blob
     assert "itur_2100" in blob
-    assert "预览·非成片" in blob
+    assert "仅预览" in blob
 
 
 def test_inspector_cat_three_sentences_review_lock():
@@ -1028,7 +1032,7 @@ def test_inspector_exposure_wb_help_no_formula_stack():
     wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
 
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_WB_HELP == (
         "机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。"
@@ -1045,7 +1049,7 @@ def test_inspector_exposure_wb_help_no_formula_stack():
     assert 'Text("CAT02")' in wb
     assert "单位阵" in wb
     assert "不猜 5600" in wb
-    assert "预览·非成片" in exposure
+    assert "仅预览" in exposure
 
     for token in INSPECTOR_HELP_FORMULA_BANNED:
         assert token not in exposure, token
@@ -1124,7 +1128,7 @@ def test_inspector_exposure_readout_unit_dang():
 
     # 验法⑰-3: ⑮ three help sentences + ⑯ two .help strings 一字不差.
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1191,7 +1195,7 @@ def test_inspector_wb_cct_label_sewen():
 
     # 验法⑱-3: ⑮ three helps / ⑯ two .helps / ⑰ %+ .2f 档 一字不差.
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1280,7 +1284,7 @@ def test_inspector_exposure_unit_label_dang():
 
     # 验法⑲-3: ⑮ three helps / ⑯ two .helps / ⑰ %+ .2f 档 / ⑱ 色温 一字不差.
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1378,7 +1382,7 @@ def test_node_strip_exposure_detail_unit_dang():
 
     # 验法⑳-3: ⑮–⑲ frozen. Do not touch Inspector Text("档").
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1461,7 +1465,7 @@ def test_odt_inspector_preview_output_zh():
     # 验法㉑-1: picker title + HDR help 一字不差.
     assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
     assert INSPECTOR_HDR_PREVIEW_NOTE == (
-        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+        "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
     )
     assert _picker_literals(odt) == [INSPECTOR_ODT_PICKER_TITLE]
     assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt
@@ -1487,11 +1491,11 @@ def test_odt_inspector_preview_output_zh():
     assert "itur_2100" not in odt_labels
     assert "itur_2100" not in _text_literals(inspector)
     assert "itur_2100" not in _picker_literals(inspector)
-    assert "ColorSync itur_2100。预览·非成片，未与 709 匹配。" not in odt
+    assert "ColorSync itur_2100。仅预览，未与 709 匹配。" not in odt
 
     # 验法㉑-3: ⑮–⑳ frozen. Keep Rec.709 / acesOTNote / mode.title.
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1524,13 +1528,13 @@ def test_odt_inspector_preview_output_zh():
         f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}", session.graph.exposureStops)'
         in detail
     )
-    assert INSPECTOR_REC709_NOTE == "Rec.709 只是预览，不是成片"
+    assert INSPECTOR_REC709_NOTE == "Rec.709 仅预览"
     assert f'Text("{INSPECTOR_REC709_NOTE}")' in odt
-    assert INSPECTOR_EXPORT_NOTE == "导出 ACEScct / EXR，709 / HLG / PQ 窗是预览·非成片"
+    assert INSPECTOR_EXPORT_NOTE == "导出 ACEScct / EXR，709 / HLG / PQ 窗是仅预览"
     assert f'Text("{INSPECTOR_EXPORT_NOTE}")' in odt
     assert ACES_OT_NOTE_OFF == "导出 ACEScct / EXR"
-    assert ACES_OT_NOTE_REC709 == "DIY 预览·非成片"
-    assert ACES_OT_NOTE_HDR == "ColorSync 预览·非成片，不是 ACES OT"
+    assert ACES_OT_NOTE_REC709 == "DIY 仅预览"
+    assert ACES_OT_NOTE_HDR == "ColorSync 仅预览，不是 ACES OT"
     assert f'return "{ACES_OT_NOTE_OFF}"' in note
     assert f'return "{ACES_OT_NOTE_REC709}"' in note
     assert f'return "{ACES_OT_NOTE_HDR}"' in note
@@ -1616,14 +1620,14 @@ def test_settings_wb_help_no_cat_jargon():
     # 验法㉒-3: ㉑ and earlier locked copy 一字不差.
     assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
     assert INSPECTOR_HDR_PREVIEW_NOTE == (
-        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+        "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
     )
     assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt
     assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt
     assert 'Picker("ODT"' not in odt
     assert "ColorSync itur_2100" not in odt
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1652,7 +1656,7 @@ def test_settings_wb_help_no_cat_jargon():
         f'String(format: "{NODE_STRIP_EXPOSURE_DETAIL}", session.graph.exposureStops)'
         in detail
     )
-    assert INSPECTOR_REC709_NOTE == "Rec.709 只是预览，不是成片"
+    assert INSPECTOR_REC709_NOTE == "Rec.709 仅预览"
     assert f'Text("{INSPECTOR_REC709_NOTE}")' in odt
 
     # 验法㉒-4: toggle / estimate algorithm / grey-card real test stay. Not ㉓.
@@ -1672,7 +1676,8 @@ def test_settings_wb_help_no_cat_jargon():
 
     # 验法㉒-5: test_ui_copy locks the new sentence + bans (above).
     assert "完善" not in settings
-    assert "精准" not in settings or "不写精准" in settings
+    for token in _BANNED_USER_COPY:
+        assert token not in settings, token
     assert "达芬奇已验证" not in settings
     _chengpian_only_honesty(SETTINGS_WB_HELP)
 
@@ -1723,7 +1728,7 @@ def test_inspector_wb_cat_picker_shiying_fangfa():
     assert _text_literals(wb).count("Bradford") == 1
     assert _text_literals(wb).count("CAT02") == 1
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1765,7 +1770,7 @@ def test_inspector_wb_cat_picker_shiying_fangfa():
     )
     assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
     assert INSPECTOR_HDR_PREVIEW_NOTE == (
-        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+        "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
     )
     assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt
     assert f'Text("{INSPECTOR_HDR_PREVIEW_NOTE}")' in odt
@@ -1849,7 +1854,7 @@ def test_preview_odt_cache_hit_preview_output_zh():
     # 验法㉔-3: ㉑ Picker("预览输出") + HDR 句、㉒ Settings WB help、㉓ Picker("适应方法") 一字不动.
     assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
     assert INSPECTOR_HDR_PREVIEW_NOTE == (
-        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+        "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
     )
     assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}"' in odt_insp
     assert f'Picker("{INSPECTOR_ODT_PICKER_TITLE}", selection: Binding(' in odt_insp
@@ -1870,7 +1875,7 @@ def test_preview_odt_cache_hit_preview_output_zh():
     assert 'Text("Bradford")' in wb
     assert 'Text("CAT02")' in wb
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_WB_HELP == (
@@ -1970,7 +1975,7 @@ def test_preview_large_inspector_thin_wb_glanceable():
         "struct Rec709TaggedHost"
     )[0]
     assert badge.count("Text(") == 1
-    assert 'Text("预览·非成片")' in badge
+    assert 'Text("仅预览")' in badge
     title = clip.split("var odtPreviewTitle")[1].split("var odtPreviewCaption")[0]
     assert f'return "{PREVIEW_STATUS_ODT_OFF}"' in title
 
@@ -2111,8 +2116,8 @@ def test_write_progress_on_preview_inspector_locks():
     center = content.split("VStack(spacing: 0)")[1].split(".frame(minWidth: 520)")[0]
     assert "PairedIDTBar" in center
     assert center.index("SplitPreview") < center.index("PairedIDTBar")
-    assert "整段代理，不是全精度成片" in content
-    assert "预览·非成片" in _all_swift()
+    assert "整段代理，代理精度" in content
+    assert "仅预览" in _all_swift()
 
 
 def test_write_progress_frame_copy_is_chinese():
@@ -2422,8 +2427,8 @@ def test_delete_removes_clip_from_session_not_disk():
     assert "already-written `_proxy`" in acceptance
     assert "select next, else previous" in acceptance
     assert "把混源文件夹拖进来" in acceptance
-    assert "整段代理，不是全精度成片" in readme
-    assert "整段代理，不是全精度成片" in acceptance
+    assert "整段代理，代理精度" in readme
+    assert "整段代理，代理精度" in acceptance
     assert "精准" not in fn
     assert "Escape while writing" in readme
     assert "idle Escape does nothing" in readme
@@ -2456,7 +2461,7 @@ def test_escape_cancels_write_only():
 
     note = clip.split("func cancelledExportNote")[1].split("static let bytesPerEXRPixel")[0]
     assert "已取消" in note
-    assert "整段代理，不是全精度成片" in note
+    assert "整段代理，代理精度" in note
 
     reserved = clip.split("func isEscapeReservedByPresentedUI")[1].split("func setExposureEnabled")[0]
     assert "attachedSheet" in reserved
@@ -2511,8 +2516,8 @@ def test_escape_cancels_write_only():
     assert "idle Escape does nothing" in readme
     assert "Escape while writing" in acceptance
     assert "idle Escape does nothing" in acceptance or "Idle Escape does nothing" in acceptance
-    assert "已取消" in readme and "整段代理，不是全精度成片" in readme
-    assert "已取消" in acceptance and "整段代理，不是全精度成片" in acceptance
+    assert "已取消" in readme and "整段代理，代理精度" in readme
+    assert "已取消" in acceptance and "整段代理，代理精度" in acceptance
 
 
 def test_import_skip_summary_is_human_chinese():
@@ -2531,14 +2536,14 @@ def test_import_skip_summary_is_human_chinese():
     )
 
     assert IMPORT_SKIP_HEADER == "未导入 {n} 条："
-    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
-    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
     assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
-    assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式已支持」。"
+    assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式都能处理」。"
     # Accept notes locked Chinese. No ImageIO / AVAssetReader / copyCGImage / Y′CbCr.
-    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。不是成片。"
-    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。代理精度，可写出。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
     for jargon in ("AVAssetReader", "ImageIO", "copyCGImage", "Y′CbCr", "Y'CbCr", "YpCbCr"):
         assert jargon not in NOTE_STILL_ACCEPT
         assert jargon not in NOTE_MOVIE_ACCEPT
@@ -2584,7 +2589,7 @@ def test_import_skip_summary_is_human_chinese():
     assert NOTE_UNKNOWN_CODEC in media
     assert NOTE_REFUSE_CONTAINER in media
     assert NOTE_MOVIE_ACCEPT in media
-    assert "按图片导入。不是成片。" in media
+    assert "按图片导入。代理精度，可写出。" in media
 
     # Cancel-write: no leftover user-visible English. Scope stays import summary.
     cancel_note = clip.split("func cancelledExportNote")[1].split("static let bytesPerEXRPixel")[0]
@@ -2667,8 +2672,8 @@ def test_selected_clip_glanceable_on_preview():
     assert 'Button("重试")' not in sidebar
     assert "精准" not in sidebar
 
-    assert "整段代理，不是全精度成片" in content
-    assert "预览·非成片" in _all_swift()
+    assert "整段代理，代理精度" in content
+    assert "仅预览" in _all_swift()
     assert PREVIEW_STATUS_ODT_OFF in clip
     assert "成片预览关" not in clip
 
@@ -2687,15 +2692,11 @@ def test_preview_scrub_bar_is_chinese_no_fake_rate():
     assert "30" not in bar
     assert "完善" not in bar
     assert "精准" not in bar
-    assert "预览·非成片" in bar
+    assert "仅预览" in bar
     assert "第 " in bar
     assert " 帧" in bar
-    cleaned = (
-        bar.replace("预览·非成片", "")
-        .replace("不是全精度成片", "")
-        .replace("不是成片", "")
-    )
-    assert "成片" not in cleaned
+    for token in _BANNED_USER_COPY:
+        assert token not in bar, token
 
     reset = clip.split("func resetPreviewScrub()")[1].split("var pendingPickerCount")[0]
     assert "kind == .still" in reset
@@ -2728,14 +2729,15 @@ def test_process_ui_says_proxy_exr_not_mov_and_failures_stay_chinese():
     resolve_fn = clip.split("func exportResolve()")[1]
 
     assert PROCESS_DELIVERABLE_NOTE_UI == (
-        "代理 EXR，不是视频。整段代理，不是全精度成片。"
+        "代理 EXR，不是视频。整段代理，代理精度。"
     )
     assert PROCESS_DELIVERABLE_NOTE_UI in bar
     assert PROCESS_BUTTON_HELP_UI in bar
     assert "代理 EXR" in bar
     assert "不是视频" in bar
     assert HONEST_PROXY_NOTE in bar
-    assert "成片" not in bar.replace("不是全精度成片", "")
+    assert "成片" not in bar
+    assert "成品" not in bar
     assert "完善" not in bar
     assert "精准" not in bar
     assert ".mov" not in bar.replace("不是 mp4/mov", "")
@@ -2781,12 +2783,11 @@ def test_forbidden_marketing_copy_stays_forbidden():
         encoding="utf-8"
     )
     tests = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "tests").glob("*.py"))
-    for token in ("一键还原", "一键校准", "全自动校准", "全格式已支持"):
-        assert token in tests  # prohibition named in tests
-        if token in swift:
-            assert "不写" in swift or "never" in swift.lower() or "Never" in swift
-    assert "精准" in tests
-    assert "全格式已支持" in docs  # named as out of scope / do not write
+    for token in _BANNED_USER_COPY:
+        assert token not in swift, token
+        assert token not in docs, token
+        assert token in tests  # needles stay in tests so the ban can be grepped
+    assert "全格式都能处理" in docs
 
 
 def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
@@ -2798,8 +2799,8 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
 
     note = graph.split("var acesOTNote: String")[1].split("enum WBSource")[0]
     assert ACES_OT_NOTE_OFF == "导出 ACEScct / EXR"
-    assert ACES_OT_NOTE_REC709 == "DIY 预览·非成片"
-    assert ACES_OT_NOTE_HDR == "ColorSync 预览·非成片，不是 ACES OT"
+    assert ACES_OT_NOTE_REC709 == "DIY 仅预览"
+    assert ACES_OT_NOTE_HDR == "ColorSync 仅预览，不是 ACES OT"
     assert f'return "{ACES_OT_NOTE_OFF}"' in note
     assert f'return "{ACES_OT_NOTE_REC709}"' in note
     assert f'return "{ACES_OT_NOTE_HDR}"' in note
@@ -2886,8 +2887,8 @@ def test_aces_ot_note_inspector_wb_chips_are_locked_chinese():
     badge = preview.split("struct PreviewNotDeliverableBadge")[1].split(
         "struct Rec709TaggedHost"
     )[0]
-    assert '.help("预览·非成片")' in badge
-    assert '.accessibilityLabel("预览·非成片")' in badge
+    assert '.help("仅预览")' in badge
+    assert '.accessibilityLabel("仅预览")' in badge
     assert "8-bit thumbnail is not a deliverable" not in badge
     assert "精准" not in badge
     _chengpian_only_honesty(badge)
@@ -2934,21 +2935,22 @@ def _code_without_comments(src: str) -> str:
 
 
 def test_settings_preview_help_has_no_diy_oetf():
-    """Settings preview caption: no DIY OETF; 预览·非成片 stays. Picker unchanged."""
+    """Settings preview caption: no DIY OETF; 仅预览 stays. Picker unchanged."""
     settings = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/SettingsView.swift")
     ui = _code_without_comments(settings)
     assert SETTINGS_PREVIEW_HELP in settings
     assert SETTINGS_WB_HELP in settings
     assert f'Text("{SETTINGS_WB_HELP}")' in settings
-    assert "预览·非成片" in settings
-    assert "角标预览·非成片" in settings
+    assert "仅预览" in settings
+    assert "角标仅预览" in settings
     assert "DIY OETF" not in ui
     assert "DIY" not in ui
-    assert 'Text("Rec.709 预览·非成片").tag(ODTMode.rec709)' in settings
-    assert 'Text("Rec.2100 HLG 预览·非成片").tag(ODTMode.hlg)' in settings
-    assert 'Text("Rec.2100 PQ 预览·非成片").tag(ODTMode.pq)' in settings
+    assert 'Text("Rec.709 仅预览").tag(ODTMode.rec709)' in settings
+    assert 'Text("Rec.2100 HLG 仅预览").tag(ODTMode.hlg)' in settings
+    assert 'Text("Rec.2100 PQ 仅预览").tag(ODTMode.pq)' in settings
     assert "完善" not in settings
-    assert "精准" not in settings or "不写精准" in settings
+    for token in _BANNED_USER_COPY:
+        assert token not in settings, token
     assert "达芬奇已验证" not in settings
     _chengpian_only_honesty(SETTINGS_PREVIEW_HELP)
     _chengpian_only_honesty(SETTINGS_WB_HELP)
@@ -3000,11 +3002,12 @@ def test_trial_usability_copy_is_locked():
     assert "R3D" not in MISSING_YCBCR_TAGS_CHIP_UI
     assert "BRAW" not in MISSING_YCBCR_TAGS_CHIP_UI
 
-    assert PROCESS_DELIVERABLE_NOTE_UI == "代理 EXR，不是视频。整段代理，不是全精度成片。"
+    assert PROCESS_DELIVERABLE_NOTE_UI == "代理 EXR，不是视频。整段代理，代理精度。"
     assert PROCESS_DELIVERABLE_NOTE_UI.startswith("代理 EXR，不是视频")
     assert HONEST_PROXY_NOTE in PROCESS_DELIVERABLE_NOTE_UI
     assert f'Text("{PROCESS_DELIVERABLE_NOTE_UI}")' in bar
-    assert "成片" not in PROCESS_DELIVERABLE_NOTE_UI.replace("不是全精度成片", "")
+    assert "成片" not in PROCESS_DELIVERABLE_NOTE_UI
+    assert "成品" not in PROCESS_DELIVERABLE_NOTE_UI
     assert "精准" not in PROCESS_DELIVERABLE_NOTE_UI
     assert "ACES OT" not in PROCESS_DELIVERABLE_NOTE_UI
 
@@ -3043,8 +3046,8 @@ def test_trial_usability_copy_is_locked():
     assert '"读不到元数据，先选择 Log 与色域。"' in detect_py
 
     assert ACES_OT_NOTE_OFF == "导出 ACEScct / EXR"
-    assert ACES_OT_NOTE_REC709 == "DIY 预览·非成片"
-    assert ACES_OT_NOTE_HDR == "ColorSync 预览·非成片，不是 ACES OT"
+    assert ACES_OT_NOTE_REC709 == "DIY 仅预览"
+    assert ACES_OT_NOTE_HDR == "ColorSync 仅预览，不是 ACES OT"
     assert WB_CHIP_AS_SHOT == "机内"
     assert WB_CHIP_GREY == "灰卡"
     assert WB_CHIP_USER == "手调"
@@ -3139,7 +3142,7 @@ def test_leftover_english_failure_chips_are_chinese():
 
     assert STUB_CHIP == "未实现"
     assert EMPTY_RGB_CHIP == "RGB 是空的，未写出"
-    assert NOTE_DLOG_M == "D-Log M 暂不支持，请用 D-Log + D-Gamut"
+    assert NOTE_DLOG_M == "D-Log M 暂不能处理，请用 D-Log + D-Gamut"
     assert NOTE_SLOG3_NO_GAMUT == "S-Log3 没有色域，先选择成对 IDT"
     assert NOTE_SLOG3_NO_GAMUT_VENICE == "S-Log3 没有色域，检测到 Venice，先选择成对 IDT"
     assert NOTE_CLOG2_NO_GAMUT == "C-Log2 没有色域，先选择成对 IDT"
@@ -3153,8 +3156,8 @@ def test_leftover_english_failure_chips_are_chinese():
     assert DECODE_FAILED_CHIP == "解码失败"
     assert PREVIEW_STATUS_HDR_BUILD_FAIL == "HDR 预览建不出"
     assert PREVIEW_STATUS_HDR_NO_EDR == "屏幕无 EDR，预览被压到 SDR"
-    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
-    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
     assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
 
@@ -3262,8 +3265,8 @@ def test_success_path_english_notes_are_chinese():
     assert NOTE_MODEL_HINT == "机型提示"
     assert NOTE_META_RED_RMD == "元数据 RED RMD"
     assert NOTE_META_RED_RMD_PICK == "检测到 RED RMD，先选择成对 IDT"
-    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。不是成片。"
-    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。代理精度，可写出。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
     for jargon in ("AVAssetReader", "ImageIO", "copyCGImage", "Y′CbCr", "Y'CbCr", "YpCbCr"):
         assert jargon not in NOTE_STILL_ACCEPT
         assert jargon not in NOTE_MOVIE_ACCEPT
@@ -3271,7 +3274,7 @@ def test_success_path_english_notes_are_chinese():
     # Existing Chinese failure chips stay locked.
     assert STUB_CHIP == "未实现"
     assert EMPTY_RGB_CHIP == "RGB 是空的，未写出"
-    assert NOTE_DLOG_M == "D-Log M 暂不支持，请用 D-Log + D-Gamut"
+    assert NOTE_DLOG_M == "D-Log M 暂不能处理，请用 D-Log + D-Gamut"
     assert NOTE_SLOG3_NO_GAMUT == "S-Log3 没有色域，先选择成对 IDT"
     assert NOTE_SLOG3_NO_GAMUT_VENICE == "S-Log3 没有色域，检测到 Venice，先选择成对 IDT"
     assert NOTE_CLOG2_NO_GAMUT == "C-Log2 没有色域，先选择成对 IDT"
@@ -3283,10 +3286,10 @@ def test_success_path_english_notes_are_chinese():
     assert DECODE_FAILED_CHIP == "解码失败"
     assert PREVIEW_STATUS_HDR_BUILD_FAIL == "HDR 预览建不出"
     assert PREVIEW_STATUS_HDR_NO_EDR == "屏幕无 EDR，预览被压到 SDR"
-    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
-    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
     assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
-    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
+    assert HONEST_PROXY_NOTE == "整段代理，代理精度"
 
     ui_clip = _code_without_comments(clip)
     assert "已写出 \\(written.count) 个文件" in clip
@@ -3328,8 +3331,8 @@ def test_success_path_english_notes_are_chinese():
         assert token not in ui_clip, token
 
     assert NOTE_STILL_ACCEPT.split("{ext}")[0] in media
-    assert "按图片导入。不是成片。" in media
-    assert '静帧 \\(ext.uppercased()) 按图片导入。不是成片。' in media
+    assert "按图片导入。代理精度，可写出。" in media
+    assert '静帧 \\(ext.uppercased()) 按图片导入。代理精度，可写出。' in media
     assert NOTE_MOVIE_ACCEPT in media
     assert NOTE_STILL_ACCEPT in formats_py
     assert NOTE_MOVIE_ACCEPT in formats_py
@@ -3390,15 +3393,15 @@ def test_mxf_no_track_chip_not_arri():
         import_skip_summary,
     )
 
-    assert NOTE_ARRI_MXF == "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+    assert NOTE_ARRI_MXF == "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
     assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
     assert NOTE_MXF_TRY == "MXF 只试系统认得出的 ProRes / AVC / HEVC。"
-    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+    assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR"
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
-    assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式已支持」。"
+    assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式都能处理」。"
     # #74 accept notes — do not rewrite.
-    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。不是成片。"
-    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。代理精度，可写出。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
 
     # True ARRI (codec ari / arx / arri) keeps the old chip.
     for codec in ("ari", "arx", "arri", "ARRIRAW"):
@@ -3463,7 +3466,7 @@ def test_mxf_no_track_chip_not_arri():
     assert r"\(MediaFormat.noteMxfNoTrack)" in try_skip
     assert r"\(MediaFormat.noteARRIMxf)" not in try_skip
     assert 'static let noteMxfNoTrack = "MXF：系统认不出可解轨道，未导入"' in media
-    assert 'static let noteARRIMxf = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"' in media
+    assert 'static let noteARRIMxf = "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"' in media
     assert 'static let noteMxfTry = "MXF 只试系统认得出的 ProRes / AVC / HEVC。"' in media
     assert "+ noteARRIMxf" not in media
     assert "+ NOTE_ARRI_MXF" not in formats_py
@@ -3486,7 +3489,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     ResolveExporter.exportNote. Leave comments, XML attrs, cube TITLE,
     implemented (unverified) alone.
 
-    Wrote N files… / Wrote  → #70 已写出 N 个文件。…整段代理，不是全精度成片.
+    Wrote N files… / Wrote  → #70 已写出 N 个文件。…整段代理，代理精度.
     Export failed: / Export failed → 写出失败.
     No clip selected → 没有素材.
     exportNote CCT fallback → 待定 / 单位阵 (not pending / identity).
@@ -3509,7 +3512,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     assert CANCELLED_NOTE == "已取消"
     assert SKIPPED_BUCKET == "待选跳过"
     assert FAILED_BUCKET == "失败原因"
-    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
+    assert HONEST_PROXY_NOTE == "整段代理，代理精度"
     assert BATCH_SUMMARY_TEMPLATE == (
         "{wrote} 条已写出代理 / {skipped} 条待选跳过 / {failed} 条失败"
     )
@@ -3517,7 +3520,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
         "处理已锁定片段 — 已取消。"
         "{processed} 条已处理 / {skipped} 条已跳过"
         "（先选择 Log 与色域 / 先选择成对 IDT）。"
-        "整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+        "整段代理，代理精度。已实现（未验证）。"
     )
     assert f'static let writeFailedChip = "{WRITE_FAILED_CHIP}"' in clip
     assert f'static let cancelledNote = "{CANCELLED_NOTE}"' in clip
@@ -3578,7 +3581,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     assert "条已跳过" in cancel_note
     assert REASON_PICK_LOG_GAMUT in cancel_note
     assert REASON_PICK_PAIRED_IDT in cancel_note
-    assert "预览·非成片" in cancel_note
+    assert "仅预览" not in cancel_note
     assert "已实现（未验证）" in cancel_note
     assert "Cancelled" not in ui_cancel
     assert "canceled" not in ui_cancel
@@ -3598,7 +3601,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     assert "条失败" in summary
     assert "failedBucket" in summary
     assert HONEST_PROXY_NOTE in summary
-    assert "预览·非成片" in summary
+    assert "仅预览" not in summary
     assert "已实现（未验证）" in summary
     assert "Cancelled" not in ui_summary
     assert "canceled" not in ui_summary
@@ -3674,7 +3677,7 @@ def test_disk_estimate_assumption_is_plain_chinese():
         assert token not in DISK_ESTIMATE_ASSUMPTION
     assert BYTES_PER_EXR_PIXEL == 6
     assert int(CONSERVATIVE_FPS) == 24
-    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成片"
+    assert HONEST_PROXY_NOTE == "整段代理，代理精度"
 
     known = ProxyDiskEstimate(bytes=2_000_000, used_frame_guess=False, used_pixel_guess=False)
     duration = ProxyDiskEstimate(
@@ -3787,14 +3790,14 @@ def test_export_note_is_plain_chinese():
     )
 
     assert EXPORT_NOTE_REC709 == (
-        "Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换，不是成片。"
+        "Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换。仅预览。"
     )
     assert EXPORT_NOTE_WB_BYPASS == "关闭白平衡时写出旁路（不改颜色），不写进查找表。"
     assert EXPORT_NOTE_WB_ON == "开（按色温/绿品校正，{cctLabel}，绿品 {tint}）"
     assert EXPORT_NOTE_WB_OFF == "已写出但默认旁路（不改颜色）"
     assert EXPORT_NOTE_ODT == EXPORT_NOTE_ODT_LOCKED
     assert EXPORT_NOTE_ODT == (
-        "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+        "预览输出：709 预览（不是 ACES 输出变换），默认关。仅预览。"
     )
     assert not EXPORT_NOTE_ODT.startswith("ODT：")
     assert "ODT：" not in EXPORT_NOTE_ODT
@@ -3804,7 +3807,7 @@ def test_export_note_is_plain_chinese():
     assert EXPORT_NOTE_TITLE == "LogBridge M1 Resolve 导出（已实现（未验证））"
     assert EXPORT_NOTE_WORKSPACE == "工作空间：ACEScct 时间线 / ACES2065-1 交换。"
     assert EXPORT_NOTE_PROXY == (
-        "主按钮时间线/EXR 是整段代理，不是全精度成片"
+        "主按钮时间线/EXR 是整段代理，代理精度"
         "（ACES2065-1 _proxy 序列），不是 ACEScct。"
     )
     assert "ACEScct" in EXPORT_NOTE_WORKSPACE
@@ -3942,7 +3945,7 @@ def test_export_note_is_plain_chinese():
     assert REC709_CUBE_TITLE in odt_fn
     assert REC709_CUBE_TITLE in py
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert REC709_CUBE_COMMENT == f"# {GRAPH_ODT_USER}"
     assert REC709_CUBE_COMMENT.startswith("# 709 预览")
@@ -4003,8 +4006,8 @@ def test_export_note_is_plain_chinese():
     )[0]
     assert GRAPH_ODT_USER in graph_fn
     assert GRAPH_ODT_USER in py_graph or f"{{GRAPH_ODT_USER}}" in py_graph
-    assert "预览·非成片" in graph_fn
-    assert "预览·非成片" in py_graph
+    assert "仅预览" in graph_fn
+    assert "仅预览" in py_graph
     assert GRAPH_WB_SUMMARY == (
         "色温 {cctLabel}，绿品 {tint}，方法 Bradford。"
         "机内只填旋钮；默认单位阵（不把机内色温当光源去校正）。"
@@ -4065,16 +4068,16 @@ def test_export_note_is_plain_chinese():
     assert "none — assign" not in py.split("def format_readme")[1].split(
         "def export_resolve_bundle"
     )[0]
-    assert "状态：**已实现（未验证）**。不是相机支持声明。" in readme_fn
-    assert "状态：**已实现（未验证）**。不是相机支持声明。" in py.split(
+    assert "状态：**已实现（未验证）**。并不表示相机已经可用。" in readme_fn
+    assert "状态：**已实现（未验证）**。并不表示相机已经可用。" in py.split(
         "def format_readme"
     )[1].split("def export_resolve_bundle")[0]
     assert (
-        "状态：**已实现（未验证）** / implemented (unverified)。不是相机支持声明。"
+        "状态：**已实现（未验证）** / implemented (unverified)。并不表示相机已经可用。"
         not in readme_fn
     )
     assert (
-        "状态：**已实现（未验证）** / implemented (unverified)。不是相机支持声明。"
+        "状态：**已实现（未验证）** / implemented (unverified)。并不表示相机已经可用。"
         not in py.split("def format_readme")[1].split("def export_resolve_bundle")[0]
     )
     wb_fn = exporter.split("private static func wbCube")[1].split(
@@ -4182,7 +4185,7 @@ def test_readme_resolve_graph_wb_plain_chinese():
 
     # 验法㉕-3: ⑮–㉔ locked copy 一字不动.
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -4191,7 +4194,7 @@ def test_readme_resolve_graph_wb_plain_chinese():
     assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
     assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
     assert INSPECTOR_HDR_PREVIEW_NOTE == (
-        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+        "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
     )
     assert SETTINGS_WB_HELP == (
         "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
@@ -4231,7 +4234,7 @@ def test_readme_resolve_graph_wb_plain_chinese():
     assert "matrixCCT = nil" in exporter
     assert "func uniqueImplementedIDTs" in exporter
     assert "未验证" in honesty_fn
-    assert "预览·非成片" in graph_fn
+    assert "仅预览" in graph_fn
     assert "已实现（未验证）" in note_fn
 
     # 验法㉕-5: test_ui_copy / test_resolve_export lock both TO + bans (above).
@@ -4260,8 +4263,8 @@ def test_export_note_odt_preview_output_zh():
         export_note,
     )
 
-    odt_to = "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
-    odt_from = "ODT：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+    odt_to = "预览输出：709 预览（不是 ACES 输出变换），默认关。仅预览。"
+    odt_from = "ODT：709 预览（不是 ACES 输出变换），默认关。仅预览。"
     honesty_to = (
         "机内色温只填旋钮，默认是单位阵。"
         "只有你改色温才做相对校正（例如 3200→5600 变暖）。"
@@ -4284,7 +4287,7 @@ def test_export_note_odt_preview_output_zh():
     assert EXPORT_NOTE_ODT == EXPORT_NOTE_ODT_LOCKED
     assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
     assert EXPORT_NOTE_ODT.startswith(f"{INSPECTOR_ODT_PICKER_TITLE}：")
-    assert EXPORT_NOTE_ODT.endswith("709 预览（不是 ACES 输出变换），默认关。预览·非成片。")
+    assert EXPORT_NOTE_ODT.endswith("709 预览（不是 ACES 输出变换），默认关。仅预览。")
 
     exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
     inspector = _read(INSPECTOR)
@@ -4331,7 +4334,7 @@ def test_export_note_odt_preview_output_zh():
     assert 'EXPORT_NOTE_ODT = "ODT：' not in py
     for line in ui_note.splitlines():
         stripped = line.strip()
-        if "709 预览（不是 ACES 输出变换），默认关。预览·非成片。" in stripped:
+        if "709 预览（不是 ACES 输出变换），默认关。仅预览。" in stripped:
             assert stripped.lstrip('lines.append("').startswith("预览输出："), stripped
             assert not stripped.lstrip('lines.append("').startswith("ODT："), stripped
 
@@ -4343,7 +4346,7 @@ def test_export_note_odt_preview_output_zh():
     assert honesty_to in honesty_fn
     assert graph_wb_swift in graph_fn
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -4351,7 +4354,7 @@ def test_export_note_odt_preview_output_zh():
     assert INSPECTOR_EXPOSURE_UNIT_LABEL == "档"
     assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
     assert INSPECTOR_HDR_PREVIEW_NOTE == (
-        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+        "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
     )
     assert SETTINGS_WB_HELP == (
         "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
@@ -4376,7 +4379,7 @@ def test_export_note_odt_preview_output_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
     assert GRAPH_ODT_USER in graph_fn
@@ -4549,7 +4552,7 @@ def test_graph_dot_xml_exposure_wb_zh():
     assert honesty_to in honesty_fn
     assert graph_wb_swift in graph_fn
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -4558,7 +4561,7 @@ def test_graph_dot_xml_exposure_wb_zh():
     assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
     assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
     assert INSPECTOR_HDR_PREVIEW_NOTE == (
-        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+        "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
     )
     assert SETTINGS_WB_HELP == (
         "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
@@ -4581,7 +4584,7 @@ def test_graph_dot_xml_exposure_wb_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert '?? "pending / identity"' in wb_fn
     assert 'name="Exposure"' in xml_fn
@@ -4755,7 +4758,7 @@ def test_graph_dot_xml_clip_working_space_idt_zh():
     assert honesty_to in note_fn
     assert honesty_to in honesty_fn
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -4764,7 +4767,7 @@ def test_graph_dot_xml_clip_working_space_idt_zh():
     assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
     assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
     assert INSPECTOR_HDR_PREVIEW_NOTE == (
-        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+        "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
     )
     assert SETTINGS_WB_HELP == (
         "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
@@ -4787,7 +4790,7 @@ def test_graph_dot_xml_clip_working_space_idt_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert '?? "pending / identity"' in wb_fn
     assert 'name="Exposure"' in xml_fn
@@ -4984,7 +4987,7 @@ def test_graph_dot_idt_odt_timeline_zh():
     assert honesty_to in note_fn
     assert honesty_to in honesty_fn
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -4993,7 +4996,7 @@ def test_graph_dot_idt_odt_timeline_zh():
     assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
     assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
     assert INSPECTOR_HDR_PREVIEW_NOTE == (
-        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+        "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
     )
     assert SETTINGS_WB_HELP == (
         "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
@@ -5016,7 +5019,7 @@ def test_graph_dot_idt_odt_timeline_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in odt_label
     assert f"<Description>{idt_xml_to}</Description>" in xml
@@ -5181,7 +5184,7 @@ def test_graph_dot_odt_cst_zh():
     assert honesty_to in note_fn
     assert honesty_to in honesty_fn
     assert INSPECTOR_EXPOSURE_HELP == (
-        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。预览·非成片。"
+        "单位是档。曝光按线性增益作用（不加减 Log 码值）；在 IDT 之后、白平衡之前。仅预览。"
     )
     assert INSPECTOR_GAIN_LIVE == "线性增益 = "
     assert INSPECTOR_EXPOSURE_READOUT == "%+.2f 档"
@@ -5190,7 +5193,7 @@ def test_graph_dot_odt_cst_zh():
     assert NODE_STRIP_EXPOSURE_DETAIL == "%+.2f 档"
     assert INSPECTOR_ODT_PICKER_TITLE == "预览输出"
     assert INSPECTOR_HDR_PREVIEW_NOTE == (
-        "系统 HDR 预览（HLG/PQ）。预览·非成片，未与 709 匹配。"
+        "系统 HDR 预览（HLG/PQ）。仅预览，未与 709 匹配。"
     )
     assert SETTINGS_WB_HELP == (
         "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
@@ -5213,7 +5216,7 @@ def test_graph_dot_odt_cst_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in odt_label
     assert f"<Description>{idt_xml_to}</Description>" in xml
@@ -5383,7 +5386,7 @@ def test_readme_graph_input_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -5426,9 +5429,9 @@ def test_readme_apply_odt_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_trail_from = (
-        "if you need a **709 预览** viewing node (not ACES OT). 预览·非成片."
+        "if you need a **709 预览** viewing node (not ACES OT). 仅预览."
     )
     odt_head_from = (
         "Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709)"
@@ -5600,7 +5603,7 @@ def test_readme_apply_odt_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -5661,7 +5664,7 @@ def test_readme_files_graph_dot_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -5816,7 +5819,7 @@ def test_readme_files_graph_dot_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -5876,7 +5879,7 @@ def test_readme_color_page_title_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -6044,7 +6047,7 @@ def test_readme_color_page_title_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -6106,7 +6109,7 @@ def test_readme_files_header_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -6289,7 +6292,7 @@ def test_readme_files_header_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -6355,7 +6358,7 @@ def test_readme_files_graph_xml_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -6559,7 +6562,7 @@ def test_readme_files_graph_xml_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -6630,7 +6633,7 @@ def test_readme_files_readme_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -6849,7 +6852,7 @@ def test_readme_files_readme_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -6922,7 +6925,7 @@ def test_readme_files_idt_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -7167,7 +7170,7 @@ def test_readme_files_idt_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -7245,7 +7248,7 @@ def test_readme_files_wb_cube_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -7500,7 +7503,7 @@ def test_readme_files_wb_cube_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -7579,7 +7582,7 @@ def test_readme_files_wb_cdl_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -7850,7 +7853,7 @@ def test_readme_files_wb_cdl_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -7932,7 +7935,7 @@ def test_readme_files_wb_dctl_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -8221,7 +8224,7 @@ def test_readme_files_wb_dctl_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -8306,7 +8309,7 @@ def test_readme_files_odt_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -8607,7 +8610,7 @@ def test_readme_files_odt_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -8725,7 +8728,7 @@ def test_readme_trail_half_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     input_to = "输入：相机 Log / 相机色域"
     input_swift = "- 输入：相机 Log / 相机色域 (`\\(idtList)`)"
@@ -9141,7 +9144,7 @@ def test_readme_trail_half_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -9205,7 +9208,7 @@ def test_readme_apply_wb_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     idt_swift = (
         "- 应用 **IDT**（节点 1：LUT `01_IDT_*.cube`，或 ACES IDT / CST 相机 → ACEScct）。"
@@ -9369,7 +9372,7 @@ def test_readme_apply_wb_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -9429,7 +9432,7 @@ def test_readme_apply_idt_zh():
     odt_head = (
         "应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
     )
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     odt_line = f"- {odt_head}{odt_trail_to}"
     exp_py = (
         "- 应用 **曝光**（节点 2：LUT `02_Exposure.cube` 或 DCTL `02_Exposure.dctl`）。"
@@ -9605,7 +9608,7 @@ def test_readme_apply_idt_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -9652,14 +9655,14 @@ def test_readme_apply_odt_line_zh():
 
     odt_to = (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     odt_from = (
         "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     banned = ("Apply **ODT**", "(node 4")
-    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    odt_trail_to = "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     idt_swift = (
         "- 应用 **IDT**（节点 1：LUT `01_IDT_*.cube`，或 ACES IDT / CST 相机 → ACEScct）。"
     )
@@ -9847,7 +9850,7 @@ def test_readme_apply_odt_line_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -9910,7 +9913,7 @@ def test_readme_apply_exposure_zh():
     )
     odt_to = (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     trail_block_to = (
         "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器. "
@@ -10101,7 +10104,7 @@ def test_readme_apply_exposure_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -10172,7 +10175,7 @@ def test_readme_bypass_wb_swift_zh():
     )
     odt_to = (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     trail_block_to = (
         "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器. "
@@ -10381,7 +10384,7 @@ def test_readme_bypass_wb_swift_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -10463,7 +10466,7 @@ def test_readme_bypass_exposure_wb_py_zh():
     )
     odt_to = (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     trail_block_to = (
         "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器. "
@@ -10686,7 +10689,7 @@ def test_readme_bypass_exposure_wb_py_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -10779,7 +10782,7 @@ def test_readme_deliverable_warn_py_zh():
     )
     odt_to = (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     trail_block_to = (
         "M1 是串行节点图（IDT → 曝光 → 白平衡 → ODT）， 不是通用节点编辑器. "
@@ -11038,7 +11041,7 @@ def test_readme_deliverable_warn_py_zh():
         "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)"
     )
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph_fn
     assert 'name="Exposure"' in xml_fn
@@ -11540,13 +11543,13 @@ def test_advanced_disclosure_help_remembers_expanded_state():
     advanced = content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
 
     # 61: help 一字锁；禁「默认收起」.
-    assert ADVANCED_DISCLOSURE_HELP == "节点与导出 ACEScct / EXR。展开状态会记住。预览·非成片。"
+    assert ADVANCED_DISCLOSURE_HELP == "节点与导出 ACEScct / EXR。展开状态会记住。仅预览。"
     assert "默认收起" not in ADVANCED_DISCLOSURE_HELP
     assert "展开状态会记住" in ADVANCED_DISCLOSURE_HELP
     assert "默认收起" not in advanced
     assert f'.help("{ADVANCED_DISCLOSURE_HELP}")' in advanced
     assert ADVANCED_DISCLOSURE_HELP in _help_literals(advanced)
-    assert "预览·非成片" in ADVANCED_DISCLOSURE_HELP
+    assert "仅预览" in ADVANCED_DISCLOSURE_HELP
     assert "精准" not in ADVANCED_DISCLOSURE_HELP
 
     # 59: persistence 一字不动（只改 help，不改 binding / UserDefaults）.
@@ -11671,7 +11674,7 @@ def test_combined_preview_lut_readme_row_copy():
     )
     assert "预览查找表" in COMBINED_PREVIEW709_README_ROLE
     assert "已实现（未验证）" in COMBINED_PREVIEW709_README_ROLE
-    for banned in ("支持", "一键精准", "成片", "达芬奇已验证"):
+    for banned in ("支持", "一键精准", "成片", "成品", "达芬奇已验证"):
         assert banned not in COMBINED_PREVIEW709_README_ROLE
         assert banned not in COMBINED_PREVIEW709_COMMENT
     _chengpian_only_honesty(COMBINED_PREVIEW709_README_ROLE)
@@ -11703,3 +11706,219 @@ def test_command_o_and_comma_each_appear_once():
     assert "isPresented: $session.showSettings" in content
     assert "Settings {" not in _code_without_comments(app)
     _assert_app_menu_shortcuts(app)
+
+
+def _user_facing_copy_paths() -> list[Path]:
+    """Sources and docs whose text can reach a user. Tests are excluded."""
+    paths = [
+        ROOT / "README.md",
+        ROOT / "ACCEPTANCE.md",
+        ROOT / "FORMULAS.md",
+        ROOT / "ocio" / "config.ocio",
+        ROOT / "tests" / "fixtures" / "grey_card" / "README.md",
+    ]
+    roots = [
+        ROOT / "macos",
+        ROOT / "color",
+        ROOT / "scripts",
+    ]
+    allowed = {".swift", ".py", ".sh", ".md"}
+    for base in roots:
+        for path in base.rglob("*"):
+            if not path.is_file():
+                continue
+            if path.suffix not in allowed:
+                continue
+            if path.name.startswith("._") or "/._" in str(path):
+                continue
+            paths.append(path)
+    return [p for p in paths if p.is_file()]
+
+
+def _generated_readme_outputs() -> str:
+    """README_RESOLVE / export note / graph text actually written for users."""
+    from color.resolve_export import export_note, format_graph_xml, format_readme
+
+    return "\n".join(
+        [
+            format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True),
+            format_readme([], None, 0.0, False),
+            export_note(None, include_wb=True, cct=5600.0, tint=0.0),
+            export_note(None, include_wb=False, cct=None, tint=0.0),
+            format_graph_xml(["arri_logc4_awg4"], 3200.0, 0.0, True),
+            format_graph_xml(
+                ["arri_logc4_awg4"], 3200.0, 0.0, False, odt_enabled=True, odt="rec709"
+            ),
+        ]
+    )
+
+
+def test_banned_substrings_absent_from_user_facing_copy():
+    """支持 / 一键 / 精准 / 成片 / 成品 are forbidden, including 不 / 非 / 暂不 forms."""
+    hits: list[str] = []
+    for path in _user_facing_copy_paths():
+        text = path.read_text(encoding="utf-8")
+        for lineno, line in enumerate(text.splitlines(), 1):
+            for token in _BANNED_USER_COPY:
+                if token in line:
+                    rel = path.relative_to(ROOT)
+                    hits.append(f"{rel}:{lineno}: {token}: {line.strip()}")
+    generated = _generated_readme_outputs()
+    for token in _BANNED_USER_COPY:
+        if token in generated:
+            hits.append(f"generated README/export: {token}")
+    assert not hits, "banned user-facing copy:\n" + "\n".join(hits)
+
+
+# New entries need PM approval. Exactly these two, and only these two.
+_PROXY_EXR_PREVIEW_WHITELIST = (
+    # (a) #142 combined cube is a 709 preview LUT by design.
+    # The file name and the log lines that name it may say Preview / 预览.
+    "00_Combined_Preview709_<idt>.cube",
+    # (b) The HDR/709 preview window and its badge are the preview itself,
+    # not a written proxy EXR. They may say 预览 / Preview.
+    "HDR/709 preview window and badge",
+)
+
+
+def _has_preview_word(text: str) -> bool:
+    """Chinese 预览, or English Preview in any capitalization."""
+    lowered = text.lower()
+    return "预览" in text or "preview" in lowered
+
+
+def _quoted_user_strings(src: str) -> str:
+    """String literals only. Identifiers such as refreshPreview are not copy."""
+    import re
+
+    parts = re.findall(r'"((?:\\.|[^"\\])*)"', _code_without_comments(src))
+    return "\n".join(parts)
+
+
+def test_proxy_exr_buttons_names_and_logs_omit_preview_word():
+    """Written proxy EXR labels, file names, and logs omit 预览 and Preview.
+
+    The whitelist has exactly two preview-by-design surfaces. It does not
+    excuse a proxy-EXR button, file name, or log line. New entries need PM approval.
+    """
+    assert _PROXY_EXR_PREVIEW_WHITELIST == (
+        "00_Combined_Preview709_<idt>.cube",
+        "HDR/709 preview window and badge",
+    )
+    assert len(_PROXY_EXR_PREVIEW_WHITELIST) == 2
+
+    from color.batch import (
+        CANCEL_BUTTON,
+        CANCELLED_STATUS_TEMPLATE,
+        DELIVERABLE_DIR_SUFFIX,
+        DISK_SHORT_STATUS,
+        DISK_SHORT_STATUS_TEMPLATE,
+        FOLDER_PICKER_MESSAGE,
+        PROCESS_BUTTON_HELP,
+        PROCESS_DELIVERABLE_NOTE,
+        WRITTEN_CHIP,
+        WRITE_FAILED_CHIP,
+        batch_summary_text,
+        cancelled_status_text,
+        deliverable_name,
+        processed_status_text,
+        progress_text,
+        sequence_frame_name,
+    )
+    from color.resolve_export import EXPORT_NOTE_PROXY
+
+    content = _read(CONTENT)
+    clip = _read(CLIP)
+    exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    swift = _all_swift()
+
+    buttons = {
+        "PROCESS_BUTTON": PROCESS_BUTTON,
+        "CANCEL_BUTTON": CANCEL_BUTTON,
+        "PROCESS_BUTTON_HELP_UI": PROCESS_BUTTON_HELP_UI,
+        "PROCESS_BUTTON_HELP": PROCESS_BUTTON_HELP,
+        "swift process bar": _quoted_user_strings(
+            content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+        ),
+    }
+    names = {
+        "deliverable_name": deliverable_name("clip.mov"),
+        "sequence_frame_name": sequence_frame_name(0),
+        "DELIVERABLE_DIR_SUFFIX": DELIVERABLE_DIR_SUFFIX,
+        "swift sequence dir": _quoted_user_strings(
+            exporter.split("static func deliverableSequenceDirectory")[1].split(
+                "static func sequenceFrameURL"
+            )[0]
+        ),
+        "swift sequence frame": _quoted_user_strings(
+            exporter.split("static func sequenceFrameURL")[1].split("static func ")[0]
+        ),
+    }
+    logs = {
+        "processed": processed_status_text(2, 1),
+        "CANCELLED_STATUS_TEMPLATE": CANCELLED_STATUS_TEMPLATE,
+        "cancelled": cancelled_status_text(1, 2),
+        "DISK_SHORT_STATUS": DISK_SHORT_STATUS,
+        "DISK_SHORT_STATUS_TEMPLATE": DISK_SHORT_STATUS_TEMPLATE,
+        "batch_summary": batch_summary_text(1, 0, 0),
+        "progress": progress_text(2, 5, 120, 240),
+        "FOLDER_PICKER_MESSAGE": FOLDER_PICKER_MESSAGE,
+        "FOLDER_PICKER_MESSAGE_UI": FOLDER_PICKER_MESSAGE_UI,
+        "PROCESS_DELIVERABLE_NOTE": PROCESS_DELIVERABLE_NOTE,
+        "PROCESS_DELIVERABLE_NOTE_UI": PROCESS_DELIVERABLE_NOTE_UI,
+        "EXPORT_NOTE_PROXY": EXPORT_NOTE_PROXY,
+        "WRITTEN_CHIP": WRITTEN_CHIP,
+        "WRITE_FAILED_CHIP": WRITE_FAILED_CHIP,
+        "swift picker": _quoted_user_strings(
+            clip.split("func processLockedClips()")[1].split("func writeLockedDeliverables")[0]
+        ),
+        "swift summary": _quoted_user_strings(
+            clip.split("static func batchSummaryText")[1].split("func exportLockedEXR")[0]
+        ),
+        "swift cancel": _quoted_user_strings(
+            clip.split("static func cancelledExportNote")[1].split("static let bytesPerEXRPixel")[0]
+        ),
+        "swift progress": _quoted_user_strings(
+            clip.split("static func exportProgressText")[1].split("static func cancelledExportNote")[0]
+        ),
+    }
+    proxy_lines = [
+        line
+        for line in exporter.splitlines()
+        if "整段代理，代理精度" in line
+    ]
+    assert proxy_lines, "Swift export log lost the proxy honesty line"
+    for index, line in enumerate(proxy_lines):
+        logs[f"swift proxy line {index}"] = line
+
+    hits = [
+        f"{name}: {text}"
+        for name, text in {**buttons, **names, **logs}.items()
+        if _has_preview_word(text)
+    ]
+    assert not hits, "proxy EXR copy says 预览/Preview:\n" + "\n".join(hits)
+
+    for text in {**buttons, **names, **logs}.values():
+        assert "代理精度预览" not in text
+        if "代理精度" in text:
+            assert "预览" not in text
+            assert "preview" not in text.lower()
+
+    # (a) combined cube file and its log mention. Preview by design.
+    cube = "00_Combined_Preview709_<idt>.cube"
+    assert cube == _PROXY_EXR_PREVIEW_WHITELIST[0]
+    assert "00_Combined_Preview709_" in exporter
+    cube_log = "预览查找表（IDT → 曝光 → 白平衡 → 709 预览）。已实现（未验证）。"
+    assert cube_log in exporter
+    assert _has_preview_word(cube)
+    assert _has_preview_word(cube_log)
+    assert "整段代理" not in cube_log
+
+    # (b) HDR/709 preview window and its badge. Preview by design.
+    assert _PROXY_EXR_PREVIEW_WHITELIST[1] == "HDR/709 preview window and badge"
+    assert 'Text("仅预览")' in swift
+    assert '.help("仅预览")' in swift
+    assert '.accessibilityLabel("仅预览")' in swift
+    assert "HLG 仅预览" in swift
+    assert "PQ 仅预览" in swift
+    assert _has_preview_word('Text("仅预览")')

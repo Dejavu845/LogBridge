@@ -3,7 +3,7 @@
 Tried: MOV/MP4 ProRes / H.264 / HEVC; stills TIFF/DPX/EXR via ImageIO.
 MXF: try if the system recognizes ProRes/AVC/HEVC. ARRI MXF (ARRIRAW) is refused.
 CRM / X-OCN / N-RAW / ProRes RAW refused with the R3D line.
-Never claim 全格式已支持.
+Never claim 全格式都能处理.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ MOVIE_CONTAINERS = frozenset({"mov", "mp4", "m4v"})
 STILL_CONTAINERS = frozenset({"tif", "tiff", "dpx", "exr"})
 MXF_CONTAINER = "mxf"
 
-# Seen in a drop, then refused with a note. Not "全格式已支持".
+# Seen in a drop, then refused with a note. Not "全格式都能处理".
 REFUSED_CONTAINERS = frozenset(
     {"r3d", "braw", "ari", "arx", "avi", "mkv", "dng", "bmd", "crm", "nev", "nraw", "xocn"}
 )
@@ -59,15 +59,15 @@ CAMERA_RAW_MARKERS = (
 )
 
 # Locked refuse copy (沟通).
-NOTE_ARRI_MXF = "ARRI MXF：暂不支持，请导出 MOV ProRes 再拖入"
+NOTE_ARRI_MXF = "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
 NOTE_MXF_NO_TRACK = "MXF：系统认不出可解轨道，未导入"
 NOTE_MXF_TRY = "MXF 只试系统认得出的 ProRes / AVC / HEVC。"
-NOTE_CAMERA_RAW = "R3D / BRAW：暂不支持，请在相机软件转 ProRes / EXR"
+NOTE_CAMERA_RAW = "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR"
 NOTE_UNKNOWN_CODEC = "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
-NOTE_REFUSE_CONTAINER = "这个容器不接。不写「全格式已支持」。"
+NOTE_REFUSE_CONTAINER = "这个容器不接。不写「全格式都能处理」。"
 # Accept notes (locked Chinese; no API / Y′CbCr jargon).
-NOTE_STILL_ACCEPT = "静帧 {ext} 按图片导入。不是成片。"
-NOTE_MOVIE_ACCEPT = "MOV/MP4：可试 ProRes / H.264 / HEVC。不是成片。"
+NOTE_STILL_ACCEPT = "静帧 {ext} 按图片导入。代理精度，可写出。"
+NOTE_MOVIE_ACCEPT = "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
 # Multi-file import skip summary. Per-file refuse chips stay as-is.
 IMPORT_SKIP_HEADER = "未导入 {n} 条："
 
@@ -218,7 +218,7 @@ def _refuse_note(ext: str) -> str:
         return NOTE_CAMERA_RAW
     if ext in {"avi", "mkv"}:
         return f"{ext.upper()} 不接。请用 MOV/MP4。"
-    return f".{ext} 不接。不写「全格式已支持」。"
+    return f".{ext} 不接。不写「全格式都能处理」。"
 
 
 def empty_metadata_note() -> str:
