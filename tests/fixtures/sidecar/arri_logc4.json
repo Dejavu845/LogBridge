@@ -1,0 +1,7 @@
+{
+  "arri_mxf_color_space": "ARRI LogC4 / AWG4",
+  "arri_white_balance": "3200K",
+  "white_balance_tint": -0.5,
+  "fps": 24,
+  "nclc": "1-1-1"
+}

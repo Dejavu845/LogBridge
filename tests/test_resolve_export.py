@@ -257,7 +257,7 @@ def test_export_default_odt_off_acescct_deliverable(tmp_path: Path):
     assert 'name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="false"' in xml
     assert GRAPH_ODT_USER in xml
     assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
-    assert "预览·非成片" in xml
+    assert "仅预览" in xml
     readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
     assert GRAPH_ODT_USER in readme
     assert "preview only" not in _graph_section(readme)
@@ -320,9 +320,9 @@ LOCKED_BUNDLE_FILES = (
     "03_WB.cube",
     "04_ODT_Rec709.cube",
 )
-RESOLVE_README_STATUS = "状态：**已实现（未验证）**。不是相机支持声明。"
+RESOLVE_README_STATUS = "状态：**已实现（未验证）**。并不表示相机已经可用。"
 RESOLVE_README_STATUS_PARALLEL_EN = (
-    "状态：**已实现（未验证）** / implemented (unverified)。不是相机支持声明。"
+    "状态：**已实现（未验证）** / implemented (unverified)。并不表示相机已经可用。"
 )
 RESOLVE_DOT_STATUS_LABEL = "LogBridge M1 Resolve graph — 已实现（未验证）"
 RESOLVE_XML_STATUS_ATTR = 'status="implemented (unverified)"'
@@ -571,17 +571,9 @@ GRAPH_ODT_BANNED = (
 
 
 def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
-    cleaned = (
-        text.replace("预览·非成片", "")
-        .replace("不是全精度成片", "")
-        .replace("不是整段成片", "")
-        .replace("不是成片", "")
-        .replace("成片预览关", "")
-    )
-    assert "成片" not in cleaned
-    assert "精准" not in cleaned
-    assert "一键还原" not in cleaned
-    assert "一键校准" not in cleaned
+    """支持 / 一键 / 精准 / 成片 / 成品 are forbidden even after a negation."""
+    for token in ("支持", "一键", "精准", "成片", "成品"):
+        assert token not in text, token
 
 
 @pytest.mark.parametrize(
@@ -706,7 +698,7 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
     readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
     honesty = readme.split("## Graph (serial nodes)")[0]
     assert "709 预览" in honesty
-    assert "整段代理，不是全精度成片" in honesty
+    assert "整段代理，代理精度" in honesty
     assert "_proxy" in honesty
     assert "已实现（未验证）" in readme
     assert RESOLVE_README_HONESTY.strip() in readme
@@ -785,7 +777,7 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
         assert f'"{name}"' in swift
     for blob in (note_fn, readme_fn):
         assert "709 预览" in blob
-        assert "整段代理，不是全精度成片" in blob
+        assert "整段代理，代理精度" in blob
         assert "已实现（未验证）" in blob
         assert EXPORT_NOTE_IN_CAMERA in blob
         assert "默认 CAT 是单位阵" not in blob
@@ -833,8 +825,8 @@ def test_readme_resolve_status_line_drops_parallel_english(tmp_path: Path):
     assert "implemented (unverified)" not in status
     assert RESOLVE_README_STATUS_PARALLEL_EN not in readme
     assert "未验证" in status
-    assert "预览·非成片" in readme
-    assert "整段代理，不是全精度成片" in readme
+    assert "仅预览" in readme
+    assert "整段代理，代理精度" in readme
     _assert_chengpian_not_a_deliverable_claim(readme)
 
     generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True)
@@ -877,8 +869,8 @@ def test_readme_resolve_status_line_drops_parallel_english(tmp_path: Path):
     assert RESOLVE_CUBE_STATUS_COMMENT in py
     assert "未验证" in readme_fn
     assert "未验证" in py_readme
-    assert "预览·非成片" in readme_fn
-    assert "预览·非成片" in py_readme
+    assert "仅预览" in readme_fn
+    assert "仅预览" in py_readme
 
 
 def test_readme_graph_odt_user_copy_is_locked_chinese(tmp_path: Path):
@@ -892,7 +884,7 @@ def test_readme_graph_odt_user_copy_is_locked_chinese(tmp_path: Path):
     cube = (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
 
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True)
     py_graph = _graph_section(generated)
@@ -903,7 +895,7 @@ def test_readme_graph_odt_user_copy_is_locked_chinese(tmp_path: Path):
         cctLabel="3200 K", tint=0.0
     )
     assert "709 预览" in written_graph
-    assert "预览·非成片" in written_graph
+    assert "仅预览" in written_graph
     for token in GRAPH_ODT_BANNED:
         assert token not in py_graph
         assert token not in written_graph
@@ -1009,7 +1001,7 @@ def test_readme_resolve_graph_wb_summary_plain_chinese(tmp_path: Path):
     wb_line = _graph_wb_summary_line(graph)
     assert wb_line == GRAPH_WB_SUMMARY.format(cctLabel="3200 K", tint=0.0)
     assert "未验证" in readme
-    assert "预览·非成片" in readme
+    assert "仅预览" in readme
     for token in HONESTY_BANNED:
         assert token not in honesty, token
     assert "identity" not in honesty
@@ -1081,7 +1073,7 @@ def test_709_cube_labeled_preview_not_aces_ot(tmp_path: Path):
     assert REC709_PREVIEW_LABEL in xml
     assert 'type="ACES_OT"' not in xml
     assert GRAPH_ODT_USER in xml
-    assert "预览·非成片" in xml
+    assert "仅预览" in xml
     assert REC709_PREVIEW_LABEL in readme
     assert GRAPH_ODT_USER in readme
     assert "Not an ACES Output Transform" not in _graph_section(readme)
@@ -1273,18 +1265,18 @@ def test_resolve_package_placeholders_are_locked_chinese(tmp_path: Path):
         _assert_chengpian_not_a_deliverable_claim(blob)
 
 
-EXPORT_NOTE_ODT_LOCKED = "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
-EXPORT_NOTE_ODT_FROM = "ODT：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+EXPORT_NOTE_ODT_LOCKED = "预览输出：709 预览（不是 ACES 输出变换），默认关。仅预览。"
+EXPORT_NOTE_ODT_FROM = "ODT：709 预览（不是 ACES 输出变换），默认关。仅预览。"
 
 
 def test_export_note_odt_preview_output_zh():
     """exportNote ㉖: ODT： → 预览输出：. Align ㉑. ㉕ honesty/Graph WB / TITLE / XML stay."""
     assert EXPORT_NOTE_ODT == EXPORT_NOTE_ODT_LOCKED
     assert EXPORT_NOTE_ODT == (
-        "预览输出：709 预览（不是 ACES 输出变换），默认关。预览·非成片。"
+        "预览输出：709 预览（不是 ACES 输出变换），默认关。仅预览。"
     )
     assert EXPORT_NOTE_ODT.startswith("预览输出：")
-    assert EXPORT_NOTE_ODT.endswith("709 预览（不是 ACES 输出变换），默认关。预览·非成片。")
+    assert EXPORT_NOTE_ODT.endswith("709 预览（不是 ACES 输出变换），默认关。仅预览。")
     assert "ODT：" not in EXPORT_NOTE_ODT
     assert not EXPORT_NOTE_ODT.startswith("ODT：")
     assert EXPORT_NOTE_ODT_FROM not in EXPORT_NOTE_ODT
@@ -1333,7 +1325,7 @@ def test_export_note_odt_preview_output_zh():
     # FROZEN: cube TITLE, XML / Graph Descriptions, node filenames.
     assert REC709_CUBE_TITLE == LOCKED_REC709_CUBE_TITLE
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
     assert GRAPH_ODT_USER in _graph_section(readme_fn)
@@ -1434,18 +1426,18 @@ README_APPLY_ODT_HEAD_FROM = (
     "Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709)"
 )
 README_APPLY_ODT_TRAIL_TO = (
-    "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
 )
 README_APPLY_ODT_TRAIL_FROM = (
-    "if you need a **709 预览** viewing node (not ACES OT). 预览·非成片."
+    "if you need a **709 预览** viewing node (not ACES OT). 仅预览."
 )
 README_APPLY_ODT_LINE = (
     "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-    "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
 )
 README_APPLY_ODT_FROM = (
     "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
-    "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+    "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
 )
 README_APPLY_ODT_BANNED = ("Apply **ODT**", "(node 4")
 README_APPLY_ODT_TRAIL_BANNED = ("viewing node", "if you need")
@@ -2062,7 +2054,7 @@ def test_graph_dot_idt_odt_timeline_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
     assert GRAPH_ODT_USER in odt_label
@@ -2195,7 +2187,7 @@ def test_graph_dot_odt_cst_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_XML_DESC == GRAPH_ODT_USER
     assert GRAPH_ODT_USER in odt_label
@@ -2347,7 +2339,7 @@ def test_readme_graph_input_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -2370,10 +2362,10 @@ def test_readme_apply_odt_plain_chinese(tmp_path: Path):
         "Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709)"
     )
     assert README_APPLY_ODT_TRAIL_TO == (
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert README_APPLY_ODT_TRAIL_FROM == (
-        "if you need a **709 预览** viewing node (not ACES OT). 预览·非成片."
+        "if you need a **709 预览** viewing node (not ACES OT). 仅预览."
     )
     assert README_APPLY_ODT_LINE == (
         f"- {README_APPLY_ODT_HEAD}{README_APPLY_ODT_TRAIL_TO}"
@@ -2534,7 +2526,7 @@ def test_readme_apply_odt_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -2656,7 +2648,7 @@ def test_readme_files_graph_dot_plain_chinese(tmp_path: Path):
     # ㉗–㉜ locked strings 一字不动.
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -2707,7 +2699,7 @@ def test_readme_files_graph_dot_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -2819,7 +2811,7 @@ def test_readme_color_page_title_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -2874,7 +2866,7 @@ def test_readme_color_page_title_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -2990,7 +2982,7 @@ def test_readme_files_header_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -3064,7 +3056,7 @@ def test_readme_files_header_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -3239,7 +3231,7 @@ def test_readme_files_graph_xml_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -3290,7 +3282,7 @@ def test_readme_files_graph_xml_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -3473,7 +3465,7 @@ def test_readme_files_readme_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -3524,7 +3516,7 @@ def test_readme_files_readme_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -3742,7 +3734,7 @@ def test_readme_files_idt_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -3793,7 +3785,7 @@ def test_readme_files_idt_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -4020,7 +4012,7 @@ def test_readme_files_wb_cube_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -4071,7 +4063,7 @@ def test_readme_files_wb_cube_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -4323,7 +4315,7 @@ def test_readme_files_wb_cdl_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -4374,7 +4366,7 @@ def test_readme_files_wb_cdl_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -4648,7 +4640,7 @@ def test_readme_files_wb_dctl_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -4699,7 +4691,7 @@ def test_readme_files_wb_dctl_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -4990,7 +4982,7 @@ def test_readme_files_odt_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -5041,7 +5033,7 @@ def test_readme_files_odt_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -5509,7 +5501,7 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
     assert README_FILES_GRAPH_DOT_FROM not in py_files
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert _apply_odt_line(readme) == README_APPLY_ODT_LINE
     assert _apply_odt_line(readme_fn) == README_APPLY_ODT_LINE
@@ -5560,7 +5552,7 @@ def test_readme_trail_half_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -5724,7 +5716,7 @@ def test_readme_apply_wb_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -5900,7 +5892,7 @@ def test_readme_apply_idt_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -5922,15 +5914,15 @@ def test_readme_apply_odt_line_plain_chinese(tmp_path: Path):
     """README Apply ㊾: ODT 行人话. Swift↔Py 该行一致. ㉗–㊽ + 邻行 IDT/Exposure/WB / TITLE / XML / 色管 frozen."""
     assert README_APPLY_ODT_LINE == (
         "- 应用 **ODT**（节点 4：LUT `04_ODT_Rec709.cube`，或 CST ACEScct → Rec.709）"
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert README_APPLY_ODT_FROM == (
         "- Apply **ODT** (node 4: LUT `04_ODT_Rec709.cube`, or CST ACEScct → Rec.709) "
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
     assert README_APPLY_ODT_BANNED == ("Apply **ODT**", "(node 4")
     assert README_APPLY_ODT_TRAIL_TO == (
-        "若需要 **709 预览** 查看节点（不是 ACES OT）。预览·非成片。"
+        "若需要 **709 预览** 查看节点（不是 ACES OT）。仅预览。"
     )
 
     export_resolve_bundle(
@@ -6077,7 +6069,7 @@ def test_readme_apply_odt_line_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -6262,7 +6254,7 @@ def test_readme_apply_exposure_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -6456,7 +6448,7 @@ def test_readme_bypass_wb_swift_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -6677,7 +6669,7 @@ def test_readme_bypass_exposure_wb_py_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -6936,7 +6928,7 @@ def test_readme_deliverable_warn_py_plain_chinese(tmp_path: Path):
     assert f'TITLE "{LOCKED_REC709_CUBE_TITLE}"' in cube
     assert LOCKED_REC709_CUBE_TITLE in swift
     assert GRAPH_ODT_USER == (
-        "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+        "709 预览，不是 ACES 输出变换。仅预览。默认关。"
     )
     assert GRAPH_ODT_USER in graph
     for name in LOCKED_NODE_FILES:
@@ -7161,7 +7153,7 @@ def test_combined_preview_respects_bypass_and_readme(tmp_path: Path):
     assert COMBINED_PREVIEW709_FILE_PATTERN in readme
     assert "已实现（未验证）" in COMBINED_PREVIEW709_README_ROLE
     assert "预览查找表" in COMBINED_PREVIEW709_README_ROLE
-    for banned in ("支持", "一键精准", "成片", "达芬奇已验证"):
+    for banned in ("支持", "一键精准", "成片", "成品", "达芬奇已验证"):
         assert banned not in COMBINED_PREVIEW709_README_ROLE
     _assert_chengpian_not_a_deliverable_claim(COMBINED_PREVIEW709_README_ROLE)
 
@@ -7201,7 +7193,7 @@ def test_combined_preview_copy_locked_in_readme_sources():
     assert "min(max(preview" in body
     export_fn = swift.split("static func export(")[1].split("static func writeSidecar")[0]
     assert "size: ResolveExporter.lutSize" in export_fn
-    for banned in ("支持", "一键精准", "成片", "达芬奇已验证"):
+    for banned in ("支持", "一键精准", "成片", "成品", "达芬奇已验证"):
         assert banned not in COMBINED_PREVIEW709_README_ROLE
         assert banned not in COMBINED_PREVIEW709_COMMENT
 

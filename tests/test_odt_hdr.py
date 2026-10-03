@@ -214,7 +214,7 @@ def test_export_xml_declares_hdr_aces_ot():
         ["arri_logc4_awg4"], 6504.0, 0.0, include_wb=False
     )
     assert 'name="ODT_Rec709" type="LUT_or_CST" bypassable="true" enabled="false"' in xml_off
-    assert "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。" in xml_off
+    assert "709 预览，不是 ACES 输出变换。仅预览。默认关。" in xml_off
     assert "preview ODT only" not in xml_off
     assert "Not an ACES Output Transform" not in xml_off
 
@@ -228,10 +228,11 @@ def test_docs_hdr_ot_unverified_not_supported():
     assert "Rec.2100 PQ" in blob
     assert "BT.2100" in blob
     assert "implemented (unverified)" in blob
-    assert "一键精准" in blob  # named as forbidden
+    assert "一键" not in blob
+    assert "精准" not in blob
     # Must not claim HDR is supported or a one-click accurate path.
     assert "HLG/PQ supported" not in blob.lower()
-    assert "一键精准" in blob
+    assert "one-step automatic restore" in blob.lower() or "one-click accurate" in blob.lower()
     assert "ColorSync" in blob
     assert "itur_2100" in blob
     assert "HDR 预览建不出" in blob

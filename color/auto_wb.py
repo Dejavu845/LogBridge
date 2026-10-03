@@ -13,7 +13,7 @@ Engineering locks (not a white paper):
   * Label: 白平衡（估计）. Confirm writes CAT; low confidence stays empty.
   * Grey-card overrides the estimate. As-shot default stays identity.
 
-Implemented (unverified). Not 精准. Not 一键校准.
+Implemented (unverified). 不是已经测准。不是自动校准。
 """
 
 from __future__ import annotations
