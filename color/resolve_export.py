@@ -16,8 +16,10 @@ Rec.2100 HLG / PQ are optional ACES Output Transform / BT.2100 nodes
   4. ODT       — Rec.709 preview (LUT and/or Resolve CST). Off by default.
 
 WB is never a CAT on ACEScct-encoded values and is never baked into the
-IDT or ODT cubes. Exposure is never baked into IDT or WB. Status:
-implemented (unverified).
+IDT or ODT cubes. Exposure is never baked into IDT or WB. A separate
+``00_Combined_Preview709_<idt>.cube`` samples the same node functions
+in order (IDT → exposure → WB → Rec.709 preview). It does not replace
+the per-node files. Preview LUT. Status: implemented (unverified).
 """
 
 from __future__ import annotations
@@ -132,6 +134,15 @@ REC709_CUBE_TITLE = (
 # Graph / dot / XML Description / cube # comment (knife ⑭). TITLE stays.
 GRAPH_ODT_USER = "709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
 REC709_CUBE_COMMENT = f"# {GRAPH_ODT_USER}"
+# Extra preview cube. Per-node files stay. Not a DaVinci check.
+COMBINED_PREVIEW709_FILE_PATTERN = "00_Combined_Preview709_<idt>.cube"
+COMBINED_PREVIEW709_README_ROLE = (
+    "预览查找表（IDT → 曝光 → 白平衡 → 709 预览）。已实现（未验证）。"
+)
+COMBINED_PREVIEW709_README_ROW = (
+    f"| `{COMBINED_PREVIEW709_FILE_PATTERN}` | {COMBINED_PREVIEW709_README_ROLE} |"
+)
+COMBINED_PREVIEW709_COMMENT = "# 预览查找表。已实现（未验证）。"
 GRAPH_ODT_XML_DESC = GRAPH_ODT_USER
 # Graph WB summary (knife ㉕). Placeholders {cctLabel} / {tint}. Copy only.
 GRAPH_WB_SUMMARY = (
@@ -428,6 +439,63 @@ def odt_cube_bytes(size: int = 17) -> str:
         out,
         size,
         extra_comments=(REC709_CUBE_COMMENT,),
+    )
+
+
+def combined_preview709_filename(idt_id: str) -> str:
+    """Per-IDT combined preview cube. Sits beside ``01_IDT_<idt>.cube``."""
+    return f"00_Combined_Preview709_{idt_id}.cube"
+
+
+def combined_preview709_rgb(
+    log_01,
+    idt_id: str,
+    *,
+    exposure_stops: float = 0.0,
+    cct: float | None = None,
+    tint: float = 0.0,
+    method: str = "bradford",
+    src_cct: float | None = None,
+) -> np.ndarray:
+    """Camera log → Rec.709 preview via the existing node functions.
+
+    IDT → exposure → WB → Rec.709 preview. Same operators as the per-node
+    cubes (ACEScct wrap between them). Does not replace those files.
+    """
+    enc = idt_to_acescct(log_01, idt_id)
+    enc = exposure_in_acescct(enc, exposure_stops)
+    enc = wb_in_acescct(
+        enc, cct, tint=tint, method=method, src_cct=src_cct
+    )
+    return odt_from_acescct(enc)
+
+
+def combined_preview709_cube_bytes(
+    idt_id: str,
+    *,
+    exposure_stops: float = 0.0,
+    cct: float | None = None,
+    tint: float = 0.0,
+    size: int = 17,
+    method: str = "bradford",
+    src_cct: float | None = None,
+) -> str:
+    """3D .cube of ``combined_preview709_rgb``. Input domain is camera log 0–1."""
+    grid = _cube_sample_grid(size)
+    out = combined_preview709_rgb(
+        grid,
+        idt_id,
+        exposure_stops=exposure_stops,
+        cct=cct,
+        tint=tint,
+        method=method,
+        src_cct=src_cct,
+    )
+    return format_cube(
+        f"LogBridge combined preview {idt_id} IDT → Exposure → WB → Rec.709",
+        out,
+        size,
+        extra_comments=(COMBINED_PREVIEW709_COMMENT,),
     )
 
 
@@ -935,6 +1003,7 @@ Locked order: **IDT → Exposure → WB → ACEScct → preview ODT**. Rec.709 /
 | --- | --- |
 | `graph.xml` | 机器可读节点图（可旁路曝光 + 白平衡） |
 | `graph.dot` | 同一图的 Graphviz |
+| `{COMBINED_PREVIEW709_FILE_PATTERN}` | {COMBINED_PREVIEW709_README_ROLE} |
 | `01_IDT_<idt>.cube` | IDT 查找表（不含白平衡、不含曝光） |
 | `02_Exposure.cube` | Exposure 1D LUT (ACEScct-wrapped linear gain) |
 | `02_Exposure.dctl` | Exposure as DCTL (linear gain) |
@@ -1033,8 +1102,21 @@ def export_resolve_bundle(
     _w("03_WB.dctl", format_dctl(cat_cct, tint, method, src_cct=cat_src))
     _w("03_WB.cube", wb_cube_bytes(cat_cct, tint, size=lut_size, method=method, src_cct=cat_src))
     _w("04_ODT_Rec709.cube", odt_cube_bytes(size=lut_size))
+    exp_stops = exposure_stops if exposure_enabled else 0.0
     for idt_id in idt_ids:
         _w(f"01_IDT_{idt_id}.cube", idt_cube_bytes(idt_id, size=lut_size))
+        _w(
+            combined_preview709_filename(idt_id),
+            combined_preview709_cube_bytes(
+                idt_id,
+                exposure_stops=exp_stops,
+                cct=cat_cct,
+                tint=tint,
+                size=lut_size,
+                method=method,
+                src_cct=cat_src,
+            ),
+        )
     from .batch import (
         RESOLVE_INCOMPLETE_CHIP,
         remove_incomplete_resolve_bundle,
