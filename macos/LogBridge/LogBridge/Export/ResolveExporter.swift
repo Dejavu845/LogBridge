@@ -102,7 +102,7 @@ enum ResolveExporter {
                     stops: expStops,
                     cct: matrixCCT,
                     tint: tint,
-                    size: lutSize,
+                    size: ResolveExporter.lutSize,
                     srcCCT: matrixSrc,
                     srcTint: srcTint
                 )
@@ -523,7 +523,14 @@ enum ResolveExporter {
             let idtEnc = idtToACEScct(logRGB, idt: idt)
             let expEnc = exposureInACEScct(idtEnc, stops: stops)
             let wbEnc = wbInACEScct(expEnc, matrix: matrix)
-            return odtFromACEScct(wbEnc)
+            // Per-node ODT cube is unchanged. This preview file only
+            // clips the final OETF result into [0, 1].
+            let preview = odtFromACEScct(wbEnc)
+            return SIMD3(
+                min(max(preview.x, 0.0), 1.0),
+                min(max(preview.y, 0.0), 1.0),
+                min(max(preview.z, 0.0), 1.0)
+            )
         }
     }
 

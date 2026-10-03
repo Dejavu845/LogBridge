@@ -143,6 +143,9 @@ COMBINED_PREVIEW709_README_ROW = (
     f"| `{COMBINED_PREVIEW709_FILE_PATTERN}` | {COMBINED_PREVIEW709_README_ROLE} |"
 )
 COMBINED_PREVIEW709_COMMENT = "# 预览查找表。已实现（未验证）。"
+# Swift ResolveExporter.lutSize. Per-node cubes keep the caller's lut_size
+# (Python batch still uses 5). The combined preview cube does not.
+COMBINED_PREVIEW709_LUT_SIZE = 17
 GRAPH_ODT_XML_DESC = GRAPH_ODT_USER
 # Graph WB summary (knife ㉕). Placeholders {cctLabel} / {tint}. Copy only.
 GRAPH_WB_SUMMARY = (
@@ -461,13 +464,17 @@ def combined_preview709_rgb(
 
     IDT → exposure → WB → Rec.709 preview. Same operators as the per-node
     cubes (ACEScct wrap between them). Does not replace those files.
+
+    The per-node IDT cube can sit far below the ACEScct toe, and the
+    per-node Rec.709 cube can encode scene-linear values above 1. This
+    preview cube clips only its own final OETF result to [0, 1].
     """
     enc = idt_to_acescct(log_01, idt_id)
     enc = exposure_in_acescct(enc, exposure_stops)
     enc = wb_in_acescct(
         enc, cct, tint=tint, method=method, src_cct=src_cct
     )
-    return odt_from_acescct(enc)
+    return np.clip(odt_from_acescct(enc), 0.0, 1.0)
 
 
 def combined_preview709_cube_bytes(
@@ -1105,6 +1112,7 @@ def export_resolve_bundle(
     exp_stops = exposure_stops if exposure_enabled else 0.0
     for idt_id in idt_ids:
         _w(f"01_IDT_{idt_id}.cube", idt_cube_bytes(idt_id, size=lut_size))
+        # Size stays 17 even when lut_size shrinks the per-node cubes.
         _w(
             combined_preview709_filename(idt_id),
             combined_preview709_cube_bytes(
@@ -1112,7 +1120,7 @@ def export_resolve_bundle(
                 exposure_stops=exp_stops,
                 cct=cat_cct,
                 tint=tint,
-                size=lut_size,
+                size=COMBINED_PREVIEW709_LUT_SIZE,
                 method=method,
                 src_cct=cat_src,
             ),

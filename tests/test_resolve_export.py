@@ -53,6 +53,7 @@ from color.resolve_export import (
     cdl_slope_offset_power,
     COMBINED_PREVIEW709_COMMENT,
     COMBINED_PREVIEW709_FILE_PATTERN,
+    COMBINED_PREVIEW709_LUT_SIZE,
     COMBINED_PREVIEW709_README_ROLE,
     COMBINED_PREVIEW709_README_ROW,
     combined_preview709_cube_bytes,
@@ -7000,7 +7001,9 @@ def test_combined_preview_cube_matches_serial_nodes(tmp_path: Path):
     assert "04_ODT_Rec709.cube" in names
 
     text = (tmp_path / name).read_text(encoding="utf-8")
-    assert f"LUT_3D_SIZE {size}" in text
+    assert f"LUT_3D_SIZE {COMBINED_PREVIEW709_LUT_SIZE}" in text
+    assert "LUT_3D_SIZE 5" in (tmp_path / f"01_IDT_{idt}.cube").read_text(encoding="utf-8")
+    assert "LUT_3D_SIZE 5" in (tmp_path / "04_ODT_Rec709.cube").read_text(encoding="utf-8")
     assert "DOMAIN_MIN 0.0 0.0 0.0" in text
     assert "DOMAIN_MAX 1.0 1.0 1.0" in text
     assert COMBINED_PREVIEW709_COMMENT in text
@@ -7009,23 +7012,29 @@ def test_combined_preview_cube_matches_serial_nodes(tmp_path: Path):
         [[float(x) for x in ln.split()] for ln in _cube_rgb_lines(text)],
         dtype=np.float64,
     )
-    assert rgb.shape == (size ** 3, 3)
+    assert rgb.shape == (COMBINED_PREVIEW709_LUT_SIZE ** 3, 3)
     assert np.isfinite(rgb).all()
-    assert rgb.min() >= -1e-8
+    assert rgb.min() >= 0.0
+    assert rgb.max() <= 1.0
 
-    grid = _sample_grid(size)
-    chain = _serial_preview709(grid, idt, stops=stops, cct=cct, tint=tint)
+    grid = _sample_grid(COMBINED_PREVIEW709_LUT_SIZE)
+    chain = np.clip(
+        _serial_preview709(grid, idt, stops=stops, cct=cct, tint=tint), 0.0, 1.0
+    )
     np.testing.assert_allclose(rgb, chain, atol=1e-7, rtol=0)
 
-    # Off-lattice sample grid: the baker is the node functions, not a new curve.
+    # Off-lattice sample grid: same node functions, then the final [0, 1] clip.
     samples = _sample_grid(4) * 0.8 + 0.1
     baked = combined_preview709_rgb(
         samples, idt, exposure_stops=stops, cct=cct, tint=tint
     )
-    again = _serial_preview709(samples, idt, stops=stops, cct=cct, tint=tint)
+    again = np.clip(
+        _serial_preview709(samples, idt, stops=stops, cct=cct, tint=tint), 0.0, 1.0
+    )
     np.testing.assert_allclose(baked, again, atol=0, rtol=0)
+    assert baked.min() >= 0.0 and baked.max() <= 1.0
 
-    # IDT cube table, then the exposure / WB / ODT node functions.
+    # IDT cube table (still unclamped), then exposure / WB / ODT, then [0, 1].
     idt_rgb = np.array(
         [
             [float(x) for x in ln.split()]
@@ -7035,12 +7044,19 @@ def test_combined_preview_cube_matches_serial_nodes(tmp_path: Path):
         ],
         dtype=np.float64,
     )
-    from_idt_lut = odt_from_acescct(
-        wb_in_acescct(exposure_in_acescct(idt_rgb, stops), cct, tint=tint)
+    assert idt_rgb.min() < -1.0
+    from_idt_lut = np.clip(
+        odt_from_acescct(
+            wb_in_acescct(exposure_in_acescct(idt_rgb, stops), cct, tint=tint)
+        ),
+        0.0,
+        1.0,
     )
-    # 8-decimal cube text, then the rest of the chain. A couple of highlights
-    # move by ~2e-6; that is the print rounding, not a different operator.
-    np.testing.assert_allclose(rgb, from_idt_lut, atol=2e-6, rtol=0)
+    small = combined_preview709_rgb(
+        _sample_grid(size), idt, exposure_stops=stops, cct=cct, tint=tint
+    )
+    # 8-decimal IDT cube text, then the rest of the chain.
+    np.testing.assert_allclose(small, from_idt_lut, atol=2e-6, rtol=0)
 
     # Each per-node cube still matches its own function on its lattice.
     exp_lines = _cube_rgb_lines(exposure_cube_bytes(stops))
@@ -7068,18 +7084,20 @@ def test_combined_preview_cube_matches_serial_nodes(tmp_path: Path):
     np.testing.assert_allclose(
         odt_rgb, odt_from_acescct(_sample_grid(size)), atol=1e-7, rtol=0
     )
+    assert odt_rgb.max() > 1.0
 
     first = combined_preview709_cube_bytes(
-        idt, exposure_stops=stops, cct=cct, tint=tint, size=size
+        idt, exposure_stops=stops, cct=cct, tint=tint
     )
     second = combined_preview709_cube_bytes(
-        idt, exposure_stops=stops, cct=cct, tint=tint, size=size
+        idt, exposure_stops=stops, cct=cct, tint=tint
     )
+    assert "LUT_3D_SIZE 17" in first
     assert first == second
     assert first == text
 
     identity = combined_preview709_cube_bytes(
-        idt, exposure_stops=0.0, cct=None, tint=0.0, size=size
+        idt, exposure_stops=0.0, cct=None, tint=0.0
     )
     assert _cube_rgb_lines(identity) != _cube_rgb_lines(text)
 
@@ -7100,8 +7118,16 @@ def test_combined_preview_respects_bypass_and_readme(tmp_path: Path):
     name = combined_preview709_filename(idt)
     text = (tmp_path / name).read_text(encoding="utf-8")
     expect = combined_preview709_cube_bytes(
-        idt, exposure_stops=0.0, cct=None, tint=0.4, size=5
+        idt, exposure_stops=0.0, cct=None, tint=0.4
     )
+    assert "LUT_3D_SIZE 17" in text
+    assert "LUT_3D_SIZE 5" in (tmp_path / "04_ODT_Rec709.cube").read_text(
+        encoding="utf-8"
+    )
+    parsed = np.array(
+        [[float(x) for x in ln.split()] for ln in _cube_rgb_lines(text)]
+    )
+    assert parsed.min() >= 0.0 and parsed.max() <= 1.0
     assert _cube_rgb_lines(text) == _cube_rgb_lines(expect)
     assert (tmp_path / "01_IDT_sony_slog3_sgamut3.cube").is_file()
     assert (tmp_path / "02_Exposure.cube").is_file()
@@ -7150,7 +7176,32 @@ def test_combined_preview_copy_locked_in_readme_sources():
     assert "exposureInACEScct" in body
     assert "wbInACEScct" in body
     assert "odtFromACEScct" in body
+    assert "min(max(preview" in body
+    export_fn = swift.split("static func export(")[1].split("static func writeSidecar")[0]
+    assert "size: ResolveExporter.lutSize" in export_fn
     for banned in ("支持", "一键精准", "成片", "达芬奇已验证"):
         assert banned not in COMBINED_PREVIEW709_README_ROLE
         assert banned not in COMBINED_PREVIEW709_COMMENT
+
+
+def test_combined_preview_mid_grey_near_rec709_oetf():
+    """Exposure 0 and identity WB keep 18% grey near the Rec.709 OETF of 0.18.
+
+    The final clip is [0, 1]. 0.409 sits inside that interval, so the clip
+    does not move it. Per-node cubes are not part of this check.
+    """
+    from color.rec709 import rec709_oetf
+
+    ref = float(np.asarray(rec709_oetf(0.18)).reshape(-1)[0])
+    assert ref == pytest.approx(0.409, abs=0.002)
+    for idt, code in (
+        ("arri_logc4_awg4", float(linear_to_logc4(0.18))),
+        ("sony_slog3_sgamut3", float(linear_to_slog3(0.18))),
+    ):
+        log = np.full(3, code)
+        out = combined_preview709_rgb(
+            log, idt, exposure_stops=0.0, cct=None, tint=0.0
+        )
+        np.testing.assert_allclose(out, ref, atol=2e-2, rtol=0)
+        assert np.all((out >= 0.0) & (out <= 1.0))
 
