@@ -75,6 +75,7 @@ struct ContentView: View {
         .onDeleteCommand {
             session.removeSelectedClipFromSession()
         }
+        .focusedSceneValue(\.logBridgeSession, SessionFocus(session: session))
     }
 }
 
