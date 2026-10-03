@@ -11150,10 +11150,32 @@ def test_empty_dropzone_tap_opens_same_importer():
     _chengpian_only_honesty(ui_drop)
 
 
+def _assert_app_menu_shortcuts(app: str) -> None:
+    """⌘O and ⌘, live in LogBridgeApp commands, each once across Swift sources."""
+    ui_app = _code_without_comments(app)
+    assert "CommandGroup(replacing: .newItem)" in app
+    assert "CommandGroup(replacing: .appSettings)" in app
+    assert "LogBridgeCommands" in app
+    add_cmd = ui_app.split('Button("添加…")')[1].split("CommandGroup")[0]
+    assert "showImporter = true" in add_cmd
+    assert '.keyboardShortcut("o")' in add_cmd
+    assert 'keyboardShortcut(","' not in add_cmd
+    settings_cmd = ui_app.split('Button("设置…")')[1]
+    assert "showSettings = true" in settings_cmd
+    assert '.keyboardShortcut(",")' in settings_cmd
+    assert 'keyboardShortcut("o"' not in settings_cmd
+    assert ui_app.count("keyboardShortcut") == 2
+    assert "Settings {" not in ui_app
+    swift = _all_swift()
+    assert swift.count("keyboardShortcut") == 2
+    assert swift.count('keyboardShortcut("o"') == 1
+    assert swift.count('keyboardShortcut(","') == 1
+
+
 def test_add_ellipsis_command_o_opens_same_importer():
-    """58 验法钉死: sidebar「添加…」⌘O → 同一 showImporter.
+    """「添加…」仍开同一 showImporter. ⌘O 在 LogBridgeApp 菜单命令，不在侧栏按钮.
     ContentView / ProcessLockedBar 仍禁 keyboardShortcut.
-    56/57 / 主按钮 / Esc / EMPTY_STATE_* 一字不动. 冻㉗–57. #132 旁路.
+    56/57 / 主按钮 / Esc / EMPTY_STATE_* 一字不动. #132 旁路.
     """
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
     content = _read(CONTENT)
@@ -11168,30 +11190,26 @@ def test_add_ellipsis_command_o_opens_same_importer():
     add = view.split('Button("添加…")')[1].split('Button("设置")')[0]
     ui_add = _code_without_comments(add)
 
-    # 58: 「添加…」挂 ⌘O，仍只开同一 showImporter.
-    assert (
-        'Button("添加…") { session.showImporter = true }\n'
-        '                    .keyboardShortcut("o", modifiers: .command)'
-    ) in view
+    # 「添加…」仍只开同一 showImporter. ⌘O 在 LogBridgeApp commands，侧栏按钮不挂快捷键.
+    assert 'Button("添加…") { session.showImporter = true }' in view
     assert "session.showImporter = true" in ui_add
-    assert '.keyboardShortcut("o", modifiers: .command)' in ui_add
-    assert ui_add.count("keyboardShortcut") == 1
+    assert "keyboardShortcut" not in ui_add
     assert ui_view.count("session.showImporter = true") == 2
-    assert ui_view.count("keyboardShortcut") == 2
-    assert ui_sidebar.count("keyboardShortcut") == 2
+    assert ui_view.count("keyboardShortcut") == 0
+    assert ui_sidebar.count("keyboardShortcut") == 0
     assert _all_swift().count("keyboardShortcut") == 2
     settings = view.split('Button("设置")')[1].split("DropZone")[0]
     assert "showImporter" not in settings
+    assert "keyboardShortcut" not in _code_without_comments(settings)
     assert "isPresented: $session.showImporter" in content
+    _assert_app_menu_shortcuts(app)
 
-    # ContentView / ProcessLockedBar / App 仍禁 keyboardShortcut；不加菜单命令.
+    # ContentView / ProcessLockedBar 仍禁 keyboardShortcut.
     assert "keyboardShortcut" not in content
     assert "keyboardShortcut" not in ui_content
     assert ".commands" not in ui_content
     assert "onExitCommand" not in content
     assert 'Button("添加…")' not in content
-    assert "keyboardShortcut" not in app
-    assert "CommandGroup(replacing: .newItem) {}" in app
     bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
     ui_bar = _code_without_comments(bar)
     assert "keyboardShortcut" not in bar
@@ -11340,21 +11358,16 @@ def test_advanced_panel_expanded_persists_in_userdefaults():
     assert "onRevealWritten" in chip
     assert "Button(" in chip
 
-    # 58: 「添加…」⌘O 仍只开同一 showImporter.
+    # 「添加…」仍只开同一 showImporter. ⌘O 在 LogBridgeApp commands.
     add = view.split('Button("添加…")')[1].split('Button("设置")')[0]
     ui_add = _code_without_comments(add)
-    assert (
-        'Button("添加…") { session.showImporter = true }\n'
-        '                    .keyboardShortcut("o", modifiers: .command)'
-    ) in view
+    assert 'Button("添加…") { session.showImporter = true }' in view
     assert "session.showImporter = true" in ui_add
-    assert '.keyboardShortcut("o", modifiers: .command)' in ui_add
-    assert ui_add.count("keyboardShortcut") == 1
+    assert "keyboardShortcut" not in ui_add
     assert "keyboardShortcut" not in content
     assert "keyboardShortcut" not in ui_content
     assert 'Button("添加…")' not in content
-    assert "keyboardShortcut" not in app
-    assert "CommandGroup(replacing: .newItem) {}" in app
+    _assert_app_menu_shortcuts(app)
 
     # EMPTY_STATE_* / Esc 不动.
     assert EMPTY_STATE_STEP_1 == "把混源文件夹拖进来"
@@ -11387,9 +11400,9 @@ def test_advanced_panel_expanded_persists_in_userdefaults():
 
 
 def test_settings_command_comma_opens_same_settings():
-    """60 验法钉死: sidebar「设置」⌘, → 同一 showSettings.
+    """「设置」仍开同一 showSettings sheet. ⌘, 在 LogBridgeApp 菜单命令，不在侧栏按钮.
     ContentView / ProcessLockedBar 仍禁 keyboardShortcut.
-    56/57/58/59 / 主按钮 / Esc / EMPTY_STATE_* 一字不动. 冻㉗–59. #132 旁路.
+    56/57/59 / 主按钮 / Esc / EMPTY_STATE_* 一字不动. #132 旁路.
     """
     sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
     content = _read(CONTENT)
@@ -11407,41 +11420,31 @@ def test_settings_command_comma_opens_same_settings():
     settings_btn = view.split('Button("设置")')[1].split("DropZone")[0]
     ui_settings_btn = _code_without_comments(settings_btn)
 
-    # 60: 「设置」挂 ⌘,，仍只开同一 showSettings.
-    assert (
-        'Button("设置") { session.showSettings = true }\n'
-        '                    .keyboardShortcut(",", modifiers: .command)'
-    ) in view
+    # 「设置」仍只开同一 showSettings sheet. ⌘, 在 LogBridgeApp commands.
+    assert 'Button("设置") { session.showSettings = true }' in view
     assert "session.showSettings = true" in ui_settings_btn
-    assert '.keyboardShortcut(",", modifiers: .command)' in ui_settings_btn
-    assert ui_settings_btn.count("keyboardShortcut") == 1
+    assert "keyboardShortcut" not in ui_settings_btn
     assert "showImporter" not in settings_btn
     assert ui_view.count("session.showSettings = true") == 1
-    assert ui_view.count("keyboardShortcut") == 2
-    assert ui_sidebar.count("keyboardShortcut") == 2
-    assert _all_swift().count("keyboardShortcut") == 2
+    assert ui_view.count("keyboardShortcut") == 0
+    assert ui_sidebar.count("keyboardShortcut") == 0
     assert "isPresented: $session.showSettings" in content
+    _assert_app_menu_shortcuts(app)
 
-    # 58: 「添加…」⌘O 仍只开同一 showImporter.
-    assert (
-        'Button("添加…") { session.showImporter = true }\n'
-        '                    .keyboardShortcut("o", modifiers: .command)'
-    ) in view
+    # 「添加…」仍只开同一 showImporter. ⌘O 在 LogBridgeApp commands.
+    assert 'Button("添加…") { session.showImporter = true }' in view
     assert "session.showImporter = true" in ui_add
-    assert '.keyboardShortcut("o", modifiers: .command)' in ui_add
-    assert ui_add.count("keyboardShortcut") == 1
+    assert "keyboardShortcut" not in ui_add
     assert ui_view.count("session.showImporter = true") == 2
     assert "isPresented: $session.showImporter" in content
 
-    # ContentView / ProcessLockedBar / App 仍禁 keyboardShortcut；不加菜单命令.
+    # ContentView / ProcessLockedBar 仍禁 keyboardShortcut.
     assert "keyboardShortcut" not in content
     assert "keyboardShortcut" not in ui_content
     assert ".commands" not in ui_content
     assert "onExitCommand" not in content
     assert 'Button("设置")' not in content
     assert 'Button("添加…")' not in content
-    assert "keyboardShortcut" not in app
-    assert "CommandGroup(replacing: .newItem) {}" in app
     bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
     ui_bar = _code_without_comments(bar)
     assert "keyboardShortcut" not in bar
@@ -11566,36 +11569,26 @@ def test_advanced_disclosure_help_remembers_expanded_state():
     assert 'DisclosureGroup("高级"' in advanced
     assert 'DisclosureGroup("高级", isExpanded: $isExpanded)' in advanced
 
-    # 60: 「设置」⌘, 仍只开同一 showSettings.
+    # 「设置」仍只开同一 showSettings sheet. ⌘, 在 LogBridgeApp commands.
     settings_btn = view.split('Button("设置")')[1].split("DropZone")[0]
     ui_settings_btn = _code_without_comments(settings_btn)
-    assert (
-        'Button("设置") { session.showSettings = true }\n'
-        '                    .keyboardShortcut(",", modifiers: .command)'
-    ) in view
+    assert 'Button("设置") { session.showSettings = true }' in view
     assert "session.showSettings = true" in ui_settings_btn
-    assert '.keyboardShortcut(",", modifiers: .command)' in ui_settings_btn
-    assert ui_settings_btn.count("keyboardShortcut") == 1
+    assert "keyboardShortcut" not in ui_settings_btn
     assert "isPresented: $session.showSettings" in content
 
-    # 58: 「添加…」⌘O 仍只开同一 showImporter.
+    # 「添加…」仍只开同一 showImporter. ⌘O 在 LogBridgeApp commands.
     add = view.split('Button("添加…")')[1].split('Button("设置")')[0]
     ui_add = _code_without_comments(add)
-    assert (
-        'Button("添加…") { session.showImporter = true }\n'
-        '                    .keyboardShortcut("o", modifiers: .command)'
-    ) in view
+    assert 'Button("添加…") { session.showImporter = true }' in view
     assert "session.showImporter = true" in ui_add
-    assert '.keyboardShortcut("o", modifiers: .command)' in ui_add
-    assert ui_add.count("keyboardShortcut") == 1
-    assert ui_view.count("keyboardShortcut") == 2
-    assert ui_sidebar.count("keyboardShortcut") == 2
-    assert _all_swift().count("keyboardShortcut") == 2
+    assert "keyboardShortcut" not in ui_add
+    assert ui_view.count("keyboardShortcut") == 0
+    assert ui_sidebar.count("keyboardShortcut") == 0
     assert "keyboardShortcut" not in content
     assert "keyboardShortcut" not in ui_content
-    assert "keyboardShortcut" not in app
-    assert "CommandGroup(replacing: .newItem) {}" in app
     assert "isPresented: $session.showImporter" in content
+    _assert_app_menu_shortcuts(app)
 
     # 主按钮 / ProcessLockedBar 不动.
     bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
@@ -11660,3 +11653,26 @@ def test_advanced_disclosure_help_remembers_expanded_state():
     assert "达芬奇已验证" not in bar
     _chengpian_only_honesty(ui_drop)
     _chengpian_only_honesty(ADVANCED_DISCLOSURE_HELP)
+
+
+def test_command_o_and_comma_each_appear_once():
+    """⌘O and ⌘, each appear exactly once in Swift sources, both in LogBridgeApp commands."""
+    app = _read(SWIFT_ROOT / "LogBridge/LogBridge/LogBridgeApp.swift")
+    sidebar = _read(SWIFT_ROOT / "LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    content = _read(CONTENT)
+    swift = _all_swift()
+    assert swift.count('keyboardShortcut("o"') == 1
+    assert swift.count('keyboardShortcut(","') == 1
+    assert swift.count("keyboardShortcut") == 2
+    assert 'keyboardShortcut("o"' in app
+    assert 'keyboardShortcut(","' in app
+    assert app.count("keyboardShortcut") == 2
+    assert "keyboardShortcut" not in sidebar
+    assert "keyboardShortcut" not in content
+    assert "focusedSceneValue" in content
+    assert "showImporter = true" in app
+    assert "showSettings = true" in app
+    assert "isPresented: $session.showImporter" in content
+    assert "isPresented: $session.showSettings" in content
+    assert "Settings {" not in _code_without_comments(app)
+    _assert_app_menu_shortcuts(app)
