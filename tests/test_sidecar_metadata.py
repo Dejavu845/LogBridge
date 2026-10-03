@@ -262,6 +262,175 @@ def test_empty_and_broken_sidecar_do_not_guess():
         assert parse_sidecar_fps(bad) is None
 
 
+# `_detect_from_metadata_idt` branch order. LogC4 and LogC3 share ARRI keys;
+# the second read is LogC3. Bare `.rmd` file presence is not one of these branches.
+_VENDOR_ORDER = (
+    "logc4",
+    "sony",
+    "canon",
+    "red",
+    "fuji",
+    "nikon",
+    "panasonic",
+    "apple",
+    "dji",
+    "logc3",
+)
+
+_BRANCH_KEY = {
+    "logc4": "arri_mxf_color_space",
+    "sony": "sony_acquisition_gamut",
+    "canon": "canon_vendor_gamma",
+    "red": "red_rmd_colorspace",
+    "fuji": "fuji_film_simulation",
+    "nikon": "nikon_gamma",
+    "panasonic": "panasonic_gamma",
+    "apple": "apple_log",
+    "dji": "dji_gamma",
+    "logc3": "arri_mxf_color_space",
+}
+
+_SWIFT_CALL = {
+    "isLogC4": "logc4",
+    "readSonyAcquisition": "sony",
+    "readCanonVendor": "canon",
+    "readREDSidecarColor": "red",
+    "isLogC3": "logc3",
+}
+
+_OTHER_KEY = {
+    "fuji_film_simulation": "fuji",
+    "nikon_gamma": "nikon",
+    "panasonic_gamma": "panasonic",
+    "apple_log": "apple",
+    "dji_gamma": "dji",
+}
+
+
+def _python_fn() -> str:
+    src = DETECT_PY.read_text(encoding="utf-8")
+    return src.split("def _detect_from_metadata_idt")[1].split("\ndef ")[0]
+
+
+def _next_if_condition(text: str) -> str:
+    match = re.search(r"\bif\b(.+?):", text, re.S)
+    return match.group(1) if match else ""
+
+
+def _python_vendor_order() -> list[tuple[str, str]]:
+    """(branch, primary key) in `_detect_from_metadata_idt` source order."""
+    fn = _python_fn()
+    primaries = "|".join(re.escape(key) for key in dict.fromkeys(_BRANCH_KEY.values()))
+    order: list[tuple[str, str]] = []
+    for match in re.finditer(rf'\.get\(\s*"({primaries})"', fn):
+        key = match.group(1)
+        cond = _next_if_condition(fn[match.end() : match.end() + 400])
+        if key == "arri_mxf_color_space":
+            if '"logc3"' in cond and "not in" in cond:
+                branch = "logc3"
+            elif '"logc4"' in cond or '"awg4"' in cond or "wide gamut 4" in cond:
+                branch = "logc4"
+            else:
+                raise AssertionError(f"ARRI branch not classified: {cond!r}")
+        else:
+            branch = next(name for name, primary in _BRANCH_KEY.items() if primary == key)
+        order.append((branch, key))
+    return order
+
+
+def _swift_vendor_order() -> list[tuple[str, str]]:
+    """(branch, primary key) from `detectMetadata`, expanding the other-vendor reader."""
+    detector = _read(DETECTOR)
+    body = detector.split("func detectMetadata")[1].split("func discardQuickTimeNCLC")[0]
+    other = detector.split("func readOtherVendorSidecar")[1].split("private static func")[0]
+    other_keys = re.findall(r'metaString\(meta, "([^"]+)"', other)
+    calls = re.findall(
+        r"\b(isLogC4|readSonyAcquisition|readCanonVendor|readREDSidecarColor|"
+        r"readOtherVendorSidecar|isLogC3|readREDRMD)\b",
+        body,
+    )
+    # File-presence `.rmd` is after the JSON branches. It is not in detect.py.
+    assert calls[-1] == "readREDRMD"
+    order: list[tuple[str, str]] = []
+    for call in calls:
+        if call == "readREDRMD":
+            continue
+        if call == "readOtherVendorSidecar":
+            order.extend((_OTHER_KEY[key], key) for key in other_keys)
+            continue
+        branch = _SWIFT_CALL[call]
+        order.append((branch, _BRANCH_KEY[branch]))
+    return order
+
+
+def _first_branch(order: list[tuple[str, str]], hits: set[str]) -> str:
+    for branch, _key in order:
+        if branch in hits:
+            return branch
+    raise AssertionError(f"no hit in {order}")
+
+
+def test_metadata_vendor_order_matches_detect_py():
+    """LogC4 → Sony → Canon → RED sidecar → Fuji → Nikon → Panasonic → Apple → DJI → LogC3."""
+    python_order = _python_vendor_order()
+    swift_order = _swift_vendor_order()
+    assert [branch for branch, _key in python_order] == list(_VENDOR_ORDER)
+    assert [branch for branch, _key in swift_order] == list(_VENDOR_ORDER)
+    assert python_order == swift_order
+    assert [key for _branch, key in python_order] == [key for _branch, key in swift_order]
+
+
+def test_conflict_sidecar_keeps_python_winner():
+    order = _python_vendor_order()
+    assert order == _swift_vendor_order()
+
+    both = _load("arri_logc3_plus_dji.json")
+    dji = detect_from_metadata(both)
+    assert dji is not None
+    assert dji.idt_id == "dji_dlog_dgamut"
+    assert dji.idt_id != "arri_logc3_ei800_awg3"
+    assert _first_branch(order, {"dji", "logc3"}) == "dji"
+
+    sony_arri = _load("sony_plus_arri_logc3.json")
+    sony = detect_from_metadata(sony_arri)
+    assert sony is not None
+    assert sony.idt_id == "sony_slog3_sgamut3"
+    assert sony.idt_id != "arri_logc3_ei800_awg3"
+    assert _first_branch(order, {"sony", "logc3"}) == "sony"
+
+
+def test_unprefixed_gamma_and_camera_model_match_nothing():
+    meta = _load("generic_unprefixed.json")
+    assert set(meta) == {"gamma", "camera_model"}
+    assert detect_from_metadata(meta) is None
+    assert detect_from_metadata({"gamma": "Log"}) is None
+    assert detect_from_metadata({"camera_model": "ALEXA Log"}) is None
+
+    detector = _read(DETECTOR)
+    readers = detector.split("func readARRIColorSpace")[1].split("func readREDRMD")[0]
+    keys = re.findall(r'metaString\(meta, "([^"]+)"', readers)
+    assert "gamma" not in keys
+    assert "camera_model" in keys
+    for key in keys:
+        if key == "camera_model":
+            continue
+        assert key.split("_", 1)[0] in {
+            "arri",
+            "sony",
+            "canon",
+            "red",
+            "fuji",
+            "nikon",
+            "panasonic",
+            "apple",
+            "dji",
+        }, key
+    sony = detector.split("func readSonyAcquisition")[1].split("private static func")[0]
+    curve_known = next(line for line in sony.splitlines() if "curveKnown" in line)
+    assert "camera_model" not in curve_known
+    assert '"gamma"' not in curve_known
+
+
 def test_swift_readers_no_longer_ignore_the_sidecar():
     detector = _read(DETECTOR)
     for name in ("func readARRIColorSpace", "func readSonyAcquisition", "func readCanonVendor"):
