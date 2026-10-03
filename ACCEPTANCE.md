@@ -168,7 +168,7 @@ Gate: open the export in Resolve; bypassing the WB node must restore uncorrected
 ## Media (no manufacturer demos)
 
 - LogBridge does **not** ship camera manufacturer demo clips (no ARRI / Sony / RED / Panasonic / Nikon / Fujifilm sample reels).
-- The user drops their own Log files or folders. Empty-state copy: **1 把混源文件夹拖进来  2 每条选成对 Log 与色域  3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。**
+- The user drops their own Log files or folders. Empty-state copy: **1 把混源文件夹拖进来  2 配对  3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。**
 
 
 ## Preview performance (Apple silicon)

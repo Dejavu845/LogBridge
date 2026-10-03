@@ -61,12 +61,12 @@ struct PreviewNotDeliverableBadge: View {
     var body: some View {
         Text("仅预览")
             .font(.caption2.weight(.bold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
             .background(.black.opacity(0.72))
             .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-            .padding(6)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(8)
             .accessibilityLabel("仅预览")
             .help("仅预览")
     }
@@ -216,11 +216,11 @@ private struct PreviewPaneTitle: View {
         Text(title)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(.black.opacity(0.55))
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-            .padding(6)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.black.opacity(0.72))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
     }
 }

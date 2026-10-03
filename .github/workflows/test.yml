@@ -4,7 +4,9 @@ on:
   push:
   pull_request:
 
-# Linux pytest 保留。macos-15 只编现有 LogBridge scheme，并跑同一套 pytest。
+# Linux pytest 保留。macos-15 编现有 LogBridge scheme，跑同一套 pytest，
+# 再用 NSHostingView + cacheDisplay 出 ui-screenshots 工件。
+# 占位或空白则回退到 XCUITest。28066d5 用同一捕获方法另存 ui-screenshots-baseline。
 # Rec709PreviewView 里 CALayer.colorspace 用 KVC 对齐 runner Swift overlay（Xcode 26.3 仍无此 member）。
 # 不改 709 观感。Metal GPU、Finder 显示、真机写出 / 真机导出 在 Actions 上测不了，仍靠人在 Mac 上点。
 # 没有真机 CI，也不覆盖 Metal / Finder / 真写出。
@@ -18,9 +20,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: python -m pip install --upgrade pip && pip install numpy pytest
+        run: python -m pip install --upgrade pip && pip install numpy pytest pillow
       - name: Test
         run: python -m pytest -q
+      - name: UI metrics
+        run: python3 scripts/check_ui_metrics.py
 
   macos:
     runs-on: macos-15
@@ -44,6 +48,44 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: python -m pip install --upgrade pip && pip install numpy pytest
+        run: python -m pip install --upgrade pip && pip install numpy pytest pillow
       - name: Test
         run: python -m pytest -q
+      - name: UI metrics
+        run: python3 scripts/check_ui_metrics.py
+      - name: UI screenshot baseline
+        run: bash scripts/ui_snapshot.sh
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: |
+            ui-screenshots/*.png
+            ui-screenshots/manifest.txt
+            ui-screenshots/README.txt
+          if-no-files-found: warn
+
+  baseline-screenshots:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install screenshot checker
+        run: python -m pip install --upgrade pip && pip install numpy pillow
+      - name: Re-render 28066d5 with the current capture
+        run: bash scripts/ui_snapshot_baseline.sh
+      - name: Upload baseline UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots-baseline
+          path: |
+            ui-screenshots-baseline/*.png
+            ui-screenshots-baseline/manifest.txt
+            ui-screenshots-baseline/README.txt
+          if-no-files-found: warn

@@ -2,41 +2,24 @@ import SwiftUI
 
 /// LogBridge — serial node graph: IDT → WB → Off / Rec.709 preview / Rec.2100 HLG / PQ.
 /// Not a general node editor. IDTs are implemented (unverified) until golden samples.
-
-/// The window's session, published for menu commands.
-/// Sidebar buttons call the same `showImporter` / `showSettings` flags.
-/// A focused-scene value keeps working when that sidebar is not in the tree,
-/// and still targets only the focused window.
-struct SessionFocus: Hashable {
-    weak var session: SessionModel?
-
-    static func == (lhs: SessionFocus, rhs: SessionFocus) -> Bool {
-        lhs.session === rhs.session
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(session.map { ObjectIdentifier($0) })
-    }
-}
-
-private struct LogBridgeSessionKey: FocusedValueKey {
-    typealias Value = SessionFocus
-}
-
-extension FocusedValues {
-    var logBridgeSession: SessionFocus? {
-        get { self[LogBridgeSessionKey.self] }
-        set { self[LogBridgeSessionKey.self] = newValue }
-    }
-}
+/// SessionFocus lives in ContentView so the screenshot tool can compile without this @main file.
 
 @main
 struct LogBridgeApp: App {
+    init() {
+        UIShotLaunch.prepareProcessIfNeeded()
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if UIShotLaunch.isActive {
+                ContentView(session: UIShotLaunch.sessionIfRequested())
+                    .modifier(UIShotChrome())
+            } else {
+                ContentView()
+            }
         }
-        .defaultSize(width: 1440, height: 900)
+        .defaultSize(width: 1520, height: 940)
         .commands {
             LogBridgeCommands()
         }

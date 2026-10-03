@@ -99,7 +99,7 @@ enum DetectionSource: String, Hashable {
         case .filename: return "文件名"
         case .model: return "机型"
         case .user: return "用户选择成对 IDT"
-        case .unresolved: return "读不到"
+        case .unresolved: return "无法读取"
         }
     }
 }
@@ -155,6 +155,8 @@ final class SessionModel: ObservableObject {
     @Published var previewScrubLastFrame: Int? = nil
     /// 「读不到帧率，未核对」 / 「读不到时长，未核对」. No slider. No 24/30 guess.
     @Published var previewScrubFail: String? = nil
+    /// Sidebar list filter. Does not change process / export rules.
+    @Published var sidebarFilter: ClipSidebarFilter = .all
     private var previewScrubClipID: UUID?
 
     let preview = PreviewEngine()
@@ -234,6 +236,24 @@ final class SessionModel: ObservableObject {
         "\(lockedClipCount) 条已锁定 / \(pendingClipCount) 条待选"
     }
 
+    /// 1 拖入 → 2 配对 → 3 处理. Header only; not a second process path.
+    var workspaceStep: Int {
+        if clips.isEmpty { return WorkspaceStep.importFolder.rawValue }
+        if pendingClipCount > 0 { return WorkspaceStep.pickPairs.rawValue }
+        return WorkspaceStep.writeProxy.rawValue
+    }
+
+    var sidebarClips: [Clip] {
+        switch sidebarFilter {
+        case .all:
+            return clips
+        case .pending:
+            return clips.filter { !$0.hasLockedPair }
+        case .locked:
+            return clips.filter(\.hasLockedPair)
+        }
+    }
+
     /// Primary button is shown only when at least one paired IDT is locked.
     var showsProcessLockedButton: Bool {
         settings.blockUnlockedIDT && lockedClipCount > 0
@@ -244,6 +264,10 @@ final class SessionModel: ObservableObject {
     var canProcess: Bool {
         !clips.isEmpty && lockedClipCount > 0
     }
+
+    /// Toolbar 「处理已锁定片段」. On when at least one clip is locked.
+    /// A write in flight still has locked clips, so cancel stays enabled.
+    var canProcessLocked: Bool { lockedClipCount > 0 }
 
     /// Selected clip has a locked pair (preview / inspector).
     var canProcessSelected: Bool {

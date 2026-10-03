@@ -25,12 +25,12 @@ struct NodeStripView: View {
             }
             Spacer(minLength: 8)
             Text("已实现（未验证）")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.bar)
+        .padding(.vertical, 12)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func chipDetail(_ slot: NodeSlot) -> String {
@@ -61,7 +61,7 @@ struct NodeStripView: View {
 private struct NodeConnector: View {
     var body: some View {
         Rectangle()
-            .fill(Color.secondary.opacity(0.45))
+            .fill(Color.accentColor.opacity(0.12))
             .frame(width: 18, height: 2)
             .padding(.horizontal, 4)
     }
@@ -74,13 +74,13 @@ private struct NodeChip: View {
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
                 Text("\(slot.rawValue)")
                     .font(.caption2.monospacedDigit().weight(.bold))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(enabled ? Color.accentColor.opacity(0.85) : Color.secondary.opacity(0.35))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 4)
+                    .background(enabled ? Color.accentColor.opacity(0.72) : Color.accentColor.opacity(0.12))
                     .foregroundStyle(.white)
                     .clipShape(Capsule())
                 Text(slot.title)
@@ -96,14 +96,14 @@ private struct NodeChip: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(selected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.04))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(selected ? Color.accentColor.opacity(0.12) : Color.clear)
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(selected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: selected ? 1.5 : 1)
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(selected ? Color.accentColor : Color.accentColor.opacity(0.12), lineWidth: selected ? 1.5 : 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .opacity(enabled || slot == .idt ? 1 : 0.7)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .opacity(enabled || slot == .idt ? 1 : 0.72)
     }
 }
