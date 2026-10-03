@@ -11655,6 +11655,32 @@ def test_advanced_disclosure_help_remembers_expanded_state():
     _chengpian_only_honesty(ADVANCED_DISCLOSURE_HELP)
 
 
+def test_combined_preview_lut_readme_row_copy():
+    """Files table: combined preview LUT row. 预览查找表 + 已实现（未验证）."""
+    from color.resolve_export import (
+        COMBINED_PREVIEW709_COMMENT,
+        COMBINED_PREVIEW709_README_ROLE,
+        COMBINED_PREVIEW709_README_ROW,
+        format_readme,
+    )
+
+    assert COMBINED_PREVIEW709_README_ROW == (
+        "| `00_Combined_Preview709_<idt>.cube` | "
+        "预览查找表（IDT → 曝光 → 白平衡 → 709 预览）。已实现（未验证）。 |"
+    )
+    assert "预览查找表" in COMBINED_PREVIEW709_README_ROLE
+    assert "已实现（未验证）" in COMBINED_PREVIEW709_README_ROLE
+    for banned in ("支持", "一键精准", "成片", "达芬奇已验证"):
+        assert banned not in COMBINED_PREVIEW709_README_ROLE
+        assert banned not in COMBINED_PREVIEW709_COMMENT
+    _chengpian_only_honesty(COMBINED_PREVIEW709_README_ROLE)
+    readme = format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True)
+    assert COMBINED_PREVIEW709_README_ROW in readme
+    swift = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
+    assert COMBINED_PREVIEW709_README_ROLE in swift
+    assert "00_Combined_Preview709_<idt>.cube" in swift
+
+
 def test_command_o_and_comma_each_appear_once():
     """⌘O and ⌘, each appear exactly once in Swift sources, both in LogBridgeApp commands."""
     app = _read(SWIFT_ROOT / "LogBridge/LogBridge/LogBridgeApp.swift")
