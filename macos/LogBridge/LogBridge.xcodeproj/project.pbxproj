@@ -31,6 +31,7 @@
 		A10000000000000000000016 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* SettingsView.swift */; };
 		A10000000000000000000017 /* HDRPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* HDRPreview.swift */; };
 		A10000000000000000000018 /* WorkspaceChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* WorkspaceChrome.swift */; };
+		A10000000000000000000019 /* ACEScctMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* ACEScctMath.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -59,6 +60,7 @@
 		A20000000000000000000018 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* HDRPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDRPreview.swift; sourceTree = "<group>"; };
 		A2000000000000000000001A /* WorkspaceChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceChrome.swift; sourceTree = "<group>"; };
+		A2000000000000000000001B /* ACEScctMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACEScctMath.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* LogBridge.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LogBridge.entitlements; sourceTree = "<group>"; };
 		A30000000000000000000001 /* LogBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LogBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -152,6 +154,7 @@
 				A20000000000000000000007 /* Rec709PreviewView.swift */,
 				A20000000000000000000019 /* HDRPreview.swift */,
 				A20000000000000000000008 /* WhiteBalance.swift */,
+				A2000000000000000000001B /* ACEScctMath.swift */,
 			);
 			path = Color;
 			sourceTree = "<group>";
@@ -279,6 +282,7 @@
 				A10000000000000000000016 /* SettingsView.swift in Sources */,
 				A10000000000000000000017 /* HDRPreview.swift in Sources */,
 				A10000000000000000000018 /* WorkspaceChrome.swift in Sources */,
+				A10000000000000000000019 /* ACEScctMath.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
