@@ -468,8 +468,7 @@ enum ClipDetector {
         let gamma = metaString(meta, "red_rmd_gamma")
         let parsed = rmd.contains("log3g10") || gamma.contains("log3g10") || rmd.contains("redwidegamut")
         if !parsed { return nil }
-        let redPair = IDT.redLog3G10RWG
-        return locked(redPair, source: .metadata, note: "元数据 RED RMD")
+        return locked(.redLog3G10RWG, source: .metadata, note: "元数据 RED RMD")
     }
 
     private static func readOtherVendorSidecar(url: URL) -> DetectionResult? {

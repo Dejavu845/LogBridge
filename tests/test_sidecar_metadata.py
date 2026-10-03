@@ -437,7 +437,9 @@ def test_swift_readers_no_longer_ignore_the_sidecar():
         body = detector.split(name)[1].split("private static func")[0]
         assert "_ = url" not in body
         assert "loadSidecarJSON" in body
-    assert "locked(.redLog3G10RWG, source: .metadata" not in detector
+    # JSON sidecar saying log3g10 locks (same as Python detect.py); a bare .rmd file does not lock.
+    red = detector.split("func readREDSidecarColor")[1].split("private static func")[0]
+    assert "locked(.redLog3G10RWG, source: .metadata" in red
     rmd = detector.split("func readREDRMD")[1].split("}")[0]
     assert "needsUserPicker: true" in rmd
     assert "检测到 RED RMD，先选择成对 IDT" in rmd
