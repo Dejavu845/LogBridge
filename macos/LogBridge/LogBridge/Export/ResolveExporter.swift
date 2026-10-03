@@ -27,7 +27,7 @@ enum ResolveExporter {
         lines.append("工作空间：ACEScct 时间线 / ACES2065-1 交换。")
         lines.append("Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换。仅预览。")
         lines.append("关闭白平衡时写出旁路（不改颜色），不写进查找表。")
-        lines.append("主按钮时间线/EXR 是整段代理，不是全精度成品（ACES2065-1 _proxy 序列），不是 ACEScct。")
+        lines.append("主按钮时间线/EXR 是整段代理，代理精度预览（ACES2065-1 _proxy 序列），不是 ACEScct。")
         lines.append("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。")
         let cctLabel = cct.map { "\(Int($0)) K" } ?? "待定 / 单位阵（不猜 5600 或 6504）"
         lines.append("WB 节点：\(includeWBNode ? "开（按色温/绿品校正，\(cctLabel)，绿品 \(tint)）" : "已写出但默认旁路（不改颜色）")")
@@ -816,7 +816,7 @@ enum ResolveExporter {
 
         - Rec.709 的 cube 只是 709 预览，不是 ACES 输出变换。仅预览。
         - 关闭白平衡时写出旁路（不改颜色），不写进查找表。
-        - 主按钮时间线/EXR 是 **整段代理，不是全精度成品**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
+        - 主按钮时间线/EXR 是 **整段代理，代理精度预览**（ACES2065-1 `_proxy` 序列），不是 ACEScct。
         - 机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。
 
         ## Graph (serial nodes)

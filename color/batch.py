@@ -18,7 +18,7 @@ full/video range follow the buffer / nclc attachments — not a
 hardcoded BT.709 + video-range for every clip. Scale is bit-depth
 + range (video 10-bit is Y 64–940 / C 64–960, not /1023). 8-bit
 Y′CbCr is only the fallback when 10-bit is unavailable. Still a
-proxy, not camera-original — 整段代理，不是全精度成品. Not ACEScct.
+proxy, not camera-original — 整段代理，代理精度预览. Not ACEScct.
 Not a Rec.709 .mov/.mp4. Movie preview first-frame unpack shares the same
 nclc/colr/vui matrix+range helper, then quantizes to 8-bit / 1920.
 Stills (TIFF / DPX / EXR) stay ImageIO — already RGB, no Y′CbCr unpack.
@@ -33,7 +33,7 @@ bin do not block.
 While writing, progress is 「写出代理 i/N · 第 k 帧」 (「第 k / 共 m 帧」 when total known).
 Cancel becomes the same primary button. The in-progress ``_proxy`` folder
 is removed so a half sequence is not a finished deliverable; completed
-clips stay. Cancelled status says 已取消 and still 整段代理，不是全精度成品.
+clips stay. Cancelled status says 已取消 and still 整段代理，代理精度.
 Partial output is 未完成. A successful write remembers the dest folder
 (UserDefaults) and status offers 「在 Finder 中显示」. Cancel does not
 treat a deleted half-folder as success. After a write, locked sidebar
@@ -62,7 +62,7 @@ so the folder is openable. Missing or empty ``graph.xml`` / DCTL / cube
 / ``README_RESOLVE.md`` fail closed with 「达芬奇包不完整，未写出」;
 the half package and those ``_proxy`` folders are removed so they are
 not 已写出代理. Do not claim ACES OT in that README.
-CI 绿不等于达芬奇已验证。不是全精度成品. Not a movie.
+CI 绿不等于达芬奇已验证。代理精度预览. Not a movie.
 
 When 「处理已锁定片段」 finishes (ok / cancel / disk abort / frame
 check), ``lastExportNote`` is one Chinese three-bucket summary:
@@ -76,7 +76,7 @@ RGB; EXR header / offset table is covered by a small margin). If
 frame count is unknown, use duration×fps, or a conservative 24 fps
 × 60 s guess (said in the note). If free space < estimate + margin,
 do not start writing. Status: 「磁盘空间不足，未写出」 +
-「整段代理，不是全精度成品」.
+「整段代理，代理精度预览」.
 
 Swift ``SessionModel.processLockedClips`` mirrors this module. Color is
 ``SerialGraph.apply`` (existing pipeline). Container is ``exr_write``.
@@ -163,33 +163,33 @@ PREVIEW_STATUS_HDR_NO_EDR = "屏幕无 EDR，预览被压到 SDR"
 PROCESS_BUTTON = "处理已锁定片段"
 ADVANCED_DISCLOSURE = "高级"
 LOCK_STATUS_TEMPLATE = "{locked} 条已锁定 / {pending} 条待选"
-HONEST_PROXY_NOTE = "整段代理，不是全精度成品"
+HONEST_PROXY_NOTE = "整段代理，代理精度"
 PROCESSED_STATUS_TEMPLATE = (
     "处理已锁定片段 — {processed} 条已处理 / {skipped} 条已跳过"
     "（先选择 Log 与色域 / 先选择成对 IDT）。"
-    "整段代理，不是全精度成品。仅预览。已实现（未验证）。"
+    "整段代理，代理精度。仅预览。已实现（未验证）。"
 )
 FOLDER_PICKER_MESSAGE = (
     "已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。"
-    "整段代理，不是全精度成品。"
+    "整段代理，代理精度预览。"
     "未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
     "仅预览。已实现（未验证）。"
 )
 PROCESS_DELIVERABLE_NOTE = (
-    "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成品。"
+    "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，代理精度预览。"
 )
 PROCESS_BUTTON_HELP = (
     "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。"
-    "整段代理，不是全精度成品。ACES2065-1 AP0 线性，不是 ACEScct。"
+    "整段代理，代理精度预览。ACES2065-1 AP0 线性，不是 ACEScct。"
     "待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
 )
 # User-visible Swift copy (trial usability). Python constants above stay
 # locked by tests/test_batch_locked.py (owned by PR #63).
 PROCESS_BUTTON_HELP_UI = "写出的是图片序列（EXR），不是 mp4/mov"
-PROCESS_DELIVERABLE_NOTE_UI = "代理 EXR，不是视频。整段代理，不是全精度成品。"
+PROCESS_DELIVERABLE_NOTE_UI = "代理 EXR，不是视频。整段代理，代理精度预览。"
 FOLDER_PICKER_MESSAGE_UI = (
     "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。"
-    "整段代理，不是全精度成品。"
+    "整段代理，代理精度预览。"
     "未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
     "仅预览。已实现（未验证）。"
 )
@@ -214,7 +214,7 @@ CANCELLED_STATUS_TEMPLATE = (
     "处理已锁定片段 — 已取消。"
     "{processed} 条已处理 / {skipped} 条已跳过"
     "（先选择 Log 与色域 / 先选择成对 IDT）。"
-    "整段代理，不是全精度成品。仅预览。已实现（未验证）。"
+    "整段代理，代理精度。仅预览。已实现（未验证）。"
 )
 # Folder of per-frame EXRs. Names must include _proxy so this is not a finished-master claim.
 DELIVERABLE_DIR_SUFFIX = "_ACES2065-1_proxy"
@@ -270,7 +270,7 @@ CONSERVATIVE_WIDTH = 3840
 CONSERVATIVE_HEIGHT = 2160
 DISK_ESTIMATE_ASSUMPTION = "未压缩浮点图"
 DISK_SHORT_STATUS_TEMPLATE = (
-    "磁盘空间不足，未写出。整段代理，不是全精度成品。"
+    "磁盘空间不足，未写出。整段代理，代理精度。"
 )
 SKIPPED_BUCKET = "待选跳过"
 FAILED_BUCKET = "失败原因"
@@ -327,7 +327,7 @@ def ycbcr_to_rgb_float(
 
     ``matrix`` / ``sample_range`` follow the source (attachments / nclc).
     No Rec.709 OETF/EOTF. Superwhite / superblack may leave 0-1.
-    Still 整段代理，不是全精度成品.
+    Still 整段代理，代理精度预览.
     """
     key = str(matrix).lower().replace(".", "")
     if key not in YCBCR_MATRIX_COEFFS:
@@ -1238,7 +1238,7 @@ def process_locked_writes(
     Empty ``_ACES2065-1_proxy`` / 0 frames fail closed (「帧数对不上」 /
     「解码失败」) and leave no success folder. ``resolve_write_fn`` is
     the test hook; default is ``export_locked_resolve_bundle``. Python
-    LUT size defaults to 5 (Swift stays 17). Not a movie. 不是全精度成品.
+    LUT size defaults to 5 (Swift stays 17). Not a movie. 代理精度预览.
     """
     dest = Path(dest)
     plan = plan_locked_batch(clips)

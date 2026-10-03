@@ -115,7 +115,7 @@ enum MediaFormat {
                 container: ext,
                 codec: codecN,
                 kind: .still,
-                note: "静帧 \(ext.uppercased()) 按图片导入。仅预览。"
+                note: "静帧 \(ext.uppercased()) 按图片导入。代理精度，可写出。"
             )
         }
         if movieExt.contains(ext) {
@@ -142,7 +142,7 @@ enum MediaFormat {
                 container: ext,
                 codec: codecN,
                 kind: .movie,
-                note: "MOV/MP4：可试 ProRes / H.264 / HEVC。仅预览。"
+                note: "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
             )
         }
         if ext == mxfExt {

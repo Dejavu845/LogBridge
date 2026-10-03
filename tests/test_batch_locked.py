@@ -623,8 +623,8 @@ def _assert_swift_exr_writer_chromaticities(exporter: str) -> None:
 
 
 def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
-    """支持 / 一键 / 精准 / 成片 are forbidden even after a negation."""
-    for token in ("支持", "一键", "精准", "成片"):
+    """支持 / 一键 / 精准 / 成片 / 成品 are forbidden even after a negation."""
+    for token in ("支持", "一键", "精准", "成片", "成品"):
         assert token not in text, token
 
 
@@ -679,7 +679,7 @@ def test_export_ycbcr_is_source_codes_not_preview_8bit():
     assert HONEST_PROXY_NOTE in engine
     status = processed_status_text(1, 0)
     assert HONEST_PROXY_NOTE in status
-    assert "整段代理，不是全精度成品" in status
+    assert "整段代理，代理精度" in status
     _assert_chengpian_not_a_deliverable_claim(status)
     assert "精准" not in status
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -970,7 +970,7 @@ def test_write_loop_one_pass_no_preview_8bit_no_odt(tmp_path: Path, monkeypatch)
 
 
 def test_honest_proxy_copy_and_filename():
-    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成品"
+    assert HONEST_PROXY_NOTE == "整段代理，代理精度"
     assert DELIVERABLE_SUFFIX == "_ACES2065-1_proxy"
     assert DELIVERABLE_DIR_SUFFIX == "_ACES2065-1_proxy"
     assert "proxy" in DELIVERABLE_SUFFIX
@@ -981,14 +981,14 @@ def test_honest_proxy_copy_and_filename():
     assert "_proxy" in deliverable_name("clip.mov")
     status = processed_status_text(2, 1)
     assert HONEST_PROXY_NOTE in status
-    assert "整段代理，不是全精度成品" in status
+    assert "整段代理，代理精度" in status
     assert "仅预览" in status
     assert "已实现（未验证）" in status
     assert "2 条已处理" in status
     _assert_chengpian_not_a_deliverable_claim(status)
     assert HONEST_PROXY_NOTE in PROCESSED_STATUS_TEMPLATE
     assert HONEST_PROXY_NOTE in FOLDER_PICKER_MESSAGE
-    assert "整段代理，不是全精度成品" in FOLDER_PICKER_MESSAGE
+    assert "整段代理，代理精度预览" in FOLDER_PICKER_MESSAGE
     assert "ACES2065-1" in FOLDER_PICKER_MESSAGE
     assert "ACEScct" not in FOLDER_PICKER_MESSAGE
     assert HONEST_PROXY_NOTE in PROCESS_BUTTON_HELP
@@ -1072,7 +1072,7 @@ def test_locked_writes_more_than_one_frame(tmp_path: Path):
     assert not (tmp_path / deliverable_dir_name("pending.mov")).exists()
     assert "_proxy" in seq.name
     assert HONEST_PROXY_NOTE in report.processed_status_text
-    assert "整段代理，不是全精度成品" in report.processed_status_text
+    assert "整段代理，代理精度" in report.processed_status_text
     _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
     assert list(tmp_path.glob("**/*.mov")) == []
     assert list(tmp_path.glob("**/*.mp4")) == []
@@ -1090,7 +1090,7 @@ def test_progress_and_cancel_copy_is_honest_not_chengpian():
     cancelled = cancelled_status_text(1, 2)
     assert CANCELLED_NOTE in cancelled
     assert HONEST_PROXY_NOTE in cancelled
-    assert "整段代理，不是全精度成品" in cancelled
+    assert "整段代理，代理精度" in cancelled
     assert "1 条已处理" in cancelled
     assert "2 条已跳过" in cancelled
     assert CANCELLED_NOTE in CANCELLED_STATUS_TEMPLATE
@@ -1566,7 +1566,7 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     assert not (dest / deliverable_dir_name("pending.mov")).exists()
     assert DISK_SHORT_STATUS in report.processed_status_text
     assert HONEST_PROXY_NOTE in report.processed_status_text
-    assert "整段代理，不是全精度成品" in report.processed_status_text
+    assert "整段代理，代理精度" in report.processed_status_text
     assert "条已处理" not in report.processed_status_text
     assert "精准" not in report.processed_status_text
     assert "0 条已写出代理" in report.processed_status_text
@@ -2036,7 +2036,7 @@ def test_still_one_written_frame_expects_one_without_fps(tmp_path: Path):
     )[0]
     assert "clipURL: clip.url" in verify_swift
     assert "written: written" in verify_swift
-    for banned in ("支持", "一键", "精准"):
+    for banned in ("支持", "一键", "精准", "成片", "成品"):
         assert banned not in report.processed_status_text
         assert banned not in report_seq.processed_status_text
 
@@ -2264,7 +2264,7 @@ def test_locked_success_implies_exr_and_complete_resolve_bundle(tmp_path: Path):
     assert "Not an ACES Output Transform" not in readme.split(
         "## Graph (serial nodes)", 1
     )[1].split("## How to bypass", 1)[0]
-    assert "不是全精度成品" in readme
+    assert "代理精度预览" in readme
     chips = sidebar_export_chips([locked, pending], report)
     assert chips["locked.mov"] == WRITTEN_CHIP
     assert chips["pending.mov"] == REASON_PICK_PAIRED_IDT

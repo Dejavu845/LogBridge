@@ -9,7 +9,7 @@
 #
 # 做了什么：xattr -dr com.apple.quarantine <app>
 # 没做什么：不跑 notarytool、不改证书、不打包、不声称已公证。
-# 整段代理，不是全精度成品。CI 绿不等于达芬奇已验证。
+# 整段代理，代理精度预览。CI 绿不等于达芬奇已验证。
 
 set -euo pipefail
 
@@ -70,4 +70,4 @@ else
 fi
 
 echo "已清 com.apple.quarantine。再双击打开。仍拦就按住 Control 点 → 打开。"
-echo "整段代理，不是全精度成品。不要去做公证。"
+echo "整段代理，代理精度预览。不要去做公证。"

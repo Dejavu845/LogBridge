@@ -50,7 +50,7 @@ def test_settings_copy_is_chinese():
     assert "不猜 5600" in s
     assert "不是校准" in s
     assert "完善" not in s
-    for token in ("支持", "一键", "精准", "成片"):
+    for token in ("支持", "一键", "精准", "成片", "成品"):
         assert token not in s, token
     assert "全自动校准" not in s or "不写" in s
     assert "达芬奇已验证" not in s

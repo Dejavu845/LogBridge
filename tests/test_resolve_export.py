@@ -571,8 +571,8 @@ GRAPH_ODT_BANNED = (
 
 
 def _assert_chengpian_not_a_deliverable_claim(text: str) -> None:
-    """支持 / 一键 / 精准 / 成片 are forbidden even after a negation."""
-    for token in ("支持", "一键", "精准", "成片"):
+    """支持 / 一键 / 精准 / 成片 / 成品 are forbidden even after a negation."""
+    for token in ("支持", "一键", "精准", "成片", "成品"):
         assert token not in text, token
 
 
@@ -698,7 +698,7 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
     readme = (tmp_path / "README_RESOLVE.md").read_text(encoding="utf-8")
     honesty = readme.split("## Graph (serial nodes)")[0]
     assert "709 预览" in honesty
-    assert "整段代理，不是全精度成品" in honesty
+    assert "整段代理，代理精度预览" in honesty
     assert "_proxy" in honesty
     assert "已实现（未验证）" in readme
     assert RESOLVE_README_HONESTY.strip() in readme
@@ -777,7 +777,7 @@ def test_readme_resolve_chinese_honesty_notes(tmp_path: Path):
         assert f'"{name}"' in swift
     for blob in (note_fn, readme_fn):
         assert "709 预览" in blob
-        assert "整段代理，不是全精度成品" in blob
+        assert "整段代理，代理精度预览" in blob
         assert "已实现（未验证）" in blob
         assert EXPORT_NOTE_IN_CAMERA in blob
         assert "默认 CAT 是单位阵" not in blob
@@ -826,7 +826,7 @@ def test_readme_resolve_status_line_drops_parallel_english(tmp_path: Path):
     assert RESOLVE_README_STATUS_PARALLEL_EN not in readme
     assert "未验证" in status
     assert "仅预览" in readme
-    assert "整段代理，不是全精度成品" in readme
+    assert "整段代理，代理精度预览" in readme
     _assert_chengpian_not_a_deliverable_claim(readme)
 
     generated = format_readme(["arri_logc4_awg4"], 3200.0, 0.0, True)
@@ -7131,7 +7131,7 @@ def test_combined_preview_respects_bypass_and_readme(tmp_path: Path):
     assert COMBINED_PREVIEW709_FILE_PATTERN in readme
     assert "已实现（未验证）" in COMBINED_PREVIEW709_README_ROLE
     assert "预览查找表" in COMBINED_PREVIEW709_README_ROLE
-    for banned in ("支持", "一键精准", "成片", "达芬奇已验证"):
+    for banned in ("支持", "一键精准", "成片", "成品", "达芬奇已验证"):
         assert banned not in COMBINED_PREVIEW709_README_ROLE
     _assert_chengpian_not_a_deliverable_claim(COMBINED_PREVIEW709_README_ROLE)
 
@@ -7171,7 +7171,7 @@ def test_combined_preview_copy_locked_in_readme_sources():
     assert "min(max(preview" in body
     export_fn = swift.split("static func export(")[1].split("static func writeSidecar")[0]
     assert "size: ResolveExporter.lutSize" in export_fn
-    for banned in ("支持", "一键精准", "成片", "达芬奇已验证"):
+    for banned in ("支持", "一键精准", "成片", "成品", "达芬奇已验证"):
         assert banned not in COMBINED_PREVIEW709_README_ROLE
         assert banned not in COMBINED_PREVIEW709_COMMENT
 

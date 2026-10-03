@@ -66,8 +66,8 @@ NOTE_CAMERA_RAW = "R3D / BRAW：暂不能处理，请在相机软件转 ProRes /
 NOTE_UNKNOWN_CODEC = "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
 NOTE_REFUSE_CONTAINER = "这个容器不接。不写「全格式都能处理」。"
 # Accept notes (locked Chinese; no API / Y′CbCr jargon).
-NOTE_STILL_ACCEPT = "静帧 {ext} 按图片导入。仅预览。"
-NOTE_MOVIE_ACCEPT = "MOV/MP4：可试 ProRes / H.264 / HEVC。仅预览。"
+NOTE_STILL_ACCEPT = "静帧 {ext} 按图片导入。代理精度，可写出。"
+NOTE_MOVIE_ACCEPT = "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
 # Multi-file import skip summary. Per-file refuse chips stay as-is.
 IMPORT_SKIP_HEADER = "未导入 {n} 条："
 

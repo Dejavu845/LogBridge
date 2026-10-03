@@ -218,7 +218,7 @@ def test_pending_clips_block_process_and_export():
     assert "待选跳过" in clip
     assert "失败原因" in clip
     assert "writeLockedDeliverables" in clip
-    assert "整段代理，不是全精度成品" in clip
+    assert "整段代理，代理精度预览" in clip
     assert "已写出代理" in clip
     assert "exportChip" in clip
     assert "revealClipExportInFinder" in clip
@@ -257,7 +257,7 @@ def test_docs_name_the_review_locks():
     assert "条已锁定" in blob
     assert "待选" in blob and "已锁定" in blob
     assert "先选择成对 IDT" in blob
-    assert "整段代理，不是全精度成品" in blob
+    assert "整段代理，代理精度预览" in blob
     assert "已写出代理" in blob
     assert "待选跳过" in blob
     assert "失败原因" in blob
@@ -288,7 +288,7 @@ def test_docs_name_resolve_real_machine_checklist():
     assert "chromaticities" in acceptance
     assert "达芬奇包" in acceptance
     assert "HDR 预览建不出" in acceptance
-    assert "整段代理，不是全精度成品" in acceptance
+    assert "整段代理，代理精度预览" in acceptance
     assert "不是视频" in acceptance
     assert "ACEScct 成片" not in blob
     # P2 trial copy: Archive → .app path → another Mac → Gatekeeper / xattr.
@@ -329,7 +329,7 @@ def test_trial_quarantine_script_is_local_xattr_only():
     assert "不是公证" in text
     assert "notarytool" in text  # named so we can say we do not run it
     assert "不要拿去提交 Apple" in text
-    assert "整段代理，不是全精度成品" in text
+    assert "整段代理，代理精度预览" in text
     assert "CI 绿不等于达芬奇已验证" in text
     assert "altool" not in text
     assert "APPLE_ID" not in text
@@ -537,11 +537,11 @@ def _picker_literals(src: str) -> list[str]:
     return found
 
 
-_BANNED_USER_COPY = ("支持", "一键", "精准", "成片")
+_BANNED_USER_COPY = ("支持", "一键", "精准", "成片", "成品")
 
 
 def _chengpian_only_honesty(text: str) -> None:
-    """Four substrings are forbidden even after a negation (非 / 不 / 暂不)."""
+    """支持 / 一键 / 精准 / 成片 / 成品 are forbidden even after a negation."""
     for token in _BANNED_USER_COPY:
         assert token not in text, (token, text)
 
@@ -555,12 +555,12 @@ def test_process_bar_and_advanced_help_are_chinese():
     advanced = content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
 
     assert PROCESS_BUTTON == "处理已锁定片段"
-    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成品"
+    assert HONEST_PROXY_NOTE == "整段代理，代理精度"
     assert SKIPPED_BUCKET == "待选跳过"
     assert REASON_PICK_LOG_GAMUT == "先选择 Log 与色域"
     assert REASON_PICK_PAIRED_IDT == "先选择成对 IDT"
     assert PROCESS_DELIVERABLE_NOTE_UI == (
-        "代理 EXR，不是视频。整段代理，不是全精度成品。"
+        "代理 EXR，不是视频。整段代理，代理精度预览。"
     )
     assert PROCESS_BUTTON_HELP_UI == "写出的是图片序列（EXR），不是 mp4/mov"
     assert ADVANCED_EXPORT_HELP == (
@@ -2116,7 +2116,7 @@ def test_write_progress_on_preview_inspector_locks():
     center = content.split("VStack(spacing: 0)")[1].split(".frame(minWidth: 520)")[0]
     assert "PairedIDTBar" in center
     assert center.index("SplitPreview") < center.index("PairedIDTBar")
-    assert "整段代理，不是全精度成品" in content
+    assert "整段代理，代理精度预览" in content
     assert "仅预览" in _all_swift()
 
 
@@ -2427,8 +2427,8 @@ def test_delete_removes_clip_from_session_not_disk():
     assert "already-written `_proxy`" in acceptance
     assert "select next, else previous" in acceptance
     assert "把混源文件夹拖进来" in acceptance
-    assert "整段代理，不是全精度成品" in readme
-    assert "整段代理，不是全精度成品" in acceptance
+    assert "整段代理，代理精度预览" in readme
+    assert "整段代理，代理精度预览" in acceptance
     assert "精准" not in fn
     assert "Escape while writing" in readme
     assert "idle Escape does nothing" in readme
@@ -2461,7 +2461,7 @@ def test_escape_cancels_write_only():
 
     note = clip.split("func cancelledExportNote")[1].split("static let bytesPerEXRPixel")[0]
     assert "已取消" in note
-    assert "整段代理，不是全精度成品" in note
+    assert "整段代理，代理精度" in note
 
     reserved = clip.split("func isEscapeReservedByPresentedUI")[1].split("func setExposureEnabled")[0]
     assert "attachedSheet" in reserved
@@ -2516,8 +2516,8 @@ def test_escape_cancels_write_only():
     assert "idle Escape does nothing" in readme
     assert "Escape while writing" in acceptance
     assert "idle Escape does nothing" in acceptance or "Idle Escape does nothing" in acceptance
-    assert "已取消" in readme and "整段代理，不是全精度成品" in readme
-    assert "已取消" in acceptance and "整段代理，不是全精度成品" in acceptance
+    assert "已取消" in readme and "整段代理，代理精度预览" in readme
+    assert "已取消" in acceptance and "整段代理，代理精度预览" in acceptance
 
 
 def test_import_skip_summary_is_human_chinese():
@@ -2542,8 +2542,8 @@ def test_import_skip_summary_is_human_chinese():
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
     assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式都能处理」。"
     # Accept notes locked Chinese. No ImageIO / AVAssetReader / copyCGImage / Y′CbCr.
-    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。仅预览。"
-    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。仅预览。"
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。代理精度，可写出。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
     for jargon in ("AVAssetReader", "ImageIO", "copyCGImage", "Y′CbCr", "Y'CbCr", "YpCbCr"):
         assert jargon not in NOTE_STILL_ACCEPT
         assert jargon not in NOTE_MOVIE_ACCEPT
@@ -2589,7 +2589,7 @@ def test_import_skip_summary_is_human_chinese():
     assert NOTE_UNKNOWN_CODEC in media
     assert NOTE_REFUSE_CONTAINER in media
     assert NOTE_MOVIE_ACCEPT in media
-    assert "按图片导入。仅预览。" in media
+    assert "按图片导入。代理精度，可写出。" in media
 
     # Cancel-write: no leftover user-visible English. Scope stays import summary.
     cancel_note = clip.split("func cancelledExportNote")[1].split("static let bytesPerEXRPixel")[0]
@@ -2672,7 +2672,7 @@ def test_selected_clip_glanceable_on_preview():
     assert 'Button("重试")' not in sidebar
     assert "精准" not in sidebar
 
-    assert "整段代理，不是全精度成品" in content
+    assert "整段代理，代理精度预览" in content
     assert "仅预览" in _all_swift()
     assert PREVIEW_STATUS_ODT_OFF in clip
     assert "成片预览关" not in clip
@@ -2729,14 +2729,15 @@ def test_process_ui_says_proxy_exr_not_mov_and_failures_stay_chinese():
     resolve_fn = clip.split("func exportResolve()")[1]
 
     assert PROCESS_DELIVERABLE_NOTE_UI == (
-        "代理 EXR，不是视频。整段代理，不是全精度成品。"
+        "代理 EXR，不是视频。整段代理，代理精度预览。"
     )
     assert PROCESS_DELIVERABLE_NOTE_UI in bar
     assert PROCESS_BUTTON_HELP_UI in bar
     assert "代理 EXR" in bar
     assert "不是视频" in bar
     assert HONEST_PROXY_NOTE in bar
-    assert "成片" not in bar.replace("不是全精度成品", "")
+    assert "成片" not in bar
+    assert "成品" not in bar
     assert "完善" not in bar
     assert "精准" not in bar
     assert ".mov" not in bar.replace("不是 mp4/mov", "")
@@ -3001,11 +3002,12 @@ def test_trial_usability_copy_is_locked():
     assert "R3D" not in MISSING_YCBCR_TAGS_CHIP_UI
     assert "BRAW" not in MISSING_YCBCR_TAGS_CHIP_UI
 
-    assert PROCESS_DELIVERABLE_NOTE_UI == "代理 EXR，不是视频。整段代理，不是全精度成品。"
+    assert PROCESS_DELIVERABLE_NOTE_UI == "代理 EXR，不是视频。整段代理，代理精度预览。"
     assert PROCESS_DELIVERABLE_NOTE_UI.startswith("代理 EXR，不是视频")
     assert HONEST_PROXY_NOTE in PROCESS_DELIVERABLE_NOTE_UI
     assert f'Text("{PROCESS_DELIVERABLE_NOTE_UI}")' in bar
-    assert "成片" not in PROCESS_DELIVERABLE_NOTE_UI.replace("不是全精度成品", "")
+    assert "成片" not in PROCESS_DELIVERABLE_NOTE_UI
+    assert "成品" not in PROCESS_DELIVERABLE_NOTE_UI
     assert "精准" not in PROCESS_DELIVERABLE_NOTE_UI
     assert "ACES OT" not in PROCESS_DELIVERABLE_NOTE_UI
 
@@ -3263,8 +3265,8 @@ def test_success_path_english_notes_are_chinese():
     assert NOTE_MODEL_HINT == "机型提示"
     assert NOTE_META_RED_RMD == "元数据 RED RMD"
     assert NOTE_META_RED_RMD_PICK == "检测到 RED RMD，先选择成对 IDT"
-    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。仅预览。"
-    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。仅预览。"
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。代理精度，可写出。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
     for jargon in ("AVAssetReader", "ImageIO", "copyCGImage", "Y′CbCr", "Y'CbCr", "YpCbCr"):
         assert jargon not in NOTE_STILL_ACCEPT
         assert jargon not in NOTE_MOVIE_ACCEPT
@@ -3287,7 +3289,7 @@ def test_success_path_english_notes_are_chinese():
     assert NOTE_CAMERA_RAW == "R3D / BRAW：暂不能处理，请在相机软件转 ProRes / EXR"
     assert NOTE_ARRI_MXF == "ARRI MXF：暂不能处理，请导出 MOV ProRes 再拖入"
     assert NOTE_MXF_NO_TRACK == "MXF：系统认不出可解轨道，未导入"
-    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成品"
+    assert HONEST_PROXY_NOTE == "整段代理，代理精度"
 
     ui_clip = _code_without_comments(clip)
     assert "已写出 \\(written.count) 个文件" in clip
@@ -3328,8 +3330,8 @@ def test_success_path_english_notes_are_chinese():
         assert token not in ui_clip, token
 
     assert NOTE_STILL_ACCEPT.split("{ext}")[0] in media
-    assert "按图片导入。仅预览。" in media
-    assert '静帧 \\(ext.uppercased()) 按图片导入。仅预览。' in media
+    assert "按图片导入。代理精度，可写出。" in media
+    assert '静帧 \\(ext.uppercased()) 按图片导入。代理精度，可写出。' in media
     assert NOTE_MOVIE_ACCEPT in media
     assert NOTE_STILL_ACCEPT in formats_py
     assert NOTE_MOVIE_ACCEPT in formats_py
@@ -3397,8 +3399,8 @@ def test_mxf_no_track_chip_not_arri():
     assert NOTE_UNKNOWN_CODEC == "这个编码不接。能试的是 ProRes / H.264 / HEVC。"
     assert NOTE_REFUSE_CONTAINER == "这个容器不接。不写「全格式都能处理」。"
     # #74 accept notes — do not rewrite.
-    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。仅预览。"
-    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。仅预览。"
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。代理精度，可写出。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
 
     # True ARRI (codec ari / arx / arri) keeps the old chip.
     for codec in ("ari", "arx", "arri", "ARRIRAW"):
@@ -3486,7 +3488,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     ResolveExporter.exportNote. Leave comments, XML attrs, cube TITLE,
     implemented (unverified) alone.
 
-    Wrote N files… / Wrote  → #70 已写出 N 个文件。…整段代理，不是全精度成品.
+    Wrote N files… / Wrote  → #70 已写出 N 个文件。…整段代理，代理精度预览.
     Export failed: / Export failed → 写出失败.
     No clip selected → 没有素材.
     exportNote CCT fallback → 待定 / 单位阵 (not pending / identity).
@@ -3509,7 +3511,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
     assert CANCELLED_NOTE == "已取消"
     assert SKIPPED_BUCKET == "待选跳过"
     assert FAILED_BUCKET == "失败原因"
-    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成品"
+    assert HONEST_PROXY_NOTE == "整段代理，代理精度"
     assert BATCH_SUMMARY_TEMPLATE == (
         "{wrote} 条已写出代理 / {skipped} 条待选跳过 / {failed} 条失败"
     )
@@ -3517,7 +3519,7 @@ def test_cancel_batch_status_english_leftovers_are_chinese():
         "处理已锁定片段 — 已取消。"
         "{processed} 条已处理 / {skipped} 条已跳过"
         "（先选择 Log 与色域 / 先选择成对 IDT）。"
-        "整段代理，不是全精度成品。仅预览。已实现（未验证）。"
+        "整段代理，代理精度。仅预览。已实现（未验证）。"
     )
     assert f'static let writeFailedChip = "{WRITE_FAILED_CHIP}"' in clip
     assert f'static let cancelledNote = "{CANCELLED_NOTE}"' in clip
@@ -3674,7 +3676,7 @@ def test_disk_estimate_assumption_is_plain_chinese():
         assert token not in DISK_ESTIMATE_ASSUMPTION
     assert BYTES_PER_EXR_PIXEL == 6
     assert int(CONSERVATIVE_FPS) == 24
-    assert HONEST_PROXY_NOTE == "整段代理，不是全精度成品"
+    assert HONEST_PROXY_NOTE == "整段代理，代理精度"
 
     known = ProxyDiskEstimate(bytes=2_000_000, used_frame_guess=False, used_pixel_guess=False)
     duration = ProxyDiskEstimate(
@@ -3804,7 +3806,7 @@ def test_export_note_is_plain_chinese():
     assert EXPORT_NOTE_TITLE == "LogBridge M1 Resolve 导出（已实现（未验证））"
     assert EXPORT_NOTE_WORKSPACE == "工作空间：ACEScct 时间线 / ACES2065-1 交换。"
     assert EXPORT_NOTE_PROXY == (
-        "主按钮时间线/EXR 是整段代理，不是全精度成品"
+        "主按钮时间线/EXR 是整段代理，代理精度预览"
         "（ACES2065-1 _proxy 序列），不是 ACEScct。"
     )
     assert "ACEScct" in EXPORT_NOTE_WORKSPACE
@@ -11671,7 +11673,7 @@ def test_combined_preview_lut_readme_row_copy():
     )
     assert "预览查找表" in COMBINED_PREVIEW709_README_ROLE
     assert "已实现（未验证）" in COMBINED_PREVIEW709_README_ROLE
-    for banned in ("支持", "一键精准", "成片", "达芬奇已验证"):
+    for banned in ("支持", "一键精准", "成片", "成品", "达芬奇已验证"):
         assert banned not in COMBINED_PREVIEW709_README_ROLE
         assert banned not in COMBINED_PREVIEW709_COMMENT
     _chengpian_only_honesty(COMBINED_PREVIEW709_README_ROLE)
@@ -11751,7 +11753,7 @@ def _generated_readme_outputs() -> str:
 
 
 def test_banned_substrings_absent_from_user_facing_copy():
-    """支持 / 一键 / 精准 / 成片 are forbidden, including 不 / 非 / 暂不 forms."""
+    """支持 / 一键 / 精准 / 成片 / 成品 are forbidden, including 不 / 非 / 暂不 forms."""
     hits: list[str] = []
     for path in _user_facing_copy_paths():
         text = path.read_text(encoding="utf-8")

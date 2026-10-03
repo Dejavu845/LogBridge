@@ -40,7 +40,7 @@ def _read(p: Path) -> str:
 
 
 def test_mov_mp4_prores_h264_hevc_accept():
-    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。仅预览。"
+    assert NOTE_MOVIE_ACCEPT == "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
     assert "AVAssetReader" not in NOTE_MOVIE_ACCEPT
     assert "copyCGImage" not in NOTE_MOVIE_ACCEPT
     assert "Y′CbCr" not in NOTE_MOVIE_ACCEPT
@@ -56,20 +56,44 @@ def test_mov_mp4_prores_h264_hevc_accept():
     assert classify("A.mp4", "hevc").action == ACCEPT
 
 
+def test_mov_mp4_still_hints_say_writable_proxy_not_preview_only():
+    """MOV/MP4 and stills can be written. 仅预览 stays off these hints."""
+    movie = "MOV/MP4：可试 ProRes / H.264 / HEVC。代理精度，可写出。"
+    still = "静帧 {ext} 按图片导入。代理精度，可写出。"
+    assert NOTE_MOVIE_ACCEPT == movie
+    assert NOTE_STILL_ACCEPT == still
+    media = _read(MEDIA)
+    assert f'note: "{movie}"' in media
+    assert 'note: "静帧 \\(ext.uppercased()) 按图片导入。代理精度，可写出。"' in media
+    for note in (NOTE_MOVIE_ACCEPT, NOTE_STILL_ACCEPT):
+        assert "仅预览" not in note
+        assert note.endswith("代理精度，可写出。")
+        for banned in ("支持", "一键", "精准", "成片", "成品"):
+            assert banned not in note
+    for name in ("A.mov", "A.mp4", "plate.tif", "plate.tiff", "plate.dpx", "plate.exr"):
+        got = classify(name).note
+        assert "仅预览" not in got
+        assert got.endswith("代理精度，可写出。")
+
+
 def test_stills_tiff_dpx_exr_accept():
-    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。仅预览。"
+    assert NOTE_STILL_ACCEPT == "静帧 {ext} 按图片导入。代理精度，可写出。"
     assert "ImageIO" not in NOTE_STILL_ACCEPT
-    assert "仅预览" in NOTE_STILL_ACCEPT
+    assert "仅预览" not in NOTE_STILL_ACCEPT
+    assert "代理精度，可写出" in NOTE_STILL_ACCEPT
     assert "成片" not in NOTE_STILL_ACCEPT
-    assert "静帧 \\(ext.uppercased()) 按图片导入。仅预览。" in _read(MEDIA)
+    assert "成品" not in NOTE_STILL_ACCEPT
+    assert "静帧 \\(ext.uppercased()) 按图片导入。代理精度，可写出。" in _read(MEDIA)
     for name in ("plate.tif", "plate.tiff", "plate.dpx", "plate.exr"):
         d = classify(name)
         assert d.action == ACCEPT
         assert d.kind == "still"
         assert "按图片导入" in d.note
         assert "ImageIO" not in d.note
-        assert "仅预览" in d.note
+        assert "仅预览" not in d.note
+        assert "代理精度，可写出" in d.note
         assert "成片" not in d.note
+        assert "成品" not in d.note
         assert d.note == NOTE_STILL_ACCEPT.format(ext=name.rsplit(".", 1)[-1].upper())
 
 

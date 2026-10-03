@@ -184,8 +184,8 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
 /// Write progress lives on SplitPreview (WriteProgressLine), not here.
 /// Not a second process button — StatusBar has no process control.
 /// 不是一步还原. Hover/help is Chinese locked phrases.
-/// Python copy-lock (test_batch_locked): 写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成品。ACES2065-1 AP0 线性，不是 ACEScct。待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。
-/// Python copy-lock (test_batch_locked): 写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成品。
+/// Python copy-lock (test_batch_locked): 写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，代理精度预览。ACES2065-1 AP0 线性，不是 ACEScct。待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。
+/// Python copy-lock (test_batch_locked): 写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，代理精度预览。
 struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
@@ -214,7 +214,7 @@ struct ProcessLockedBar: View {
                     .help("写出的是图片序列（EXR），不是 mp4/mov")
                 }
             }
-            Text("代理 EXR，不是视频。整段代理，不是全精度成品。")
+            Text("代理 EXR，不是视频。整段代理，代理精度预览。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
