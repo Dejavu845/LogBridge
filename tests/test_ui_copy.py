@@ -11733,7 +11733,7 @@ def test_unlocked_hint_is_visible_only_when_none_locked():
     assert ".fixedSize()" in button
     assert ".layoutPriority(1)" in button
     assert button.count(".layoutPriority(0)") == 2
-    assert ".buttonStyle(.borderedProminent)" in button
+    assert "AccentProminentButtonStyle()" in button
     assert ".font(.system(" not in button
     assert ".background(" not in button
     assert ".opacity(" not in button

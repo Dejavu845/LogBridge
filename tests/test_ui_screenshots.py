@@ -247,7 +247,11 @@ def test_enabled_button_region_is_accent_blue(tmp_path: Path):
     assert "return true" in enabled
     content = CONTENT.read_text(encoding="utf-8")
     button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
-    assert ".buttonStyle(.borderedProminent)" in button
+    assert "AccentProminentButtonStyle()" in button
+    style = content.split("struct AccentProminentButtonStyle")[1].split("struct AdvancedPanel")[0]
+    assert "Color.accentColor" in style
+    assert "quaternarySystemFill" in style
+    assert "@Environment(\\.isEnabled)" in style
     assert ".fixedSize()" in button
     assert ".layoutPriority(1)" in button
     assert ".layoutPriority(0)" in button

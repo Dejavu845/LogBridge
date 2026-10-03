@@ -312,8 +312,8 @@ struct ProcessLockedToolbarButton: View {
                     session.processLockedClips()
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.accentColor)
+            .buttonStyle(AccentProminentButtonStyle())
+            .environment(\.controlActiveState, .active)
             .fixedSize()
             .layoutPriority(1)
             .disabled(session.lockedClipCount == 0)
@@ -342,6 +342,26 @@ private struct ProcessLockedButtonHelp: ViewModifier {
             content
                 .help("写出的是图片序列（EXR），不是 mp4/mov")
         }
+    }
+}
+
+/// Enabled fill is accentColor. Disabled fill is a grey system fill.
+/// borderedProminent stays grey in an offscreen capture even when the window is key,
+/// so a reviewer cannot tell the two states apart.
+private struct AccentProminentButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: true)
+            .foregroundStyle(isEnabled ? Color.white : Color.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(
+                isEnabled ? Color.accentColor : Color(nsColor: .quaternarySystemFill),
+                in: RoundedRectangle(cornerRadius: 6)
+            )
     }
 }
 
