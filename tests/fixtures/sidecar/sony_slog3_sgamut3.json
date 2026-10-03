@@ -1,0 +1,8 @@
+{
+  "sony_acquisition_gamma": "S-Log3",
+  "sony_acquisition_gamut": "S-Gamut3",
+  "cct": 5600,
+  "tint": 1.5,
+  "fps": 25,
+  "nclc": "1-1-1"
+}

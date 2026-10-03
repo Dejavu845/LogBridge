@@ -18,6 +18,8 @@ struct DetectionResult {
     var veniceDetected: Bool = false
     var asShotCCT: Double? = nil
     var asShotTint: Double = 0
+    /// Camera-reported rate from the sidecar `fps` key. Nil when absent or unparsable.
+    var fps: Double? = nil
 }
 
 enum ClipDetector {
@@ -44,6 +46,7 @@ enum ClipDetector {
         let shot = readAsShotWB(url: url)
         result.asShotCCT = shot.cct
         result.asShotTint = shot.tint
+        result.fps = readSidecarFrameRate(url: url)
         return result
     }
 
@@ -60,20 +63,24 @@ enum ClipDetector {
                 cleaned[k.lowercased()] = v
             }
         }
+        // Same order as color/as_shot.py `_CCT_KEYS` / `_TINT_KEYS`, then existing aliases.
         let cctKeys = [
-            "arri_wb_kelvin", "arri_white_balance_kelvin", "arri_color_temperature", "arri_cct",
-            "sony_wb_kelvin", "sony_white_balance", "sony_acquisition_white_balance",
-            "sony_acquisition_cct", "sony_colortemp", "sony_color_temperature",
-            "canon_wb_kelvin", "canon_white_balance", "canon_color_temperature", "canon_cct",
-            "red_kelvin", "red_wb_kelvin", "red_color_temp", "red_rmd_kelvin", "red_rmd_wb_kelvin",
+            "as_shot_cct", "as_shot_kelvin", "white_balance_kelvin", "wb_kelvin",
+            "color_temperature", "colour_temperature", "cct", "kelvin",
+            "arri_white_balance", "arri_wb_kelvin", "sony_white_balance", "sony_wb_kelvin",
+            "red_kelvin", "red_color_temperature", "canon_color_temperature", "canon_wb_kelvin",
+            "arri_white_balance_kelvin", "arri_color_temperature", "arri_cct",
+            "sony_acquisition_white_balance", "sony_acquisition_cct", "sony_colortemp", "sony_color_temperature",
+            "canon_white_balance", "canon_cct",
+            "red_wb_kelvin", "red_color_temp", "red_rmd_kelvin", "red_rmd_wb_kelvin",
             "apple_wb_kelvin", "apple_white_balance", "apple_color_temperature",
-            "dji_wb_kelvin", "dji_white_balance", "dji_color_temperature",
-            "as_shot_cct", "as_shot_kelvin", "white_balance_kelvin", "wb_kelvin", "cct", "kelvin", "color_temperature"
+            "dji_wb_kelvin", "dji_white_balance", "dji_color_temperature"
         ]
         let tintKeys = [
-            "arri_wb_tint", "arri_tint", "arri_cc_shift", "sony_wb_tint", "sony_tint",
-            "canon_wb_tint", "canon_tint", "red_tint", "red_wb_tint", "red_rmd_tint",
-            "apple_tint", "dji_tint", "as_shot_tint", "wb_tint"
+            "as_shot_tint", "white_balance_tint", "wb_tint", "tint",
+            "arri_tint", "arri_wb_tint", "sony_tint", "sony_wb_tint",
+            "red_tint", "canon_tint", "canon_wb_tint",
+            "arri_cc_shift", "red_wb_tint", "red_rmd_tint", "apple_tint", "dji_tint"
         ]
         var cct: Double?
         for key in cctKeys {
@@ -111,15 +118,50 @@ enum ClipDetector {
         return nil
     }
 
-    /// Sidecar JSON next to the clip (camera-private keys). Not nclc. Not a demo reel.
-    static func readAsShotWB(url: URL) -> (cct: Double?, tint: Double) {
-        let jsonURL = url.deletingPathExtension().appendingPathExtension("json")
+    /// Sidecar JSON next to the clip: `{stem}.json`. Camera-private keys. Not nclc.
+    static func sidecarJSONURL(for url: URL) -> URL {
+        url.deletingPathExtension().appendingPathExtension("json")
+    }
+
+    /// Missing file, non-object JSON, or unreadable bytes → nil. Do not guess.
+    private static func loadSidecarJSON(url: URL) -> [String: Any]? {
+        let jsonURL = sidecarJSONURL(for: url)
         guard let data = try? Data(contentsOf: jsonURL),
               let obj = try? JSONSerialization.jsonObject(with: data),
               let dict = obj as? [String: Any] else {
+            return nil
+        }
+        return dict
+    }
+
+    /// Sidecar JSON next to the clip (camera-private keys). Not nclc. Not a demo reel.
+    static func readAsShotWB(url: URL) -> (cct: Double?, tint: Double) {
+        guard let dict = loadSidecarJSON(url: url) else {
             return (nil, 0)
         }
         return readAsShotWB(from: dict)
+    }
+
+    /// `fps` only (same field as Python `BatchClip.fps`). Absent / bad → nil.
+    private static func readSidecarFrameRate(url: URL) -> Double? {
+        guard let meta = loadSidecarJSON(url: url) else { return nil }
+        guard let raw = meta["fps"] else { return nil }
+        return parsePositiveRate(raw)
+    }
+
+    private static func parsePositiveRate(_ value: Any) -> Double? {
+        if let n = value as? NSNumber {
+            if CFGetTypeID(n) == CFBooleanGetTypeID() { return nil }
+            let d = n.doubleValue
+            if d.isFinite, d > 0 { return d }
+            return nil
+        }
+        if let s = value as? String {
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let d = Double(trimmed), d.isFinite, d > 0 else { return nil }
+            return d
+        }
+        return nil
     }
 
     /// Camera-private boxes only. QuickTime nclc is read then discarded.
@@ -129,14 +171,23 @@ enum ClipDetector {
         // as an identity for S-Log3 or LogC4. Those tags are often Rec.709 or unset.
         _ = discardQuickTimeNCLC(asset)
 
-        if let arri = readARRIColorSpace(url: url) {
-            return locked(.arriLogC4AWG4, source: .metadata, note: "元数据 ARRI MXF \(arri)")
+        if let arri = readARRIColorSpace(url: url), isLogC4(arri) {
+            return locked(.arriLogC4AWG4, source: .metadata, note: "元数据 ARRI MXF")
         }
         if let sony = readSonyAcquisition(url: url) {
             return sony
         }
         if let canon = readCanonVendor(url: url) {
             return canon
+        }
+        if let red = readREDSidecarColor(url: url) {
+            return red
+        }
+        if let other = readOtherVendorSidecar(url: url) {
+            return other
+        }
+        if let arri = readARRIColorSpace(url: url), isLogC3(arri) {
+            return locked(.arriLogC3EI800AWG3, source: .metadata, note: "元数据 LogC3 EI800 + AWG3")
         }
         if let red = readREDRMD(url: url) {
             return red
@@ -283,24 +334,178 @@ enum ClipDetector {
         )
     }
 
-    // MARK: Camera-private readers (scaffolded; return nil until parsers land)
+    // MARK: Camera-private sidecar ({stem}.json). Keys match color/detect.py.
 
-    /// ARRI MXF camera metadata (AS-11 / ARRI specific). Not QuickTime nclc.
+    /// Present key wins. Missing key may use the fallback. Values are lowercased.
+    private static func metaString(_ meta: [String: Any], _ key: String, fallback: String? = nil) -> String {
+        if let value = meta[key] {
+            return loweredScalar(value)
+        }
+        if let fallback, let value = meta[fallback] {
+            return loweredScalar(value)
+        }
+        return ""
+    }
+
+    private static func loweredScalar(_ value: Any) -> String {
+        if value is NSNull { return "" }
+        if let s = value as? String { return s.lowercased() }
+        if let n = value as? NSNumber {
+            if CFGetTypeID(n) == CFBooleanGetTypeID() {
+                return n.boolValue ? "true" : "false"
+            }
+            return n.stringValue.lowercased()
+        }
+        return ""
+    }
+
+    private static func isLogC4(_ arri: String) -> Bool {
+        arri.contains("logc4") || arri.contains("awg4") || arri.contains("wide gamut 4")
+    }
+
+    private static func isLogC3(_ arri: String) -> Bool {
+        arri.contains("logc3") && !arri.contains("logc4")
+    }
+
+    private static func veniceHit(_ parts: [String]) -> Bool {
+        parts.joined(separator: " ").lowercased().contains("venice")
+    }
+
+    /// ARRI MXF camera metadata. Not QuickTime nclc. LogC4 before LogC3.
     private static func readARRIColorSpace(url: URL) -> String? {
-        // M1 scaffold: look for a sidecar or MXF essence descriptor in a later slice.
-        _ = url
+        guard let meta = loadSidecarJSON(url: url) else { return nil }
+        let arri = metaString(meta, "arri_mxf_color_space", fallback: "arri_color_space")
+        if arri.isEmpty { return nil }
+        if isLogC4(arri) || isLogC3(arri) { return arri }
         return nil
     }
 
-    /// Sony Acquisition Metadata (RDD 18 / XML in MXF). Distinguishes S-Gamut3 vs Cine.
+    /// Sony Acquisition. S-Gamut3.Cine only when the gamut string says cine.
     private static func readSonyAcquisition(url: URL) -> DetectionResult? {
-        _ = url
+        guard let meta = loadSidecarJSON(url: url) else { return nil }
+        let sony = metaString(meta, "sony_acquisition_gamut", fallback: "sony_color_gamut")
+        let sonyCurve = metaString(meta, "sony_acquisition_gamma")
+        let venice = veniceHit([
+            sony,
+            sonyCurve,
+            metaString(meta, "sony_camera_model"),
+            metaString(meta, "camera_model"),
+            metaString(meta, "sony_model"),
+        ])
+        let curveKnown = sonyCurve.contains("s-log3") || sonyCurve.contains("slog3") || sony.contains("s-log3")
+        if !curveKnown { return nil }
+        if sony.contains("cine") {
+            return locked(
+                venice ? .sonySLog3SGamut3CineVenice : .sonySLog3SGamut3Cine,
+                source: .metadata,
+                note: venice ? "元数据 Sony（Venice）" : "元数据 Sony"
+            )
+        }
+        if sony.contains("s-gamut3") || sony.contains("sgamut3") {
+            return locked(
+                venice ? .sonySLog3SGamut3Venice : .sonySLog3SGamut3,
+                source: .metadata,
+                note: venice ? "元数据 Sony（Venice）" : "元数据 Sony"
+            )
+        }
+        return DetectionResult(
+            idt: nil,
+            curve: "S-Log3",
+            gamut: nil,
+            source: .metadata,
+            needsUserPicker: true,
+            note: venice
+                ? "S-Log3 没有色域，检测到 Venice，先选择成对 IDT"
+                : "S-Log3 没有色域，先选择成对 IDT",
+            veniceDetected: venice
+        )
+    }
+
+    /// Canon vendor metadata. C-Log2 / C-Log3 without gamut stay pending.
+    private static func readCanonVendor(url: URL) -> DetectionResult? {
+        guard let meta = loadSidecarJSON(url: url) else { return nil }
+        let canon = metaString(meta, "canon_vendor_gamma", fallback: "canon_log")
+        let gamut = metaString(meta, "canon_vendor_gamut", fallback: "canon_gamut")
+        if canon.contains("c-log2") || canon.contains("clog2") {
+            if gamut.contains("cinema") || gamut.contains("cgamut") || gamut.contains("c-gamut") {
+                return locked(.canonCLog2CGamut, source: .metadata, note: "元数据 C-Log2 + Cinema Gamut")
+            }
+            if gamut.contains("2020") || gamut.contains("bt.2020") || gamut.contains("bt2020") {
+                return locked(.canonCLog2BT2020, source: .metadata, note: "元数据 C-Log2 + BT.2020")
+            }
+            return DetectionResult(
+                idt: nil,
+                curve: "C-Log2",
+                gamut: nil,
+                source: .metadata,
+                needsUserPicker: true,
+                note: "C-Log2 没有色域，先选择成对 IDT"
+            )
+        }
+        if canon.contains("c-log3") || canon.contains("clog3") {
+            if gamut.contains("cinema") || gamut.contains("cgamut") || gamut.contains("c-gamut") {
+                return locked(.canonCLog3CGamut, source: .metadata, note: "元数据 C-Log3 + Cinema Gamut")
+            }
+            if gamut.contains("2020") || gamut.contains("bt.2020") || gamut.contains("bt2020") {
+                return locked(.canonCLog3BT2020, source: .metadata, note: "元数据 C-Log3 + BT.2020")
+            }
+            return DetectionResult(
+                idt: nil,
+                curve: "C-Log3",
+                gamut: nil,
+                source: .metadata,
+                needsUserPicker: true,
+                note: "C-Log3 没有色域，先选择成对 IDT"
+            )
+        }
         return nil
     }
 
-    /// Canon vendor metadata. C-Log2 / C-Log3 without gamut stay pending (no Cinema Gamut default).
-    private static func readCanonVendor(url: URL) -> DetectionResult? {
-        _ = url
+    /// RED color keys in the JSON sidecar. A bare .rmd file is not this path.
+    private static func readREDSidecarColor(url: URL) -> DetectionResult? {
+        guard let meta = loadSidecarJSON(url: url) else { return nil }
+        let rmd = metaString(meta, "red_rmd_colorspace", fallback: "red_color_space")
+        let gamma = metaString(meta, "red_rmd_gamma")
+        let parsed = rmd.contains("log3g10") || gamma.contains("log3g10") || rmd.contains("redwidegamut")
+        if !parsed { return nil }
+        return locked(.redLog3G10RWG, source: .metadata, note: "元数据 RED RMD")
+    }
+
+    private static func readOtherVendorSidecar(url: URL) -> DetectionResult? {
+        guard let meta = loadSidecarJSON(url: url) else { return nil }
+        let fuji = metaString(meta, "fuji_film_simulation", fallback: "fuji_log")
+        if fuji.contains("f-log2") || fuji.contains("flog2") {
+            return locked(.fujiFLog2BT2020, source: .metadata, note: "元数据 Fujifilm")
+        }
+        let nikon = metaString(meta, "nikon_gamma", fallback: "nikon_nlog")
+        if nikon.contains("n-log") || nikon.contains("nlog") {
+            return locked(.nikonNLogBT2020, source: .metadata, note: "元数据 Nikon")
+        }
+        let pana = metaString(meta, "panasonic_gamma")
+        if pana.contains("v-log") || pana.contains("vlog") {
+            return locked(.panasonicVLogVGamut, source: .metadata, note: "元数据 Panasonic")
+        }
+        let apple = metaString(meta, "apple_log", fallback: "apple_gamma")
+        if apple.contains("apple log 2") || apple.contains("applelog2") {
+            return locked(.appleLog2AWG, source: .metadata, note: "元数据 Apple Log 2 + Apple Wide Gamut")
+        }
+        if apple.contains("apple log") || apple.contains("applelog") {
+            return locked(.appleLogBT2020, source: .metadata, note: "元数据 Apple Log")
+        }
+        let dji = metaString(meta, "dji_gamma", fallback: "dji_log")
+        if dji.contains("d-log m") || dji.contains("dlog m") || dji.contains("dlogm") || dji.contains("d-logm") {
+            return DetectionResult(
+                idt: nil,
+                curve: nil,
+                gamut: nil,
+                source: .metadata,
+                needsUserPicker: true,
+                note: "D-Log M 暂不能处理，请用 D-Log + D-Gamut"
+            )
+        }
+        if dji.contains("d-log") || dji.contains("dlog") {
+            return locked(.djiDLogDGamut, source: .metadata, note: "元数据 D-Log")
+        }
         return nil
     }
 
