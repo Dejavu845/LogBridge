@@ -69,15 +69,15 @@ enum ODTMode: String, CaseIterable, Identifiable, Hashable {
     var isHDR: Bool { self == .hlg || self == .pq }
     var isEnabled: Bool { self != .off }
 
-    /// Off: ACEScct/AP0 可交 Resolve. 709 / HLG / PQ: 预览·非成片. HLG/PQ is ColorSync, not ACES OT.
+    /// Off: ACEScct/AP0 可交 Resolve. 709 / HLG / PQ: 仅预览. HLG/PQ is ColorSync, not ACES OT.
     var acesOTNote: String {
         switch self {
         case .off:
             return "导出 ACEScct / EXR"
         case .rec709:
-            return "DIY 预览·非成片"
+            return "DIY 仅预览"
         case .hlg, .pq:
-            return "ColorSync 预览·非成片，不是 ACES OT"
+            return "ColorSync 仅预览，不是 ACES OT"
         }
     }
 }

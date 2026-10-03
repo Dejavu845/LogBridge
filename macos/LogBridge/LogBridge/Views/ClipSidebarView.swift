@@ -13,10 +13,8 @@ struct ClipSidebarView: View {
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Button("添加…") { session.showImporter = true }
-                    .keyboardShortcut("o", modifiers: .command)
                     .controlSize(.small)
                 Button("设置") { session.showSettings = true }
-                    .keyboardShortcut(",", modifiers: .command)
                     .controlSize(.small)
             }
             .padding(.horizontal, 10)

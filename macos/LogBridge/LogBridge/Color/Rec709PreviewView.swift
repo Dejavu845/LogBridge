@@ -56,10 +56,10 @@ struct Rec709PreviewView: View {
     }
 }
 
-/// Overlay on every preview pane. 预览·非成片.
+/// Overlay on every preview pane. 仅预览.
 struct PreviewNotDeliverableBadge: View {
     var body: some View {
-        Text("预览·非成片")
+        Text("仅预览")
             .font(.caption2.weight(.bold))
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
@@ -67,8 +67,8 @@ struct PreviewNotDeliverableBadge: View {
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: 5))
             .padding(6)
-            .accessibilityLabel("预览·非成片")
-            .help("预览·非成片")
+            .accessibilityLabel("仅预览")
+            .help("仅预览")
     }
 }
 

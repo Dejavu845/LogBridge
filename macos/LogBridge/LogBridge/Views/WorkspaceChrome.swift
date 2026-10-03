@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Team B workspace chrome. Product copy stays locked Chinese.
-/// No extra process path. No 一键还原. No ultraThinMaterial in ContentView.
+/// No extra process path. No ultraThinMaterial in ContentView.
 
 enum WorkspaceStep: Int, CaseIterable {
     case importFolder = 1
@@ -76,7 +76,7 @@ struct WorkspaceHeader: View {
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .frame(maxWidth: 220)
-                .help("预览·非成片")
+                .help("仅预览")
             }
         }
         .padding(.horizontal, 14)
@@ -162,7 +162,7 @@ struct EmptyPreviewStage: View {
                 EmptyStepCard(index: 3, title: "写出代理", detail: "点处理已锁定片段。得到的是 EXR 图序列，不是视频。")
             }
             .frame(maxWidth: 720)
-            Text("已实现（未验证）。整段代理，不是全精度成片。")
+            Text("已实现（未验证）。整段代理，代理精度。")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }

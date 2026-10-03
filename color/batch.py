@@ -18,7 +18,7 @@ full/video range follow the buffer / nclc attachments — not a
 hardcoded BT.709 + video-range for every clip. Scale is bit-depth
 + range (video 10-bit is Y 64–940 / C 64–960, not /1023). 8-bit
 Y′CbCr is only the fallback when 10-bit is unavailable. Still a
-proxy, not camera-original — 整段代理，不是全精度成片. Not ACEScct.
+proxy, not camera-original — 整段代理，代理精度. Not ACEScct.
 Not a Rec.709 .mov/.mp4. Movie preview first-frame unpack shares the same
 nclc/colr/vui matrix+range helper, then quantizes to 8-bit / 1920.
 Stills (TIFF / DPX / EXR) stay ImageIO — already RGB, no Y′CbCr unpack.
@@ -33,8 +33,8 @@ bin do not block.
 While writing, progress is 「写出代理 i/N · 第 k 帧」 (「第 k / 共 m 帧」 when total known).
 Cancel becomes the same primary button. The in-progress ``_proxy`` folder
 is removed so a half sequence is not a finished deliverable; completed
-clips stay. Cancelled status says 已取消 and still 整段代理，不是全精度成片.
-Partial output is 不是成片. A successful write remembers the dest folder
+clips stay. Cancelled status says 已取消 and still 整段代理，代理精度.
+Partial output is 未完成. A successful write remembers the dest folder
 (UserDefaults) and status offers 「在 Finder 中显示」. Cancel does not
 treat a deleted half-folder as success. After a write, locked sidebar
 rows show 「已写出代理」 (or a short Chinese error). Clicking that
@@ -46,7 +46,9 @@ A cancelled in-progress clip is not 已写出; completed clips keep
 「在 Finder 中显示」 stays.
 
 After a locked write, count EXRs in ``{stem}_ACES2065-1_proxy/`` and
-compare to source duration × metadata fps only. Off-by-one is accepted
+compare to source duration × metadata fps. A still (tif/tiff/dpx/exr)
+with exactly one written EXR expects 1. A still sequence (more than one
+EXR) keeps duration × fps. Off-by-one is accepted
 (inclusive last frame). An empty ``_ACES2065-1_proxy`` (no EXRs /
 0 frames) is 「帧数对不上」; the folder is removed. Decode that wrote
 nothing is 「解码失败」 (no folder). Missing fps is 「读不到帧率，未核对」;
@@ -60,7 +62,7 @@ so the folder is openable. Missing or empty ``graph.xml`` / DCTL / cube
 / ``README_RESOLVE.md`` fail closed with 「达芬奇包不完整，未写出」;
 the half package and those ``_proxy`` folders are removed so they are
 not 已写出代理. Do not claim ACES OT in that README.
-CI 绿不等于达芬奇已验证。不是全精度成片. Not a movie.
+CI 绿不等于达芬奇已验证。代理精度. Not a movie.
 
 When 「处理已锁定片段」 finishes (ok / cancel / disk abort / frame
 check), ``lastExportNote`` is one Chinese three-bucket summary:
@@ -74,7 +76,7 @@ RGB; EXR header / offset table is covered by a small margin). If
 frame count is unknown, use duration×fps, or a conservative 24 fps
 × 60 s guess (said in the note). If free space < estimate + margin,
 do not start writing. Status: 「磁盘空间不足，未写出」 +
-「整段代理，不是全精度成片」.
+「整段代理，代理精度」.
 
 Swift ``SessionModel.processLockedClips`` mirrors this module. Color is
 ``SerialGraph.apply`` (existing pipeline). Container is ``exr_write``.
@@ -92,7 +94,13 @@ import numpy as np
 
 from .as_shot import WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from .exr_write import write_rgb_exr
-from .formats import NOTE_ARRI_MXF, NOTE_CAMERA_RAW, NOTE_MXF_NO_TRACK, NOTE_UNKNOWN_CODEC
+from .formats import (
+    NOTE_ARRI_MXF,
+    NOTE_CAMERA_RAW,
+    NOTE_MXF_NO_TRACK,
+    NOTE_UNKNOWN_CODEC,
+    classify,
+)
 from .graph import SerialGraph
 
 REASON_PICK_LOG_GAMUT = "先选择 Log 与色域"
@@ -100,7 +108,7 @@ REASON_PICK_PAIRED_IDT = "先选择成对 IDT"
 # Leftover English failure chips → short Chinese. Copy only.
 STUB_CHIP = "未实现"
 EMPTY_RGB_CHIP = "RGB 是空的，未写出"
-NOTE_DLOG_M = "D-Log M 暂不支持，请用 D-Log + D-Gamut"
+NOTE_DLOG_M = "D-Log M 暂不能处理，请用 D-Log + D-Gamut"
 NOTE_SLOG3_NO_GAMUT = "S-Log3 没有色域，先选择成对 IDT"
 NOTE_SLOG3_NO_GAMUT_VENICE = "S-Log3 没有色域，检测到 Venice，先选择成对 IDT"
 NOTE_CLOG2_NO_GAMUT = "C-Log2 没有色域，先选择成对 IDT"
@@ -142,48 +150,48 @@ NOTE_META_APPLE_LOG = "元数据 Apple Log"
 NOTE_META_DLOG = "元数据 D-Log"
 NOTE_META_LOGC3 = "元数据 LogC3 EI800 + AWG3"
 WROTE_FILES_NOTE = "已写出 {n} 个文件"
-# preview.status (Swift PreviewEngine). Existing phrases only. No 精准.
+# preview.status (Swift PreviewEngine). Existing phrases only. 不写已经测准.
 PREVIEW_STATUS_EMPTY = "没有素材"
 PREVIEW_STATUS_DECODING = "正在解码预览…"
 PREVIEW_STATUS_DECODE_FAIL = "解不出预览帧"
 PREVIEW_STATUS_ODT_CACHE_HIT = "只重跑预览输出"
-PREVIEW_STATUS_PROXY = "预览代理，不是成片"
-PREVIEW_STATUS_NOT_DELIVERABLE = "预览·非成片"
+PREVIEW_STATUS_PROXY = "预览代理，仅预览"
+PREVIEW_STATUS_NOT_DELIVERABLE = "仅预览"
 PREVIEW_STATUS_ODT_OFF = "709 预览关"
 PREVIEW_STATUS_HDR_BUILD_FAIL = "HDR 预览建不出"
 PREVIEW_STATUS_HDR_NO_EDR = "屏幕无 EDR，预览被压到 SDR"
 PROCESS_BUTTON = "处理已锁定片段"
 ADVANCED_DISCLOSURE = "高级"
 LOCK_STATUS_TEMPLATE = "{locked} 条已锁定 / {pending} 条待选"
-HONEST_PROXY_NOTE = "整段代理，不是全精度成片"
+HONEST_PROXY_NOTE = "整段代理，代理精度"
 PROCESSED_STATUS_TEMPLATE = (
     "处理已锁定片段 — {processed} 条已处理 / {skipped} 条已跳过"
     "（先选择 Log 与色域 / 先选择成对 IDT）。"
-    "整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+    "整段代理，代理精度。已实现（未验证）。"
 )
 FOLDER_PICKER_MESSAGE = (
     "已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。"
-    "整段代理，不是全精度成片。"
+    "整段代理，代理精度。"
     "未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
-    "预览·非成片。已实现（未验证）。"
+    "已实现（未验证）。"
 )
 PROCESS_DELIVERABLE_NOTE = (
-    "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，不是全精度成片。"
+    "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，代理精度。"
 )
 PROCESS_BUTTON_HELP = (
     "写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。"
-    "整段代理，不是全精度成片。ACES2065-1 AP0 线性，不是 ACEScct。"
+    "整段代理，代理精度。ACES2065-1 AP0 线性，不是 ACEScct。"
     "待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
 )
 # User-visible Swift copy (trial usability). Python constants above stay
 # locked by tests/test_batch_locked.py (owned by PR #63).
 PROCESS_BUTTON_HELP_UI = "写出的是图片序列（EXR），不是 mp4/mov"
-PROCESS_DELIVERABLE_NOTE_UI = "代理 EXR，不是视频。整段代理，不是全精度成片。"
+PROCESS_DELIVERABLE_NOTE_UI = "代理 EXR，不是视频。整段代理，代理精度。"
 FOLDER_PICKER_MESSAGE_UI = (
     "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。"
-    "整段代理，不是全精度成片。"
+    "整段代理，代理精度。"
     "未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
-    "预览·非成片。已实现（未验证）。"
+    "已实现（未验证）。"
 )
 PROGRESS_STATUS_HELP = "按每一帧出一张图，不是一条视频"
 EMPTY_STATE_STEP_1 = "把混源文件夹拖进来"
@@ -196,9 +204,9 @@ EMPTY_STATE_STEPS = (
 USER_PICKED_IDT_NOTE = "用户选择成对 IDT"
 MISSING_YCBCR_TAGS_CHIP_UI = "读不出片源色彩标签，没法写出"
 ADVANCED_EXPORT_HELP = (
-    "只处理已锁定片段。待选跳过。709 预览。预览·非成片。不必全部锁定。"
+    "只处理已锁定片段。待选跳过。709 预览。仅预览。不必全部锁定。"
 )
-ADVANCED_DISCLOSURE_HELP = "节点与导出 ACEScct / EXR。展开状态会记住。预览·非成片。"
+ADVANCED_DISCLOSURE_HELP = "节点与导出 ACEScct / EXR。展开状态会记住。仅预览。"
 CANCEL_BUTTON = "取消"
 CANCELLED_NOTE = "已取消"
 PROGRESS_PREFIX = "写出代理"
@@ -206,9 +214,9 @@ CANCELLED_STATUS_TEMPLATE = (
     "处理已锁定片段 — 已取消。"
     "{processed} 条已处理 / {skipped} 条已跳过"
     "（先选择 Log 与色域 / 先选择成对 IDT）。"
-    "整段代理，不是全精度成片。预览·非成片。已实现（未验证）。"
+    "整段代理，代理精度。已实现（未验证）。"
 )
-# Folder of per-frame EXRs. Names must include _proxy so this is not a 成片 claim.
+# Folder of per-frame EXRs. Names must include _proxy so this is not a finished-master claim.
 DELIVERABLE_DIR_SUFFIX = "_ACES2065-1_proxy"
 DELIVERABLE_SUFFIX = DELIVERABLE_DIR_SUFFIX
 SEQUENCE_FRAME_PREFIX = "frame"
@@ -262,7 +270,7 @@ CONSERVATIVE_WIDTH = 3840
 CONSERVATIVE_HEIGHT = 2160
 DISK_ESTIMATE_ASSUMPTION = "未压缩浮点图"
 DISK_SHORT_STATUS_TEMPLATE = (
-    "磁盘空间不足，未写出。整段代理，不是全精度成片。"
+    "磁盘空间不足，未写出。整段代理，代理精度。"
 )
 SKIPPED_BUCKET = "待选跳过"
 FAILED_BUCKET = "失败原因"
@@ -319,7 +327,7 @@ def ycbcr_to_rgb_float(
 
     ``matrix`` / ``sample_range`` follow the source (attachments / nclc).
     No Rec.709 OETF/EOTF. Superwhite / superblack may leave 0-1.
-    Still 整段代理，不是全精度成片.
+    Still 整段代理，代理精度.
     """
     key = str(matrix).lower().replace(".", "")
     if key not in YCBCR_MATRIX_COEFFS:
@@ -562,7 +570,7 @@ def preserved_failure_note(error: str) -> str | None:
         NOTE_VENICE_PICK,
     ):
         return error
-    if "不接" in error or "暂不支持" in error or "无法读取" in error:
+    if "不接" in error or "暂不能处理" in error or "无法读取" in error:
         return error
     return None
 
@@ -714,11 +722,18 @@ def clip_frame_count(
     return max(1, int(ceil(CONSERVATIVE_SECONDS * CONSERVATIVE_FPS))), "guess"
 
 
-def expected_source_frames(clip: BatchClip) -> tuple[int | None, str | None]:
-    """Expected EXR count: duration × metadata fps only. Never invent fps.
+def expected_source_frames(
+    clip: BatchClip, *, written: int | None = None
+) -> tuple[int | None, str | None]:
+    """Expected EXR count: duration × metadata fps. Never invent fps.
 
-    Missing fps → 「读不到帧率，未核对」. Missing duration → 「读不到时长，未核对」.
+    A still (``classify`` kind ``still``: tif / tiff / dpx / exr) with
+    exactly one written EXR expects 1. A still sequence (more than one
+    written EXR) keeps duration × fps. Missing fps → 「读不到帧率，未核对」.
+    Missing duration → 「读不到时长，未核对」.
     """
+    if written == 1 and classify(clip.name).kind == "still":
+        return 1, None
     duration = _positive_float(clip.duration_seconds)
     fps = _positive_float(clip.fps)
     if duration is not None and fps is not None:
@@ -763,7 +778,7 @@ def verify_locked_proxy_sequence(seq_dir, clip: BatchClip) -> tuple[bool, str | 
     written = count_proxy_exrs(folder)
     if written < 1:
         return False, FRAME_MISMATCH_CHIP
-    expected, timing_err = expected_source_frames(clip)
+    expected, timing_err = expected_source_frames(clip, written=written)
     if timing_err is not None:
         return False, timing_err
     if expected is None or not frames_count_matches(written, expected):
@@ -814,6 +829,9 @@ def remove_incomplete_resolve_bundle(dest) -> None:
     for path in folder.glob("01_IDT_*.cube"):
         if path.is_file():
             path.unlink()
+    for path in folder.glob("00_Combined_Preview709_*.cube"):
+        if path.is_file():
+            path.unlink()
 
 
 def remove_failed_proxy_dir(seq_dir) -> None:
@@ -861,7 +879,7 @@ class ProxyDiskEstimate:
 
     @property
     def note(self) -> str:
-        """Folder-picker / abort suffix. 不是成片. No 精准."""
+        """Folder-picker / abort suffix. 未完成. 不写已经测准."""
         size = format_proxy_bytes(self.bytes)
         if self.used_frame_guess:
             return (
@@ -993,7 +1011,7 @@ def never_guess_cct(cct: float | None) -> bool:
 
 
 def deliverable_dir_name(clip_name: str) -> str:
-    """Sequence folder. ``{stem}_ACES2065-1_proxy`` — proxy, not 成片."""
+    """Sequence folder. ``{stem}_ACES2065-1_proxy`` — proxy, not a finished master."""
     return f"{Path(clip_name).stem}{DELIVERABLE_DIR_SUFFIX}"
 
 
@@ -1056,7 +1074,7 @@ def batch_summary_text(
     reasons = [str(item) for item in (failure_reasons or ()) if item]
     if reasons:
         note += f"。{FAILED_BUCKET} " + " ".join(reasons)
-    note += f"。{HONEST_PROXY_NOTE}。预览·非成片。已实现（未验证）。"
+    note += f"。{HONEST_PROXY_NOTE}。已实现（未验证）。"
     if dest is not None and int(wrote) > 0:
         note += f" {short_export_path(dest)}"
     return note
@@ -1083,7 +1101,7 @@ def progress_text(
 
 
 def cancelled_status_text(processed: int, skipped: int) -> str:
-    """Cancel status. 已取消 + honesty. Partial output is 不是成片."""
+    """Cancel status. 已取消 + honesty. Partial output is 未完成."""
     return CANCELLED_STATUS_TEMPLATE.format(processed=processed, skipped=skipped)
 
 
@@ -1220,7 +1238,7 @@ def process_locked_writes(
     Empty ``_ACES2065-1_proxy`` / 0 frames fail closed (「帧数对不上」 /
     「解码失败」) and leave no success folder. ``resolve_write_fn`` is
     the test hook; default is ``export_locked_resolve_bundle``. Python
-    LUT size defaults to 5 (Swift stays 17). Not a movie. 不是全精度成片.
+    LUT size defaults to 5 (Swift stays 17). Not a movie. 代理精度.
     """
     dest = Path(dest)
     plan = plan_locked_batch(clips)
