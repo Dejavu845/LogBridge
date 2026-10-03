@@ -275,25 +275,16 @@ enum ResolveExporter {
 
     // MARK: - Working-space / OETF
 
-    private static let acescctLoS = 10.5402377416545
-    private static let acescctLoO = 0.0729055341958355
-    private static let acescctBreakLin = 0.0078125
-    private static let acescctBreakLog = acescctLoS * acescctBreakLin + acescctLoO
     private static let rec709Beta = 0.018053968510807
     private static let rec709Alpha = 1.09929682680944
 
     private static func acescctEncode(_ lin: Double) -> Double {
-        if lin <= acescctBreakLin {
-            return acescctLoS * lin + acescctLoO
-        }
-        return (log2(max(lin, 1e-10)) + 9.72) / 17.52
+        // Floor before the branch. Matches Python _acescct_encode_lut.
+        ACEScctMath.encode(lin)
     }
 
     private static func acescctDecode(_ enc: Double) -> Double {
-        if enc <= acescctBreakLog {
-            return (enc - acescctLoO) / acescctLoS
-        }
-        return pow(2.0, enc * 17.52 - 9.72)
+        ACEScctMath.decode(enc)
     }
 
     private static func rec709OETF(_ lin: Double) -> Double {
@@ -435,7 +426,31 @@ enum ResolveExporter {
 
     // MARK: - .cube (Adobe/IRIDAS: R fastest, then G, then B)
 
-    private static func cubeFile(title: String, size: Int, extraComments: [String] = [], map: (SIMD3<Double>) -> SIMD3<Double>) -> String {
+    private static func domainComponent(_ v: Double) -> String {
+        if v == 0.0 { return "0.0" }
+        if v == 1.0 { return "1.0" }
+        return String(format: "%.10f", v)
+    }
+
+    private static func domainLine(_ key: String, _ v: Double) -> String {
+        let s = domainComponent(v)
+        return "\(key) \(s) \(s) \(s)"
+    }
+
+    private static func clampChannel(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
+        min(max(v, lo), hi)
+    }
+
+    private static func cubeFile(
+        title: String,
+        size: Int,
+        domainMin: Double = 0.0,
+        domainMax: Double = 1.0,
+        outputMin: Double? = nil,
+        outputMax: Double? = nil,
+        extraComments: [String] = [],
+        map: (SIMD3<Double>) -> SIMD3<Double>
+    ) -> String {
         var lines: [String] = [
             "TITLE \"\(title)\"",
             "# LogBridge M1 — implemented (unverified). Not a camera-support claim."
@@ -443,16 +458,28 @@ enum ResolveExporter {
         lines.append(contentsOf: extraComments)
         lines.append(contentsOf: [
             "LUT_3D_SIZE \(size)",
-            "DOMAIN_MIN 0.0 0.0 0.0",
-            "DOMAIN_MAX 1.0 1.0 1.0"
+            domainLine("DOMAIN_MIN", domainMin),
+            domainLine("DOMAIN_MAX", domainMax)
         ])
         if size > 1 {
             let den = Double(size - 1)
+            let span = domainMax - domainMin
             for bi in 0..<size {
                 for gi in 0..<size {
                     for ri in 0..<size {
-                        let rgb = SIMD3(Double(ri) / den, Double(gi) / den, Double(bi) / den)
-                        let o = map(rgb)
+                        let rgb = SIMD3(
+                            domainMin + Double(ri) / den * span,
+                            domainMin + Double(gi) / den * span,
+                            domainMin + Double(bi) / den * span
+                        )
+                        var o = map(rgb)
+                        if let lo = outputMin, let hi = outputMax {
+                            o = SIMD3(
+                                clampChannel(o.x, lo, hi),
+                                clampChannel(o.y, lo, hi),
+                                clampChannel(o.z, lo, hi)
+                            )
+                        }
                         lines.append(String(format: "%.8f %.8f %.8f", o.x, o.y, o.z))
                     }
                 }
@@ -462,7 +489,15 @@ enum ResolveExporter {
     }
 
     private static func idtCube(idt: IDT, size: Int) -> String {
-        cubeFile(title: "LogBridge IDT \(idt.rawValue) → ACEScct (no WB)", size: size) {
+        cubeFile(
+            title: "LogBridge IDT \(idt.rawValue) → ACEScct (no WB)",
+            size: size,
+            outputMin: ACEScctMath.cubeMin,
+            outputMax: ACEScctMath.cubeMax,
+            extraComments: [
+                "# Input DOMAIN is camera log 0-1. ACEScct encode floors linear at 1e-10 and caps at 65504 so the table stays in the ACEScct allocation."
+            ]
+        ) {
             idtToACEScct($0, idt: idt)
         }
     }
@@ -471,7 +506,17 @@ enum ResolveExporter {
         let m = wbRGBMatrix(cct: cct, tint: tint, srcCCT: srcCCT, srcTint: srcTint)
         // Cube TITLE keeps English pending / identity for compatibility.
         let titleCCT = cct.map { "\(Int($0)) K" } ?? "pending / identity"
-        return cubeFile(title: "LogBridge WB AP0 CAT \(titleCCT) tint \(tint) (ACEScct decode→ACES2065-1→encode)", size: size) {
+        return cubeFile(
+            title: "LogBridge WB AP0 CAT \(titleCCT) tint \(tint) (ACEScct decode→ACES2065-1→encode)",
+            size: size,
+            domainMin: ACEScctMath.cubeMin,
+            domainMax: ACEScctMath.cubeMax,
+            outputMin: ACEScctMath.cubeMin,
+            outputMax: ACEScctMath.cubeMax,
+            extraComments: [
+                "# Input DOMAIN is the ACEScct allocation (encode of 1e-10 … 65504), not 0-1."
+            ]
+        ) {
             wbInACEScct($0, matrix: m)
         }
     }
@@ -480,8 +525,13 @@ enum ResolveExporter {
         cubeFile(
             title: "LogBridge 709 预览 ACEScct → Rec.709 (BT.709 OETF preview, not ACES OT)",
             size: size,
+            domainMin: ACEScctMath.cubeMin,
+            domainMax: ACEScctMath.cubeMax,
+            outputMin: 0.0,
+            outputMax: 1.0,
             extraComments: [
-                "# 709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。"
+                "# 709 预览，不是 ACES 输出变换，不是成片。预览·非成片。默认关。",
+                "# Input DOMAIN is the ACEScct allocation (encode of 1e-10 … 65504), not 0-1."
             ]
         ) {
             odtFromACEScct($0)
@@ -489,12 +539,12 @@ enum ResolveExporter {
     }
 
     /// Same per-channel wrap as ``exposureCube``: ACEScct decode → gain → encode.
+    /// Linear is floored at 1e-10 before encode (Python ``_acescct_encode_lut``).
     private static func exposureInACEScct(_ enc: SIMD3<Double>, stops: Double) -> SIMD3<Double> {
-        let gain = pow(2.0, stops)
-        return SIMD3(
-            acescctEncode(acescctDecode(enc.x) * gain),
-            acescctEncode(acescctDecode(enc.y) * gain),
-            acescctEncode(acescctDecode(enc.z) * gain)
+        SIMD3(
+            ACEScctMath.exposureChannel(enc.x, stops: stops),
+            ACEScctMath.exposureChannel(enc.y, stops: stops),
+            ACEScctMath.exposureChannel(enc.z, stops: stops)
         )
     }
 
@@ -525,6 +575,8 @@ enum ResolveExporter {
             let wbEnc = wbInACEScct(expEnc, matrix: matrix)
             // Per-node ODT cube is unchanged. This preview file only
             // clips the final OETF result into [0, 1].
+            // Per-node ODT cube clamps to [0, 1] as well. This preview file
+            // still clips only its final OETF result.
             let preview = odtFromACEScct(wbEnc)
             return SIMD3(
                 min(max(preview.x, 0.0), 1.0),
@@ -534,23 +586,25 @@ enum ResolveExporter {
         }
     }
 
-    /// 1D cube: ACEScct decode → linear gain → encode. Identity at 0 stops.
+    /// 1D cube over the ACEScct allocation. Identity at 0 stops inside it.
     private static func exposureCube(stops: Double) -> String {
         let size = 65
         let gain = pow(2.0, stops)
+        let lo = ACEScctMath.cubeMin
+        let hi = ACEScctMath.cubeMax
         var lines: [String] = [
             "TITLE \"LogBridge Exposure \(String(format: "%+.3f", stops)) stops (gain \(String(format: "%.8f", gain)), ACEScct wrap)\"",
             "# ACES2065-1 linear gain rgb*(2**stops). Not a log-code add.",
             "# Own node — not baked into IDT or WB when stops=0.",
+            "# Input DOMAIN is the ACEScct allocation (encode of 1e-10 … 65504), not 0-1.",
             "LUT_1D_SIZE \(size)",
-            "DOMAIN_MIN 0.0 0.0 0.0",
-            "DOMAIN_MAX 1.0 1.0 1.0"
+            domainLine("DOMAIN_MIN", lo),
+            domainLine("DOMAIN_MAX", hi)
         ]
         let den = Double(size - 1)
         for i in 0..<size {
-            let x = Double(i) / den
-            let lin = acescctDecode(x) * gain
-            let y = acescctEncode(lin)
+            let x = lo + Double(i) / den * (hi - lo)
+            let y = clampChannel(ACEScctMath.exposureChannel(x, stops: stops), lo, hi)
             lines.append(String(format: "%.8f %.8f %.8f", y, y, y))
         }
         return lines.joined(separator: "\n") + "\n"

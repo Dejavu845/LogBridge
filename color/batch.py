@@ -1198,7 +1198,7 @@ def process_locked_writes(
     free_bytes: int | None = None,
     ycbcr_tags: dict[str, dict] | None = None,
     resolve_write_fn: Callable[..., object] | None = None,
-    resolve_lut_size: int = 5,
+    resolve_lut_size: int = 17,
 ) -> BatchWriteReport:
     """Write an ACES2065-1 proxy EXR sequence for locked clips only.
 
@@ -1238,7 +1238,8 @@ def process_locked_writes(
     Empty ``_ACES2065-1_proxy`` / 0 frames fail closed (「帧数对不上」 /
     「解码失败」) and leave no success folder. ``resolve_write_fn`` is
     the test hook; default is ``export_locked_resolve_bundle``. Python
-    LUT size defaults to 5 (Swift stays 17). Not a movie. 不是全精度成片.
+    LUT size defaults to 17 (same as Swift). Pass ``resolve_lut_size=33``
+    for a finer lattice. Not a movie. 不是全精度成片.
     """
     dest = Path(dest)
     plan = plan_locked_batch(clips)

@@ -143,9 +143,18 @@ COMBINED_PREVIEW709_README_ROW = (
     f"| `{COMBINED_PREVIEW709_FILE_PATTERN}` | {COMBINED_PREVIEW709_README_ROLE} |"
 )
 COMBINED_PREVIEW709_COMMENT = "# 预览查找表。已实现（未验证）。"
-# Swift ResolveExporter.lutSize. Per-node cubes keep the caller's lut_size
-# (Python batch still uses 5). The combined preview cube does not.
+# Swift ResolveExporter.lutSize. Per-node cubes and the combined preview cube
+# share this default. Pass lut_size=CUBE_SIZE_33 for a finer per-node lattice.
+# The combined preview file stays at COMBINED_PREVIEW709_LUT_SIZE.
+DEFAULT_CUBE_SIZE = 17
+CUBE_SIZE_33 = 33
 COMBINED_PREVIEW709_LUT_SIZE = 17
+# ACEScct allocation stored in scene-referred cubes.
+# Floor matches _acescct_encode_lut (1e-10): without it the linear toe of
+# out-of-gamut AP1 runs away (IDT tables reached about -848).
+# Ceiling is half-float max; ACEScct(65504) is the usual allocation top.
+ACESCCT_CUBE_LIN_MIN = 1e-10
+ACESCCT_CUBE_LIN_MAX = 65504.0
 GRAPH_ODT_XML_DESC = GRAPH_ODT_USER
 # Graph WB summary (knife ㉕). Placeholders {cctLabel} / {tint}. Copy only.
 GRAPH_WB_SUMMARY = (
@@ -282,9 +291,15 @@ def decode_camera_log_01(log_01, idt_id: str) -> np.ndarray:
 
 
 def _acescct_encode_lut(lin_ap1):
-    """ACEScct encode for export LUTs. Keep log2 defined for tiny/negative."""
+    """ACEScct encode for export LUTs. Floor linear at 1e-10.
+
+    The log2 branch of ``acescct_encode`` never sees a value that small
+    (the toe breakpoint is 0.0078125). The floor is applied first so a
+    negative AP1 lobe cannot run down the linear toe. Analytic
+    ``acescct_encode`` itself is unchanged.
+    """
     lin = np.asarray(lin_ap1, dtype=np.float64)
-    return acescct_encode(np.maximum(lin, 1e-10))
+    return acescct_encode(np.maximum(lin, ACESCCT_CUBE_LIN_MIN))
 
 
 def idt_to_acescct(log_01, idt_id: str) -> np.ndarray:
@@ -388,21 +403,96 @@ def odt_from_di(di_rgb) -> np.ndarray:
     return apply_odt_rec709(lin, working="DWG")
 
 
+# Code values of the ACEScct allocation (module-level; encode is pure).
+ACESCCT_CUBE_MIN = float(acescct_encode(ACESCCT_CUBE_LIN_MIN))
+ACESCCT_CUBE_MAX = float(acescct_encode(ACESCCT_CUBE_LIN_MAX))
+DISPLAY_CUBE_MIN = 0.0
+DISPLAY_CUBE_MAX = 1.0
+# Camera-log cubes. Output is ACEScct inside the allocation above.
+IDT_CUBE_DOMAIN_COMMENT = (
+    "# Input DOMAIN is camera log 0-1. "
+    "ACEScct encode floors linear at 1e-10 and caps at 65504 "
+    "so the table stays in the ACEScct allocation."
+)
+# Exposure / WB / ODT input. Not linear 0-1: ACEScct code 1 is already
+# ~223 scene-linear, and IDT highlights sit slightly above 1.
+SCENE_CUBE_DOMAIN_COMMENT = (
+    "# Input DOMAIN is the ACEScct allocation (encode of 1e-10 … 65504), not 0-1."
+)
+
+
+def acescct_encode_for_cube(lin_ap1) -> np.ndarray:
+    """ACEScct encode for scene-referred cube tables.
+
+    Floors at 1e-10 (same as ``_acescct_encode_lut``) and caps at half-float
+    max. ``acescct_encode`` / ``idt_to_acescct`` stay unbounded so the
+    combined preview still uses the analytic IDT.
+    """
+    lin = np.clip(
+        np.asarray(lin_ap1, dtype=np.float64),
+        ACESCCT_CUBE_LIN_MIN,
+        ACESCCT_CUBE_LIN_MAX,
+    )
+    return acescct_encode(lin)
+
+
+def clip_acescct_cube(rgb) -> np.ndarray:
+    """Keep a scene-referred table inside the ACEScct allocation."""
+    return np.clip(np.asarray(rgb, dtype=np.float64), ACESCCT_CUBE_MIN, ACESCCT_CUBE_MAX)
+
+
 def _cube_sample_grid(size: int) -> np.ndarray:
-    """Adobe/IRIDAS .cube lattice: R fastest, then G, then B. Shape (N, 3)."""
-    xs = np.linspace(0.0, 1.0, size)
+    """Adobe/IRIDAS .cube lattice on [0, 1]. R fastest, then G, then B."""
+    return _cube_domain_grid(size, 0.0, 1.0)
+
+
+def _cube_domain_grid(size: int, lo: float, hi: float) -> np.ndarray:
+    """Uniform lattice from ``lo`` to ``hi``. R fastest, then G, then B."""
+    xs = np.linspace(float(lo), float(hi), int(size))
     b, g, r = np.meshgrid(xs, xs, xs, indexing="ij")
     return np.stack([r, g, b], axis=-1).reshape(-1, 3)
 
 
-def format_cube(title: str, rgb: np.ndarray, size: int, extra_comments: tuple[str, ...] = ()) -> str:
+def _domain_triple(v) -> tuple[float, float, float]:
+    if isinstance(v, (int, float)):
+        x = float(v)
+        return (x, x, x)
+    xs = tuple(float(x) for x in v)
+    if len(xs) != 3:
+        raise ValueError("cube domain needs 3 components")
+    return xs  # type: ignore[return-value]
+
+
+def _fmt_domain_component(v: float) -> str:
+    """Keep the historical 0.0 / 1.0 spelling. Other edges get 10 decimals."""
+    if v == 0.0:
+        return "0.0"
+    if v == 1.0:
+        return "1.0"
+    return f"{float(v):.10f}"
+
+
+def _fmt_domain_line(key: str, triple: tuple[float, float, float]) -> str:
+    return key + " " + " ".join(_fmt_domain_component(v) for v in triple)
+
+
+def format_cube(
+    title: str,
+    rgb: np.ndarray,
+    size: int,
+    extra_comments: tuple[str, ...] = (),
+    domain_min: tuple[float, float, float] | float = (0.0, 0.0, 0.0),
+    domain_max: tuple[float, float, float] | float = (1.0, 1.0, 1.0),
+) -> str:
+    lo = _domain_triple(domain_min)
+    hi = _domain_triple(domain_max)
     lines = [
         f'TITLE "{title}"',
         "# LogBridge M1 — implemented (unverified). Not a camera-support claim.",
         *extra_comments,
         f"LUT_3D_SIZE {size}",
-        "DOMAIN_MIN 0.0 0.0 0.0",
-        "DOMAIN_MAX 1.0 1.0 1.0",
+        _fmt_domain_line("DOMAIN_MIN", lo),
+        _fmt_domain_line("DOMAIN_MAX", hi),
     ]
     rgb = np.asarray(rgb, dtype=np.float64).reshape(-1, 3)
     for row in rgb:
@@ -410,38 +500,63 @@ def format_cube(title: str, rgb: np.ndarray, size: int, extra_comments: tuple[st
     return "\n".join(lines) + "\n"
 
 
-def idt_cube_bytes(idt_id: str, size: int = 17) -> str:
+def idt_cube_rgb(log_01, idt_id: str) -> np.ndarray:
+    """Camera log → ACEScct table. Same IDT as ``idt_to_acescct``, ranged encode.
+
+    Analytic ``idt_to_acescct`` is what the combined preview samples. This
+    helper only changes values outside the ACEScct allocation.
+    """
+    curve, _gamut = IDT_PAIRS[idt_id]
+    log = np.asarray(log_01, dtype=np.float64)
+    if curve == "nlog":
+        log = log * 1023.0
+    ap1 = aces2065_to_ap1(apply_idt(log, idt_id))
+    return acescct_encode_for_cube(ap1)
+
+
+def idt_cube_bytes(idt_id: str, size: int = DEFAULT_CUBE_SIZE) -> str:
     grid = _cube_sample_grid(size)
-    out = idt_to_acescct(grid, idt_id)
+    out = idt_cube_rgb(grid, idt_id)
     return format_cube(
-        f"LogBridge IDT {idt_id} → ACEScct (no WB)", out, size
+        f"LogBridge IDT {idt_id} → ACEScct (no WB)",
+        out,
+        size,
+        extra_comments=(IDT_CUBE_DOMAIN_COMMENT,),
     )
 
 
 def wb_cube_bytes(
     cct: float | None,
     tint: float = 0.0,
-    size: int = 17,
+    size: int = DEFAULT_CUBE_SIZE,
     method: str = "bradford",
     src_cct: float | None = None,
 ) -> str:
-    grid = _cube_sample_grid(size)
-    out = wb_in_acescct(grid, cct, tint=tint, method=method, src_cct=src_cct)
+    grid = _cube_domain_grid(size, ACESCCT_CUBE_MIN, ACESCCT_CUBE_MAX)
+    out = clip_acescct_cube(
+        wb_in_acescct(grid, cct, tint=tint, method=method, src_cct=src_cct)
+    )
     return format_cube(
         f"LogBridge WB AP0 CAT {_cct_label(cct)} tint {tint} (ACEScct decode→ACES2065-1→encode)",
         out,
         size,
+        extra_comments=(SCENE_CUBE_DOMAIN_COMMENT,),
+        domain_min=ACESCCT_CUBE_MIN,
+        domain_max=ACESCCT_CUBE_MAX,
     )
 
 
-def odt_cube_bytes(size: int = 17) -> str:
-    grid = _cube_sample_grid(size)
-    out = odt_from_acescct(grid)
+def odt_cube_bytes(size: int = DEFAULT_CUBE_SIZE) -> str:
+    """ACEScct allocation → Rec.709 preview, table clamped to [0, 1]."""
+    grid = _cube_domain_grid(size, ACESCCT_CUBE_MIN, ACESCCT_CUBE_MAX)
+    out = np.clip(odt_from_acescct(grid), DISPLAY_CUBE_MIN, DISPLAY_CUBE_MAX)
     return format_cube(
         REC709_CUBE_TITLE,
         out,
         size,
-        extra_comments=(REC709_CUBE_COMMENT,),
+        extra_comments=(REC709_CUBE_COMMENT, SCENE_CUBE_DOMAIN_COMMENT),
+        domain_min=ACESCCT_CUBE_MIN,
+        domain_max=ACESCCT_CUBE_MAX,
     )
 
 
@@ -465,9 +580,12 @@ def combined_preview709_rgb(
     IDT → exposure → WB → Rec.709 preview. Same operators as the per-node
     cubes (ACEScct wrap between them). Does not replace those files.
 
-    The per-node IDT cube can sit far below the ACEScct toe, and the
-    per-node Rec.709 cube can encode scene-linear values above 1. This
-    preview cube clips only its own final OETF result to [0, 1].
+    The analytic IDT is not range-limited here. Per-node scene cubes floor
+    linear at 1e-10 when they encode ACEScct; the Rec.709 node clamps its
+    own table to [0, 1]. Those range limits do not move this preview: 18%
+    grey stays on the Rec.709 OETF of 0.18, and a negative AP1 lobe clips
+    to the same display value either way. The written cube still clips
+    only the final OETF result to [0, 1].
     """
     enc = idt_to_acescct(log_01, idt_id)
     enc = exposure_in_acescct(enc, exposure_stops)
@@ -506,7 +624,13 @@ def combined_preview709_cube_bytes(
     )
 
 
-def format_1d_cube(title: str, rgb: np.ndarray) -> str:
+def format_1d_cube(
+    title: str,
+    rgb: np.ndarray,
+    domain_min: tuple[float, float, float] | float = (0.0, 0.0, 0.0),
+    domain_max: tuple[float, float, float] | float = (1.0, 1.0, 1.0),
+    extra_comments: tuple[str, ...] = (),
+) -> str:
     """IRIDAS 1D cube (uniform gain / ACEScct-wrapped exposure)."""
     rgb = np.asarray(rgb, dtype=np.float64).reshape(-1, 3)
     lines = [
@@ -514,9 +638,10 @@ def format_1d_cube(title: str, rgb: np.ndarray) -> str:
         "# LogBridge Exposure — ACES2065-1 linear gain rgb*(2**stops).",
         "# ACEScct wrap: decode → gain → encode. Not a log-code add.",
         "# Implemented (unverified). Own node; not baked into IDT or WB.",
+        *extra_comments,
         f"LUT_1D_SIZE {len(rgb)}",
-        "DOMAIN_MIN 0.0 0.0 0.0",
-        "DOMAIN_MAX 1.0 1.0 1.0",
+        _fmt_domain_line("DOMAIN_MIN", _domain_triple(domain_min)),
+        _fmt_domain_line("DOMAIN_MAX", _domain_triple(domain_max)),
     ]
     for row in rgb:
         lines.append(f"{row[0]:.8f} {row[1]:.8f} {row[2]:.8f}")
@@ -524,14 +649,17 @@ def format_1d_cube(title: str, rgb: np.ndarray) -> str:
 
 
 def exposure_cube_bytes(stops: float = 0.0, size: int = 65) -> str:
-    """1D LUT: ACEScct-wrapped linear exposure. Identity at 0 stops."""
-    xs = np.linspace(0.0, 1.0, int(size))
+    """1D LUT over the ACEScct allocation. Identity at 0 stops inside it."""
+    xs = np.linspace(ACESCCT_CUBE_MIN, ACESCCT_CUBE_MAX, int(size))
     grid = np.stack([xs, xs, xs], axis=-1)
-    out = exposure_in_acescct(grid, stops)
+    out = clip_acescct_cube(exposure_in_acescct(grid, stops))
     gain = stops_to_gain(stops)
     return format_1d_cube(
         f"LogBridge Exposure {stops:+.3f} stops (gain {gain:.8f}, ACEScct wrap)",
         out,
+        domain_min=ACESCCT_CUBE_MIN,
+        domain_max=ACESCCT_CUBE_MAX,
+        extra_comments=(SCENE_CUBE_DOMAIN_COMMENT,),
     )
 
 
@@ -1031,7 +1159,7 @@ def export_resolve_bundle(
     cct: float = 6504.0,
     tint: float = 0.0,
     include_wb: bool = True,
-    lut_size: int = 17,
+    lut_size: int = DEFAULT_CUBE_SIZE,
     method: str = "bradford",
     odt_enabled: bool = False,
     odt: str | None = None,
@@ -1159,7 +1287,7 @@ def export_locked_resolve_bundle(
     clips: Sequence[BatchClip],
     *,
     graph: SerialGraph | None = None,
-    lut_size: int = 17,
+    lut_size: int = DEFAULT_CUBE_SIZE,
     method: str = "bradford",
 ) -> LockedResolveReport:
     """Write one session Resolve package for locked paired-IDT clips only.
