@@ -608,6 +608,7 @@ def test_process_bar_and_advanced_help_are_chinese():
         _chengpian_only_honesty(help_text)
 
     assert _help_literals(bar) == [
+        "把混源文件夹拖进来",
         "先选成对 Log 与色域",
         PROCESS_BUTTON_HELP_UI,
     ]
@@ -11704,15 +11705,14 @@ def test_empty_state_keeps_unverified_proxy_line():
 
 
 def test_toolbar_hint_copy_is_locked():
-    """Disabled primary action and the visible not-locked line share one phrase."""
+    """Disabled primary action and the visible caption beside it share one phrase."""
     assert PROCESS_BUTTON == "处理已锁定片段"
     assert UNLOCKED_TOOLBAR_HINT == "先选成对 Log 与色域"
     assert UNLOCKED_TOOLBAR_HINT != REASON_PICK_LOG_GAMUT
     content = _read(CONTENT)
-    hint = content.split("struct UnlockedPairHint")[1].split("struct AdvancedPanel")[0]
-    assert f'Text("{UNLOCKED_TOOLBAR_HINT}")' in hint
+    button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
+    assert f'Text("{UNLOCKED_TOOLBAR_HINT}")' in button
     assert f'.help("{UNLOCKED_TOOLBAR_HINT}")' in content
-    assert f'.accessibilityLabel("{UNLOCKED_TOOLBAR_HINT}")' in content
     assert f'Button(session.isWritingDeliverables ? "取消" : "{PROCESS_BUTTON}")' in content
     for token in _BANNED_USER_COPY:
         assert token not in UNLOCKED_TOOLBAR_HINT
@@ -11722,23 +11722,24 @@ def test_toolbar_hint_copy_is_locked():
 
 
 def test_unlocked_hint_is_visible_only_when_none_locked():
-    """Not-locked state view. The line is in layout only while lockedClipCount == 0."""
+    """Pair caption sits by the toolbar button only when clips exist and none is locked."""
     content = _read(CONTENT)
     window = content.split("struct ContentView")[1].split("struct ClipListArrowMonitor")[0]
-    hint = content.split("struct UnlockedPairHint")[1].split("struct AdvancedPanel")[0]
-    assert 'Text("先选成对 Log 与色域")' in hint
-    assert ".foregroundStyle(.secondary)" in hint
-    assert ".font(.caption)" in hint
-    assert ".font(.system(" not in hint
-    assert ".background(" not in hint
-    assert ".opacity(" not in hint
-    assert ".hidden(" not in hint
-    assert window.count("UnlockedPairHint()") == 1
-    call = window.split("if session.lockedClipCount == 0")[1].split("}")[0]
-    assert "UnlockedPairHint()" in call
-    assert ".opacity" not in call
-    assert ".hidden" not in call
     button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
+    assert 'Text("先选成对 Log 与色域")' in button
+    assert 'Text("把混源文件夹拖进来")' in button
+    assert ".foregroundStyle(.secondary)" in button
+    assert ".font(.caption)" in button
+    assert ".font(.system(" not in button
+    assert ".background(" not in button
+    assert ".opacity(" not in button
+    assert ".hidden(" not in button
+    assert "UnlockedPairHint()" not in window
+    assert "if session.clips.isEmpty" in button
+    pair = button.split("else if session.lockedClipCount == 0")[1].split("}")[0]
+    assert 'Text("先选成对 Log 与色域")' in pair
+    assert ".opacity" not in pair
+    assert ".hidden" not in pair
     assert ".disabled(session.lockedClipCount == 0)" in button
     assert "ToolbarItem(placement: .primaryAction)" in window
     assert window.count("ToolbarItem(") == 1

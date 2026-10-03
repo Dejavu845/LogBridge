@@ -48,12 +48,6 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 8) {
             WorkspaceHeader(session: session)
-            if session.lockedClipCount == 0 {
-                UnlockedPairHint()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-            }
             if session.clips.isEmpty {
                 EmptyPreviewStage(session: session)
             } else {
@@ -288,46 +282,55 @@ struct ProcessLockedBar: View {
 
 /// The window toolbar's only primary action.
 /// Disabled until at least one clip is locked. Same button cancels a write.
+/// The caption sits in this item, next to the button. No second row under the header.
 struct ProcessLockedToolbarButton: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
-            if session.isWritingDeliverables {
-                session.cancelLockedDeliverables()
-            } else {
-                session.processLockedClips()
+        HStack(spacing: 8) {
+            if session.clips.isEmpty {
+                Text("把混源文件夹拖进来")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if session.lockedClipCount == 0 {
+                Text("先选成对 Log 与色域")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            Button(session.isWritingDeliverables ? "取消" : "处理已锁定片段") {
+                if session.isWritingDeliverables {
+                    session.cancelLockedDeliverables()
+                } else {
+                    session.processLockedClips()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(session.lockedClipCount == 0)
+            .modifier(ProcessLockedButtonHelp(
+                importing: session.clips.isEmpty,
+                unlocked: session.lockedClipCount == 0
+            ))
         }
-        .buttonStyle(.borderedProminent)
-        .disabled(session.lockedClipCount == 0)
-        .modifier(ProcessLockedButtonHelp(unlocked: session.lockedClipCount == 0))
     }
 }
 
-/// Unlocked help is the visible hint's same phrase. Locked help stays the EXR line.
+/// Tooltip matches the caption beside the button. The button keeps its own title.
+/// Locked help stays the EXR line. `if` removes the caption once a clip is locked.
 private struct ProcessLockedButtonHelp: ViewModifier {
+    var importing: Bool
     var unlocked: Bool
 
     func body(content: Content) -> some View {
-        if unlocked {
+        if importing {
+            content
+                .help("把混源文件夹拖进来")
+        } else if unlocked {
             content
                 .help("先选成对 Log 与色域")
-                .accessibilityLabel("先选成对 Log 与色域")
         } else {
             content
                 .help("写出的是图片序列（EXR），不是 mp4/mov")
         }
-    }
-}
-
-/// Not-locked state view. Call sites use `if session.lockedClipCount == 0`
-/// so the line leaves the layout once a clip is locked.
-struct UnlockedPairHint: View {
-    var body: some View {
-        Text("先选成对 Log 与色域")
-            .font(.caption)
-            .foregroundStyle(.secondary)
     }
 }
 

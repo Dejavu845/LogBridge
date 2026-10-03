@@ -10,6 +10,7 @@ SRC_ROOT="${SNAPSHOT_SRC_ROOT:-$ROOT}"
 OUT="${SNAPSHOT_OUT:-${ROOT}/ui-screenshots}"
 TOOL="${SNAPSHOT_TOOL:-${ROOT}/scripts/ui_snapshot.swift}"
 XCTEST="${SNAPSHOT_XCTEST:-1}"
+export SNAPSHOT_REQUIRE_TOOLBAR="${SNAPSHOT_REQUIRE_TOOLBAR:-1}"
 PROJECT_DIR="${SNAPSHOT_PROJECT_DIR:-${SRC_ROOT}/macos/LogBridge}"
 SHA="${SNAPSHOT_SHA:-$(git -C "$SRC_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}"
 CHECK="${ROOT}/scripts/check_ui_screenshots.py"
@@ -18,7 +19,7 @@ mkdir -p "$OUT"
 cat > "${OUT}/README.txt" <<EOF
 CI 离屏渲染·假数据·非真机
 
-这些 PNG 是 macOS CI runner 上的离屏捕获。先把 ContentView 放进 NSHostingView / NSWindow，跑几轮 runloop（约 0.5s）再 cacheDisplay。若仍是占位色或空白，则改由 XCUITest 启动真应用，注入样例状态，用 XCUIApplication screenshot。没有真机素材。不能当成真机外观。
+这些 PNG 是 macOS CI runner 上的整窗捕获（标题栏和工具栏，不只是内容区）。NSHostingController 装上工具栏，跑几轮 runloop（约 0.5s）后 cacheDisplay 窗框，或对 windowNumber 做 CGWindowListCreateImage。高度必须大于内容高度。若仍是占位色、空白或没有工具栏，则改由 XCUITest 启动真应用，注入样例状态，用窗口 screenshot。没有真机素材。不能当成真机外观。
 
 commit: ${SHA}
 EOF
@@ -78,6 +79,11 @@ fi
 
 rm -f "$OUT"/*.png
 printf '%s\n' "$OUT" > /tmp/logbridge-ui-screenshot-out.txt
+if [ "${SNAPSHOT_REQUIRE_TOOLBAR}" = "0" ]; then
+  printf '0\n' > /tmp/logbridge-ui-shot-require-toolbar.txt
+else
+  rm -f /tmp/logbridge-ui-shot-require-toolbar.txt
+fi
 export UI_SCREENSHOT_OUT="$OUT"
 echo "ui-screenshots: XCUITest fallback"
 if ! xcodebuild \

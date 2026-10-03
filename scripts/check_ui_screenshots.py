@@ -89,6 +89,20 @@ def expected_names() -> list[str]:
     return names
 
 
+def nominal_content_height(name: str) -> int | None:
+    """`empty-1440x900-light.png` -> 900. The whole window must be taller than this."""
+    stem = name[:-4] if name.endswith(".png") else name
+    parts = stem.split("-")
+    if len(parts) < 2 or "x" not in parts[-2]:
+        return None
+    return int(parts[-2].split("x")[1])
+
+
+def toolbar_region_present(pixel_height: int, content_height: int) -> bool:
+    """Title bar / toolbar makes the capture taller than the content view."""
+    return pixel_height > content_height
+
+
 def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -105,6 +119,12 @@ def check_directory(out: Path) -> list[str]:
         stats = analyze_path(path)
         if stats.width < 200 or stats.height < 200:
             errors.append(f"{name}: capture is {stats.width}x{stats.height}")
+        if nominal := nominal_content_height(name):
+            if not toolbar_region_present(stats.height, nominal):
+                errors.append(
+                    f"{name}: missing toolbar chrome "
+                    f"height {stats.height} is not above content {nominal}"
+                )
         if is_prohibited_placeholder(stats.yellow_frac, stats.red_frac):
             errors.append(
                 f"{name}: prohibited placeholder "

@@ -10,6 +10,7 @@ from scripts.check_ui_screenshots import (
     check_directory,
     is_blank_capture,
     is_prohibited_placeholder,
+    toolbar_region_present,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,7 +56,9 @@ def test_snapshot_tool_covers_sizes_appearances_and_states():
         "light",
         "dark",
         "NSWindow",
+        "NSHostingController",
         "NSHostingView",
+        "superview",
         "bitmapImageRepForCachingDisplay",
         "cacheDisplay",
         "spinRunLoop",
@@ -80,16 +83,22 @@ def test_snapshot_tool_covers_sizes_appearances_and_states():
     assert "exit 1" in script
     assert "-only-testing:LogBridgeUITests" in script
     assert "XCUITest fallback" in script
+    assert "SNAPSHOT_REQUIRE_TOOLBAR" in script
+    assert "logbridge-ui-shot-require-toolbar.txt" in script
     assert TOOL.relative_to(ROOT).parts[0] == "scripts"
     xctest = XCTEST.read_text(encoding="utf-8")
+    assert "windows.firstMatch" in xctest
     assert "XCUIApplication()" in xctest
     assert "screenshot()" in xctest
     assert "--logbridge-ui-shot" in xctest
+    assert "expectsPrimaryToolbar" in xctest
+    assert 'app.buttons["处理已锁定片段"]' in xctest
     baseline = BASELINE.read_text(encoding="utf-8")
     assert "28066d5" in baseline
     assert "ui-screenshots-baseline" in baseline
     assert "worktree" in baseline
     assert "wire_baseline_shot_launch.py" in baseline
+    assert "SNAPSHOT_REQUIRE_TOOLBAR=0" in baseline
 
 
 def test_dropped_awaiting_is_the_not_locked_screenshot_state():
@@ -102,9 +111,13 @@ def test_dropped_awaiting_is_the_not_locked_screenshot_state():
     assert "先选成对 Log 与色域" in awaiting
     assert "lockedSample" in locked
     assert "sonySLog3SGamut3" in tool.split("private func lockedSample")[1]
-    assert "if session.lockedClipCount == 0" in content
-    assert "UnlockedPairHint()" in content.split("if session.lockedClipCount == 0")[1]
-    assert 'Text("先选成对 Log 与色域")' in content
+    button = content.split("struct ProcessLockedToolbarButton")[1].split("struct ProcessLockedButtonHelp")[0]
+    assert "if session.clips.isEmpty" in button
+    assert 'Text("把混源文件夹拖进来")' in button
+    pair = button.split("else if session.lockedClipCount == 0")[1]
+    assert 'Text("先选成对 Log 与色域")' in pair
+    window = content.split("struct ContentView")[1].split("struct ClipListArrowMonitor")[0]
+    assert "UnlockedPairHint()" not in window
 
 
 def test_snapshot_compile_can_see_session_focus():
@@ -167,11 +180,16 @@ def test_placeholder_colors_fail_and_small_accents_do_not():
 
     blank = Image.new("RGB", (80, 80), (236, 236, 236))
     assert is_blank_capture(analyze_image(blank).stddev)
+    assert toolbar_region_present(960, 900) is True
+    assert toolbar_region_present(900, 900) is False
+    assert toolbar_region_present(840, 800) is True
 
 
 def test_after_write_must_not_match_locked_bytes(tmp_path: Path):
     def write(name: str, color: tuple[int, int, int]) -> None:
-        Image.new("RGB", (220, 220), color).save(tmp_path / name)
+        height = int(name.split("-")[-2].split("x")[1])
+        width = int(name.split("-")[-2].split("x")[0])
+        Image.new("RGB", (width, height + 48), color).save(tmp_path / name)
 
     for size in ("1440x900", "1280x800"):
         for appearance in ("light", "dark"):

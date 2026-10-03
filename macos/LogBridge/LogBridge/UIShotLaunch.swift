@@ -94,7 +94,8 @@ enum UIShotLaunch {
         NSApp.appearance = appearance
         guard let window = NSApp.windows.first(where: { $0.contentView != nil }) else { return }
         window.appearance = appearance
-        window.styleMask = [.borderless]
+        window.styleMask.formUnion([.titled, .closable, .miniaturizable, .resizable])
+        window.toolbarStyle = .unified
         window.setContentSize(NSSize(width: shotWidth, height: shotHeight))
         window.setFrameOrigin(NSPoint(x: 40, y: 40))
         window.orderFrontRegardless()

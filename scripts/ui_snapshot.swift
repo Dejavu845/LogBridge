@@ -3,11 +3,11 @@ import SwiftUI
 
 // Screenshot baseline for the macOS CI runner.
 // Renders the real ContentView with injected sample clips (no footage, no personal info).
-// Capture is an NSHostingView in an NSWindow: layout, several runloop turns
-// (~0.5s), then bitmapImageRepForCachingDisplay + cacheDisplay.
-// If that bitmap is still the prohibited placeholder or a blank field, try
-// CGWindowListCreateImage on the same window. The shell falls back to XCUITest
-// when every AppKit capture is still unusable.
+// Capture is the whole NSWindow (title bar and toolbar), not the content view.
+// NSHostingController installs .toolbar. After several runloop turns (~0.5s),
+// cacheDisplay the frame view (contentView.superview) and/or
+// CGWindowListCreateImage on windowNumber. A bitmap no taller than the content
+// is rejected. The shell falls back to XCUITest when that still fails.
 // One state is one child process. The shell's checker fails the job.
 
 enum SampleState: String, CaseIterable {
@@ -223,7 +223,7 @@ private func renderImage(
 ) throws -> NSImage {
     resetSampleDefaults()
     let app = NSApplication.shared
-    app.setActivationPolicy(.accessory)
+    app.setActivationPolicy(.regular)
     NSApp.appearance = NSAppearance(named: appearance.nsAppearance)
 
     let session = makeSampleSession(state)
@@ -262,51 +262,102 @@ private func renderWithHostingView<V: View>(
     height: Int,
     appearance: SampleAppearance
 ) throws -> NSImage {
-    let host = NSHostingView(rootView: view)
     let size = NSSize(width: width, height: height)
-    host.frame = NSRect(origin: .zero, size: size)
-    host.appearance = NSAppearance(named: appearance.nsAppearance)
+    // A bare NSHostingView content view does not install .toolbar.
+    // NSHostingController does, so the primary button is in the window chrome.
+    let controller = NSHostingController(rootView: view)
+    controller.view.appearance = NSAppearance(named: appearance.nsAppearance)
     let window = NSWindow(
         contentRect: NSRect(origin: .zero, size: size),
-        styleMask: [.borderless],
+        styleMask: [.titled, .closable, .miniaturizable, .resizable],
         backing: .buffered,
         defer: false
     )
     window.isReleasedWhenClosed = false
-    window.isOpaque = true
-    window.backgroundColor = .windowBackgroundColor
-    window.appearance = host.appearance
-    window.contentView = host
-    host.autoresizingMask = [.width, .height]
-    // Off the visible desktop first. List/Table still need a real window
-    // and several runloop turns before cacheDisplay has their cells.
-    window.setFrame(NSRect(x: -20000, y: -20000, width: width, height: height), display: true)
-    window.orderFrontRegardless()
+    window.title = "LogBridge"
+    window.toolbarStyle = .unified
+    window.appearance = controller.view.appearance
+    window.contentViewController = controller
+    window.setContentSize(size)
+    // On the runner's GUI session so the toolbar and List/Table get a backing store.
+    window.setFrameOrigin(NSPoint(x: 40, y: 40))
+    NSApp.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
 
-    spinRunLoop(host: host)
-    var best = cacheDisplayRep(host: host)
-    if best == nil || bitmapIsUnusable(best!) {
-        window.setFrameOrigin(NSPoint(x: 40, y: 40))
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-        spinRunLoop(host: host)
-        if let again = cacheDisplayRep(host: host), betterCapture(again, than: best) {
+    let frame = window.contentView?.superview ?? controller.view
+    spinRunLoop(host: frame)
+    var best = wholeWindowRep(window, contentHeight: height)
+    if best == nil || !captureShowsChrome(best!, window: window, contentHeight: height) {
+        spinRunLoop(host: frame)
+        if let again = wholeWindowRep(window, contentHeight: height),
+           betterWindowCapture(again, than: best, window: window, contentHeight: height) {
             best = again
         }
     }
-    if best == nil || bitmapIsUnusable(best!) {
-        if let windowRep = windowImageRep(window: window), betterCapture(windowRep, than: best) {
-            best = windowRep
-        }
-    }
+    let showsChrome = best.map { captureShowsChrome($0, window: window, contentHeight: height) } ?? false
+    let toolbarOK = !requireToolbarItems || toolbarHasItems(window)
+    let usable = best.map { !bitmapIsUnusable($0) } ?? false
     window.orderOut(nil)
     window.close()
-    guard let rep = best else {
-        throw SnapshotError.noBitmap("NSHostingView cacheDisplay and CGWindowListCreateImage produced no bitmap")
+    guard let rep = best, showsChrome else {
+        throw SnapshotError.noBitmap("whole-window capture did not include toolbar chrome")
+    }
+    guard usable else {
+        throw SnapshotError.noBitmap("whole-window capture is still a placeholder or blank")
+    }
+    guard toolbarOK else {
+        throw SnapshotError.noBitmap("NSWindow.toolbar has no items")
     }
     let image = NSImage(size: NSSize(width: rep.pixelsWide, height: rep.pixelsHigh))
     image.addRepresentation(rep)
     return image
+}
+
+/// HEAD screenshots must show the primary toolbar button. The 28066d5
+/// baseline has no window toolbar, so that job sets this to 0.
+private var requireToolbarItems: Bool {
+    ProcessInfo.processInfo.environment["SNAPSHOT_REQUIRE_TOOLBAR"] != "0"
+}
+
+private func toolbarHasItems(_ window: NSWindow) -> Bool {
+    guard let items = window.toolbar?.items else { return false }
+    return !items.isEmpty
+}
+
+/// Frame-view cacheDisplay plus the composited window image. Keep whichever
+/// is tall enough to include the title bar / toolbar.
+@MainActor
+private func wholeWindowRep(_ window: NSWindow, contentHeight: Int) -> NSBitmapImageRep? {
+    var best: NSBitmapImageRep?
+    if let frame = window.contentView?.superview, let rep = cacheDisplayRep(host: frame) {
+        best = rep
+    }
+    if let rep = windowImageRep(window: window),
+       betterWindowCapture(rep, than: best, window: window, contentHeight: contentHeight) {
+        best = rep
+    }
+    return best
+}
+
+private func captureShowsChrome(_ rep: NSBitmapImageRep, window: NSWindow, contentHeight: Int) -> Bool {
+    let minPixels = Int((CGFloat(contentHeight) * window.backingScaleFactor).rounded(.up))
+    return rep.pixelsHigh > minPixels
+}
+
+private func betterWindowCapture(
+    _ candidate: NSBitmapImageRep,
+    than current: NSBitmapImageRep?,
+    window: NSWindow,
+    contentHeight: Int
+) -> Bool {
+    guard let current else { return true }
+    let candChrome = captureShowsChrome(candidate, window: window, contentHeight: contentHeight)
+    let currChrome = captureShowsChrome(current, window: window, contentHeight: contentHeight)
+    if candChrome, !currChrome { return true }
+    if !candChrome, currChrome { return false }
+    if bitmapIsUnusable(current), !bitmapIsUnusable(candidate) { return true }
+    if !bitmapIsUnusable(current), bitmapIsUnusable(candidate) { return false }
+    return candidate.pixelsHigh > current.pixelsHigh
 }
 
 /// Ten turns, 0.05s each: about 0.5s total, so lazy Table/List can fill in.

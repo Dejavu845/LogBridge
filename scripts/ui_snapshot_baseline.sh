@@ -19,5 +19,6 @@ export SNAPSHOT_TOOL="${ROOT}/scripts/ui_snapshot.swift"
 export SNAPSHOT_OUT="${ROOT}/ui-screenshots-baseline"
 export SNAPSHOT_SHA="28066d5"
 export SNAPSHOT_XCTEST=1
+export SNAPSHOT_REQUIRE_TOOLBAR=0
 export SNAPSHOT_PROJECT_DIR="${WT}/macos/LogBridge"
 bash "${ROOT}/scripts/ui_snapshot.sh"

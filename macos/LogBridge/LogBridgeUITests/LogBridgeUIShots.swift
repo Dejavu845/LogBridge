@@ -27,8 +27,28 @@ final class LogBridgeUIShots: XCTestCase {
                         "--logbridge-shot-appearance", appearance,
                     ]
                     app.launch()
+                    let window = app.windows.firstMatch
+                    XCTAssertTrue(window.waitForExistence(timeout: 20), "\(state) window")
                     let caption = app.staticTexts["CI 离屏渲染·假数据·非真机"]
                     XCTAssertTrue(caption.waitForExistence(timeout: 20), "\(state) \(appearance) caption")
+                    // 28066d5 keeps the button inside the content bar, and only
+                    // when a clip is locked. That job writes the marker below.
+                    if expectsPrimaryToolbar {
+                        let primary = app.buttons["处理已锁定片段"]
+                        XCTAssertTrue(primary.waitForExistence(timeout: 12), "\(state) primary button")
+                        if state == "empty" || state == "dropped-awaiting" {
+                            XCTAssertFalse(primary.isEnabled)
+                        } else {
+                            XCTAssertTrue(primary.isEnabled)
+                        }
+                        if state == "dropped-awaiting" {
+                            XCTAssertTrue(app.staticTexts["先选成对 Log 与色域"].exists)
+                        }
+                        if state == "empty" {
+                            XCTAssertTrue(app.staticTexts["把混源文件夹拖进来"].exists)
+                            XCTAssertFalse(app.staticTexts["先选成对 Log 与色域"].exists)
+                        }
+                    }
                     let settled = expectation(description: "layout")
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         settled.fulfill()
@@ -36,11 +56,21 @@ final class LogBridgeUIShots: XCTestCase {
                     wait(for: [settled], timeout: 2)
                     let name = "\(state)-\(size.0)x\(size.1)-\(appearance).png"
                     let url = out.appendingPathComponent(name)
-                    try app.screenshot().pngRepresentation.write(to: url)
+                    try window.screenshot().pngRepresentation.write(to: url)
                     app.terminate()
                 }
             }
         }
+    }
+
+    /// HEAD requires the window-toolbar button. Baseline sets this marker to 0.
+    private var expectsPrimaryToolbar: Bool {
+        let marker = "/tmp/logbridge-ui-shot-require-toolbar.txt"
+        if let text = try? String(contentsOfFile: marker, encoding: .utf8) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !trimmed.hasPrefix("0")
+        }
+        return ProcessInfo.processInfo.environment["SNAPSHOT_REQUIRE_TOOLBAR"] != "0"
     }
 
     private func outputDirectory() -> URL {
