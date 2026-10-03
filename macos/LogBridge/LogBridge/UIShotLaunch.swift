@@ -168,6 +168,7 @@ enum UIShotLaunch {
 struct UIShotChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
+            .environment(\.controlActiveState, .active)
             .overlay(alignment: .bottomTrailing) {
                 Text(UIShotLaunch.caption)
                     .font(.caption2.weight(.semibold))

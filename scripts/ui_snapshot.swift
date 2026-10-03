@@ -250,6 +250,8 @@ private func snapshotRoot(session: SessionModel, width: Int, height: Int, appear
         .background(Color(nsColor: .windowBackgroundColor))
         .preferredColorScheme(appearance.colorScheme)
         .environment(\.colorScheme, appearance.colorScheme)
+        // Inactive windows draw borderedProminent grey whether or not it is enabled.
+        .environment(\.controlActiveState, .active)
         .overlay(alignment: .bottomTrailing) {
             Text(offscreenCaption)
                 .font(.caption2.weight(.semibold))

@@ -72,6 +72,7 @@ def test_snapshot_tool_covers_sizes_appearances_and_states():
         "_setForceActiveAppearance:",
         "isEnabled",
         "expectPrimaryEnabled",
+        "controlActiveState",
         "ContentView(session:",
         "sample-a.mov",
         "sample-locked.mov",
