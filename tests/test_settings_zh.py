@@ -1,4 +1,4 @@
-"""Chinese settings page. No color numbers. No 精准 / 一键还原 / 全自动校准."""
+"""Chinese settings page. No color numbers. 不写已经测准 / 自动还原 / 全自动校准."""
 
 from pathlib import Path
 
@@ -10,7 +10,7 @@ SIDEBAR = ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift"
 
 
 SETTINGS_PREVIEW_HELP = (
-    "默认 Rec.709（角标预览·非成片）。不是成片，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
+    "默认 Rec.709（角标仅预览）。只作预览，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
 )
 SETTINGS_WB_HELP = (
     "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"
@@ -29,19 +29,19 @@ def test_settings_copy_is_chinese():
     s = _read(SETTINGS)
     ui = _code_without_comments(s)
     assert "默认预览" in s
-    assert "Rec.709 预览·非成片" in s
-    assert "Rec.2100 HLG 预览·非成片" in s
-    assert "Rec.2100 PQ 预览·非成片" in s
-    assert 'Text("Rec.709 预览·非成片").tag(ODTMode.rec709)' in s
-    assert 'Text("Rec.2100 HLG 预览·非成片").tag(ODTMode.hlg)' in s
-    assert 'Text("Rec.2100 PQ 预览·非成片").tag(ODTMode.pq)' in s
+    assert "Rec.709 仅预览" in s
+    assert "Rec.2100 HLG 仅预览" in s
+    assert "Rec.2100 PQ 仅预览" in s
+    assert 'Text("Rec.709 仅预览").tag(ODTMode.rec709)' in s
+    assert 'Text("Rec.2100 HLG 仅预览").tag(ODTMode.hlg)' in s
+    assert 'Text("Rec.2100 PQ 仅预览").tag(ODTMode.pq)' in s
     assert SETTINGS_PREVIEW_HELP in s
     assert SETTINGS_WB_HELP in s
     assert f'Text("{SETTINGS_WB_HELP}")' in s
     assert "不写入 CAT" not in SETTINGS_WB_HELP
     assert "CAT" not in SETTINGS_WB_HELP
-    assert "预览·非成片" in s
-    assert "角标预览·非成片" in s
+    assert "仅预览" in s
+    assert "角标仅预览" in s
     assert "DIY OETF" not in ui
     assert "DIY" not in ui
     assert "导入后提示估计白平衡" in s
@@ -50,8 +50,8 @@ def test_settings_copy_is_chinese():
     assert "不猜 5600" in s
     assert "不是校准" in s
     assert "完善" not in s
-    assert "精准" not in s or "不写精准" in s
-    assert "一键还原" not in s or "不写" in s
+    for token in ("支持", "一键", "精准", "成片", "成品"):
+        assert token not in s, token
     assert "全自动校准" not in s or "不写" in s
     assert "达芬奇已验证" not in s
     assert "已实现（未验证）" in s

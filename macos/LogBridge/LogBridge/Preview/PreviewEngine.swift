@@ -223,7 +223,7 @@ final class PreviewEngine: ObservableObject {
     private func renderODTFromGraded(graded: GradedFrame, graph: SerialGraph, cacheHit: Bool) -> (CGImage?, String) {
         var work = graded.rgb
         var odtCG: CGImage?
-        var note = "预览代理，不是成片"
+        var note = "预览代理，仅预览"
         if cacheHit {
             // Scrub does not re-run IDT. Visible status is 只重跑预览输出.
             note = "只重跑预览输出"
@@ -245,7 +245,7 @@ final class PreviewEngine: ObservableObject {
                 odt: graph.odt
             ) {
                 odtCG = hdr
-                note = "预览·非成片"
+                note = "仅预览"
             } else {
                 odtCG = nil
                 note = "HDR 预览建不出"
@@ -280,7 +280,7 @@ final class PreviewEngine: ObservableObject {
     /// 709 notes are unchanged. Fail string stays 「HDR 预览建不出」.
     private static func resolvedPreviewStatus(odt: CGImage?, status: String) -> String {
         if status == "HDR 预览建不出" { return status }
-        if status == "预览·非成片", odt != nil, !HDRPreviewColor.displayHasEDR() {
+        if status == "仅预览", odt != nil, !HDRPreviewColor.displayHasEDR() {
             return "屏幕无 EDR，预览被压到 SDR"
         }
         return status
@@ -482,8 +482,8 @@ final class PreviewEngine: ObservableObject {
     /// hardcoded BT.709 + video-range for every clip. No Rec.709 transfer
     /// before IDT. Video-range 10-bit is not /1023. It does not use the
     /// preview 8-bit path and then promote those 8-bit pixels
-    /// (`extractRGB` / 255). Still a proxy — 整段代理，不是全精度成片.
-    /// Bit-depth going up is still 整段代理，不是全精度成片.
+    /// (`extractRGB` / 255). Still a proxy — 整段代理，代理精度.
+    /// Bit-depth going up is still 整段代理，代理精度.
     /// Movies: AVAssetReader ``copyNextSampleBuffer`` loop. Stills: one frame.
     /// Write is source pixels 1:1. ``writeLongEdgeCeiling`` (16384) is refuse
     /// only — do not scale export to 16384 or 1920.
@@ -805,7 +805,7 @@ final class PreviewEngine: ObservableObject {
             || desc == MediaFormat.noteUnknownCodec {
             return desc
         }
-        if desc.contains("不接") || desc.contains("暂不支持") || desc.contains("无法读取") {
+        if desc.contains("不接") || desc.contains("暂不能处理") || desc.contains("无法读取") {
             return desc
         }
         if desc == "no IDT" || desc == "IDT is required" {
