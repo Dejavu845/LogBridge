@@ -94,6 +94,23 @@ import numpy as np
 
 from .as_shot import WB_SOURCE_ESTIMATE, WB_SOURCE_GREY
 from .exr_write import write_rgb_exr
+from .export_format import (
+    ADVANCED_DISCLOSURE_HELP_PRORES,
+    ADVANCED_EXPORT_HELP_PRORES,
+    DEFAULT_EXPORT_FORMAT,
+    DEFAULT_FORMAT_HELP,
+    EMPTY_STATE_STEP_3_PRORES,
+    EXPORT_FORMAT_LABELS,
+    ExportFormat,
+    FOLDER_PICKER_PRORES,
+    PROCESS_BUTTON_HELP_PRORES,
+    PROCESS_DELIVERABLE_NOTE_PRORES,
+    bytes_per_pixel,
+    parse_export_format,
+    prores_mov_name,
+)
+from .prores_write import verify_prores_mov, write_rgb_prores_422_hq
+from .odt import ODT_REC709, apply_odt
 from .formats import (
     NOTE_ARRI_MXF,
     NOTE_CAMERA_RAW,
@@ -185,30 +202,21 @@ PROCESS_BUTTON_HELP = (
 )
 # User-visible Swift copy (trial usability). Python constants above stay
 # locked by tests/test_batch_locked.py (owned by PR #63).
-PROCESS_BUTTON_HELP_UI = "写出的是图片序列（EXR），不是 mp4/mov"
-PROCESS_DELIVERABLE_NOTE_UI = "代理 EXR，不是视频。整段代理，代理精度。"
-FOLDER_PICKER_MESSAGE_UI = (
-    "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。"
-    "整段代理，代理精度。"
-    "未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。"
-    "已实现（未验证）。"
-)
-PROGRESS_STATUS_HELP = "按每一帧出一张图，不是一条视频"
+PROCESS_BUTTON_HELP_UI = PROCESS_BUTTON_HELP_PRORES
+PROCESS_DELIVERABLE_NOTE_UI = PROCESS_DELIVERABLE_NOTE_PRORES
+FOLDER_PICKER_MESSAGE_UI = FOLDER_PICKER_PRORES
+PROGRESS_STATUS_HELP = "按每一帧写入 ProRes；高级可选 EXR 图序列"
 EMPTY_STATE_STEP_1 = "把混源文件夹拖进来"
 EMPTY_STATE_STEP_2 = "每条选成对 Log 与色域"
-EMPTY_STATE_STEP_3 = "点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
+EMPTY_STATE_STEP_3 = EMPTY_STATE_STEP_3_PRORES
 EMPTY_STATE_STEPS = (
     "1 把混源文件夹拖进来  2 每条选成对 Log 与色域  "
-    "3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。"
+    "3 点处理已锁定片段。得到的是 ProRes 视频，不是 EXR 图序列。"
 )
 USER_PICKED_IDT_NOTE = "用户选择成对 IDT"
 MISSING_YCBCR_TAGS_CHIP_UI = "读不出片源色彩标签，没法写出"
-ADVANCED_EXPORT_HELP = (
-    "只处理已锁定片段。待选跳过。写出整段代理，代理精度 EXR，以及 cube 节点。不必全部锁定。"
-)
-ADVANCED_DISCLOSURE_HELP = (
-    "节点与导出 ACEScct / EXR。展开状态会记住。整段代理，代理精度。"
-)
+ADVANCED_EXPORT_HELP = ADVANCED_EXPORT_HELP_PRORES
+ADVANCED_DISCLOSURE_HELP = ADVANCED_DISCLOSURE_HELP_PRORES
 CANCEL_BUTTON = "取消"
 CANCELLED_NOTE = "已取消"
 PROGRESS_PREFIX = "写出代理"
@@ -837,18 +845,19 @@ def remove_incomplete_resolve_bundle(dest) -> None:
 
 
 def remove_failed_proxy_dir(seq_dir) -> None:
-    """Drop a ``_ACES2065-1_proxy`` folder that must not be 已写出代理.
-
-    Empty folders, zero-frame writes, and half packages after a Resolve
-    fail-closed. Name must end with ``_ACES2065-1_proxy``.
-    """
-    folder = Path(seq_dir)
-    if not folder.is_dir():
+    """Drop a half ``_proxy`` folder or a half ProRes ``.mov``."""
+    folder = Path(seq_dir) if seq_dir is not None else None
+    if folder is None:
         return
-    if not folder.name.endswith(DELIVERABLE_DIR_SUFFIX):
+    try:
+        if folder.is_file():
+            if folder.suffix.lower() == ".mov" and "_proxy" in folder.stem:
+                folder.unlink()
+            return
+        if folder.is_dir() and folder.name.endswith(DELIVERABLE_DIR_SUFFIX):
+            shutil.rmtree(folder)
+    except OSError:
         return
-    shutil.rmtree(folder)
-
 
 def clip_pixel_count(
     clip: BatchClip, rgb_frames: Sequence[np.ndarray] | None = None
@@ -908,6 +917,7 @@ def format_proxy_bytes(n: int) -> str:
 def estimate_locked_proxy_bytes(
     clips: Sequence[BatchClip],
     frames: dict[str, np.ndarray | Sequence[np.ndarray]] | None = None,
+    export_format=None,
 ) -> ProxyDiskEstimate:
     """Sum locked clips only. Pending / unlocked add nothing.
 
@@ -928,7 +938,7 @@ def estimate_locked_proxy_bytes(
             continue
         n_frames, frame_src = clip_frame_count(clip, rgb_frames)
         n_pixels, pixel_src = clip_pixel_count(clip, rgb_frames)
-        total += n_frames * n_pixels * BYTES_PER_EXR_PIXEL
+        total += n_frames * n_pixels * bytes_per_pixel(parse_export_format(export_format))
         if frame_src == "guess":
             used_frame_guess = True
         elif frame_src == "duration_fps":
@@ -1025,6 +1035,16 @@ def sequence_frame_name(index: int) -> str:
 def deliverable_name(clip_name: str, index: int = 0) -> str:
     """Relative path of one proxy sequence frame. Not a lone ``_frame0`` file."""
     return f"{deliverable_dir_name(clip_name)}/{sequence_frame_name(index)}"
+
+
+
+def deliverable_path_name(clip_name: str, export_format=None) -> str:
+    """Default ProRes .mov name; EXR keeps the ``_ACES2065-1_proxy`` folder."""
+    fmt = parse_export_format(export_format)
+    if fmt is ExportFormat.PRORES_422_HQ:
+        return prores_mov_name(clip_name)
+    return deliverable_dir_name(clip_name)
+
 
 
 def as_frame_sequence(value) -> list[np.ndarray]:
@@ -1201,6 +1221,7 @@ def process_locked_writes(
     ycbcr_tags: dict[str, dict] | None = None,
     resolve_write_fn: Callable[..., object] | None = None,
     resolve_lut_size: int = 17,
+    export_format=None,
 ) -> BatchWriteReport:
     """Write an ACES2065-1 proxy EXR sequence for locked clips only.
 
@@ -1246,7 +1267,8 @@ def process_locked_writes(
     dest = Path(dest)
     plan = plan_locked_batch(clips)
     frames = frames or {}
-    estimate = estimate_locked_proxy_bytes(plan.locked, frames=frames)
+    fmt = parse_export_format(export_format)
+    estimate = estimate_locked_proxy_bytes(plan.locked, frames=frames, export_format=fmt)
     # Nothing to write (decode errors only) is not a dest-size abort.
     if estimate.bytes > 0 and not dest_has_space(
         dest, estimate.needed_bytes, free_bytes=free_bytes
@@ -1262,8 +1284,7 @@ def process_locked_writes(
         )
     dest.mkdir(parents=True, exist_ok=True)
     graph = graph if graph is not None else SerialGraph()
-    writer = write_fn or (lambda path, rgb: write_rgb_exr(path, rgb))
-
+    writer = write_fn  # optional override; EXR path only when set or format=exr
     written: list[ClipWrite] = []
     errors: list[ClipWrite] = []
     cancelled = False
@@ -1272,10 +1293,14 @@ def process_locked_writes(
         if should_cancel and should_cancel():
             cancelled = True
             break
-        seq_dir = dest / deliverable_dir_name(clip.name)
         rgb_frames = as_frame_sequence(frames.get(clip.name))
         if not rgb_frames:
-            remove_failed_proxy_dir(seq_dir)
+            if fmt is ExportFormat.EXR_ACES2065:
+                remove_failed_proxy_dir(dest / deliverable_dir_name(clip.name))
+            else:
+                mov = dest / prores_mov_name(clip.name)
+                if mov.exists():
+                    mov.unlink()
             errors.append(ClipWrite(name=clip.name, error=DECODE_FAILED_CHIP))
             continue
         if not clip.idt:
@@ -1295,47 +1320,78 @@ def process_locked_writes(
                 errors.append(ClipWrite(name=clip.name, error=str(exc)))
                 continue
         try:
-            if seq_dir.exists():
-                shutil.rmtree(seq_dir)
-            seq_dir.mkdir(parents=True, exist_ok=True)
             if on_progress:
                 on_progress(progress_text(clip_index, clip_total))
-            frame_total = len(rgb_frames)
-            # Clip-constant CAT / exposure. One IDT+WB pass per write frame.
-            # Never graph.apply — that bakes preview ODT (709 / HLG / PQ).
             write_setup = graph.ap0_write_setup()
-            for index, rgb in enumerate(rgb_frames):
-                if should_cancel and should_cancel():
-                    if seq_dir.exists():
-                        shutil.rmtree(seq_dir)
-                    cancelled = True
-                    break
-                out = seq_dir / sequence_frame_name(index)
-                linear = graph.apply_ap0(rgb, clip.idt, setup=write_setup)
-                writer(out, np.asarray(linear, dtype=np.float32))
-                if write_fn is None and not out.is_file():
-                    raise OSError(WRITE_FAILED_CHIP)
-                if on_progress:
-                    on_progress(
-                        progress_text(
-                            clip_index, clip_total, index + 1, frame_total
-                        )
-                    )
-            if cancelled:
+            linear_frames = [
+                np.asarray(graph.apply_ap0(rgb, clip.idt, setup=write_setup), dtype=np.float32)
+                for rgb in rgb_frames
+            ]
+            if should_cancel and should_cancel():
+                cancelled = True
                 break
-            ok, verify_err = verify_locked_proxy_sequence(seq_dir, clip)
-            if not ok:
-                remove_failed_proxy_dir(seq_dir)
-                errors.append(
-                    ClipWrite(name=clip.name, error=verify_err or FRAME_MISMATCH_CHIP)
+            if fmt is ExportFormat.PRORES_422_HQ and writer is None:
+                # Bake Rec.709 preview ODT so the .mov is editor-ready.
+                display_frames = [np.asarray(apply_odt(f, ODT_REC709), dtype=np.float32) for f in linear_frames]
+                fps = float(clip.fps) if getattr(clip, "fps", None) else 24.0
+                if not fps or fps <= 0:
+                    fps = 24.0
+                out_mov = dest / prores_mov_name(clip.name)
+                if out_mov.exists():
+                    out_mov.unlink()
+                write_rgb_prores_422_hq(out_mov, display_frames, fps=fps)
+                ok, verify_err = verify_prores_mov(out_mov)
+                if not ok:
+                    if out_mov.exists():
+                        out_mov.unlink()
+                    errors.append(ClipWrite(name=clip.name, error=verify_err or FRAME_MISMATCH_CHIP))
+                    continue
+                written.append(
+                    ClipWrite(name=clip.name, path=str(out_mov), frame_count=len(display_frames))
                 )
-                continue
-            written.append(
-                ClipWrite(name=clip.name, path=str(seq_dir), frame_count=len(rgb_frames))
-            )
+            else:
+                # EXR sequence path (advanced / explicit / write_fn override).
+                seq_dir = dest / deliverable_dir_name(clip.name)
+                if seq_dir.exists():
+                    shutil.rmtree(seq_dir)
+                seq_dir.mkdir(parents=True, exist_ok=True)
+                exr_writer = writer or (lambda p, rgb: write_rgb_exr(p, rgb))
+                frame_total = len(linear_frames)
+                for index, linear in enumerate(linear_frames):
+                    if should_cancel and should_cancel():
+                        if seq_dir.exists():
+                            shutil.rmtree(seq_dir)
+                        cancelled = True
+                        break
+                    out = seq_dir / sequence_frame_name(index)
+                    exr_writer(out, linear)
+                    if writer is None and not out.is_file():
+                        raise OSError(WRITE_FAILED_CHIP)
+                    if on_progress:
+                        on_progress(
+                            progress_text(clip_index, clip_total, index + 1, frame_total)
+                        )
+                if cancelled:
+                    break
+                ok, verify_err = verify_locked_proxy_sequence(seq_dir, clip)
+                if not ok:
+                    remove_failed_proxy_dir(seq_dir)
+                    errors.append(
+                        ClipWrite(name=clip.name, error=verify_err or FRAME_MISMATCH_CHIP)
+                    )
+                    continue
+                written.append(
+                    ClipWrite(name=clip.name, path=str(seq_dir), frame_count=len(linear_frames))
+                )
         except Exception as exc:  # noqa: BLE001 — per-clip error, keep going
-            remove_failed_proxy_dir(seq_dir)
+            if fmt is ExportFormat.EXR_ACES2065:
+                remove_failed_proxy_dir(dest / deliverable_dir_name(clip.name))
+            else:
+                mov = dest / prores_mov_name(clip.name)
+                if mov.exists():
+                    mov.unlink()
             errors.append(ClipWrite(name=clip.name, error=str(exc)))
+
     if written and not cancelled:
         try:
             if resolve_write_fn is not None:

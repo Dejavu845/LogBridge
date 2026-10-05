@@ -495,7 +495,7 @@ def test_export_write_overlaps_next_copynext():
         "func readFirstYpCbCrRGB"
     )[0]
     export_body = clip.split("func exportLockedEXR")[1].split(
-        "func cancelLockedDeliverables"
+        "func exportLockedProRes"
     )[0]
 
     assert "exportWriteQueue" not in engine

@@ -32,6 +32,8 @@
 		A10000000000000000000017 /* HDRPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* HDRPreview.swift */; };
 		A10000000000000000000018 /* ACEScctMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* ACEScctMath.swift */; };
 		A10000000000000000000019 /* UICopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* UICopy.swift */; };
+		A1000000000000000000001A /* ExportFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001C /* ExportFormat.swift */; };
+		A1000000000000000000001B /* ProResWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001D /* ProResWriter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -61,6 +63,8 @@
 		A20000000000000000000019 /* HDRPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDRPreview.swift; sourceTree = "<group>"; };
 		A2000000000000000000001A /* ACEScctMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACEScctMath.swift; sourceTree = "<group>"; };
 		A2000000000000000000001B /* UICopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UICopy.swift; sourceTree = "<group>"; };
+		A2000000000000000000001C /* ExportFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFormat.swift; sourceTree = "<group>"; };
+		A2000000000000000000001D /* ProResWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProResWriter.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* LogBridge.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LogBridge.entitlements; sourceTree = "<group>"; };
 		A30000000000000000000001 /* LogBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LogBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -125,6 +129,7 @@
 				A20000000000000000000010 /* NodeGraph.swift */,
 				A20000000000000000000016 /* MediaFormat.swift */,
 				A20000000000000000000017 /* AppSettings.swift */,
+				A2000000000000000000001C /* ExportFormat.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -171,6 +176,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000009 /* ResolveExporter.swift */,
+				A2000000000000000000001D /* ProResWriter.swift */,
 			);
 			path = Export;
 			sourceTree = "<group>";
@@ -291,6 +297,8 @@
 				A10000000000000000000017 /* HDRPreview.swift in Sources */,
 				A10000000000000000000018 /* ACEScctMath.swift in Sources */,
 				A10000000000000000000019 /* UICopy.swift in Sources */,
+				A1000000000000000000001A /* ExportFormat.swift in Sources */,
+				A1000000000000000000001B /* ProResWriter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -286,8 +286,8 @@ final class SessionModel: ObservableObject {
         panel.canCreateDirectories = true
         panel.prompt = "写出"
         let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
-        // Python copy-lock (test_batch_locked): 已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，代理精度。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。
-        panel.message = "每条素材一个 _ACES2065-1_proxy 夹，里面逐帧图片，给达芬奇用。整段代理，代理精度。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。" + estimate.pickerSuffix
+        // Default ProRes 422 HQ; EXR remains advanced.
+        panel.message = UICopy.FOLDER_PICKER_MESSAGE_UI + estimate.pickerSuffix
         if let remembered = settings.lastExportDirectoryURL {
             panel.directoryURL = remembered
         }
@@ -341,18 +341,35 @@ final class SessionModel: ObservableObject {
                     force: true
                 )
                 do {
-                    let url = try self.exportLockedEXR(
-                        clip: clip,
-                        graph: graphCopy,
-                        dest: dest
-                    ) { frame in
-                        self.publishExportProgress(
-                            Self.exportProgressText(
-                                clipIndex: clipIndex,
-                                clipTotal: clipTotal,
-                                frame: frame
+                    let url: URL
+                    if self.settings.exportFormat == .prores422HQ {
+                        url = try self.exportLockedProRes(
+                            clip: clip,
+                            graph: graphCopy,
+                            dest: dest
+                        ) { frame in
+                            self.publishExportProgress(
+                                Self.exportProgressText(
+                                    clipIndex: clipIndex,
+                                    clipTotal: clipTotal,
+                                    frame: frame
+                                )
                             )
-                        )
+                        }
+                    } else {
+                        url = try self.exportLockedEXR(
+                            clip: clip,
+                            graph: graphCopy,
+                            dest: dest
+                        ) { frame in
+                            self.publishExportProgress(
+                                Self.exportProgressText(
+                                    clipIndex: clipIndex,
+                                    clipTotal: clipTotal,
+                                    frame: frame
+                                )
+                            )
+                        }
                     }
                     written.append(url)
                     self.setExportChip(clipID: clip.id, Self.wroteProxyChip)
@@ -489,6 +506,61 @@ final class SessionModel: ObservableObject {
     }
 
     /// Same primary button becomes 取消 while writing. Not a second process button.
+
+    /// Rec.709 preview ProRes 422 HQ movie. Same grade as EXR, then ODT.
+    /// Editor-ready proxy. 整段代理，代理精度.
+    func exportLockedProRes(
+        clip: Clip,
+        graph: SerialGraph,
+        dest: URL,
+        onFrame: ((Int) -> Void)? = nil
+    ) throws -> URL {
+        guard clip.hasLockedPair else {
+            throw NSError(domain: "LogBridge", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: clip.processSkipReason ?? "先选择成对 IDT"
+            ])
+        }
+        let outURL = ProResWriter.deliverableURL(for: clip, in: dest)
+        if FileManager.default.fileExists(atPath: outURL.path) {
+            try FileManager.default.removeItem(at: outURL)
+        }
+        var frames: [[Float]] = []
+        var width = 0
+        var height = 0
+        do {
+            let count = try preview.exportGradedAP0Sequence(clip: clip, graph: graph) { index, rgb, w, h in
+                if self.writeCancel.isRequested {
+                    throw LockedWriteCancel()
+                }
+                width = w
+                height = h
+                var display = rgb
+                PreviewColor.applyODT(rgb: &display)
+                frames.append(display)
+                onFrame?(index + 1)
+            }
+            if count < 1 || frames.isEmpty {
+                throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: Self.decodeFailedChip
+                ])
+            }
+            let fps = Self.metadataFPS(for: clip) ?? Self.conservativeFPS
+            try ProResWriter.writeRec709ProRes422HQ(
+                frames: frames,
+                width: width,
+                height: height,
+                fps: fps,
+                to: outURL
+            )
+        } catch {
+            if FileManager.default.fileExists(atPath: outURL.path) {
+                try? FileManager.default.removeItem(at: outURL)
+            }
+            throw error
+        }
+        return outURL
+    }
+
     func cancelLockedDeliverables() {
         writeCancel.request()
     }
@@ -525,6 +597,13 @@ final class SessionModel: ObservableObject {
     /// Uncompressed half RGB (3 × 2). Matches color/batch.py.
     static let bytesPerEXRPixel: Int64 = 6
     static let conservativeFPS = 24.0
+
+    /// Metadata fps when present. Never invent; callers may fall back to conservativeFPS for ProRes encode only.
+    static func metadataFPS(for clip: Clip) -> Double? {
+        let ext = MediaFormat.extent(url: clip.url)
+        guard let f = ext.fps, f.isFinite, f > 0 else { return nil }
+        return f
+    }
     static let conservativeSeconds = 60.0
     static let conservativeWidth = 3840
     static let conservativeHeight = 2160

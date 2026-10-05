@@ -19,7 +19,7 @@ struct SettingsView: View {
                     Text("Rec.2100 HLG 仅预览").tag(ODTMode.hlg)
                     Text("Rec.2100 PQ 仅预览").tag(ODTMode.pq)
                 }
-                Text("默认 Rec.709（角标仅预览）。只作预览，未与 HDR 匹配。导出仍是 ACEScct / EXR。")
+                Text("默认 Rec.709（角标仅预览）。只作预览，未与 HDR 匹配。默认写出 ProRes；EXR 在高级选项。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// (never inside 「高级」). Node strip / Resolve export sit behind 「高级」
 /// (hidden by default). UI copy uses "已实现（未验证）"
 /// — never "supported". Primary action is "处理已锁定片段" — 不是一步还原.
-/// Unlocked IDT is skipped, never guessed. Export: "导出 ACEScct / EXR".
+/// Unlocked IDT is skipped, never guessed. Export default: ProRes 422 HQ; advanced: ACEScct / EXR package.
 struct ContentView: View {
     @StateObject private var session = SessionModel()
     @ObservedObject private var settings = AppSettings.shared
@@ -184,8 +184,8 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
 /// Write progress lives on SplitPreview (WriteProgressLine), not here.
 /// Not a second process button — StatusBar has no process control.
 /// 不是一步还原. Hover/help is Chinese locked phrases.
-/// Python copy-lock (test_batch_locked): 写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，代理精度。ACES2065-1 AP0 线性，不是 ACEScct。待选跳过（先选择 Log 与色域 / 先选择成对 IDT）。
-/// Python copy-lock (test_batch_locked): 写出代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，代理精度。
+/// Default deliverable: ProRes 422 HQ (Rec.709 preview). EXR remains advanced.
+/// 整段代理，代理精度.
 struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
@@ -211,10 +211,10 @@ struct ProcessLockedBar: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .help("写出的是图片序列（EXR），不是 mp4/mov")
+                    .help(UICopy.PROCESS_BUTTON_HELP_UI)
                 }
             }
-            Text("代理 EXR，不是视频。整段代理，代理精度。")
+            Text(UICopy.PROCESS_DELIVERABLE_NOTE_UI)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -240,6 +240,16 @@ struct AdvancedPanel: View {
     var body: some View {
         DisclosureGroup("高级", isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 6) {
+                Picker("写出格式", selection: Binding(
+                    get: { session.settings.exportFormat },
+                    set: { session.settings.exportFormat = $0 }
+                )) {
+                    ForEach(ExportFormat.allCases) { fmt in
+                        Text(fmt.labelZH).tag(fmt)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                .help(session.settings.exportFormat.pickerHelpZH)
                 NodeStripView(session: session)
                 HStack {
                     Button("导出 ACEScct / EXR") {
@@ -247,7 +257,7 @@ struct AdvancedPanel: View {
                     }
                     .controlSize(.small)
                     .disabled(!session.canProcess)
-                    .help("只处理已锁定片段。待选跳过。写出整段代理，代理精度 EXR，以及 cube 节点。不必全部锁定。")
+                    .help(UICopy.ADVANCED_EXPORT_HELP)
                     if let reason = session.processBlockedReason {
                         Text(reason)
                             .font(.caption2)
@@ -259,7 +269,7 @@ struct AdvancedPanel: View {
                 .padding(.bottom, 6)
             }
         }
-        .help("节点与导出 ACEScct / EXR。展开状态会记住。整段代理，代理精度。")
+        .help(UICopy.ADVANCED_DISCLOSURE_HELP)
         .padding(.horizontal, 10)
         .padding(.vertical, 2)
         .background(Color.primary.opacity(0.02))
@@ -365,7 +375,7 @@ struct WriteProgressLine: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(Color.accentColor.opacity(0.08))
-            .help("按每一帧出一张图，不是一条视频")
+            .help(UICopy.PROGRESS_STATUS_HELP)
     }
 }
 
@@ -408,6 +418,6 @@ struct StatusBar: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .background(.bar)
-        .help("按每一帧出一张图，不是一条视频")
+        .help(UICopy.PROGRESS_STATUS_HELP)
     }
 }
