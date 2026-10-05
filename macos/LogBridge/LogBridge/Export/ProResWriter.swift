@@ -112,8 +112,12 @@ enum ProResWriter {
             }
         }
         input.markAsFinished()
-        let finished = writer.finishWriting()
-        if !finished || writer.status != .completed {
+        let sem = DispatchSemaphore(value: 0)
+        writer.finishWriting {
+            sem.signal()
+        }
+        sem.wait()
+        if writer.status != .completed {
             throw writer.error ?? NSError(domain: "LogBridge", code: 3, userInfo: [
                 NSLocalizedDescriptionKey: "写出失败"
             ])
