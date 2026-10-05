@@ -10,7 +10,7 @@ SIDEBAR = ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift"
 
 
 SETTINGS_PREVIEW_HELP = (
-    "默认 Rec.709（角标仅预览）。只作预览，未与 HDR 匹配。导出仍是 ACEScct / EXR。"
+    "默认 Rec.709（角标仅预览）。只作预览，未与 HDR 匹配。默认写出 ProRes；EXR 在高级选项。"
 )
 SETTINGS_WB_HELP = (
     "默认关。打开后只提示「白平衡（估计）」，不会自动写入白平衡，不猜 5600。确认后才写。灰卡覆盖估计。不是校准。"

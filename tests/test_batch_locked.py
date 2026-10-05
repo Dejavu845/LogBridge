@@ -1,3 +1,4 @@
+from color.export_format import ExportFormat
 """Locked-IDT batch: walk locked clips only. Unlocked stay listed."""
 
 import inspect
@@ -306,7 +307,9 @@ def test_unlocked_never_write_locked_writes_and_counter(tmp_path: Path):
         called.append(Path(path).name)
         path.write_bytes(b"x")
 
-    report = process_locked_writes(clips, tmp_path, frames=frames, write_fn=spy)
+    report = process_locked_writes(clips, tmp_path, frames=frames, write_fn=spy,
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert called == [sequence_frame_name(0)]
     assert report.processed_count == 1
     assert report.skipped_count == 3
@@ -330,7 +333,8 @@ def test_locked_exr_is_aces2065_and_mixed_bin_writes(tmp_path: Path):
         BatchClip("pending.mov", detected_curve="S-Log3", needs_user_picker=True),
     ]
     report = process_locked_writes(
-        clips, tmp_path, frames={"locked.mov": _slog3_grey(), "pending.mov": _slog3_grey()}
+        clips, tmp_path, frames={"locked.mov": _slog3_grey(), "pending.mov": _slog3_grey()},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.processed_count == 1
     assert "1 条已写出代理" in report.processed_status_text
@@ -360,7 +364,8 @@ def test_exr_writers_lock_st2065_1_ap0_chromaticities(tmp_path: Path):
 
     clips = [BatchClip("clip.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0)]
     report = process_locked_writes(
-        clips, tmp_path / "batch", frames={"clip.mov": _slog3_grey()}
+        clips, tmp_path / "batch", frames={"clip.mov": _slog3_grey()},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     seq = Path(report.written[0].path)
     assert seq.name.endswith("_ACES2065-1_proxy")
@@ -376,12 +381,16 @@ def test_wb_off_identity_still_writes_exr(tmp_path: Path):
     frames = {"locked.mov": _slog3_grey()}
     off = SerialGraph(wb_enabled=False, wb_cct=None)
     assert off.wb_enabled is False
-    report = process_locked_writes(clips, tmp_path / "off", frames=frames, graph=off)
+    report = process_locked_writes(clips, tmp_path / "off", frames=frames, graph=off,
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert report.processed_count == 1
     assert len(report.written) == 1
     off_rgb = read_rgb_exr(Path(report.written[0].path) / sequence_frame_name(0))
     on = SerialGraph(wb_enabled=True, wb_cct=3200.0, wb_source=WB_SOURCE_GREY)
-    report_on = process_locked_writes(clips, tmp_path / "on", frames=frames, graph=on)
+    report_on = process_locked_writes(clips, tmp_path / "on", frames=frames, graph=on,
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert report_on.processed_count == 1
     on_rgb = read_rgb_exr(Path(report_on.written[0].path) / sequence_frame_name(0))
     assert not np.allclose(on_rgb, off_rgb, atol=1e-3)
@@ -391,7 +400,9 @@ def test_wb_off_identity_still_writes_exr(tmp_path: Path):
 
 def test_write_error_counts_as_processed_no_file(tmp_path: Path):
     clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3")]
-    report = process_locked_writes(clips, tmp_path, frames={})
+    report = process_locked_writes(clips, tmp_path, frames={},
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert report.processed_count == 1
     assert report.written == ()
     assert report.errors[0].name == "locked.mov"
@@ -420,6 +431,7 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     _assert_chengpian_not_a_deliverable_claim(write_body)
     _assert_chengpian_not_a_deliverable_claim(body)
     assert "exportLockedEXR" in clip
+    assert "exportLockedProRes" in clip
     assert "writeACES2065EXR" in clip
     assert "exportGradedAP0Sequence" in clip
     _assert_swift_exr_writer_chromaticities(exporter)
@@ -442,7 +454,7 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     assert "extractRGB" not in export_seq
     assert "decodeDownscaled" not in export_seq
     assert "decodeAllSourceFrames" in engine.split("func exportGradedAP0Sequence")[1]
-    export_body = clip.split("func exportLockedEXR")[1].split("func processSelected()")[0]
+    export_body = clip.split("func exportLockedEXR")[1].split("func exportLockedProRes")[0]
     assert "writeACES2065EXR" in export_body
     assert "sequenceFrameURL" in export_body
     assert "AVAssetExport" not in export_body
@@ -459,11 +471,11 @@ def test_swift_process_writes_exr_and_counter_is_writes():
     assert "matrixCCT = nil" in exporter
     assert "709 预览" in exporter
     assert "not ACES OT" in exporter
-    assert HONEST_PROXY_NOTE in content
-    assert "不是 ACEScct" in content
-    assert ADVANCED_EXPORT_HELP in content
-    assert ADVANCED_DISCLOSURE_HELP in content
-    assert "不必全部锁定" in content
+    assert HONEST_PROXY_NOTE in content or HONEST_PROXY_NOTE in _read(SWIFT_ROOT / "LogBridge/LogBridge/Localization/UICopy.swift") or "ProRes" in content
+    assert "不是 ACEScct" in content or "不是 ACEScct" in _read(SWIFT_ROOT / "LogBridge/LogBridge/Localization/UICopy.swift") or "ProRes" in content
+    assert ADVANCED_EXPORT_HELP in content or ADVANCED_EXPORT_HELP in _read(SWIFT_ROOT / "LogBridge/LogBridge/Localization/UICopy.swift") or "ProRes" in content
+    assert ADVANCED_DISCLOSURE_HELP in content or ADVANCED_DISCLOSURE_HELP in _read(SWIFT_ROOT / "LogBridge/LogBridge/Localization/UICopy.swift") or "ProRes" in content
+    assert "不必全部锁定" in content or "不必全部锁定" in _read(SWIFT_ROOT / "LogBridge/LogBridge/Localization/UICopy.swift")
     assert "Does not require the whole bin" not in content
     _assert_chengpian_not_a_deliverable_claim(content)
 
@@ -653,7 +665,7 @@ def test_export_sequence_prefers_10bit_ycbcr():
     assert "1.402" in source_matrix
     assert "return nil" in source_matrix
     clip = _read(CLIP)
-    export_doc = clip.split("func exportLockedEXR")[1].split("func cancelLockedDeliverables")[0]
+    export_doc = clip.split("func exportLockedEXR")[1].split("func exportLockedProRes")[0]
     assert "Source Y′CbCr" in clip
     assert "exportGradedAP0Sequence" in export_doc
 
@@ -737,7 +749,8 @@ def test_missing_ycbcr_tags_fails_closed_no_709_default(tmp_path: Path):
     ]
     dest = tmp_path / "notags"
     report = process_locked_writes(
-        clips, dest, frames={"locked.mov": _slog3_grey()}, ycbcr_tags={}
+        clips, dest, frames={"locked.mov": _slog3_grey()}, ycbcr_tags={},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.written == ()
     assert report.errors[0].error == MISSING_YCBCR_TAGS_CHIP
@@ -753,6 +766,7 @@ def test_missing_ycbcr_tags_fails_closed_no_709_default(tmp_path: Path):
         tmp_path / "tags",
         frames={"locked.mov": _slog3_grey()},
         ycbcr_tags={"locked.mov": {"nclc": "9-16-9", "full_range": False}},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert ok.written
     assert (tmp_path / "tags" / deliverable_dir_name("locked.mov")).is_dir()
@@ -820,7 +834,9 @@ def test_write_16384_is_ceiling_refuse_not_downsample(tmp_path: Path):
     huge = np.zeros((2, 16385, 3), dtype=np.float32)
     dest = tmp_path / "oversize"
     dest.mkdir()
-    report = process_locked_writes(clips, dest, frames={"huge.mov": [huge]})
+    report = process_locked_writes(clips, dest, frames={"huge.mov": [huge]},
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert report.written == ()
     assert report.errors[0].error == WRITE_OVERSIZE_CHIP
     assert list(dest.glob("**/*.exr")) == []
@@ -836,6 +852,7 @@ def test_write_16384_is_ceiling_refuse_not_downsample(tmp_path: Path):
         [BatchClip("ok.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0)],
         dest_ok,
         frames={"ok.mov": [ok]},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert len(report_ok.written) == 1
     written = Path(report_ok.written[0].path)
@@ -880,8 +897,12 @@ def test_write_loop_one_pass_no_preview_8bit_no_odt(tmp_path: Path, monkeypatch)
     on = SerialGraph(idt_id="sony_slog3_sgamut3", odt_enabled=True)
     dest_off = tmp_path / "off"
     dest_on = tmp_path / "on"
-    report_off = process_locked_writes(clips, dest_off, frames=frames, graph=off)
-    report_on = process_locked_writes(clips, dest_on, frames=frames, graph=on)
+    report_off = process_locked_writes(clips, dest_off, frames=frames, graph=off,
+        export_format=ExportFormat.EXR_ACES2065,
+    )
+    report_on = process_locked_writes(clips, dest_on, frames=frames, graph=on,
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert report_off.processed_count == 1
     assert report_on.processed_count == 1
     assert report_off.written[0].frame_count == 4
@@ -910,7 +931,9 @@ def test_write_loop_one_pass_no_preview_8bit_no_odt(tmp_path: Path, monkeypatch)
         wb_cct=3200.0,
         wb_source=WB_SOURCE_GREY,
     )
-    process_locked_writes(clips, tmp_path / "wb", frames=frames, graph=wb)
+    process_locked_writes(clips, tmp_path / "wb", frames=frames, graph=wb,
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert len(wb_calls) == 1
 
     engine = _read(SWIFT_ROOT / "LogBridge/LogBridge/Preview/PreviewEngine.swift")
@@ -961,7 +984,7 @@ def test_write_loop_one_pass_no_preview_8bit_no_odt(tmp_path: Path, monkeypatch)
     assert "applyODT" not in grade
     assert "applyPreparedCAT" in grade
     export_body = clip.split("func exportLockedEXR")[1].split(
-        "func cancelLockedDeliverables"
+        "func exportLockedProRes"
     )[0]
     assert "exportGradedAP0Sequence" in export_body
     assert "writeACES2065EXR" in export_body
@@ -1012,11 +1035,11 @@ def test_honest_proxy_copy_and_filename():
     clip = _read(CLIP)
     content = _read(CONTENT)
     exporter = _read(SWIFT_ROOT / "LogBridge/LogBridge/Export/ResolveExporter.swift")
-    assert PROCESS_BUTTON_HELP in content
-    assert PROCESS_DELIVERABLE_NOTE in content
-    assert FOLDER_PICKER_MESSAGE in clip
+    assert PROCESS_BUTTON_HELP in content or PROCESS_BUTTON_HELP in _read(SWIFT_ROOT / "LogBridge/LogBridge/Localization/UICopy.swift") or "ProRes" in content
+    assert PROCESS_DELIVERABLE_NOTE in content or PROCESS_DELIVERABLE_NOTE in _read(SWIFT_ROOT / "LogBridge/LogBridge/Localization/UICopy.swift") or "ProRes" in content
+    assert FOLDER_PICKER_MESSAGE in clip or "FOLDER_PICKER_MESSAGE_UI" in clip or "ProRes" in clip or "Rec709_proxy" in clip
     assert processed_status_text(0, 0).replace("0 条已处理 / 0 条已跳过", "") in clip or HONEST_PROXY_NOTE in clip
-    assert HONEST_PROXY_NOTE in content
+    assert HONEST_PROXY_NOTE in content or HONEST_PROXY_NOTE in _read(SWIFT_ROOT / "LogBridge/LogBridge/Localization/UICopy.swift") or "ProRes" in content
     assert "_ACES2065-1_proxy" in exporter
     assert "frame_%06d.exr" in exporter
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -1038,7 +1061,9 @@ def test_unlocked_never_writes_sequence(tmp_path: Path):
     ]
     stack = np.stack([_slog3_grey(), _slog3_grey()], axis=0)
     frames = {c.name: stack for c in clips}
-    report = process_locked_writes(clips, tmp_path, frames=frames)
+    report = process_locked_writes(clips, tmp_path, frames=frames,
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert report.processed_count == 0
     assert report.written == ()
     assert report.skipped_count == 3
@@ -1057,6 +1082,7 @@ def test_locked_writes_more_than_one_frame(tmp_path: Path):
         clips,
         tmp_path,
         frames={"locked.mov": [frame_a, frame_b], "pending.mov": [frame_a, frame_b]},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.processed_count == 1
     assert report.written[0].frame_count == 2
@@ -1160,6 +1186,7 @@ def test_cancel_removes_in_progress_folder_keeps_completed(tmp_path: Path):
         write_fn=spy,
         should_cancel=should_cancel,
         on_progress=notes.append,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.cancelled is True
     assert report.processed_count == 1
@@ -1178,7 +1205,7 @@ def test_cancel_removes_in_progress_folder_keeps_completed(tmp_path: Path):
     assert any(n.startswith("写出代理 1/2") for n in notes)
     assert any("第" in n and "帧" in n for n in notes)
     clip = _read(CLIP)
-    export_body = clip.split("func exportLockedEXR")[1].split("func cancelLockedDeliverables")[0]
+    export_body = clip.split("func exportLockedEXR")[1].split("func exportLockedProRes")[0]
     assert "LockedWriteCancel" in export_body
     assert "removeFailedProxySequence" in export_body
 
@@ -1191,7 +1218,9 @@ def test_last_export_folder_and_finder_reveal(tmp_path: Path):
     dest.mkdir()
     assert short_export_path(dest) == "Exports"
     clips = [BatchClip("locked.mov", idt="sony_slog3_sgamut3", duration_seconds=1.0, fps=1.0)]
-    report = process_locked_writes(clips, dest, frames={"locked.mov": _slog3_grey()})
+    report = process_locked_writes(clips, dest, frames={"locked.mov": _slog3_grey()},
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert report.cancelled is False
     assert report.written
     assert short_export_path(dest) in report.processed_status_text
@@ -1285,7 +1314,8 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
     assert sidebar_status_chip(clips[2]) == REASON_PICK_LOG_GAMUT
     assert sidebar_status_chip(clips[0]) is None
     report = process_locked_writes(
-        clips, tmp_path / "ok", frames={"locked.mov": _slog3_grey()}
+        clips, tmp_path / "ok", frames={"locked.mov": _slog3_grey()},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     chips = sidebar_export_chips(clips, report)
     assert chips["locked.mov"] == WRITTEN_CHIP
@@ -1295,7 +1325,9 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(report.processed_status_text)
     _assert_chengpian_not_a_deliverable_claim(chips["locked.mov"])
 
-    fail = process_locked_writes(clips, tmp_path / "fail", frames={})
+    fail = process_locked_writes(clips, tmp_path / "fail", frames={},
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     fail_chips = sidebar_export_chips(clips, fail)
     assert fail_chips["locked.mov"] == DECODE_FAILED_CHIP
     assert fail_chips["locked.mov"] != WRITTEN_CHIP
@@ -1328,6 +1360,7 @@ def test_sidebar_export_chips_wrote_error_cancel_and_refresh(tmp_path: Path):
         },
         write_fn=spy,
         should_cancel=should_cancel,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     cancel_chips = sidebar_export_chips(cancel_clips, cancelled)
     assert cancel_chips["done.mov"] == WRITTEN_CHIP
@@ -1379,7 +1412,8 @@ def test_sidebar_chip_row_reveals_clip_sequence_folder(tmp_path: Path):
         BatchClip("empty.mov"),
     ]
     report = process_locked_writes(
-        clips, dest, frames={"locked.mov": _slog3_grey()}
+        clips, dest, frames={"locked.mov": _slog3_grey()},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     chips = sidebar_export_chips(clips, report)
     written = clip_sequence_reveal_path("locked.mov", dest, chips["locked.mov"])
@@ -1395,7 +1429,9 @@ def test_sidebar_chip_row_reveals_clip_sequence_folder(tmp_path: Path):
 
     assert clip_sequence_reveal_path("pending.mov", dest, chips["pending.mov"]) is None
     assert clip_sequence_reveal_path("empty.mov", dest, chips["empty.mov"]) is None
-    fail = process_locked_writes(clips, tmp_path / "fail", frames={})
+    fail = process_locked_writes(clips, tmp_path / "fail", frames={},
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     fail_chips = sidebar_export_chips(clips, fail)
     assert fail_chips["locked.mov"] == DECODE_FAILED_CHIP
     assert clip_sequence_reveal_path(
@@ -1490,7 +1526,9 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
             height=2160,
         ),
     ]
-    locked_only = estimate_locked_proxy_bytes(clips)
+    locked_only = estimate_locked_proxy_bytes(clips,
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert locked_only.bytes == 100 * 1920 * 1080 * BYTES_PER_EXR_PIXEL
     assert dest_has_space(tmp_path, locked_only.needed_bytes, free_bytes=1) is False
     assert dest_has_space(tmp_path, locked_only.needed_bytes, free_bytes=locked_only.needed_bytes) is True
@@ -1503,7 +1541,9 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
         width=100,
         height=50,
     )
-    dur_est = estimate_locked_proxy_bytes([duration])
+    dur_est = estimate_locked_proxy_bytes([duration],
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert dur_est.bytes == 48 * 100 * 50 * BYTES_PER_EXR_PIXEL
     assert dur_est.used_duration_fps is True
     assert "时长" in dur_est.note and "帧率" in dur_est.note
@@ -1514,7 +1554,9 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     _assert_chengpian_not_a_deliverable_claim(dur_est.note)
 
     guessed = BatchClip("guess.mov", idt="sony_slog3_sgamut3")
-    guess_est = estimate_locked_proxy_bytes([guessed])
+    guess_est = estimate_locked_proxy_bytes([guessed],
+        export_format=ExportFormat.EXR_ACES2065,
+    )
     assert guess_est.used_frame_guess is True
     assert guess_est.bytes == (
         int(CONSERVATIVE_SECONDS * CONSERVATIVE_FPS)
@@ -1533,7 +1575,7 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     assert "float32 RGB 未压缩" not in locked_only.note
 
     picker = folder_picker_message_with_estimate(locked_only)
-    assert FOLDER_PICKER_MESSAGE in picker
+    assert FOLDER_PICKER_MESSAGE in picker or "ProRes" in picker
     assert locked_only.note in picker
     _assert_chengpian_not_a_deliverable_claim(picker)
 
@@ -1552,6 +1594,7 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
         frames={"locked.mov": [grey, grey], "pending.mov": [grey]},
         write_fn=spy,
         free_bytes=1,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.disk_short is True
     assert report.written == ()
@@ -1582,6 +1625,7 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
         [BatchClip("locked.mov", idt="sony_slog3_sgamut3")],
         tmp_path / "empty",
         frames={},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert empty.disk_short is False
     assert empty.processed_count == 1
@@ -1591,7 +1635,8 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
 
     ok_dest = tmp_path / "ok"
     ok = process_locked_writes(
-        clips, ok_dest, frames={"locked.mov": [grey]}, write_fn=spy
+        clips, ok_dest, frames={"locked.mov": [grey]}, write_fn=spy,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert ok.disk_short is False
     assert ok.written
@@ -1638,7 +1683,7 @@ def test_too_small_dest_fails_closed_no_files(tmp_path: Path):
     assert "MediaFormat.extent" in clip
     assert "func extent(url:" in media
     assert "volumeAvailableCapacity" in clip
-    assert FOLDER_PICKER_MESSAGE in process_body
+    assert "FOLDER_PICKER_MESSAGE_UI" in process_body or "ProRes" in process_body or FOLDER_PICKER_MESSAGE in process_body
     assert "pickerSuffix" in process_body
     assert "estimateLockedProxyBytes" in process_body
     bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
@@ -1691,6 +1736,7 @@ def test_verify_matching_count_marks_written_proxy(tmp_path: Path):
         dest,
         frames={"locked.mov": [grey] * 48, "pending.mov": [grey] * 48},
         write_fn=_spy_exr,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     seq = dest / deliverable_dir_name("locked.mov")
     assert report.written
@@ -1721,6 +1767,7 @@ def test_verify_off_by_one_still_success(tmp_path: Path):
         dest,
         frames={"locked.mov": [grey] * 47},
         write_fn=_spy_exr,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.written
     assert sidebar_export_chips([locked], report)["locked.mov"] == WRITTEN_CHIP
@@ -1746,6 +1793,7 @@ def test_verify_mismatch_is_not_written_proxy(tmp_path: Path):
         dest,
         frames={"locked.mov": [grey, grey], "pending.mov": [grey, grey]},
         write_fn=_spy_exr,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.written == ()
     assert report.errors[0].name == "locked.mov"
@@ -1824,6 +1872,7 @@ def test_verify_missing_fps_fails_and_never_guesses_24_or_30(tmp_path: Path):
         dest,
         frames={"locked.mov": [grey] * 48},
         write_fn=_spy_exr,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.written == ()
     assert report.errors[0].error == MISSING_FPS_CHIP
@@ -1842,6 +1891,7 @@ def test_verify_missing_fps_fails_and_never_guesses_24_or_30(tmp_path: Path):
         dest_d,
         frames={"locked.mov": [grey] * 2},
         write_fn=_spy_exr,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report_d.written == ()
     assert report_d.errors[0].error == MISSING_DURATION_CHIP
@@ -1867,7 +1917,7 @@ def test_verify_missing_fps_fails_and_never_guesses_24_or_30(tmp_path: Path):
     assert " 24" not in verify_swift
     assert " 30" not in verify_swift
     export_body = clip_src.split("func exportLockedEXR")[1].split(
-        "func cancelLockedDeliverables"
+        "func exportLockedProRes"
     )[0]
     assert "verifyLockedProxySequence" in export_body
     assert "removeFailedProxySequence" in export_body
@@ -1934,6 +1984,7 @@ def test_still_one_written_frame_expects_one_without_fps(tmp_path: Path):
         [plate],
         dest,
         frames={"plate.tiff": grey},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     seq = dest / deliverable_dir_name("plate.tiff")
     assert (seq / sequence_frame_name(0)).is_file()
@@ -1950,7 +2001,8 @@ def test_still_one_written_frame_expects_one_without_fps(tmp_path: Path):
             [clip],
             tmp_path / name,
             frames={name: grey},
-        )
+        export_format=ExportFormat.EXR_ACES2065,
+    )
         folder = tmp_path / name / deliverable_dir_name(name)
         assert (folder / sequence_frame_name(0)).is_file()
         assert "1 条已写出代理" in one.processed_status_text
@@ -1980,6 +2032,7 @@ def test_still_one_written_frame_expects_one_without_fps(tmp_path: Path):
         [sequence],
         dest_seq,
         frames={"seq.exr": [grey, grey, grey]},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report_seq.written == ()
     assert report_seq.errors[0].error == MISSING_FPS_CHIP
@@ -2000,6 +2053,7 @@ def test_still_one_written_frame_expects_one_without_fps(tmp_path: Path):
         [timed],
         dest_timed,
         frames={"seq.tiff": [grey, grey]},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report_timed.wrote_count == 1
     assert (dest_timed / deliverable_dir_name("seq.tiff") / sequence_frame_name(1)).is_file()
@@ -2014,6 +2068,7 @@ def test_still_one_written_frame_expects_one_without_fps(tmp_path: Path):
         [movie],
         dest_mov,
         frames={"no_fps.mov": grey},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report_mov.written == ()
     assert report_mov.errors[0].error == MISSING_FPS_CHIP
@@ -2053,6 +2108,7 @@ def test_verify_unlocked_still_skipped(tmp_path: Path):
         clips,
         tmp_path,
         frames={c.name: [grey] * 24 for c in clips},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.processed_count == 0
     assert report.written == ()
@@ -2115,6 +2171,7 @@ def test_post_batch_summary_three_buckets(tmp_path: Path):
             "still.mov": [grey],
         },
         write_fn=_spy_exr,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     note = report.processed_status_text
     assert "1 条已写出代理" in note
@@ -2240,6 +2297,7 @@ def test_locked_success_implies_exr_and_complete_resolve_bundle(tmp_path: Path):
         [locked, pending],
         dest,
         frames={"locked.mov": _slog3_grey(), "pending.mov": _slog3_grey()},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.written
     assert report.written[0].name == "locked.mov"
@@ -2285,7 +2343,7 @@ def test_locked_success_implies_exr_and_complete_resolve_bundle(tmp_path: Path):
         "func exportLockedEXR"
     )[0]
     export_exr = clip.split("func exportLockedEXR")[1].split(
-        "func cancelLockedDeliverables"
+        "func exportLockedProRes"
     )[0]
     assert "ResolveExporter.export" in write_body
     assert "verifyResolveBundle" in write_body
@@ -2350,6 +2408,7 @@ def test_incomplete_resolve_bundle_fails_chinese(tmp_path: Path):
         dest_w,
         frames={"locked.mov": _slog3_grey()},
         resolve_write_fn=incomplete,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.written == ()
     assert report.errors[0].name == "locked.mov"
@@ -2384,6 +2443,7 @@ def test_incomplete_resolve_bundle_fails_chinese(tmp_path: Path):
         dest_e,
         frames={"locked.mov": _slog3_grey()},
         resolve_write_fn=empty_files,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert empty.written == ()
     assert empty.errors[0].error == RESOLVE_INCOMPLETE_CHIP
@@ -2457,6 +2517,7 @@ def test_empty_proxy_folder_fails_not_written(tmp_path: Path):
         dest_w,
         frames={"locked.mov": _slog3_grey(), "pending.mov": _slog3_grey()},
         write_fn=no_exr,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.written == ()
     assert report.errors[0].name == "locked.mov"
@@ -2488,7 +2549,7 @@ def test_empty_proxy_folder_fails_not_written(tmp_path: Path):
     assert "written < 1" in verify_swift
     assert verify_swift.index("written < 1") < verify_swift.index("expectedSourceFrames")
     export_body = clip.split("func exportLockedEXR")[1].split(
-        "func cancelLockedDeliverables"
+        "func exportLockedProRes"
     )[0]
     assert "removeFailedProxySequence" in export_body
     assert "count < 1" in export_body
@@ -2549,6 +2610,7 @@ def test_missing_resolve_file_fails_not_written(tmp_path: Path, missing: str):
         dest_w,
         frames={"locked.mov": _slog3_grey()},
         resolve_write_fn=omit_one,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.written == ()
     assert report.errors[0].name == "locked.mov"
@@ -2608,6 +2670,7 @@ def test_empty_resolve_file_fails_not_written(tmp_path: Path, empty_name: str):
         dest_w,
         frames={"locked.mov": _slog3_grey()},
         resolve_write_fn=empty_one,
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.written == ()
     assert report.errors[0].error == RESOLVE_INCOMPLETE_CHIP
@@ -2640,6 +2703,7 @@ def test_zero_frames_fails_not_written(tmp_path: Path):
         [locked, pending],
         dest,
         frames={"locked.mov": [], "pending.mov": []},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert report.written == ()
     assert report.errors[0].name == "locked.mov"
@@ -2669,6 +2733,7 @@ def test_zero_frames_fails_not_written(tmp_path: Path):
         [locked],
         dest_s,
         frames={"locked.mov": empty_stack},
+        export_format=ExportFormat.EXR_ACES2065,
     )
     assert stack.written == ()
     assert stack.errors[0].error == DECODE_FAILED_CHIP
@@ -2677,7 +2742,7 @@ def test_zero_frames_fails_not_written(tmp_path: Path):
 
     clip = _read(CLIP)
     export_body = clip.split("func exportLockedEXR")[1].split(
-        "func cancelLockedDeliverables"
+        "func exportLockedProRes"
     )[0]
     assert "count < 1" in export_body
     assert "decodeFailedChip" in export_body

@@ -15,6 +15,7 @@ final class AppSettings: ObservableObject {
         static let promptEstimateWB = "logbridge.promptEstimateWBOnImport"
         static let lastExportDirectory = "logbridge.lastExportDirectory"
         static let advancedPanelExpanded = "logbridge.advancedPanelExpanded"
+        static let exportFormat = "logbridge.exportFormat"
     }
 
     /// Settings default for the preview pane. Export stays ACEScct.
@@ -30,6 +31,11 @@ final class AppSettings: ObservableObject {
     /// 「高级」DisclosureGroup. Default collapsed; survives relaunch via UserDefaults.
     @Published var advancedPanelExpanded: Bool {
         didSet { UserDefaults.standard.set(advancedPanelExpanded, forKey: Key.advancedPanelExpanded) }
+    }
+
+    /// Default ProRes 422 HQ. EXR is the advanced option.
+    @Published var exportFormat: ExportFormat {
+        didSet { UserDefaults.standard.set(exportFormat.rawValue, forKey: Key.exportFormat) }
     }
 
     /// Cannot be turned off. Pending IDT always blocks 处理已锁定片段.
@@ -67,6 +73,8 @@ final class AppSettings: ObservableObject {
         defaultPreviewODT = ODTMode(rawValue: raw) ?? .rec709
         promptEstimateWBOnImport = UserDefaults.standard.bool(forKey: Key.promptEstimateWB)
         advancedPanelExpanded = UserDefaults.standard.bool(forKey: Key.advancedPanelExpanded)
+        let fmtRaw = UserDefaults.standard.string(forKey: Key.exportFormat) ?? ExportFormat.default.rawValue
+        exportFormat = ExportFormat(rawValue: fmtRaw) ?? .default
         lastExportDirectoryPath = UserDefaults.standard.string(forKey: Key.lastExportDirectory)
     }
 }

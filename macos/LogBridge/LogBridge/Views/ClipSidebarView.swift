@@ -27,7 +27,7 @@ struct ClipSidebarView: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 6)
 
-            Text("1 把混源文件夹拖进来  2 每条选成对 Log 与色域  3 点处理已锁定片段。得到的是 EXR 图序列，不是视频。")
+            Text(UICopy.EMPTY_STATE_STEPS)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
