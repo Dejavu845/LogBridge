@@ -31,6 +31,7 @@
 		A10000000000000000000016 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* SettingsView.swift */; };
 		A10000000000000000000017 /* HDRPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* HDRPreview.swift */; };
 		A10000000000000000000018 /* ACEScctMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* ACEScctMath.swift */; };
+		A10000000000000000000019 /* UICopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* UICopy.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -59,6 +60,7 @@
 		A20000000000000000000018 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* HDRPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDRPreview.swift; sourceTree = "<group>"; };
 		A2000000000000000000001A /* ACEScctMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ACEScctMath.swift; sourceTree = "<group>"; };
+		A2000000000000000000001B /* UICopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UICopy.swift; sourceTree = "<group>"; };
 		A2000000000000000000000F /* LogBridge.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LogBridge.entitlements; sourceTree = "<group>"; };
 		A30000000000000000000001 /* LogBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LogBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -99,10 +101,19 @@
 				A50000000000000000000007 /* Stubs */,
 				A5000000000000000000000A /* Views */,
 				A5000000000000000000000B /* Preview */,
+				A5000000000000000000000C /* Localization */,
 				A2000000000000000000000E /* Info.plist */,
 				A2000000000000000000000F /* LogBridge.entitlements */,
 			);
 			path = LogBridge;
+			sourceTree = "<group>";
+		};
+		A5000000000000000000000C /* Localization */ = {
+			isa = PBXGroup;
+			children = (
+				A2000000000000000000001B /* UICopy.swift */,
+			);
+			path = Localization;
 			sourceTree = "<group>";
 		};
 		A50000000000000000000003 /* Models */ = {
@@ -279,6 +290,7 @@
 				A10000000000000000000016 /* SettingsView.swift in Sources */,
 				A10000000000000000000017 /* HDRPreview.swift in Sources */,
 				A10000000000000000000018 /* ACEScctMath.swift in Sources */,
+				A10000000000000000000019 /* UICopy.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
