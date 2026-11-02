@@ -23,6 +23,15 @@ struct Clip: Identifiable, Hashable {
     var wbCCT: Double?
     var wbTint: Double
     var formatNote: String
+    /// Source pixels from `MediaFormat.extent`. Nil when that read failed. Not the 1920 preview.
+    var pixelWidth: Int? = nil
+    var pixelHeight: Int? = nil
+    /// Metadata frame rate. Nil on stills and when the file has no rate. Never a 24/30 fill-in.
+    var mediaFPS: Double? = nil
+    /// Metadata duration in seconds. Nil on stills and when duration is missing.
+    var durationSeconds: Double? = nil
+    /// Still image. The fact line says 静帧 and does not invent a frame rate.
+    var isStill: Bool = false
     /// Sidebar chip after 「处理已锁定片段」. `已写出代理`, a short Chinese error, or nil.
     /// Cleared on re-export. Cancelled in-progress stays nil. 未完成.
     var exportChip: String? = nil
@@ -95,6 +104,81 @@ struct Clip: Identifiable, Hashable {
 
     var displayCurve: String? { idt?.curve ?? detectedCurve }
     var displayGamut: String? { idt?.gamut ?? detectedGamut }
+
+    /// List, monitor, inspector, and the write sheet share this line.
+    /// Only numbers `MediaFormat.extent` actually read. Missing fields stay off the line.
+    /// Stills say 静帧 and do not show a rate. Not an input to write.
+    var mediaFactLine: String? {
+        Self.mediaFactLine(
+            pixelWidth: pixelWidth,
+            pixelHeight: pixelHeight,
+            mediaFPS: mediaFPS,
+            durationSeconds: durationSeconds,
+            isStill: isStill
+        )
+    }
+
+    static func mediaFactLine(
+        pixelWidth: Int?,
+        pixelHeight: Int?,
+        mediaFPS: Double?,
+        durationSeconds: Double?,
+        isStill: Bool
+    ) -> String? {
+        var parts: [String] = []
+        if let width = pixelWidth, let height = pixelHeight, width > 0, height > 0 {
+            parts.append("\(width)×\(height)")
+        }
+        if isStill {
+            parts.append("静帧")
+        } else {
+            if let fps = mediaFPS, fps.isFinite, fps > 0 {
+                parts.append("\(formatMediaFPS(fps)) 帧/秒")
+            }
+            if let seconds = durationSeconds, seconds.isFinite, seconds > 0 {
+                parts.append(formatMediaDuration(seconds))
+            }
+        }
+        if parts.isEmpty { return nil }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Trim to milliseconds. 23.976 stays 23.976. An exact integer stays an integer.
+    /// Does not replace a missing rate.
+    static func formatMediaFPS(_ fps: Double) -> String {
+        let milli = (fps * 1000).rounded()
+        let rounded = milli / 1000
+        if abs(milli.truncatingRemainder(dividingBy: 1000)) < 0.5 {
+            return String(Int(rounded.rounded()))
+        }
+        var text = String(format: "%.3f", rounded)
+        while text.hasSuffix("0") {
+            text.removeLast()
+        }
+        if text.hasSuffix(".") {
+            text.removeLast()
+        }
+        return text
+    }
+
+    /// Under a minute: tenths. Longer: clock, rounded to the second. No invented length.
+    static func formatMediaDuration(_ seconds: Double) -> String {
+        if seconds < 60 {
+            let tenths = (seconds * 10).rounded() / 10
+            if abs(tenths - tenths.rounded()) < 0.05 {
+                return "\(Int(tenths.rounded())) 秒"
+            }
+            return String(format: "%.1f 秒", tenths)
+        }
+        let total = Int(seconds.rounded())
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let remain = total % 60
+        if hours > 0 {
+            return String(format: "%d 小时 %02d 分 %02d 秒", hours, minutes, remain)
+        }
+        return String(format: "%d 分 %02d 秒", minutes, remain)
+    }
 }
 
 enum DetectionSource: String, Hashable {
@@ -1789,6 +1873,7 @@ final class SessionModel: ObservableObject {
                     }
                 }
                 let detection = ClipDetector.detect(url: file)
+                let extent = MediaFormat.extent(url: file)
                 // Never silently assign an IDT. S-Log3 without gamut stays nil.
                 let shot = detection.asShotCCT
                 built.append(Clip(
@@ -1806,7 +1891,12 @@ final class SessionModel: ObservableObject {
                     wbSource: shot == nil ? .unknown : .asShot,
                     wbCCT: shot,
                     wbTint: detection.asShotTint,
-                    formatNote: probe.note
+                    formatNote: probe.note,
+                    pixelWidth: extent.width,
+                    pixelHeight: extent.height,
+                    mediaFPS: extent.fps,
+                    durationSeconds: extent.durationSeconds,
+                    isStill: probe.kind == .still
                 ))
             }
             DispatchQueue.main.async {

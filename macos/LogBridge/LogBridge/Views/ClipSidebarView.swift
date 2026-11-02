@@ -186,6 +186,13 @@ struct ClipRow: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                if let fact = clip.mediaFactLine {
+                    Text(fact)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help("片源读到的画面尺寸、帧率和时长。缺的不写，不猜帧率。静帧写静帧。不是预览缩小后的尺寸，不参与写出。")
+                }
                 if let reason = clip.processSkipReason {
                     Text(reason)
                         .font(.caption)

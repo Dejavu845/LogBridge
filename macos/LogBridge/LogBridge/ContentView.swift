@@ -248,6 +248,13 @@ private struct MonitorHeader: View {
                               ? "画面不含曝光和白平衡。这一行仍是检查器里会写出的那一套。仅预览。"
                               : "和右侧检查器是同一套。换一条素材，这一行的曝光和白平衡不改。仅预览。")
                 }
+                if let fact = session.selectedClip?.mediaFactLine {
+                    Text(fact)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help("片源读到的画面尺寸、帧率和时长。缺的不写，不猜帧率。静帧写静帧。预览长边仍会缩小，这一行不跟着变，也不参与写出。")
+                }
             }
         }
         .padding(.horizontal, 12)
@@ -298,6 +305,13 @@ private struct InspectorColumn: View {
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.middle)
+                    if let fact = clip.mediaFactLine {
+                        Text(fact)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .help("和左侧列表、监视器、写出说明是同一行。缺的不写，不猜帧率。不参与写出。")
+                    }
                     Text(clip.hasLockedPair
                          ? "跟这条选中。曝光和白平衡是全片这一套，换一条也不改。"
                          : "跟这条选中。先选成对 IDT。")

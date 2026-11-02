@@ -88,7 +88,7 @@ struct DeliverSheet: View {
 
     private var listHeight: CGFloat {
         let headers = (session.lockedClips.isEmpty ? 0 : 1) + (skippedClips.isEmpty ? 0 : 1)
-        let estimate = CGFloat(headers) * 28 + CGFloat(session.clips.count) * 44 + 8
+        let estimate = CGFloat(headers) * 28 + CGFloat(session.clips.count) * 62 + 8
         return min(240, max(44, estimate))
     }
 
@@ -104,6 +104,7 @@ struct DeliverSheet: View {
                             clipLine(
                                 name: clip.filename,
                                 detail: clip.lockedPairLabel,
+                                fact: clip.mediaFactLine,
                                 output: clip.plannedDeliverableName(format: session.settings.exportFormat),
                                 willWrite: true
                             )
@@ -117,6 +118,7 @@ struct DeliverSheet: View {
                             clipLine(
                                 name: clip.filename,
                                 detail: clip.processSkipReason ?? "先选择成对 IDT",
+                                fact: clip.mediaFactLine,
                                 output: nil,
                                 willWrite: false
                             )
@@ -129,11 +131,11 @@ struct DeliverSheet: View {
         }
     }
 
-    private func clipLine(name: String, detail: String, output: String?, willWrite: Bool) -> some View {
+    private func clipLine(name: String, detail: String, fact: String?, output: String?, willWrite: Bool) -> some View {
         HStack(alignment: .top, spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(willWrite ? Color.accentColor : Color.yellow.opacity(0.95))
-                .frame(width: 4, height: output == nil ? 34 : 48)
+                .frame(width: 4, height: output == nil ? (fact == nil ? 34 : 50) : (fact == nil ? 48 : 64))
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(.body)
@@ -143,6 +145,13 @@ struct DeliverSheet: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                if let fact {
+                    Text(fact)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help("和左侧列表同一行。片源尺寸、帧率、时长。缺的不写，不猜帧率。不参与写出。")
+                }
                 if let output {
                     Text("将得到 \(output)")
                         .font(.caption.monospaced())

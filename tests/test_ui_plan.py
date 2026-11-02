@@ -624,3 +624,49 @@ def test_preview_playback_uses_metadata_rate_and_stops_at_the_end():
     assert "不猜帧率" in plan
     assert "不改曝光和白平衡" in plan
     assert "已写出代理。可再调色，或在状态栏打开 Finder" in plan
+
+
+def test_media_fact_line_is_shared_and_does_not_invent_a_rate():
+    """List, monitor, inspector, and the write sheet name the source. No 24/30 fill-in."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func mediaFactLine(")[1].split("static func formatMediaFPS")[0]
+    assert "静帧" in fn
+    assert "帧/秒" in fn
+    assert "width > 0" in fn
+    assert "fps.isFinite, fps > 0" in fn
+    assert "seconds.isFinite, seconds > 0" in fn
+    assert "return nil" in fn
+    assert "isStill" in fn
+    for token in ("24", "30", "5600", "6504", "setExposureStops", "setWBParams"):
+        assert token not in fn, token
+    fps = clip.split("static func formatMediaFPS")[1].split("static func formatMediaDuration")[0]
+    assert "1000" in fps
+    assert "%.3f" in fps
+    for token in ("24", "30", "5600", "6504"):
+        assert token not in fps, token
+    duration = clip.split("static func formatMediaDuration")[1].split("enum DetectionSource")[0]
+    assert "秒" in duration
+    assert "分" in duration
+    assert "小时" in duration
+    for token in ("24", "30", "5600", "6504"):
+        assert token not in duration, token
+    apply = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    assert "MediaFormat.extent" in apply
+    assert "pixelWidth: extent.width" in apply
+    assert "pixelHeight: extent.height" in apply
+    assert "mediaFPS: extent.fps" in apply
+    assert "durationSeconds: extent.durationSeconds" in apply
+    assert "isStill: probe.kind == .still" in apply
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    assert "clip.mediaFactLine" in sidebar
+    content = _read(CONTENT)
+    header = content.split("struct MonitorHeader")[1].split("struct InspectorColumn")[0]
+    assert "selectedClip?.mediaFactLine" in header
+    column = content.split("struct InspectorColumn")[1].split("struct ClipListArrowMonitor")[0]
+    assert "clip.mediaFactLine" in column
+    deliver = _read(DELIVER)
+    assert deliver.count("fact: clip.mediaFactLine") == 2
+    plan = _read(PLAN)
+    assert "静帧" in plan
+    assert "不猜 24 或 30" in plan
+    assert "片源尺寸" in plan
