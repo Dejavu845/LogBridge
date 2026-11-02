@@ -145,6 +145,23 @@ private struct LogBridgeCommands: Commands {
             .keyboardShortcut("]", modifiers: [.command, .shift])
             .disabled(sessionFocus?.session?.canApplyLockedPairToNextPending != true)
             Divider()
+            Button("锁定第 1 对") {
+                sessionFocus?.session?.lockShortListPair(at: 1)
+            }
+            .disabled(sessionFocus?.session?.canLockShortListPair(at: 1) != true)
+            Button("锁定第 2 对") {
+                sessionFocus?.session?.lockShortListPair(at: 2)
+            }
+            .disabled(sessionFocus?.session?.canLockShortListPair(at: 2) != true)
+            Button("锁定第 3 对") {
+                sessionFocus?.session?.lockShortListPair(at: 3)
+            }
+            .disabled(sessionFocus?.session?.canLockShortListPair(at: 3) != true)
+            Button("锁定第 4 对") {
+                sessionFocus?.session?.lockShortListPair(at: 4)
+            }
+            .disabled(sessionFocus?.session?.canLockShortListPair(at: 4) != true)
+            Divider()
             Button("回到开头") {
                 sessionFocus?.session?.jumpPreviewToStart()
             }

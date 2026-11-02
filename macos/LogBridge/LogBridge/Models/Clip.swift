@@ -2163,6 +2163,37 @@ final class SessionModel: ObservableObject {
         selectNextPendingAfterLock(lockedID: clip.id)
     }
 
+    /// Short paired lists only: no search field, at most ``IDT.pairListShowsSearchAfter`` rows.
+    /// That is the detected S-Log3 / C-Log2 / C-Log3 choice, not the whole catalog.
+    /// Digit 1…n locks that row and stays on this clip. A longer list has no digit,
+    /// so 1 never locks the first row of the full table and does not guess a pair.
+    /// Does not edit exposure, white balance, or the preview frame.
+    /// Already this pair: leave playback and the frame. A new pair stops playback.
+    func canLockShortListPair(at oneBased: Int) -> Bool {
+        guard oneBased >= 1, oneBased <= IDT.pairListShowsSearchAfter else { return false }
+        guard !isWritingDeliverables,
+              !showSettings,
+              !showImporter,
+              !showDeliverSheet,
+              !openingExportFolder,
+              let clip = selectedClip
+        else { return false }
+        let pairs = clip.pickerPairs
+        guard pairs.count <= IDT.pairListShowsSearchAfter, oneBased <= pairs.count else { return false }
+        return !pairs[oneBased - 1].isStub
+    }
+
+    /// Same lock as clicking that short-list row. Text fields keep the digits.
+    @discardableResult
+    func lockShortListPair(at oneBased: Int) -> Bool {
+        guard canLockShortListPair(at: oneBased), let clip = selectedClip else { return false }
+        let pair = clip.pickerPairs[oneBased - 1]
+        if clip.idt == pair, clip.hasLockedPair { return true }
+        stopPreviewPlayback()
+        setIDT(clip.id, pair)
+        return true
+    }
+
     /// Next pending clip after this one, wrapping once. Does not lock an IDT.
     private func nextPendingClip(after id: UUID) -> Clip? {
         guard let currentIdx = clips.firstIndex(where: { $0.id == id }) else { return nil }

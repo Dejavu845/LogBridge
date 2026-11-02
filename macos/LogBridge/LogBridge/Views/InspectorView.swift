@@ -103,11 +103,22 @@ private struct PairedIDTChoices: View {
         pairQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// 1、2 on a two-row list. The full catalog never gets these labels.
+    private var shortListKeyLabel: String {
+        pairs.indices.map { String($0 + 1) }.joined(separator: "、")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("点一行锁定。选完停在这条看预览。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if pairs.count <= IDT.pairListShowsSearchAfter {
+                Text("按 \(shortListKeyLabel) 锁定这一列。已经是这一对时，帧和播放留着。整表较长时没有数字键，不从整表里猜。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if showSearch {
                 HStack(spacing: 8) {
                     TextField("查找 Log 或色域", text: $pairQuery)
@@ -146,6 +157,20 @@ private struct PairedIDTChoices: View {
         }
     }
 
+    /// Short lists name the digit. A long catalog stays a click, so 1 is not a guess.
+    private func pairRowHelp(_ pair: IDT) -> String {
+        let digit: String
+        if pairs.count <= IDT.pairListShowsSearchAfter, let index = pairs.firstIndex(of: pair) {
+            digit = "按 \(index + 1) 或点这一行。"
+        } else {
+            digit = "点这一行。"
+        }
+        if clip.idt == pair {
+            return "已经是这一对。预览按这一对。再按一次不重解这一帧。"
+        }
+        return "\(digit)锁定成对 IDT。停在这条看预览，不替下一条选。整表较长时没有数字键。"
+    }
+
     private var pairRows: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(shown) { pair in
@@ -155,6 +180,12 @@ private struct PairedIDTChoices: View {
                     }
                 } label: {
                     HStack(spacing: 8) {
+                        if pairs.count <= IDT.pairListShowsSearchAfter, let index = pairs.firstIndex(of: pair) {
+                            Text("\(index + 1)")
+                                .font(.caption.monospacedDigit().weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16, alignment: .leading)
+                        }
                         Text(pair.pairLabel)
                             .font(.body)
                             .foregroundStyle(.primary)
@@ -177,9 +208,7 @@ private struct PairedIDTChoices: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(session.isExporting)
-                .help(clip.idt == pair
-                      ? "已经是这一对。预览按这一对。"
-                      : "点这一行锁定成对 IDT。停在这条看预览，不替下一条选。")
+                .help(pairRowHelp(pair))
             }
         }
     }

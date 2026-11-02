@@ -1824,3 +1824,62 @@ def test_add_panel_sticks_to_the_window_and_reopens_the_last_folder():
     assert "不在 ⌘, 里" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_short_pair_list_locks_from_a_digit_without_guessing_the_catalog():
+    """Digits lock a two-row S-Log3 / C-Log list. The full catalog has no digit."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("func canLockShortListPair")[1].split("func lockShortListPair")[0]
+    assert "pairListShowsSearchAfter" in gate
+    assert "pickerPairs" in gate
+    assert "isStub" in gate
+    assert "isWritingDeliverables" in gate
+    assert "showSettings" in gate
+    assert "showImporter" in gate
+    assert "showDeliverSheet" in gate
+    assert "openingExportFolder" in gate
+    assert "oneBased <= pairs.count" in gate
+    for token in ("5600", "6504", "setIDT", "setExposureStops", "24", "30"):
+        assert token not in gate, token
+    lock = clip.split("func lockShortListPair")[1].split("func nextPendingClip")[0]
+    assert "canLockShortListPair" in lock
+    assert "clip.idt == pair, clip.hasLockedPair { return true }" in lock
+    assert "stopPreviewPlayback()" in lock
+    assert "setIDT(clip.id, pair)" in lock
+    assert lock.index("return true") < lock.index("stopPreviewPlayback()")
+    for token in ("setExposureStops", "setWBParams", "setPreviewFrame", "setODT", "5600", "6504", "24", "30"):
+        assert token not in lock, token
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    choices = inspector.split("struct PairedIDTChoices")[1].split("struct InspectorView")[0]
+    assert "pairListShowsSearchAfter" in choices
+    assert "shortListKeyLabel" in choices
+    assert "锁定这一列" in choices
+    assert "没有数字键" in choices
+    assert "不从整表里猜" in choices
+    assert "帧和播放留着" in choices
+    assert "monospacedDigit" in choices
+    content = _read(CONTENT)
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert "consumeShortPairKey" in monitor
+    assert "onLockShortPair" in monitor
+    assert "lockShortListPair" in content
+    assert "(1...4).contains(digit)" in monitor
+    assert "isArrowConsumedByTextInput" in monitor
+    assert "isEscapeReservedByPresentedUI" in monitor
+    assert "flags.isEmpty" in monitor
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    first = menu.split('Button("锁定第 1 对")')[1].split('Button("锁定第 2 对")')[0]
+    assert "lockShortListPair(at: 1)" in first
+    assert "canLockShortListPair(at: 1)" in first
+    assert "keyboardShortcut" not in first
+    assert 'Button("锁定第 4 对")' in menu
+    assert "lockShortListPair(at: 4)" in menu
+    plan = _read(PLAN)
+    assert "行前标 1、2" in plan
+    assert "按 1 也不会从整表里锁第一行" in plan
+    assert "锁定第 1 对" in plan
+    assert "不改这一套曝光和白平衡" in plan
+    assert "菜单上不标快捷键" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

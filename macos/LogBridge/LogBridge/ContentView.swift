@@ -104,6 +104,9 @@ struct ContentView: View {
                 onRedoGrade: {
                     session.redoSharedGrade()
                 },
+                onLockShortPair: { index in
+                    session.lockShortListPair(at: index)
+                },
                 onGradeStrokeEnd: {
                     session.closeSharedGradeStroke()
                 }
@@ -448,6 +451,8 @@ private struct InspectorColumn: View {
 /// Same window only; text / numeric / search / slider first-responders keep
 /// arrows and Delete. Sheets / alerts / settings keep Escape and Delete.
 /// ⌘Z / ⇧⌘Z step the shared grade, unless a text field has the keys.
+/// Bare 1…4 lock a short paired-IDT list. Text fields keep the digits.
+/// A long catalog has no digit, so 1 does not lock the first catalog row.
 private struct ClipListArrowMonitor: NSViewRepresentable {
     var handler: (Int) -> Bool
     var onEscape: () -> Bool
@@ -461,6 +466,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     var onPausePlayback: () -> Bool
     var onUndoGrade: () -> Bool
     var onRedoGrade: () -> Bool
+    var onLockShortPair: (Int) -> Bool
     var onGradeStrokeEnd: () -> Void
 
     func makeNSView(context: Context) -> MonitorView {
@@ -477,6 +483,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         view.onPausePlayback = onPausePlayback
         view.onUndoGrade = onUndoGrade
         view.onRedoGrade = onRedoGrade
+        view.onLockShortPair = onLockShortPair
         view.onGradeStrokeEnd = onGradeStrokeEnd
         return view
     }
@@ -494,6 +501,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         nsView.onPausePlayback = onPausePlayback
         nsView.onUndoGrade = onUndoGrade
         nsView.onRedoGrade = onRedoGrade
+        nsView.onLockShortPair = onLockShortPair
         nsView.onGradeStrokeEnd = onGradeStrokeEnd
     }
 
@@ -514,6 +522,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         var onPausePlayback: (() -> Bool)?
         var onUndoGrade: (() -> Bool)?
         var onRedoGrade: (() -> Bool)?
+        var onLockShortPair: ((Int) -> Bool)?
         var onGradeStrokeEnd: (() -> Void)?
         private var monitor: Any?
 
@@ -545,6 +554,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                 guard event.window === self.window else { return event }
                 if self.consumeGradeUndoKey(event) { return nil }
                 if self.consumeShuttleKey(event) { return nil }
+                if self.consumeShortPairKey(event) { return nil }
                 switch event.keyCode {
                 case 126:
                     if SessionModel.isArrowConsumedByTextInput() { return event }
@@ -621,6 +631,20 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                     return event
                 }
             }
+        }
+
+        /// Bare 1…4 on a short paired list. No modifiers. Text, sliders, and search keep the digits.
+        /// The session refuses a long catalog, so this does not lock a guessed pair.
+        private func consumeShortPairKey(_ event: NSEvent) -> Bool {
+            guard let key = event.charactersIgnoringModifiers, key.count == 1,
+                  let digit = Int(key), (1...4).contains(digit) else { return false }
+            let flags = event.modifierFlags
+                .intersection(.deviceIndependentFlagsMask)
+                .subtracting([.numericPad, .function, .capsLock])
+            guard flags.isEmpty else { return false }
+            if SessionModel.isArrowConsumedByTextInput() { return false }
+            if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: window) { return false }
+            return onLockShortPair?(digit) == true
         }
 
         /// J reverse, L same as 播放, K pause. No modifiers. Text, sliders, and buttons keep the letters.
