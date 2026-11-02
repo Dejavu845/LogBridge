@@ -2199,3 +2199,97 @@ def test_clip_list_filter_shows_bin_counts_and_the_remaining_step():
     assert "不改选中，不改这一套调色，不改成对 IDT，不改预览帧，不参与写出" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def _loop_return_action(*, blocked, clips_empty, selected_pending, selected_locked):
+    """Same order as SessionModel.loopReturnAction. Write is not a Return action."""
+    if blocked:
+        return "none"
+    if clips_empty:
+        return "import"
+    if selected_pending:
+        return "idt"
+    if selected_locked:
+        return "grade"
+    return "none"
+
+
+def test_return_follows_the_current_loop_step_without_writing():
+    """Return opens add, scrolls to the pair list, or reveals exposure. It does not write."""
+    assert _loop_return_action(
+        blocked=False, clips_empty=True, selected_pending=False, selected_locked=False
+    ) == "import"
+    assert _loop_return_action(
+        blocked=True, clips_empty=True, selected_pending=False, selected_locked=False
+    ) == "none"
+    assert _loop_return_action(
+        blocked=False, clips_empty=False, selected_pending=True, selected_locked=False
+    ) == "idt"
+    assert _loop_return_action(
+        blocked=False, clips_empty=False, selected_pending=True, selected_locked=True
+    ) == "idt"
+    assert _loop_return_action(
+        blocked=False, clips_empty=False, selected_pending=False, selected_locked=True
+    ) == "grade"
+    assert _loop_return_action(
+        blocked=False, clips_empty=False, selected_pending=False, selected_locked=False
+    ) == "none"
+    assert _loop_return_action(
+        blocked=True, clips_empty=False, selected_pending=False, selected_locked=True
+    ) == "none"
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func loopReturnAction(")[1].split("var canFollowLoopWithReturn")[0]
+    assert 'if blocked { return "none" }' in fn
+    assert 'if clipsEmpty { return "import" }' in fn
+    assert 'if selectedPending { return "idt" }' in fn
+    assert 'if selectedLocked { return "grade" }' in fn
+    assert fn.index('return "none"') < fn.index('return "import"')
+    assert fn.index('return "import"') < fn.index('return "idt"')
+    assert fn.index('return "idt"') < fn.index('return "grade"')
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "presentDeliverSheet", "5600", "6504"):
+        assert token not in fn, token
+    body = clip.split("func followLoopWithReturn()")[1].split("func requestInspectorScroll")[0]
+    assert "presentImporter()" in body
+    assert "inspectorPairedIDTAnchor" in body
+    assert "focusGradeControls()" in body
+    assert "presentDeliverSheet" not in body
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in body, token
+    hint = clip.split("var loopStepHint")[1].split("var exportFolderOpenNote")[0]
+    assert "按回车也是添加" in hint
+    assert "按回车滚到这一列，不替你选" in hint
+    assert "按回车滚到曝光，不改数字" in hint
+    content = _read(CONTENT)
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert "case 36, 76:" in monitor
+    assert "onFollowLoop" in monitor
+    assert "isArrowConsumedByTextInput" in monitor
+    returns = monitor.split("case 36, 76:")[1].split("default:")[0]
+    assert "returnFlags.isEmpty" in returns
+    assert "isArrowConsumedByTextInput" in returns
+    empty = content.split("if session.clips.isEmpty {")[1].split("} else if let clip = session.selectedClip, clip.isPending")[0]
+    assert "或按回车" in empty
+    pending = content.split("clip.isPending, !session.isExporting")[1].split("private var compareBeforePane")[0]
+    assert "按回车滚到右侧成对 IDT" in pending
+    assert "不替你选" in pending
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    zone = sidebar.split("struct DropZone")[1].split("struct ClipRow")[0]
+    assert "按回车也是添加。取消则不读入。" in zone
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('Button("跟当前这一步")')[1].split('Button("曝光 +0.10")')[0]
+    assert "followLoopWithReturn()" in menu
+    assert "canFollowLoopWithReturn" in menu
+    assert "keyboardShortcut" not in menu
+    assert "不打开写出说明" in menu
+    plan = _read(PLAN)
+    assert "回车跟当前这一步" in plan
+    assert "回车不打开写出说明" in plan
+    assert "菜单上不标快捷键，避免抢走输入框里的回车" in plan
+    assert "列表里已经有素材时，回车不再打开添加" in plan
+    readme = _read(ROOT / "README.md")
+    assert "本机打开试用" in readme
+    assert "macos/LogBridge/LogBridge.xcodeproj" in readme
+    assert "按回车滚到成对 IDT" in readme
+    for token in BANNED_CONTACT:
+        assert token not in plan
+        assert token not in readme.split("## 本机打开试用")[1].split("## Quick start")[0]

@@ -1192,11 +1192,13 @@ final class SessionModel: ObservableObject {
         if isWritingDeliverables { return "正在写出代理" }
         if openingExportFolder { return "正在打开选文件夹" }
         if showImporter { return "正在打开添加" }
-        if clips.isEmpty { return "先拖入或点添加" }
-        if !showsProcessLockedButton { return "在右侧检查器选成对 IDT" }
+        if clips.isEmpty { return "先拖入或点添加。按回车也是添加。" }
+        if !showsProcessLockedButton { return "在右侧检查器选成对 IDT。按回车滚到这一列，不替你选。" }
         if canRevealLastExport { return "已写出代理。可再调色，或在状态栏打开 Finder" }
-        if pendingClipCount > 0 { return "可调色并写出；待选仍要选 IDT" }
-        return "可调色，再点写出"
+        if pendingClipCount > 0 {
+            return "可调色并写出；待选仍要选 IDT。待选时按回车滚到成对 IDT；已锁定时按回车滚到曝光，不改数字。"
+        }
+        return "可调色，再点写出。按回车滚到曝光，不改数字。"
     }
 
     /// 写出说明、监视器下那一行、选文件夹面板共用。只写文件夹名。
@@ -1241,6 +1243,42 @@ final class SessionModel: ObservableObject {
             lockedCount: lockedClipCount,
             selectedPending: selectedClip?.isPending == true
         )
+    }
+
+    /// What Return does. "none" leaves the key alone.
+    /// import opens the add panel. idt scrolls to this clip's paired list.
+    /// grade reveals exposure. Write stays on ⌘E.
+    /// A pending clip wins over locked, so Return does not skip the pair list.
+    /// Does not lock a pair and does not edit the shared grade.
+    static func loopReturnAction(
+        blocked: Bool,
+        clipsEmpty: Bool,
+        selectedPending: Bool,
+        selectedLocked: Bool
+    ) -> String {
+        if blocked { return "none" }
+        if clipsEmpty { return "import" }
+        if selectedPending { return "idt" }
+        if selectedLocked { return "grade" }
+        return "none"
+    }
+
+    var canFollowLoopWithReturn: Bool {
+        Self.loopReturnAction(
+            blocked: returnLoopBlocked,
+            clipsEmpty: clips.isEmpty,
+            selectedPending: selectedClip?.isPending == true,
+            selectedLocked: selectedClip?.hasLockedPair == true
+        ) != "none"
+    }
+
+    /// Sheets, the add panel, and a write in progress keep Return.
+    private var returnLoopBlocked: Bool {
+        isWritingDeliverables
+            || openingExportFolder
+            || showSettings
+            || showImporter
+            || showDeliverSheet
     }
 
     /// Same gate as 「添加…」. Cancel still reads nothing.
@@ -1304,6 +1342,32 @@ final class SessionModel: ObservableObject {
     func focusGradeControls() {
         guard canFocusGradeControls else { return }
         requestInspectorScroll(Self.inspectorExposureAnchor)
+    }
+
+    /// Return follows the marked step, except 写出.
+    /// Empty bin: same as 添加…. Pending: scroll to the pair list, do not lock.
+    /// Locked: reveal exposure and white balance, do not change the numbers.
+    /// Text fields keep Return. Does not open the write sheet.
+    @discardableResult
+    func followLoopWithReturn() -> Bool {
+        switch Self.loopReturnAction(
+            blocked: returnLoopBlocked,
+            clipsEmpty: clips.isEmpty,
+            selectedPending: selectedClip?.isPending == true,
+            selectedLocked: selectedClip?.hasLockedPair == true
+        ) {
+        case "import":
+            presentImporter()
+            return true
+        case "idt":
+            requestInspectorScroll(Self.inspectorPairedIDTAnchor)
+            return true
+        case "grade":
+            focusGradeControls()
+            return true
+        default:
+            return false
+        }
     }
 
     func requestInspectorScroll(_ anchor: String) {

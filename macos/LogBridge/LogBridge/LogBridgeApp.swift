@@ -86,6 +86,12 @@ private struct LogBridgeCommands: Commands {
                       || sessionFocus?.session?.showImporter == true)
         }
         CommandMenu("调色") {
+            Button("跟当前这一步") {
+                sessionFocus?.session?.followLoopWithReturn()
+            }
+            .disabled(sessionFocus?.session?.canFollowLoopWithReturn != true)
+            .help("没有素材时和「添加…」一样。待选时滚到成对 IDT，不替你选。已锁定时滚到曝光，不改数字。回车是同一套，菜单不标快捷键。查找框、手填和跳到仍吃回车。不打开写出说明。")
+            Divider()
             Button("曝光 +0.10") {
                 sessionFocus?.session?.nudgeExposureStops(0.10)
             }

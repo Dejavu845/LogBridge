@@ -107,6 +107,9 @@ struct ContentView: View {
                 onLockShortPair: { index in
                     session.lockShortListPair(at: index)
                 },
+                onFollowLoop: {
+                    session.followLoopWithReturn()
+                },
                 onGradeStrokeEnd: {
                     session.closeSharedGradeStroke()
                 }
@@ -163,7 +166,7 @@ private struct LoopStepStrip: View {
                 "导入",
                 index: 0,
                 enabled: session.canOpenImporter,
-                help: "和「添加…」一样。面板贴在这个窗口上。取消则不读入。不改这一套曝光和白平衡。"
+                help: "和「添加…」一样。面板贴在这个窗口上。取消则不读入。没有素材时，回车是同一套。不改这一套曝光和白平衡。"
             ) {
                 session.presentImporter()
             }
@@ -171,7 +174,7 @@ private struct LoopStepStrip: View {
                 "选 IDT",
                 index: 1,
                 enabled: session.canFocusPendingIDT,
-                help: "当前这条还没锁定，就滚到成对 IDT。已经锁定且后面还有待选，就去下一条待选，不替它选。不改这一套曝光和白平衡。"
+                help: "当前这条还没锁定，就滚到成对 IDT。已经锁定且后面还有待选，就去下一条待选，不替它选。待选时回车只滚到这一列，不替你选。不改这一套曝光和白平衡。"
             ) {
                 session.focusPendingIDT()
             }
@@ -179,7 +182,7 @@ private struct LoopStepStrip: View {
                 "调色",
                 index: 2,
                 enabled: session.canFocusGradeControls,
-                help: "当前这条已锁定时，展开曝光和白平衡并滚到曝光。不改数字，不改预览帧，也不改成对 IDT。"
+                help: "当前这条已锁定时，展开曝光和白平衡并滚到曝光。回车是同一套。不改数字，不改预览帧，也不改成对 IDT。"
             ) {
                 session.focusGradeControls()
             }
@@ -187,7 +190,7 @@ private struct LoopStepStrip: View {
                 "写出",
                 index: 3,
                 enabled: session.canStartWriteFromLoop,
-                help: "打开写出说明。没有已锁定时不起作用。正在写出时用顶栏「取消」。不改这一套曝光和白平衡。"
+                help: "打开写出说明。没有已锁定时不起作用。正在写出时用顶栏「取消」。回车不打开这一步。不改这一套曝光和白平衡。"
             ) {
                 session.presentDeliverSheet()
             }
@@ -517,7 +520,7 @@ private struct InspectorColumn: View {
                     .padding(.top, 4)
                     .help("回到上一次曝光和白平衡。一次拖动滑条算一步，松开后再拖是另一步。不改成对 IDT，不改预览帧，不改这次预览。⌘Z、⇧⌘Z 和菜单「调色」是同一套。查找框里的 ⌘Z 仍改文字。写出进行中不能撤销。")
                 } else if session.clips.isEmpty {
-                    Text("先拖入或点「添加…」。选中一条后，这里跟这条。")
+                    Text("先拖入或点「添加…」，或按回车。选中一条后，这里跟这条。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -577,6 +580,7 @@ private struct InspectorColumn: View {
 /// ⌘Z / ⇧⌘Z step the shared grade, unless a text field has the keys.
 /// Bare 1…4 lock a short paired-IDT list. Text fields keep the digits.
 /// A long catalog has no digit, so 1 does not lock the first catalog row.
+/// Return follows the marked step, except 写出. Text fields keep Return.
 private struct ClipListArrowMonitor: NSViewRepresentable {
     var handler: (Int) -> Bool
     var onEscape: () -> Bool
@@ -591,6 +595,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     var onUndoGrade: () -> Bool
     var onRedoGrade: () -> Bool
     var onLockShortPair: (Int) -> Bool
+    var onFollowLoop: () -> Bool
     var onGradeStrokeEnd: () -> Void
 
     func makeNSView(context: Context) -> MonitorView {
@@ -608,6 +613,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         view.onUndoGrade = onUndoGrade
         view.onRedoGrade = onRedoGrade
         view.onLockShortPair = onLockShortPair
+        view.onFollowLoop = onFollowLoop
         view.onGradeStrokeEnd = onGradeStrokeEnd
         return view
     }
@@ -626,6 +632,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         nsView.onUndoGrade = onUndoGrade
         nsView.onRedoGrade = onRedoGrade
         nsView.onLockShortPair = onLockShortPair
+        nsView.onFollowLoop = onFollowLoop
         nsView.onGradeStrokeEnd = onGradeStrokeEnd
     }
 
@@ -647,6 +654,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         var onUndoGrade: (() -> Bool)?
         var onRedoGrade: (() -> Bool)?
         var onLockShortPair: ((Int) -> Bool)?
+        var onFollowLoop: (() -> Bool)?
         var onGradeStrokeEnd: (() -> Void)?
         private var monitor: Any?
 
@@ -750,6 +758,17 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                     if self.onDelete?() == true {
                         return nil
                     }
+                    return event
+                case 36, 76:
+                    let returnFlags = event.modifierFlags
+                        .intersection(.deviceIndependentFlagsMask)
+                        .subtracting([.numericPad, .function, .capsLock])
+                    if !returnFlags.isEmpty { return event }
+                    if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
+                        return event
+                    }
+                    if self.onFollowLoop?() == true { return nil }
                     return event
                 default:
                     return event
@@ -1040,7 +1059,7 @@ struct SplitPreview: View {
                 VStack(spacing: 10) {
                     Text("把混源文件夹拖进来")
                         .font(.title2.weight(.semibold))
-                    Text("或点「添加…」。每条再选成对 Log 与色域。")
+                    Text("或点「添加…」，或按回车。每条再选成对 Log 与色域。")
                         .font(.body)
                         .multilineTextAlignment(.center)
                     Text("已实现（未验证）")
@@ -1060,7 +1079,7 @@ struct SplitPreview: View {
                 VStack(spacing: 4) {
                     Text(clip.processSkipReason ?? "先选择 Log 与色域")
                         .font(.title3.weight(.semibold))
-                    Text("在右侧检查器选成对 IDT。预览角标仍是仅预览。")
+                    Text("按回车滚到右侧成对 IDT，点一行锁定。不替你选。预览角标仍是仅预览。")
                         .font(.callout)
                 }
                 .foregroundStyle(.white)

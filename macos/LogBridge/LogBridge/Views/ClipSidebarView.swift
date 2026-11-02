@@ -357,6 +357,9 @@ private struct DropZone: View {
                     .padding(.vertical, 3)
                     .background(Color.orange.opacity(0.2))
                     .clipShape(Capsule())
+                Text("按回车也是添加。取消则不读入。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
