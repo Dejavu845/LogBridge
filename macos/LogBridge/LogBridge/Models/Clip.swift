@@ -715,24 +715,39 @@ final class SessionModel: ObservableObject {
     /// Name the next write will create for the selected locked clip.
     /// Same suffix as the write sheet. A pending clip is skipped, so it gets nil.
     /// A write in progress yields the progress line instead. No full path.
+    /// When the write sheet can open, the sentence says this line opens it.
+    /// A sheet or the folder panel keeps the name and drops that sentence.
     /// Does not change exposure, white balance, the pair, or the frame.
     static func monitorWillWriteLine(
         selectedLocked: Bool,
         exporting: Bool,
         deliverableName: String,
         lockedCount: Int,
-        pendingCount: Int
+        pendingCount: Int,
+        canOpenSheet: Bool
     ) -> String? {
         guard selectedLocked, !exporting, lockedCount > 0 else { return nil }
         let name = deliverableName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
+        let action: String? = canOpenSheet ? "点这一行打开写出说明，再选文件夹。" : nil
         if lockedCount == 1 && pendingCount == 0 {
-            return "将得到 \(name)。点写出再选文件夹。"
+            if let action {
+                return "将得到 \(name)。\(action)"
+            }
+            return "将得到 \(name)。"
         }
         if pendingCount > 0 {
-            return "已锁定 \(lockedCount) 条会写出，待选 \(pendingCount) 条会跳过。这一条将得到 \(name)"
+            let base = "已锁定 \(lockedCount) 条会写出，待选 \(pendingCount) 条会跳过。这一条将得到 \(name)"
+            if let action {
+                return "\(base)。\(action)"
+            }
+            return base
         }
-        return "已锁定 \(lockedCount) 条都会写出。这一条将得到 \(name)"
+        let base = "已锁定 \(lockedCount) 条都会写出。这一条将得到 \(name)"
+        if let action {
+            return "\(base)。\(action)"
+        }
+        return base
     }
 
     /// Why one monitor pane is still black. A picture that is up gets nothing.
@@ -1168,6 +1183,7 @@ final class SessionModel: ObservableObject {
 
     /// 监视器下、滑条下面。当前这条已锁定时，写出将得到的名字。
     /// 和写出说明是同一个。只写文件名或文件夹名。待选不出现。正在写出时让给进度。
+    /// 能打开写出说明时，句尾让人点这一行。设置、添加、写出说明或选文件夹开着时只留名字。
     /// 不改这一套曝光和白平衡，不改成对 IDT，也不改预览帧。
     var monitorWillWriteLine: String? {
         guard let clip = selectedClip else { return nil }
@@ -1176,7 +1192,8 @@ final class SessionModel: ObservableObject {
             exporting: isWritingDeliverables,
             deliverableName: clip.plannedDeliverableName(format: settings.exportFormat),
             lockedCount: lockedClipCount,
-            pendingCount: pendingClipCount
+            pendingCount: pendingClipCount,
+            canOpenSheet: canStartWriteFromLoop
         )
     }
 
@@ -3236,6 +3253,16 @@ final class SessionModel: ObservableObject {
         } else {
             panel.begin(completionHandler: finish)
         }
+    }
+
+    /// The line under the monitor. Same sheet as 写出 and ⌘E.
+    /// Does not open the folder panel and does not start writing.
+    /// Playback stops. The frame, the pair, and this grade stay.
+    @discardableResult
+    func openWriteSheetFromMonitorLine() -> Bool {
+        guard canStartWriteFromLoop, selectedClip?.hasLockedPair == true else { return false }
+        presentDeliverSheet()
+        return true
     }
 
     /// Write sheet. Folder panel opens only after this sheet has gone.

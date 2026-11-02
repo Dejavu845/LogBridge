@@ -2295,64 +2295,102 @@ def test_return_follows_the_current_loop_step_without_writing():
         assert token not in readme.split("## 本机打开试用")[1].split("## Quick start")[0]
 
 
-def _monitor_will_write_line(*, selected_locked, exporting, name, locked_count, pending_count):
+def _monitor_will_write_line(
+    *, selected_locked, exporting, name, locked_count, pending_count, can_open_sheet
+):
     """Same branches as SessionModel.monitorWillWriteLine. Pending clips stay quiet."""
     if not selected_locked or exporting or locked_count <= 0:
         return None
     name = name.strip()
     if not name:
         return None
+    action = "点这一行打开写出说明，再选文件夹。" if can_open_sheet else None
     if locked_count == 1 and pending_count == 0:
-        return f"将得到 {name}。点写出再选文件夹。"
+        if action:
+            return f"将得到 {name}。{action}"
+        return f"将得到 {name}。"
     if pending_count > 0:
-        return f"已锁定 {locked_count} 条会写出，待选 {pending_count} 条会跳过。这一条将得到 {name}"
-    return f"已锁定 {locked_count} 条都会写出。这一条将得到 {name}"
+        base = f"已锁定 {locked_count} 条会写出，待选 {pending_count} 条会跳过。这一条将得到 {name}"
+        if action:
+            return f"{base}。{action}"
+        return base
+    base = f"已锁定 {locked_count} 条都会写出。这一条将得到 {name}"
+    if action:
+        return f"{base}。{action}"
+    return base
 
 
 def test_monitor_names_the_file_this_locked_clip_will_write():
-    """A locked clip shows the same deliverable name as the write sheet. Pending stays blank."""
+    """A locked clip shows the same deliverable name as the write sheet. Pending stays blank.
+
+    When the write sheet can open, the line says a click opens it. It does not
+    pick a folder. A covering sheet keeps the name and is not a button.
+    """
     assert _monitor_will_write_line(
         selected_locked=True, exporting=False, name="A_Rec709_proxy.mov",
-        locked_count=1, pending_count=0,
-    ) == "将得到 A_Rec709_proxy.mov。点写出再选文件夹。"
+        locked_count=1, pending_count=0, can_open_sheet=True,
+    ) == "将得到 A_Rec709_proxy.mov。点这一行打开写出说明，再选文件夹。"
+    assert _monitor_will_write_line(
+        selected_locked=True, exporting=False, name="A_Rec709_proxy.mov",
+        locked_count=1, pending_count=0, can_open_sheet=False,
+    ) == "将得到 A_Rec709_proxy.mov。"
     assert _monitor_will_write_line(
         selected_locked=True, exporting=False, name="  A_ACES2065-1_proxy  ",
-        locked_count=3, pending_count=0,
+        locked_count=3, pending_count=0, can_open_sheet=True,
+    ) == "已锁定 3 条都会写出。这一条将得到 A_ACES2065-1_proxy。点这一行打开写出说明，再选文件夹。"
+    assert _monitor_will_write_line(
+        selected_locked=True, exporting=False, name="A_ACES2065-1_proxy",
+        locked_count=3, pending_count=0, can_open_sheet=False,
     ) == "已锁定 3 条都会写出。这一条将得到 A_ACES2065-1_proxy"
     assert _monitor_will_write_line(
         selected_locked=True, exporting=False, name="A_Rec709_proxy.mov",
-        locked_count=1, pending_count=2,
+        locked_count=1, pending_count=2, can_open_sheet=True,
+    ) == "已锁定 1 条会写出，待选 2 条会跳过。这一条将得到 A_Rec709_proxy.mov。点这一行打开写出说明，再选文件夹。"
+    assert _monitor_will_write_line(
+        selected_locked=True, exporting=False, name="A_Rec709_proxy.mov",
+        locked_count=1, pending_count=2, can_open_sheet=False,
     ) == "已锁定 1 条会写出，待选 2 条会跳过。这一条将得到 A_Rec709_proxy.mov"
     assert _monitor_will_write_line(
         selected_locked=False, exporting=False, name="A_Rec709_proxy.mov",
-        locked_count=1, pending_count=1,
+        locked_count=1, pending_count=1, can_open_sheet=True,
     ) is None
     assert _monitor_will_write_line(
         selected_locked=True, exporting=True, name="A_Rec709_proxy.mov",
-        locked_count=2, pending_count=0,
+        locked_count=2, pending_count=0, can_open_sheet=True,
     ) is None
     assert _monitor_will_write_line(
         selected_locked=True, exporting=False, name="   ",
-        locked_count=1, pending_count=0,
+        locked_count=1, pending_count=0, can_open_sheet=True,
     ) is None
     assert _monitor_will_write_line(
         selected_locked=True, exporting=False, name="A_Rec709_proxy.mov",
-        locked_count=0, pending_count=0,
+        locked_count=0, pending_count=0, can_open_sheet=True,
     ) is None
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     fn = clip.split("static func monitorWillWriteLine(")[1].split("static func monitorPaneGapNote(")[0]
     assert "guard selectedLocked, !exporting, lockedCount > 0 else { return nil }" in fn
     assert "trimmingCharacters" in fn
-    assert 'return "将得到 \\(name)。点写出再选文件夹。"' in fn
+    assert 'let action: String? = canOpenSheet ? "点这一行打开写出说明，再选文件夹。" : nil' in fn
+    assert 'return "将得到 \\(name)。\\(action)"' in fn
+    assert 'return "将得到 \\(name)。"' in fn
     assert "待选 \\(pendingCount) 条会跳过" in fn
     assert "已锁定 \\(lockedCount) 条都会写出" in fn
     assert fn.index("pendingCount > 0") < fn.index("条都会写出")
+    assert "canOpenSheet" in fn
     for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "setODT", ".path", "5600", "6504", "24", "30"):
         assert token not in fn, token
     prop = clip.split("var monitorWillWriteLine")[1].split("static let inspectorPairedIDTAnchor")[0]
     assert "plannedDeliverableName(format: settings.exportFormat)" in prop
     assert "isWritingDeliverables" in prop
     assert "clip.hasLockedPair" in prop
+    assert "canStartWriteFromLoop" in prop
+    opener = clip.split("func openWriteSheetFromMonitorLine()")[1].split("func presentDeliverSheet()")[0]
+    assert "canStartWriteFromLoop" in opener
+    assert "hasLockedPair" in opener
+    assert "presentDeliverSheet()" in opener
+    assert "processLockedClips" not in opener
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in opener, token
     content = _read(CONTENT)
     preview = content.split("struct SplitPreview")[1].split("private var compareBeforePane")[0]
     assert "session.monitorWillWriteLine" in preview
@@ -2361,17 +2399,25 @@ def test_monitor_names_the_file_this_locked_clip_will_write():
     assert "session.isExporting" in preview
     exporting = preview.split("if session.isExporting {")[1].split("} else {")[0]
     assert "monitorWillWriteLine" not in exporting
+    clickable = preview.split("if session.canStartWriteFromLoop {")[1].split("} else {")[0]
+    assert "openWriteSheetFromMonitorLine()" in clickable
+    assert "processLockedClips" not in clickable
+    quiet = preview.split("if session.canStartWriteFromLoop {")[1].split("} else {", 1)[1].split("if let caption")[0]
+    assert "openWriteSheetFromMonitorLine" not in quiet
     assert "不写整条路径" in preview
     assert "truncation: .middle" in preview
+    assert "这一行只留名字" in preview
     plan = _read(PLAN)
-    assert "将得到 {名}。点写出再选文件夹。" in plan
+    assert "将得到 {名}。点这一行打开写出说明，再选文件夹。" in plan
     assert "待选不出现这一行" in plan
     assert "不写整条路径" in plan
+    assert "这一行只留名字" in plan
     assert "不改这一套曝光和白平衡，也不改成对 IDT，也不改预览帧" in plan
     readme = _read(ROOT / "README.md")
     trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
     assert "将得到的文件名" in trial
     assert "待选不写这一行" in trial
+    assert "点这一行也打开写出说明" in trial
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial

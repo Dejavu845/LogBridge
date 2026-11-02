@@ -1053,11 +1053,26 @@ struct SplitPreview: View {
                     WriteProgressLine(text: session.lastExportNote)
                 } else {
                     if let line = session.monitorWillWriteLine {
-                        WriteProgressLine(
-                            text: line,
-                            help: "和写出说明里「将得到」是同一个名字。只写文件名或文件夹名，不写整条路径。已锁定的都会写出，每条仍用自己的成对 IDT。待选会跳过，所以待选时没有这一行。点写出才打开说明。正在写出时这一行让给进度。不改这一套曝光和白平衡，也不改预览帧。",
-                            truncation: .middle
-                        )
+                        if session.canStartWriteFromLoop {
+                            Button {
+                                session.openWriteSheetFromMonitorLine()
+                            } label: {
+                                WriteProgressLine(
+                                    text: line,
+                                    help: "点这一行打开写出说明，和顶栏「写出」、⌘E 一样。确认后才选文件夹，不开始写文件。只写文件名或文件夹名，不写整条路径。不改这一套曝光和白平衡，不改成对 IDT，也不改预览帧。播放会停。",
+                                    truncation: .middle
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .help("点这一行打开写出说明。确认后才选文件夹。设置、添加、写出说明或正在打开选文件夹时，这一行只留名字，点不了。")
+                        } else {
+                            WriteProgressLine(
+                                text: line,
+                                help: "和写出说明里「将得到」是同一个名字。这一行现在只留名字：设置、添加、写出说明或选文件夹开着时点不了。不改这一套曝光和白平衡，也不改预览帧。",
+                                truncation: .middle
+                            )
+                        }
                     }
                     if let caption = session.selectedClip?.previewCaption {
                         WriteProgressLine(text: caption)
