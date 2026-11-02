@@ -962,15 +962,18 @@ enum ResolveExporter {
     /// Drop a ``_ACES2065-1_proxy`` folder that must not be 已写出代理.
     /// Empty folders, zero-frame writes, and half packages after a Resolve fail-closed.
     static func removeFailedProxySequence(at seqDir: URL) {
-        guard seqDir.lastPathComponent.hasSuffix("_ACES2065-1_proxy") else { return }
+        guard seqDir.lastPathComponent.hasSuffix(proxyFolderSuffix) else { return }
         try? FileManager.default.removeItem(at: seqDir)
     }
+
+    /// Folder name suffix. Same string the write sheet shows before the folder panel.
+    static let proxyFolderSuffix = "_ACES2065-1_proxy"
 
     /// Proxy sequence folder. Mirrors ``color.batch.deliverable_dir_name``.
     /// ``{stem}_ACES2065-1_proxy/frame_000000.exr``. Name must say proxy so it is not a finished-master claim.
     static func deliverableSequenceDirectory(for clip: Clip, in directory: URL) -> URL {
         let stem = clip.url.deletingPathExtension().lastPathComponent
-        return directory.appendingPathComponent("\(stem)_ACES2065-1_proxy")
+        return directory.appendingPathComponent("\(stem)\(proxyFolderSuffix)")
     }
 
     /// One frame of the proxy sequence: ``frame_%06d.exr``.

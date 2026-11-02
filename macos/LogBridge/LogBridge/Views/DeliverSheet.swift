@@ -95,6 +95,7 @@ struct DeliverSheet: View {
                             clipLine(
                                 name: clip.filename,
                                 detail: clip.lockedPairLabel,
+                                output: clip.plannedDeliverableName(format: session.settings.exportFormat),
                                 willWrite: true
                             )
                         }
@@ -107,6 +108,7 @@ struct DeliverSheet: View {
                             clipLine(
                                 name: clip.filename,
                                 detail: clip.processSkipReason ?? "先选择成对 IDT",
+                                output: nil,
                                 willWrite: false
                             )
                         }
@@ -118,11 +120,11 @@ struct DeliverSheet: View {
         }
     }
 
-    private func clipLine(name: String, detail: String, willWrite: Bool) -> some View {
+    private func clipLine(name: String, detail: String, output: String?, willWrite: Bool) -> some View {
         HStack(alignment: .top, spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(willWrite ? Color.accentColor : Color.yellow.opacity(0.95))
-                .frame(width: 4, height: 34)
+                .frame(width: 4, height: output == nil ? 34 : 48)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(.body)
@@ -132,6 +134,13 @@ struct DeliverSheet: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                if let output {
+                    Text("将得到 \(output)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
             Spacer(minLength: 0)
         }

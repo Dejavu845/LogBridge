@@ -114,9 +114,11 @@ private struct WorkspaceToolbar: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("LogBridge")
                     .font(.headline)
-                Text("调色与交付")
+                Text(session.loopStepHint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help("打开后的下一步。导入、选成对 IDT、调色、写出，都在这一窗。")
             }
             Spacer(minLength: 12)
             Button("添加…") { session.showImporter = true }
@@ -256,6 +258,11 @@ private struct InspectorColumn: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+                } else if session.clips.isEmpty {
+                    Text("先拖入或点「添加…」。选中一条后，这里跟这条。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("先在左侧点一条素材。")
                         .font(.callout)

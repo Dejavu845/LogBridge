@@ -78,7 +78,7 @@ private struct DropZone: View {
             HStack(spacing: 8) {
                 Image(systemName: "square.and.arrow.down")
                     .font(empty ? .title2 : .body)
-                Text(empty ? "把混源文件夹拖进来" : "把文件夹拖进来")
+                Text(empty ? "把混源文件夹拖进来" : "把文件夹拖进来，或点这里添加")
                     .font(empty ? .headline : .caption.weight(.semibold))
             }
             if empty {
@@ -109,9 +109,7 @@ private struct DropZone: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .contentShape(Rectangle())
         .onTapGesture {
-            if empty {
-                onTap()
-            }
+            onTap()
         }
     }
 }

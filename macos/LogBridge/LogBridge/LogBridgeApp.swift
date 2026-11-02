@@ -64,10 +64,14 @@ private struct LogBridgeCommands: Commands {
         }
         CommandGroup(after: .newItem) {
             Button("写出…") {
-                guard let session = sessionFocus?.session, !session.isWritingDeliverables else { return }
+                guard let session = sessionFocus?.session,
+                      session.showsProcessLockedButton,
+                      !session.isWritingDeliverables else { return }
                 session.presentDeliverSheet()
             }
             .keyboardShortcut("e")
+            .disabled(sessionFocus?.session?.showsProcessLockedButton != true
+                      || sessionFocus?.session?.isWritingDeliverables == true)
         }
         CommandMenu("调色") {
             Button("曝光 +0.10") {

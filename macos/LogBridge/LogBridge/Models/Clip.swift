@@ -29,6 +29,18 @@ struct Clip: Identifiable, Hashable {
 
     var filename: String { url.lastPathComponent }
 
+    /// File or folder the write will create. Same suffixes as the writers.
+    /// ProRes: `{stem}_Rec709_proxy.mov`. EXR: `{stem}_ACES2065-1_proxy`.
+    func plannedDeliverableName(format: ExportFormat) -> String {
+        let stem = url.deletingPathExtension().lastPathComponent
+        switch format {
+        case .prores422HQ:
+            return stem + ProResWriter.proresSuffix
+        case .exrACES2065:
+            return stem + ResolveExporter.proxyFolderSuffix
+        }
+    }
+
     var asShotUnknown: Bool { asShotCCT == nil && wbSource == .unknown }
 
     var lockedPairLabel: String {
@@ -265,6 +277,15 @@ final class SessionModel: ObservableObject {
             wb = graph.wbSource.title
         }
         return "这一套会套到已锁定素材：\(exposure) · \(wb)"
+    }
+
+    /// 主路径现在走到哪。顶栏一行，不另开一页。
+    var loopStepHint: String {
+        if isWritingDeliverables { return "正在写出代理" }
+        if clips.isEmpty { return "先拖入或点添加" }
+        if !showsProcessLockedButton { return "在右侧检查器选成对 IDT" }
+        if pendingClipCount > 0 { return "可调色并写出；待选仍要选 IDT" }
+        return "可调色，再点写出"
     }
 
     /// Primary button is shown only when at least one paired IDT is locked.

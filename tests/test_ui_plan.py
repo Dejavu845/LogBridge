@@ -227,6 +227,45 @@ def test_wb_steps_restore_camera_values_and_the_write_sheet_names_the_grade():
     assert "这一套会套到已锁定素材" in plan
 
 
+def test_write_sheet_names_the_proxy_and_the_toolbar_says_the_next_step():
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    name = clip.split("func plannedDeliverableName")[1].split("var asShotUnknown")[0]
+    assert "ProResWriter.proresSuffix" in name
+    assert "ResolveExporter.proxyFolderSuffix" in name
+    assert "5600" not in name
+    exporter = _read(ROOT / "macos/LogBridge/LogBridge/Export/ResolveExporter.swift")
+    assert 'static let proxyFolderSuffix = "_ACES2065-1_proxy"' in exporter
+    directory = exporter.split("func deliverableSequenceDirectory")[1].split("func sequenceFrameURL")[0]
+    assert "proxyFolderSuffix" in directory
+    deliver = _read(DELIVER)
+    assert "plannedDeliverableName" in deliver
+    assert "将得到" in deliver
+    assert "clip.filename" in deliver
+    hint = clip.split("var loopStepHint")[1].split("var showsProcessLockedButton")[0]
+    assert "先拖入或点添加" in hint
+    assert "在右侧检查器选成对 IDT" in hint
+    assert "可调色，再点写出" in hint
+    assert "正在写出代理" in hint
+    content = _read(CONTENT)
+    assert "session.loopStepHint" in content
+    column = content.split("struct InspectorColumn")[1].split("struct ClipListArrowMonitor")[0]
+    assert "先拖入或点「添加…」" in column
+    assert "session.clips.isEmpty" in column
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    zone = sidebar.split("struct DropZone")[1]
+    assert "或点这里添加" in zone
+    tap = zone.split(".onTapGesture")[1].split("struct ClipRow")[0]
+    assert "if empty" not in tap
+    assert "onTap()" in tap
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('Button("写出…")')[1].split('CommandMenu("调色")')[0]
+    assert "showsProcessLockedButton" in menu
+    assert "isWritingDeliverables" in menu
+    plan = _read(PLAN)
+    assert "将得到" in plan
+    assert "先拖入或点添加" in plan
+
+
 def test_idt_lock_stays_on_the_clip_being_previewed():
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]
