@@ -31,6 +31,8 @@ struct DeliverSheet: View {
             Text(deliverableNote)
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
+            clipList
+
             Text("每条已锁定素材用自己的成对 IDT。曝光和白平衡用检查器里当前这一套，套到这些素材上。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -64,7 +66,73 @@ struct DeliverSheet: View {
             }
         }
         .padding(24)
-        .frame(minWidth: 520, minHeight: 320)
+        .frame(minWidth: 560, minHeight: 360)
+    }
+
+    /// Clips the write will skip. Same rule as the batch: no locked pair.
+    private var skippedClips: [Clip] {
+        session.clips.filter { !$0.hasLockedPair }
+    }
+
+    private var listHeight: CGFloat {
+        let headers = (session.lockedClips.isEmpty ? 0 : 1) + (skippedClips.isEmpty ? 0 : 1)
+        let estimate = CGFloat(headers) * 28 + CGFloat(session.clips.count) * 44 + 8
+        return min(240, max(44, estimate))
+    }
+
+    @ViewBuilder
+    private var clipList: some View {
+        if !session.clips.isEmpty {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    if !session.lockedClips.isEmpty {
+                        Text("会写出")
+                            .font(.subheadline.weight(.semibold))
+                        ForEach(session.lockedClips) { clip in
+                            clipLine(
+                                name: clip.filename,
+                                detail: clip.lockedPairLabel,
+                                willWrite: true
+                            )
+                        }
+                    }
+                    if !skippedClips.isEmpty {
+                        Text("会跳过")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.top, session.lockedClips.isEmpty ? 0 : 4)
+                        ForEach(skippedClips) { clip in
+                            clipLine(
+                                name: clip.filename,
+                                detail: clip.processSkipReason ?? "先选择成对 IDT",
+                                willWrite: false
+                            )
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: listHeight)
+        }
+    }
+
+    private func clipLine(name: String, detail: String, willWrite: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(willWrite ? Color.accentColor : Color.yellow.opacity(0.95))
+                .frame(width: 4, height: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.body)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var deliverableNote: String {

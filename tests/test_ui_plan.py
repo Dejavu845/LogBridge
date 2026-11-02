@@ -72,6 +72,23 @@ def test_deliver_sheet_is_separate_from_preferences():
     assert "if session.showDeliverSheet" not in content
 
 
+def test_deliver_sheet_names_each_clip_before_the_folder_panel():
+    deliver = _read(DELIVER)
+    assert "会写出" in deliver
+    assert "会跳过" in deliver
+    assert "session.lockedClips" in deliver
+    assert "clip.filename" in deliver
+    assert "lockedPairLabel" in deliver
+    assert "processSkipReason" in deliver
+    assert "skippedClips" in deliver
+    assert "!$0.hasLockedPair" in deliver
+    assert "选出文件夹并写出" in deliver
+    assert "processLockedClips" not in deliver
+    plan = _read(PLAN)
+    assert "会写出" in plan
+    assert "会跳过" in plan
+
+
 def test_monitor_can_enlarge_the_grade_preview():
     content = _read(CONTENT)
     assert "enum MonitorLayout" in content
