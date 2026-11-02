@@ -193,15 +193,24 @@ struct ClipSidebarView: View {
             if !session.clips.isEmpty {
                 Picker("列表", selection: $session.clipListFilter) {
                     ForEach(ClipListFilter.allCases) { item in
-                        Text(item.label).tag(item)
+                        Text(session.clipListFilterTitle(item)).tag(item)
                     }
                 }
                 .pickerStyle(.segmented)
                 .controlSize(.small)
                 .labelsHidden()
                 .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-                .help("全部 \(session.clips.count) 条，待选 \(session.pendingClipCount) 条，已锁定 \(session.lockedClipCount) 条。筛选只收列表，不改当前这一套调色。")
+                .padding(.bottom, 6)
+                .help("每一段写出条数：全部、待选、已锁定。条数是这一窗的素材，查找不改这些数字。筛选只收列表。不改选中，不改这一套调色，不改成对 IDT，不改预览帧，也不参与写出。")
+                if let line = session.clipListRemainderLine {
+                    Text(line)
+                        .font(.callout.weight(session.pendingClipCount > 0 ? .semibold : .regular))
+                        .foregroundStyle(session.pendingClipCount > 0 ? Color.orange : Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 8)
+                        .help("还有待选时，点一条，到右侧选成对 IDT。都已锁定则可调色再写出。条数是这一窗的素材，查找不改这一行。不改选中，不改这一套调色，不改成对 IDT，不改预览帧，也不参与写出。")
+                }
             }
 
             if !session.clips.isEmpty {

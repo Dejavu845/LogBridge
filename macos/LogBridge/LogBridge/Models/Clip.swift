@@ -563,6 +563,51 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// How many rows a filter names. Counts are the whole bin, not the filename query.
+    /// Does not move the selection, lock an IDT, or change the shared grade.
+    static func clipListFilterCount(filter: ClipListFilter, clipCount: Int, pendingCount: Int, lockedCount: Int) -> Int {
+        switch filter {
+        case .all: return clipCount
+        case .pending: return pendingCount
+        case .locked: return lockedCount
+        }
+    }
+
+    /// Segment title: 「待选 3」. The number is the bin count, not the search.
+    static func clipListFilterTitle(filter: ClipListFilter, count: Int) -> String {
+        "\(filter.label) \(count)"
+    }
+
+    /// One line under the filter. Pending stays the next step. All locked can be graded.
+    /// Nil when the bin is empty. Does not change the selection, the grade, or the frame.
+    static func clipListRemainderLine(pendingCount: Int, lockedCount: Int) -> String? {
+        if pendingCount > 0 {
+            return "还有 \(pendingCount) 条待选。点一条，到右侧选成对 IDT。"
+        }
+        if lockedCount > 0 {
+            return "成对 IDT 都已选上。可调色，再写出。"
+        }
+        return nil
+    }
+
+    /// 「全部 12」. The number is this bin, not the filename query.
+    func clipListFilterTitle(_ filter: ClipListFilter) -> String {
+        Self.clipListFilterTitle(
+            filter: filter,
+            count: Self.clipListFilterCount(
+                filter: filter,
+                clipCount: clips.count,
+                pendingCount: pendingClipCount,
+                lockedCount: lockedClipCount
+            )
+        )
+    }
+
+    /// Next step under the filter. Empty bin stays on the drop zone.
+    var clipListRemainderLine: String? {
+        Self.clipListRemainderLine(pendingCount: pendingClipCount, lockedCount: lockedClipCount)
+    }
+
     /// Rows the sidebar is showing. Arrow keys move inside this list.
     /// The lock filter runs first. A filename query only narrows that list.
     var visibleClips: [Clip] {

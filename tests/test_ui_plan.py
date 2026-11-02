@@ -2130,3 +2130,72 @@ def test_loop_steps_follow_import_grade_and_write():
     assert "不猜成对 IDT" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def _clip_list_filter_count(filter_name, clip_count, pending_count, locked_count):
+    """Same branches as SessionModel.clipListFilterCount. The query is not a count."""
+    if filter_name == "all":
+        return clip_count
+    if filter_name == "pending":
+        return pending_count
+    if filter_name == "locked":
+        return locked_count
+    raise AssertionError(filter_name)
+
+
+def _clip_list_filter_title(filter_name, count):
+    labels = {"all": "全部", "pending": "待选", "locked": "已锁定"}
+    return f"{labels[filter_name]} {count}"
+
+
+def _clip_list_remainder_line(pending_count, locked_count):
+    if pending_count > 0:
+        return f"还有 {pending_count} 条待选。点一条，到右侧选成对 IDT。"
+    if locked_count > 0:
+        return "成对 IDT 都已选上。可调色，再写出。"
+    return None
+
+
+def test_clip_list_filter_shows_bin_counts_and_the_remaining_step():
+    """Filter segments name how many clips are pending. Search does not change that count."""
+    assert _clip_list_filter_count("all", 5, 2, 3) == 5
+    assert _clip_list_filter_count("pending", 5, 2, 3) == 2
+    assert _clip_list_filter_count("locked", 5, 2, 3) == 3
+    assert _clip_list_filter_title("pending", 2) == "待选 2"
+    assert _clip_list_filter_title("locked", 0) == "已锁定 0"
+    assert _clip_list_remainder_line(2, 3) == "还有 2 条待选。点一条，到右侧选成对 IDT。"
+    assert _clip_list_remainder_line(0, 4) == "成对 IDT 都已选上。可调色，再写出。"
+    assert _clip_list_remainder_line(0, 0) is None
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    count = clip.split("static func clipListFilterCount")[1].split("static func clipListFilterTitle")[0]
+    assert "case .all: return clipCount" in count
+    assert "case .pending: return pendingCount" in count
+    assert "case .locked: return lockedCount" in count
+    assert "clipListQuery" not in count
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in count, token
+    title = clip.split("static func clipListFilterTitle")[1].split("static func clipListRemainderLine")[0]
+    assert "filter.label" in title
+    assert "5600" not in title
+    line = clip.split("static func clipListRemainderLine")[1].split("func clipListFilterTitle(_")[0]
+    assert "还有 \\(pendingCount) 条待选。点一条，到右侧选成对 IDT。" in line
+    assert "成对 IDT 都已选上。可调色，再写出。" in line
+    assert "return nil" in line
+    assert line.index("pendingCount > 0") < line.index("lockedCount > 0")
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in line, token
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    picker = sidebar.split('Picker("列表"')[1].split('TextField("查找文件名"')[0]
+    assert "session.clipListFilterTitle(item)" in picker
+    assert "session.clipListRemainderLine" in picker
+    assert "还有待选时，点一条，到右侧选成对 IDT" in picker
+    assert "查找不改这些数字" in picker
+    assert "不改选中，不改这一套调色，不改成对 IDT，不改预览帧，也不参与写出" in picker
+    plan = _read(PLAN)
+    assert "每一段写出条数" in plan
+    assert "查找不改这些数字" in plan
+    assert "还有 N 条待选" in plan
+    assert "成对 IDT 都已选上。可调色，再写出。" in plan
+    assert "不改选中，不改这一套调色，不改成对 IDT，不改预览帧，不参与写出" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
