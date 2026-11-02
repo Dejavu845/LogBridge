@@ -1885,6 +1885,33 @@ def test_short_pair_list_locks_from_a_digit_without_guessing_the_catalog():
         assert token not in plan
 
 
+def test_pending_selection_scrolls_the_inspector_back_to_the_paired_idt():
+    """A short window can leave the pair list above the fold. Pending selection returns there."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func inspectorScrollAnchor")[1].split("写出说明上的这一套")[0]
+    assert "inspectorPairedIDTAnchor" in fn
+    assert "selectedIsPending ? inspectorPairedIDTAnchor : nil" in fn
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "setODT", "5600", "6504", "24", "30"):
+        assert token not in fn, token
+    content = _read(CONTENT)
+    column = content.split("struct InspectorColumn")[1].split("struct ClipListArrowMonitor")[0]
+    assert "ScrollViewReader" in column
+    assert "inspectorPairedIDTAnchor" in column
+    assert "inspectorScrollAnchor" in column
+    assert "selectedIsPending: session.selectedClip?.isPending == true" in column
+    assert "proxy.scrollTo(anchor, anchor: .top)" in column
+    assert column.index("onChange(of: session.selectedID)") < column.index("proxy.scrollTo")
+    assert "回到成对 IDT" in column
+    assert "不跟着滚" in column
+    assert "不改这一套调色，不改预览帧，也不参与写出" in column
+    plan = _read(PLAN)
+    assert "这一栏回到成对 IDT" in plan
+    assert "换到已锁定时不跟着滚" in plan
+    assert "不改这一套调色，不改预览帧，也不参与写出" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
+
+
 def test_write_sheet_names_the_last_export_folder_without_the_full_path():
     """The sheet, the bar, and the folder panel name the last folder, or say it is gone."""
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")

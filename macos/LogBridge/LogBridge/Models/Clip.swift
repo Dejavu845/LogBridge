@@ -1094,6 +1094,16 @@ final class SessionModel: ObservableObject {
         "\(lockedClipCount) 条已锁定 / \(pendingClipCount) 条待选"
     }
 
+    /// Scroll id for the paired-IDT block. Pending selection returns here.
+    static let inspectorPairedIDTAnchor = "paired-idt"
+
+    /// A pending clip needs the paired-IDT list, which sits above the grade.
+    /// A locked clip keeps the scroll, so exposure and white balance stay put.
+    /// Nil means do not scroll. Does not change the grade, the pair, or the frame.
+    static func inspectorScrollAnchor(selectedIsPending: Bool) -> String? {
+        selectedIsPending ? inspectorPairedIDTAnchor : nil
+    }
+
     /// 写出说明上的这一套。和检查器同一套曝光、白平衡，套到已锁定素材。
     /// 不另记数字，也不在色温空着时填 5600。
     var sharedGradeWriteLine: String {

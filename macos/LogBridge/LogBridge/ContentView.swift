@@ -361,6 +361,7 @@ private struct MonitorHeader: View {
 
 /// 检查器跟当前选中。标题固定；成对 IDT、曝光、白平衡在下面整栏滚动。
 /// 窗口变矮时仍能滚到曝光和白平衡，不会被成对 IDT 顶出画面。
+/// 换到待选时回到成对 IDT。换到已锁定时不跟着滚。
 private struct InspectorColumn: View {
     @ObservedObject var session: SessionModel
 
@@ -390,6 +391,7 @@ private struct InspectorColumn: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
+                                .help("换到还没锁定的一条时，下面这一栏回到成对 IDT。换到已锁定时不跟着滚，曝光和白平衡留在刚才的位置。不改这一套调色，不改预览帧，也不参与写出。")
                         }
                     }
                     HStack(spacing: 8) {
@@ -420,17 +422,26 @@ private struct InspectorColumn: View {
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    PairedIDTBar(session: session)
-                    Divider()
-                    InspectorView(session: session)
-                    Text("写出时已锁定素材共用当前这一套曝光和白平衡，每条仍用自己的成对 IDT。点另一条、方向键或再拖入，都不会改掉这一套。")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 12)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        PairedIDTBar(session: session)
+                            .id(SessionModel.inspectorPairedIDTAnchor)
+                        Divider()
+                        InspectorView(session: session)
+                        Text("写出时已锁定素材共用当前这一套曝光和白平衡，每条仍用自己的成对 IDT。点另一条、方向键或再拖入，都不会改掉这一套。")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 12)
+                    }
+                }
+                .onChange(of: session.selectedID) { _, _ in
+                    guard let anchor = SessionModel.inspectorScrollAnchor(
+                        selectedIsPending: session.selectedClip?.isPending == true
+                    ) else { return }
+                    proxy.scrollTo(anchor, anchor: .top)
                 }
             }
         }
