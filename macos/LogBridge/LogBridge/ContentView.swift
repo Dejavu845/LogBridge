@@ -12,6 +12,8 @@ struct ContentView: View {
     @StateObject private var session = SessionModel()
     @ObservedObject private var settings = AppSettings.shared
     @State private var monitorLayout: MonitorLayout = .split
+    @State private var monitorZoom: MonitorZoom = .fit
+    @State private var monitorPan = MonitorPanBus()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,8 +23,19 @@ struct ContentView: View {
                 ClipSidebarView(session: session)
                     .frame(minWidth: 240, idealWidth: 292, maxWidth: 380)
                 VStack(spacing: 0) {
-                    MonitorHeader(session: session, layout: $monitorLayout)
-                    SplitPreview(session: session, layout: monitorLayout)
+                    MonitorHeader(session: session, layout: $monitorLayout, zoom: $monitorZoom)
+                        .onChange(of: monitorZoom) { _, _ in
+                            monitorPan.reset()
+                        }
+                        .onChange(of: session.selectedID) { _, _ in
+                            monitorPan.reset()
+                        }
+                    SplitPreview(
+                        session: session,
+                        layout: monitorLayout,
+                        zoom: monitorZoom,
+                        panBus: monitorPan
+                    )
                         .frame(minHeight: 200, maxWidth: .infinity, maxHeight: .infinity)
                         .layoutPriority(1)
                     ProcessLockedBar(session: session)
@@ -182,6 +195,7 @@ enum MonitorLayout: String, CaseIterable, Identifiable {
 private struct MonitorHeader: View {
     @ObservedObject var session: SessionModel
     @Binding var layout: MonitorLayout
+    @Binding var zoom: MonitorZoom
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -225,7 +239,7 @@ private struct MonitorHeader: View {
                     .background(Color.primary.opacity(0.08))
                     .clipShape(Capsule())
             }
-            if session.selectedClip != nil {
+                if session.selectedClip != nil {
                 HStack(spacing: 8) {
                     Picker("这次预览", selection: Binding(
                         get: { session.monitorPreviewODT },
@@ -239,6 +253,27 @@ private struct MonitorHeader: View {
                     .fixedSize()
                     .disabled(session.isExporting)
                     .help("只改这次监视器。默认预览在设置。角标仍是仅预览。不改写出。")
+                    Picker("放大", selection: $zoom) {
+                        ForEach(MonitorZoom.allCases) { item in
+                            Text(item.label).tag(item)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 168)
+                    .labelsHidden()
+                    .disabled(session.pickingNeutral)
+                    .help("只改监视器画面大小。适应是整幅塞进窗口。100% 是预览画面的一个像素对一个屏幕像素，不是片源逐像素，预览长边仍会缩小。200% 再大一倍，停在中央，可拖动；分屏时源和预览一起动。换放大倍数或换一条回到中央。不改这一套调色，不参与写出。点灰卡时回到适应，取样仍按整幅，点完仍停在刚才拖到的位置。")
+                    if session.pickingNeutral {
+                        Text("点灰卡时适应")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else if zoom != .fit {
+                        Text("可拖动")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     Text(gradeReadout)
                         .font(.callout.monospacedDigit())
                         .foregroundStyle(.secondary)
@@ -640,6 +675,8 @@ struct AdvancedPanel: View {
 struct SplitPreview: View {
     @ObservedObject var session: SessionModel
     var layout: MonitorLayout
+    var zoom: MonitorZoom
+    var panBus: MonitorPanBus = MonitorPanBus()
 
     /// Grey-card sampling hits the grade pane. Keep that pane up while sampling.
     private var shownLayout: MonitorLayout {
@@ -647,6 +684,14 @@ struct SplitPreview: View {
             return .grade
         }
         return layout
+    }
+
+    /// Grey-card hits use the whole fitted frame. Magnify comes back after.
+    private var shownZoom: MonitorZoom {
+        if session.pickingNeutral, !session.isExporting {
+            return .fit
+        }
+        return zoom
     }
 
     var body: some View {
@@ -714,7 +759,9 @@ struct SplitPreview: View {
         SourcePreviewView(
             title: "源（相机 Log）",
             caption: "未套 Rec.709。相机编码值。",
-            image: session.preview.sourceImage
+            image: session.preview.sourceImage,
+            zoom: shownZoom,
+            panBus: panBus
         )
     }
 
@@ -739,6 +786,8 @@ struct SplitPreview: View {
                 title: gradePaneTitle,
                 caption: gradePaneCaption,
                 image: session.preview.odtImage,
+                zoom: shownZoom,
+                panBus: panBus,
                 odt: session.graph.odt,
                 pickingNeutral: session.pickingNeutral && !session.isExporting,
                 onPick: { nx, ny in
@@ -753,6 +802,8 @@ struct SplitPreview: View {
                 title: gradePaneTitle,
                 caption: gradePaneCaption,
                 image: session.preview.odtImage,
+                zoom: shownZoom,
+                panBus: panBus,
                 pickingNeutral: session.pickingNeutral && !session.isExporting,
                 onPick: { nx, ny in
                     session.handlePreviewPick(nx: nx, ny: ny)

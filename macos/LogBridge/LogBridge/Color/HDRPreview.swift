@@ -172,6 +172,8 @@ struct HDRPreviewView: View {
     let title: String
     let caption: String
     var image: CGImage? = nil
+    var zoom: MonitorZoom = .fit
+    var panBus: MonitorPanBus? = nil
     var odt: ODTMode = .hlg
     var pickingNeutral: Bool = false
     var onPick: ((Double, Double) -> Void)? = nil
@@ -179,7 +181,7 @@ struct HDRPreviewView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            HDRTaggedHost(image: image, odt: odt, onLayerFail: onLayerFail)
+            HDRTaggedHost(image: image, odt: odt, zoom: zoom, panBus: panBus, onLayerFail: onLayerFail)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
             // Empty right pane: same 「HDR 预览建不出」 chip. Never 709 pixels.
@@ -235,6 +237,8 @@ private struct HDRPaneTitle: View {
 struct HDRTaggedHost: NSViewRepresentable {
     var image: CGImage?
     var odt: ODTMode
+    var zoom: MonitorZoom = .fit
+    var panBus: MonitorPanBus? = nil
     var onLayerFail: (() -> Void)?
 
     func makeNSView(context: Context) -> HDRImageHost {
@@ -243,12 +247,16 @@ struct HDRTaggedHost: NSViewRepresentable {
 
     func updateNSView(_ nsView: HDRImageHost, context: Context) {
         nsView.onLayerFail = onLayerFail
+        nsView.setPanBus(panBus)
         nsView.setImage(image, odt: odt)
+        nsView.setZoom(zoom)
     }
 }
 
 final class HDRImageHost: NSView {
     private let imageLayer = CALayer()
+    private var magnifier = PreviewMagnifier()
+    private var panBus: MonitorPanBus?
     private var pendingImage: CGImage?
     private var pendingODT: ODTMode = .hlg
     var onLayerFail: (() -> Void)?
@@ -257,6 +265,7 @@ final class HDRImageHost: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer = CALayer()
+        layer?.masksToBounds = true
         layer?.backgroundColor = CGColor(gray: 0.09, alpha: 1)
         imageLayer.contentsGravity = .resizeAspect
         setHDRLayerContentsFormat(imageLayer)
@@ -267,10 +276,31 @@ final class HDRImageHost: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override var acceptsFirstResponder: Bool { true }
+
+    func setPanBus(_ bus: MonitorPanBus?) {
+        magnifier.bus = bus
+        bindMonitorPan(bus, to: self, previous: &panBus) { [weak self] in
+            self?.needsLayout = true
+        }
+    }
+
     func setImage(_ img: CGImage?, odt: ODTMode) {
         pendingImage = img
         pendingODT = odt
+        magnifier.noteImage(img)
         applyPending()
+        needsLayout = true
+    }
+
+    func setZoom(_ zoom: MonitorZoom) {
+        magnifier.setZoom(zoom)
+        needsLayout = true
+        window?.invalidateCursorRects(for: self)
+    }
+
+    deinit {
+        panBus?.unobserve(self)
     }
 
     override func viewDidMoveToWindow() {
@@ -324,6 +354,36 @@ final class HDRImageHost: NSView {
 
     override func layout() {
         super.layout()
-        imageLayer.frame = bounds
+        magnifier.place(
+            imageLayer: imageLayer,
+            image: pendingImage,
+            bounds: bounds,
+            screenScale: previewScreenScale(of: self)
+        )
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if magnifier.showsHand {
+            magnifier.mouseDown(event)
+        } else {
+            super.mouseDown(with: event)
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard magnifier.showsHand else {
+            super.mouseDragged(with: event)
+            return
+        }
+        magnifier.mouseDragged(
+            event,
+            image: pendingImage,
+            bounds: bounds,
+            screenScale: previewScreenScale(of: self)
+        )
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: magnifier.showsHand ? .openHand : .arrow)
     }
 }
