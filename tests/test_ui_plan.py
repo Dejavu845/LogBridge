@@ -670,3 +670,50 @@ def test_media_fact_line_is_shared_and_does_not_invent_a_rate():
     assert "静帧" in plan
     assert "不猜 24 或 30" in plan
     assert "片源尺寸" in plan
+
+
+def test_write_progress_names_the_clip_and_the_row_opens_the_proxy():
+    """Default ProRes: progress names the file, and 已写出代理 opens that .mov."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    total = clip.split("static func knownWriteFrameTotal")[1].split("static func cancelledExportNote")[0]
+    assert "isStill" in total
+    assert "return 1" in total
+    assert "expectedSourceFrames" in total
+    assert "durationSeconds" in total
+    assert "mediaFPS" in total
+    assert "conservativeFPS" not in total
+    for token in ("24", "30", "5600", "6504"):
+        assert token not in total, token
+    progress = clip.split("static func exportProgressText")[1].split("static func knownWriteFrameTotal")[0]
+    assert "clipName" in progress
+    assert "第 \\(frame) / 共 \\(frameTotal) 帧" in progress
+    assert "第 \\(frame) 帧" in progress
+    writing = clip.split("func writeLockedDeliverables")[1].split("static func batchSummaryText")[0]
+    assert "knownWriteFrameTotal(for: clip)" in writing
+    assert "clipName: clip.filename" in writing
+    assert "frameTotal: frameTotal" in writing
+    assert "writingClipID = nil" in writing
+    assert "writtenName: url.lastPathComponent" in writing
+    assert "writtenPath: url.path" in writing
+    reveal = clip.split("func revealClipExportInFinder")[1].split("private func publishExportProgress")[0]
+    assert "writtenRevealPath" in reveal
+    assert "clipProResRevealURL" in reveal
+    assert "clipSequenceRevealURL" in reveal
+    assert "lastExportDirectoryURL" in reveal
+    assert "fileExists" in reveal
+    assert "exportFormat == .exrACES2065" in reveal
+    prores = clip.split("static func clipProResRevealURL")[1].split("func revealClipExportInFinder")[0]
+    assert "wroteProxyChip" in prores
+    assert "ProResWriter.deliverableURL" in prores
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    assert "正在写出" in sidebar
+    assert "writingClipID" in sidebar
+    assert "writtenDeliverableName" in sidebar
+    assert "session.revealClipExportInFinder(clip)" in sidebar
+    plan = _read(PLAN)
+    assert "正在写出" in plan
+    assert "第 k / 共 m 帧" in plan
+    assert "不猜 24 或 30" in plan
+    assert "_Rec709_proxy.mov" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

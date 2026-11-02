@@ -35,6 +35,10 @@ struct Clip: Identifiable, Hashable {
     /// Sidebar chip after 「处理已锁定片段」. `已写出代理`, a short Chinese error, or nil.
     /// Cleared on re-export. Cancelled in-progress stays nil. 未完成.
     var exportChip: String? = nil
+    /// File name of the proxy this row just wrote. Nil unless the chip is 已写出代理.
+    var writtenDeliverableName: String? = nil
+    /// Absolute path of that proxy file or EXR folder. Nil unless the chip is 已写出代理.
+    var writtenRevealPath: String? = nil
 
     var filename: String { url.lastPathComponent }
 
@@ -296,6 +300,8 @@ final class SessionModel: ObservableObject {
     /// The top bar says so, so a quiet gap is not a missed click. Cancel writes nothing.
     @Published var openingExportFolder = false
     @Published var isWritingDeliverables = false
+    /// Clip whose proxy is being written. Nil when idle. Does not move selection.
+    @Published var writingClipID: UUID?
     /// Same busy flag. Preview progress + inspector / IDT lock read this.
     var isExporting: Bool { isWritingDeliverables }
     /// Completed `{stem}_ACES2065-1_proxy` folders from the last successful write.
@@ -737,7 +743,12 @@ final class SessionModel: ObservableObject {
         lastExportRevealURLs = []
         clearExportChips(for: locked)
         isWritingDeliverables = true
-        lastExportNote = Self.exportProgressText(clipIndex: 1, clipTotal: clipTotal)
+        writingClipID = locked.first?.id
+        lastExportNote = Self.exportProgressText(
+            clipIndex: 1,
+            clipTotal: clipTotal,
+            clipName: locked.first?.filename
+        )
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             var written: [URL] = []
@@ -749,8 +760,14 @@ final class SessionModel: ObservableObject {
                     break
                 }
                 let clipIndex = offset + 1
+                let frameTotal = Self.knownWriteFrameTotal(for: clip)
                 self.publishExportProgress(
-                    Self.exportProgressText(clipIndex: clipIndex, clipTotal: clipTotal),
+                    Self.exportProgressText(
+                        clipIndex: clipIndex,
+                        clipTotal: clipTotal,
+                        clipName: clip.filename
+                    ),
+                    clipID: clip.id,
                     force: true
                 )
                 do {
@@ -765,8 +782,11 @@ final class SessionModel: ObservableObject {
                                 Self.exportProgressText(
                                     clipIndex: clipIndex,
                                     clipTotal: clipTotal,
-                                    frame: frame
-                                )
+                                    frame: frame,
+                                    frameTotal: frameTotal,
+                                    clipName: clip.filename
+                                ),
+                                clipID: clip.id
                             )
                         }
                     } else {
@@ -779,13 +799,21 @@ final class SessionModel: ObservableObject {
                                 Self.exportProgressText(
                                     clipIndex: clipIndex,
                                     clipTotal: clipTotal,
-                                    frame: frame
-                                )
+                                    frame: frame,
+                                    frameTotal: frameTotal,
+                                    clipName: clip.filename
+                                ),
+                                clipID: clip.id
                             )
                         }
                     }
                     written.append(url)
-                    self.setExportChip(clipID: clip.id, Self.wroteProxyChip)
+                    self.setExportChip(
+                        clipID: clip.id,
+                        Self.wroteProxyChip,
+                        writtenName: url.lastPathComponent,
+                        writtenPath: url.path
+                    )
                 } catch is LockedWriteCancel {
                     cancelled = true
                     break
@@ -853,6 +881,7 @@ final class SessionModel: ObservableObject {
             DispatchQueue.main.async {
                 self.lastExportNote = note
                 self.lastExportRevealURLs = reveal
+                self.writingClipID = nil
                 self.isWritingDeliverables = false
             }
         }
@@ -1001,17 +1030,48 @@ final class SessionModel: ObservableObject {
         return true
     }
 
-    /// 「写出代理 2/5 · 第 120 帧」. Frame total omitted when unknown.
-    static func exportProgressText(clipIndex: Int, clipTotal: Int, frame: Int? = nil, frameTotal: Int? = nil) -> String {
+    /// 「写出代理 2/5 · 文件名 · 第 120 / 共 240 帧」.
+    /// The name is the source file. Frame total only when this clip already has one.
+    /// A still is 1. Missing rate or duration omits the total. Does not invent a rate.
+    static func exportProgressText(
+        clipIndex: Int,
+        clipTotal: Int,
+        frame: Int? = nil,
+        frameTotal: Int? = nil,
+        clipName: String? = nil
+    ) -> String {
         var note = "写出代理 \(clipIndex)/\(clipTotal)"
+        if let clipName {
+            let trimmed = clipName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                note += " · \(trimmed)"
+            }
+        }
         if let frame {
-            if let frameTotal {
+            if let frameTotal, frameTotal > 0 {
                 note += " · 第 \(frame) / 共 \(frameTotal) 帧"
             } else {
                 note += " · 第 \(frame) 帧"
             }
         }
         return note
+    }
+
+    /// Frames this write can name. A still is 1. A movie is duration × metadata fps.
+    /// Missing rate or duration returns nil. Not the disk-estimate fallback.
+    static func knownWriteFrameTotal(for clip: Clip) -> Int? {
+        if clip.isStill { return 1 }
+        let ext = MediaExtent(
+            frameCount: nil,
+            durationSeconds: clip.durationSeconds,
+            fps: clip.mediaFPS,
+            width: clip.pixelWidth,
+            height: clip.pixelHeight
+        )
+        let (count, err) = expectedSourceFrames(ext)
+        if err != nil { return nil }
+        guard let count, count > 0 else { return nil }
+        return count
     }
 
     /// Cancelled batch. 已取消 + honesty. Partial output is 未完成.
@@ -1278,13 +1338,27 @@ final class SessionModel: ObservableObject {
         let ids = Set(locked.map(\.id))
         for i in clips.indices where ids.contains(clips[i].id) {
             clips[i].exportChip = nil
+            clips[i].writtenDeliverableName = nil
+            clips[i].writtenRevealPath = nil
         }
     }
 
-    private func setExportChip(clipID: UUID, _ chip: String?) {
+    private func setExportChip(
+        clipID: UUID,
+        _ chip: String?,
+        writtenName: String? = nil,
+        writtenPath: String? = nil
+    ) {
         DispatchQueue.main.async { [weak self] in
             guard let self, let idx = self.clips.firstIndex(where: { $0.id == clipID }) else { return }
             self.clips[idx].exportChip = chip
+            if chip == Self.wroteProxyChip {
+                self.clips[idx].writtenDeliverableName = writtenName
+                self.clips[idx].writtenRevealPath = writtenPath
+            } else {
+                self.clips[idx].writtenDeliverableName = nil
+                self.clips[idx].writtenRevealPath = nil
+            }
         }
     }
 
@@ -1318,21 +1392,45 @@ final class SessionModel: ObservableObject {
         return ResolveExporter.deliverableSequenceDirectory(for: clip, in: dest)
     }
 
-    /// Sidebar row / 「已写出代理」 chip. Reuses last dest. No-op unless written.
-    func revealClipExportInFinder(_ clip: Clip) {
-        guard let dest = settings.lastExportDirectoryURL,
-              let seqDir = Self.clipSequenceRevealURL(for: clip, dest: dest),
-              FileManager.default.fileExists(atPath: seqDir.path)
-        else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([seqDir])
+    /// Last dest + `{stem}_Rec709_proxy.mov`. Success chip only.
+    /// Pending / failed / cancelled do not reveal.
+    static func clipProResRevealURL(for clip: Clip, dest: URL) -> URL? {
+        guard clip.exportChip == wroteProxyChip else { return nil }
+        return ProResWriter.deliverableURL(for: clip, in: dest)
     }
 
-    private func publishExportProgress(_ note: String, force: Bool = false) {
+    /// Sidebar 「已写出代理」. Opens the file this write made.
+    /// Default ProRes is the .mov. Advanced EXR is the proxy folder.
+    /// A remembered path wins. Otherwise the last dest is checked for whichever file is there.
+    /// Pending / failed / cancelled do not reveal. Does not invent a path.
+    func revealClipExportInFinder(_ clip: Clip) {
+        guard clip.exportChip == Self.wroteProxyChip else { return }
+        if let path = clip.writtenRevealPath, FileManager.default.fileExists(atPath: path) {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            return
+        }
+        guard let dest = settings.lastExportDirectoryURL else { return }
+        let prores = Self.clipProResRevealURL(for: clip, dest: dest)
+        let sequence = Self.clipSequenceRevealURL(for: clip, dest: dest)
+        let ordered: [URL?] = settings.exportFormat == .exrACES2065
+            ? [sequence, prores]
+            : [prores, sequence]
+        guard let url = ordered.compactMap({ $0 }).first(where: {
+            FileManager.default.fileExists(atPath: $0.path)
+        }) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func publishExportProgress(_ note: String, clipID: UUID? = nil, force: Bool = false) {
         let now = ProcessInfo.processInfo.systemUptime
         if !force && (now - lastProgressUptime) < 0.12 { return }
         lastProgressUptime = now
         DispatchQueue.main.async { [weak self] in
-            self?.lastExportNote = note
+            guard let self else { return }
+            self.lastExportNote = note
+            if let clipID {
+                self.writingClipID = clipID
+            }
         }
     }
 

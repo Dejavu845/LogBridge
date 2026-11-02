@@ -80,6 +80,7 @@ struct ClipSidebarView: View {
                             ClipRow(
                                 clip: clip,
                                 selected: session.selectedID == clip.id,
+                                writing: session.writingClipID == clip.id,
                                 onRevealWritten: { session.revealClipExportInFinder(clip) }
                             )
                             .id(clip.id)
@@ -94,6 +95,11 @@ struct ClipSidebarView: View {
                     .padding(.bottom, 8)
                 }
                 .onChange(of: session.selectedID) { _, id in
+                    if let id {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                }
+                .onChange(of: session.writingClipID) { _, id in
                     if let id {
                         proxy.scrollTo(id, anchor: .center)
                     }
@@ -159,6 +165,7 @@ private struct DropZone: View {
 struct ClipRow: View {
     let clip: Clip
     var selected: Bool = false
+    var writing: Bool = false
     var onRevealWritten: (() -> Void)? = nil
 
     var body: some View {
@@ -193,6 +200,13 @@ struct ClipRow: View {
                         .lineLimit(1)
                         .help("片源读到的画面尺寸、帧率和时长。缺的不写，不猜帧率。静帧写静帧。不是预览缩小后的尺寸，不参与写出。")
                 }
+                if writing {
+                    Text("正在写出")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .lineLimit(1)
+                        .help("这一条正在写出代理。监视器下那一行是同一条的文件名和帧数。不改这一套调色。")
+                }
                 if let reason = clip.processSkipReason {
                     Text(reason)
                         .font(.caption)
@@ -206,6 +220,15 @@ struct ClipRow: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.secondary)
                             .lineLimit(1)
+                            .help("在 Finder 中显示刚写出的代理。默认是 Rec.709 ProRes。高级 EXR 打开代理夹。失败的不打开。")
+                        if let name = clip.writtenDeliverableName {
+                            Text(name)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help("刚写出的文件名。点「已写出代理」在 Finder 中显示。整段代理，代理精度。")
+                        }
                     } else {
                         Text(chip)
                             .font(.caption)
