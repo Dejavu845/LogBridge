@@ -183,6 +183,25 @@ struct Clip: Identifiable, Hashable {
         }
         return String(format: "%d 分 %02d 秒", minutes, remain)
     }
+
+    /// Preview clock for this frame: index divided by this clip's metadata rate.
+    /// Milliseconds. Nil when the rate is missing or not finite. Not camera timecode.
+    /// Does not fill in a rate.
+    static func previewClock(frameIndex: Int, fps: Double?) -> String? {
+        guard frameIndex >= 0, let fps, fps.isFinite, fps > 0 else { return nil }
+        let seconds = Double(frameIndex) / fps
+        guard seconds.isFinite, seconds >= 0 else { return nil }
+        let wholeMillis = Int((seconds * 1000).rounded())
+        let millis = wholeMillis % 1000
+        let totalSeconds = wholeMillis / 1000
+        let secs = totalSeconds % 60
+        let minutes = (totalSeconds / 60) % 60
+        let hours = totalSeconds / 3600
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d.%03d", hours, minutes, secs, millis)
+        }
+        return String(format: "%d:%02d.%03d", minutes, secs, millis)
+    }
 }
 
 enum DetectionSource: String, Hashable {
@@ -484,6 +503,12 @@ final class SessionModel: ObservableObject {
         clips.filter { $0.needsUserPicker || $0.idt == nil }.count
     }
 
+    /// Clock beside the frame count. Same index and the metadata rate already
+    /// used for playback. Nil when that rate was not read. Not a write input.
+    var previewClockText: String? {
+        Clip.previewClock(frameIndex: previewFrameIndex, fps: previewPlaybackFPS)
+    }
+
     /// Movie scrub range exists, and no sheet or write is up.
     /// Stills and missing fps/duration stay out: no invented frame count.
     var canStepPreviewFrame: Bool {
@@ -516,6 +541,41 @@ final class SessionModel: ObservableObject {
             guard let last = previewScrubLastFrame, previewFrameIndex < last else { return true }
             setPreviewFrame(previewFrameIndex + 1)
         }
+        return true
+    }
+
+    /// Home / 回到开头. Already on frame 0 still stops playback.
+    var canJumpPreviewToStart: Bool {
+        canStepPreviewFrame && previewFrameIndex > 0
+    }
+
+    /// End / 到结尾. Already on the last frame stays put.
+    var canJumpPreviewToEnd: Bool {
+        canStepPreviewForward
+    }
+
+    /// First preview frame. Stops playback. Does not change the shared grade.
+    @discardableResult
+    func jumpPreviewToStart() -> Bool {
+        guard canStepPreviewFrame else { return false }
+        if previewFrameIndex == 0 {
+            stopPreviewPlayback()
+            return true
+        }
+        setPreviewFrame(0)
+        return true
+    }
+
+    /// Last preview frame from the existing scrub range. Stops playback.
+    /// Does not change the shared grade, and does not invent a frame count.
+    @discardableResult
+    func jumpPreviewToEnd() -> Bool {
+        guard canStepPreviewFrame, let last = previewScrubLastFrame else { return false }
+        if previewFrameIndex >= last {
+            stopPreviewPlayback()
+            return true
+        }
+        setPreviewFrame(last)
         return true
     }
 

@@ -89,6 +89,12 @@ struct ContentView: View {
                 onStepFrame: { delta in
                     session.stepPreviewFrame(delta)
                 },
+                onJumpToStart: {
+                    session.jumpPreviewToStart()
+                },
+                onJumpToEnd: {
+                    session.jumpPreviewToEnd()
+                },
                 onTogglePlayback: {
                     session.togglePreviewPlayback()
                 }
@@ -392,7 +398,8 @@ private struct InspectorColumn: View {
 }
 
 /// Window-level Up/Down for the sidebar list. Left/Right steps the preview
-/// frame (same as 上一帧 / 下一帧). Space plays or pauses that preview.
+/// frame (same as 上一帧 / 下一帧). Home / End jump to the first or last
+/// preview frame. Space plays or pauses that preview.
 /// Escape while writing is the existing 取消
 /// (same cancelLockedDeliverables). Idle Escape does nothing.
 /// Delete / Backspace drops the selected clip from the session only
@@ -405,6 +412,8 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     var onEscape: () -> Bool
     var onDelete: () -> Bool
     var onStepFrame: (Int) -> Bool
+    var onJumpToStart: () -> Bool
+    var onJumpToEnd: () -> Bool
     var onTogglePlayback: () -> Bool
 
     func makeNSView(context: Context) -> MonitorView {
@@ -413,6 +422,8 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         view.onEscape = onEscape
         view.onDelete = onDelete
         view.onStepFrame = onStepFrame
+        view.onJumpToStart = onJumpToStart
+        view.onJumpToEnd = onJumpToEnd
         view.onTogglePlayback = onTogglePlayback
         return view
     }
@@ -422,6 +433,8 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         nsView.onEscape = onEscape
         nsView.onDelete = onDelete
         nsView.onStepFrame = onStepFrame
+        nsView.onJumpToStart = onJumpToStart
+        nsView.onJumpToEnd = onJumpToEnd
         nsView.onTogglePlayback = onTogglePlayback
     }
 
@@ -434,6 +447,8 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         var onEscape: (() -> Bool)?
         var onDelete: (() -> Bool)?
         var onStepFrame: ((Int) -> Bool)?
+        var onJumpToStart: (() -> Bool)?
+        var onJumpToEnd: (() -> Bool)?
         var onTogglePlayback: (() -> Bool)?
         private var monitor: Any?
 
@@ -466,6 +481,20 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                 case 124:
                     if SessionModel.isArrowConsumedByTextInput() { return event }
                     if self.onStepFrame?(1) == true { return nil }
+                    return event
+                case 115:
+                    if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
+                        return event
+                    }
+                    if self.onJumpToStart?() == true { return nil }
+                    return event
+                case 119:
+                    if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
+                        return event
+                    }
+                    if self.onJumpToEnd?() == true { return nil }
                     return event
                 case 49:
                     if SessionModel.isPlaybackKeyConsumedByControl() { return event }
@@ -844,6 +873,12 @@ struct PreviewScrubBar: View {
                 .controlSize(.regular)
                 .disabled(!session.canTogglePreviewPlayback)
                 .help("按这条素材自己的帧率走预览。这一帧还没画完就等它，到最后一帧就停，不绕回。空格是同一套。不改曝光和白平衡，不参与写出。读不到帧率就不能播。")
+                Button("回到开头") {
+                    session.jumpPreviewToStart()
+                }
+                .controlSize(.regular)
+                .disabled(!session.canJumpPreviewToStart)
+                .help("回到第 1 帧。Home 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
                 Button("上一帧") {
                     session.stepPreviewFrame(-1)
                 }
@@ -866,17 +901,34 @@ struct PreviewScrubBar: View {
                 .controlSize(.regular)
                 .disabled(!session.canStepPreviewForward)
                 .help("每次一帧，到头就停。右方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
-                Text(session.isPreviewPlaying
-                     ? "第 \(session.previewFrameIndex + 1) / \(last + 1) 帧 · 播放中"
-                     : "第 \(session.previewFrameIndex + 1) / \(last + 1) 帧")
+                Button("到结尾") {
+                    session.jumpPreviewToEnd()
+                }
+                .controlSize(.regular)
+                .disabled(!session.canJumpPreviewToEnd)
+                .help("到最后一帧。End 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                Text(previewFrameReadout(last: last))
                     .font(.body.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .frame(minWidth: 180, alignment: .trailing)
+                    .frame(minWidth: 220, alignment: .trailing)
+                    .help("帧数是这条预览的第几帧。读到帧率时，后面的时间是这一帧除以这条帧率，不是片源时间码。读不到帧率就不写时间。不改这一套调色，不参与写出。")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
+    }
+
+    /// Frame count, and a clock when this clip's rate was read. Playback stays a suffix.
+    private func previewFrameReadout(last: Int) -> String {
+        var line = "第 \(session.previewFrameIndex + 1) / \(last + 1) 帧"
+        if let clock = session.previewClockText {
+            line += " · \(clock)"
+        }
+        if session.isPreviewPlaying {
+            line += " · 播放中"
+        }
+        return line
     }
 }
 

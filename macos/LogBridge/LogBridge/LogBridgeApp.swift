@@ -131,6 +131,10 @@ private struct LogBridgeCommands: Commands {
             .keyboardShortcut("]", modifiers: [.command])
             .disabled(sessionFocus?.session?.canSelectNextPending != true)
             Divider()
+            Button("回到开头") {
+                sessionFocus?.session?.jumpPreviewToStart()
+            }
+            .disabled(sessionFocus?.session?.canJumpPreviewToStart != true)
             Button("上一帧") {
                 sessionFocus?.session?.stepPreviewFrame(-1)
             }
@@ -139,6 +143,10 @@ private struct LogBridgeCommands: Commands {
                 sessionFocus?.session?.stepPreviewFrame(1)
             }
             .disabled(sessionFocus?.session?.canStepPreviewForward != true)
+            Button("到结尾") {
+                sessionFocus?.session?.jumpPreviewToEnd()
+            }
+            .disabled(sessionFocus?.session?.canJumpPreviewToEnd != true)
             Button(sessionFocus?.session?.isPreviewPlaying == true ? "暂停预览" : "播放预览") {
                 sessionFocus?.session?.togglePreviewPlayback()
             }

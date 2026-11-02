@@ -296,9 +296,15 @@ def test_write_sheet_names_the_proxy_and_the_toolbar_says_the_next_step():
 def test_shared_grade_stays_when_selection_changes():
     """Browsing clips must not replace the one exposure / WB set write uses."""
     content = _read(CONTENT)
-    # Monitor zoom resets on the first selectedID change. The shared grade
-    # stays on the later handler, which is what write uses.
-    handlers = content.split(".onChange(of: session.selectedID)")[1:]
+    # Monitor zoom resets pan on the first selectedID change. That handler
+    # must not touch the grade. The shared set stays on the later handler.
+    parts = content.split(".onChange(of: session.selectedID)")
+    assert len(parts) >= 3
+    pan_reset = parts[1].split("SplitPreview")[0]
+    assert "monitorPan.reset()" in pan_reset
+    assert "noteSelectionForSharedGrade" not in pan_reset
+    assert "applyClipWBToGraph" not in pan_reset
+    handlers = parts[1:]
     grade = [part.split("refreshPreview()")[0] for part in handlers if "noteSelectionForSharedGrade" in part]
     assert len(grade) == 1
     assert "applyClipWBToGraph" not in grade[0]
@@ -421,6 +427,69 @@ def test_preview_frame_steps_without_inventing_a_range_or_moving_the_grade():
     assert "到头就停" in plan
     assert "不改曝光和白平衡" in plan
     assert "不猜帧率" in plan
+
+
+def test_preview_clock_uses_the_clip_rate_and_jumps_leave_the_grade():
+    """Clock is index ÷ metadata fps. Home/End move the preview frame only."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func previewClock(")[1].split("enum DetectionSource")[0]
+    assert "frameIndex >= 0" in fn
+    assert "fps.isFinite, fps > 0" in fn
+    assert "return nil" in fn
+    assert "Double(frameIndex) / fps" in fn
+    assert "1000" in fn
+    assert "%d:%02d.%03d" in fn
+    for token in ("24", "30", "5600", "6504", "setExposureStops", "setWBParams"):
+        assert token not in fn, token
+    shown = clip.split("var previewClockText")[1].split("var canStepPreviewFrame")[0]
+    assert "previewFrameIndex" in shown
+    assert "previewPlaybackFPS" in shown
+    start = clip.split("func jumpPreviewToStart")[1].split("func jumpPreviewToEnd")[0]
+    assert "setPreviewFrame(0)" in start
+    assert "stopPreviewPlayback" in start
+    assert "setExposureStops" not in start
+    assert "setWBParams" not in start
+    assert "touchSharedGrade" not in start
+    end = clip.split("func jumpPreviewToEnd")[1].split("var canPlayPreview")[0]
+    assert "previewScrubLastFrame" in end
+    assert "setPreviewFrame(last)" in end
+    assert "setExposureStops" not in end
+    assert "setWBParams" not in end
+    assert "touchSharedGrade" not in end
+    for token in ("24", "30", "5600", "6504"):
+        assert token not in start, token
+        assert token not in end, token
+    content = _read(CONTENT)
+    bar = content.split("struct PreviewScrubBar")[1].split("struct WriteProgressLine")[0]
+    assert 'Button("回到开头")' in bar
+    assert 'Button("到结尾")' in bar
+    assert "jumpPreviewToStart" in bar
+    assert "jumpPreviewToEnd" in bar
+    assert "previewClockText" in bar
+    assert "canJumpPreviewToStart" in bar
+    assert "canJumpPreviewToEnd" in bar
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert "case 115:" in monitor
+    assert "case 119:" in monitor
+    assert "onJumpToStart?()" in monitor
+    assert "onJumpToEnd?()" in monitor
+    assert "isArrowConsumedByTextInput" in monitor
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    assert 'Button("回到开头")' in menu
+    assert 'Button("到结尾")' in menu
+    assert "jumpPreviewToStart" in menu
+    assert "jumpPreviewToEnd" in menu
+    assert "canJumpPreviewToStart" in menu
+    assert "canJumpPreviewToEnd" in menu
+    plan = _read(PLAN)
+    assert "预览时间" in plan
+    assert "回到开头" in plan
+    assert "到结尾" in plan
+    assert "不猜 24 或 30" in plan
+    assert "不改曝光和白平衡" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
 
 
 def test_grade_before_is_preview_only_and_leaves_the_shared_set():
