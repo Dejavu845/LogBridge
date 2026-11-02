@@ -50,12 +50,26 @@ struct PairedIDTBar: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
                 if clip.hasLockedPair, session.pendingClipCount > 0 {
-                    Button("下一条待选") {
-                        session.selectNextPendingAfterLock(lockedID: clip.id)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button("下一条待选") {
+                            session.selectNextPendingAfterLock(lockedID: clip.id)
+                        }
+                        .controlSize(.regular)
+                        .disabled(session.isExporting)
+                        .help("这条留在列表里。去下一条还没选成对 IDT 的素材，不替你选。")
+                        Button("这一对给下一条待选") {
+                            session.applyLockedPairToNextPending()
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canApplyLockedPairToNextPending)
+                        .help("把当前这一对写到下一条还没锁定的素材上，而且这一对已经在它的成对列表里。然后停在那一条看预览。不改曝光和白平衡。下一条的列表里没有这一对时不起作用，也不跳去更后面的一条。⇧⌘] 和菜单「调色」是同一套。")
                     }
-                    .controlSize(.regular)
-                    .disabled(session.isExporting)
-                    .help("这条留在列表里。去下一条还没选成对 IDT 的素材，不替你选。")
+                    if let note = session.applyPairToNextPendingNote {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             } else {
                 Text("先点一条素材。读不到元数据就在这里选成对 IDT，不猜。")

@@ -1826,6 +1826,61 @@ final class SessionModel: ObservableObject {
         selectNextPendingAfterLock(lockedID: clip.id)
     }
 
+    /// Next pending clip after this one, wrapping once. Does not lock an IDT.
+    private func nextPendingClip(after id: UUID) -> Clip? {
+        guard let currentIdx = clips.firstIndex(where: { $0.id == id }) else { return nil }
+        if let next = clips.dropFirst(currentIdx + 1).first(where: { !$0.hasLockedPair }) {
+            return next
+        }
+        return clips.first(where: { $0.id != id && !$0.hasLockedPair })
+    }
+
+    /// Shown when the next pending clip's own pair list does not contain this pair.
+    /// Does not skip ahead to a later clip, and does not pick for it.
+    var applyPairToNextPendingNote: String? {
+        guard !canApplyLockedPairToNextPending else { return nil }
+        guard !isWritingDeliverables,
+              !showSettings,
+              !showImporter,
+              !showDeliverSheet,
+              !openingExportFolder,
+              selectedClip?.hasLockedPair == true,
+              pendingClipCount > 0
+        else { return nil }
+        return "下一条待选的列表里没有这一对。不替它选。"
+    }
+
+    /// The current locked pair may be written onto the next pending clip
+    /// only when that clip's picker already lists the pair.
+    var canApplyLockedPairToNextPending: Bool {
+        guard !isWritingDeliverables,
+              !showSettings,
+              !showImporter,
+              !showDeliverSheet,
+              !openingExportFolder,
+              let clip = selectedClip,
+              clip.hasLockedPair,
+              let idt = clip.idt,
+              !idt.isStub,
+              let next = nextPendingClip(after: clip.id)
+        else { return false }
+        return next.pickerPairs.contains(idt)
+    }
+
+    /// Write this pair onto the next pending clip and stay there for the preview.
+    /// Does not change exposure or white balance. Does not skip a clip whose list lacks the pair.
+    func applyLockedPairToNextPending() {
+        guard canApplyLockedPairToNextPending,
+              let clip = selectedClip,
+              let idt = clip.idt,
+              let next = nextPendingClip(after: clip.id)
+        else { return }
+        stopPreviewPlayback()
+        selectedID = next.id
+        noteSelectionForSharedGrade(next)
+        setIDT(next.id, idt)
+    }
+
     private func currentSharedGradeSnapshot() -> SharedGradeSnapshot {
         SharedGradeSnapshot(
             exposureEnabled: graph.exposureEnabled,

@@ -1245,3 +1245,52 @@ def test_shared_grade_undo_steps_back_without_moving_idt_or_the_frame():
     assert "不记进撤销" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_locked_pair_moves_only_when_the_next_pending_list_has_it():
+    """The current pair is written onto the next pending clip only if that clip already lists it."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    nxt = clip.split("func nextPendingClip")[1].split("var applyPairToNextPendingNote")[0]
+    assert "!$0.hasLockedPair" in nxt
+    assert "dropFirst" in nxt
+    note = clip.split("var applyPairToNextPendingNote")[1].split("var canApplyLockedPairToNextPending")[0]
+    assert "下一条待选的列表里没有这一对。不替它选。" in note
+    assert "canApplyLockedPairToNextPending" in note
+    assert "isWritingDeliverables" in note
+    assert "openingExportFolder" in note
+    gate = clip.split("var canApplyLockedPairToNextPending")[1].split("func applyLockedPairToNextPending")[0]
+    assert "pickerPairs.contains(idt)" in gate
+    assert "hasLockedPair" in gate
+    assert "isWritingDeliverables" in gate
+    assert "showDeliverSheet" in gate
+    assert "showSettings" in gate
+    assert "showImporter" in gate
+    assert "openingExportFolder" in gate
+    assert "isStub" in gate
+    apply = clip.split("func applyLockedPairToNextPending()")[1].split("private func currentSharedGradeSnapshot")[0]
+    assert "canApplyLockedPairToNextPending" in apply
+    assert "stopPreviewPlayback()" in apply
+    assert "selectedID = next.id" in apply
+    assert "noteSelectionForSharedGrade(next)" in apply
+    assert "setIDT(next.id, idt)" in apply
+    for token in ("setExposureStops", "setWBParams", "setODT", "5600", "6504", "24", "30"):
+        assert token not in apply, token
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    assert 'Button("这一对给下一条待选")' in inspector
+    assert "applyLockedPairToNextPending()" in inspector
+    assert "canApplyLockedPairToNextPending" in inspector
+    assert "applyPairToNextPendingNote" in inspector
+    assert 'Button("下一条待选")' in inspector
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    assert 'Button("这一对给下一条待选")' in menu
+    assert "applyLockedPairToNextPending()" in menu
+    assert "canApplyLockedPairToNextPending" in menu
+    assert 'keyboardShortcut("]", modifiers: [.command, .shift])' in menu
+    plan = _read(PLAN)
+    assert "这一对给下一条待选" in plan
+    assert "不替它选" in plan
+    assert "不改这一套曝光和白平衡" in plan
+    assert "⇧⌘]" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

@@ -130,6 +130,11 @@ private struct LogBridgeCommands: Commands {
             }
             .keyboardShortcut("]", modifiers: [.command])
             .disabled(sessionFocus?.session?.canSelectNextPending != true)
+            Button("这一对给下一条待选") {
+                sessionFocus?.session?.applyLockedPairToNextPending()
+            }
+            .keyboardShortcut("]", modifiers: [.command, .shift])
+            .disabled(sessionFocus?.session?.canApplyLockedPairToNextPending != true)
             Divider()
             Button("回到开头") {
                 sessionFocus?.session?.jumpPreviewToStart()
