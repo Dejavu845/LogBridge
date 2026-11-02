@@ -106,6 +106,22 @@ private struct LogBridgeCommands: Commands {
             .keyboardShortcut("9", modifiers: [.command, .option])
             .disabled(sessionFocus?.session?.canRestoreAsShotWB != true)
             Divider()
+            Button("绿品 +1") {
+                sessionFocus?.session?.nudgeWBTint(1)
+            }
+            .keyboardShortcut(".", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canNudgeWBTint != true)
+            Button("绿品 −1") {
+                sessionFocus?.session?.nudgeWBTint(-1)
+            }
+            .keyboardShortcut(";", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canNudgeWBTint != true)
+            Button("绿品归零") {
+                sessionFocus?.session?.resetWBTint()
+            }
+            .keyboardShortcut("'", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canNudgeWBTint != true)
+            Divider()
             Button("下一条待选") {
                 sessionFocus?.session?.selectNextPendingFromMenu()
             }

@@ -227,6 +227,16 @@ struct WBInspector: View {
                         .font(.caption.monospacedDigit())
                         .frame(width: 52, alignment: .trailing)
                 }
+                HStack(spacing: 8) {
+                    Button("−1") { session.nudgeWBTint(-1) }
+                        .disabled(!session.canNudgeWBTint || session.graph.wbTint <= -10)
+                    Button("绿品归零") { session.resetWBTint() }
+                        .disabled(!session.canNudgeWBTint || abs(session.graph.wbTint) < 0.001)
+                    Button("+1") { session.nudgeWBTint(1) }
+                        .disabled(!session.canNudgeWBTint || session.graph.wbTint >= 10)
+                }
+                .controlSize(.regular)
+                .help("每次 1，或把绿品收到 0。色温不动。色温空着时不能步进。回到机内才把当前这条的机内绿品写入这一套。菜单「调色」是同一套。仅预览。")
                 Picker("适应方法", selection: Binding(
                     get: { session.graph.wbMethod },
                     set: { session.setWBParams(method: $0) }

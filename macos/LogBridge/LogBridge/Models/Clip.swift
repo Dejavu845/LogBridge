@@ -1259,6 +1259,26 @@ final class SessionModel: ObservableObject {
         return false
     }
 
+    /// ±1 green–magenta. Same graph as the inspector slider.
+    /// Same gate as the temperature step: needs a color temperature.
+    /// Empty CCT stays empty. Does not turn white balance on.
+    /// Off while writing or while a sheet is up. Range stays −10 to +10.
+    var canNudgeWBTint: Bool { canNudgeWB }
+
+    func nudgeWBTint(_ delta: Double) {
+        guard canNudgeWBTint else { return }
+        let next = min(10, max(-10, graph.wbTint + delta))
+        guard abs(next - graph.wbTint) > 1e-6 else { return }
+        setWBParams(tint: next)
+    }
+
+    /// Tint back to 0. Color temperature stays. This is not 回到机内.
+    func resetWBTint() {
+        guard canNudgeWBTint else { return }
+        guard abs(graph.wbTint) > 1e-3 else { return }
+        setWBParams(tint: 0)
+    }
+
     func setExposureEnabled(_ enabled: Bool) {
         touchSharedGrade()
         graph.setEnabled(.exposure, enabled)

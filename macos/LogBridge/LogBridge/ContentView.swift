@@ -242,7 +242,8 @@ private struct MonitorHeader: View {
         if !session.graph.wbEnabled {
             wb = "白平衡关"
         } else if let cct = session.graph.wbCCT {
-            wb = "\(session.graph.wbSource.title) \(Int(cct)) K"
+            let tint = String(format: "%+.1f", session.graph.wbTint)
+            wb = "\(session.graph.wbSource.title) \(Int(cct.rounded())) K · 绿品 \(tint)"
         } else {
             wb = session.graph.wbSource.title
         }

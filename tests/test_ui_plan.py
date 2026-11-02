@@ -296,6 +296,49 @@ def test_shared_grade_stays_when_selection_changes():
     assert "全部 / 待选 / 已锁定" in plan
 
 
+def test_tint_steps_zero_without_moving_temperature_and_the_monitor_shows_it():
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    wb = inspector.split("struct WBInspector")[1].split("struct ODTInspector")[0]
+    assert 'Button("−1")' in wb
+    assert 'Button("+1")' in wb
+    assert 'Button("绿品归零")' in wb
+    assert "nudgeWBTint(-1)" in wb
+    assert "nudgeWBTint(1)" in wb
+    assert "resetWBTint()" in wb
+    assert "canNudgeWBTint" in wb
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("var canNudgeWBTint")[1].split("func nudgeWBTint")[0]
+    assert "canNudgeWB" in gate
+    nudge = clip.split("func nudgeWBTint")[1].split("func resetWBTint")[0]
+    assert "canNudgeWBTint" in nudge
+    assert "setWBParams(tint:" in nudge
+    assert "-10" in nudge
+    assert "10" in nudge
+    assert "5600" not in nudge
+    assert "6504" not in nudge
+    assert "wbCCT" not in nudge
+    reset = clip.split("func resetWBTint")[1].split("func setExposureEnabled")[0]
+    assert "canNudgeWBTint" in reset
+    assert "setWBParams(tint: 0)" in reset
+    assert "wbCCT" not in reset
+    assert "5600" not in reset
+    assert "6504" not in reset
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    assert "绿品 +1" in app
+    assert "绿品 −1" in app
+    assert "绿品归零" in app
+    assert "nudgeWBTint(1)" in app
+    assert "nudgeWBTint(-1)" in app
+    assert "resetWBTint" in app
+    content = _read(CONTENT)
+    header = content.split("struct MonitorHeader")[1].split("struct InspectorColumn")[0]
+    assert "绿品" in header
+    plan = _read(PLAN)
+    assert "绿品归零" in plan
+    assert "色温不动" in plan
+    assert "−10 到 +10" in plan
+
+
 def test_idt_lock_stays_on_the_clip_being_previewed():
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]
