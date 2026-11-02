@@ -171,6 +171,62 @@ def test_exposure_steps_and_luma_waveform_stay_on_the_preview_path():
     assert "不是示波器读数" in plan
 
 
+def test_wb_steps_restore_camera_values_and_the_write_sheet_names_the_grade():
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    assert 'Button("−100 K")' in inspector
+    assert 'Button("+100 K")' in inspector
+    assert 'Button("回到机内")' in inspector
+    assert "nudgeWBCCT(-100)" in inspector
+    assert "nudgeWBCCT(100)" in inspector
+    assert "restoreAsShotWB()" in inspector
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("var canNudgeWB")[1].split("func nudgeWBCCT")[0]
+    assert "wbEnabled" in gate
+    assert "wbCCT" in gate
+    assert "isWritingDeliverables" in gate
+    assert "showDeliverSheet" in gate
+    nudge = clip.split("func nudgeWBCCT")[1].split("var canRestoreAsShotWB")[0]
+    assert "canNudgeWB" in nudge
+    assert "graph.wbCCT" in nudge
+    assert "setWBParams" in nudge
+    assert "2000" in nudge
+    assert "10000" in nudge
+    assert "5600" not in nudge
+    assert "6504" not in nudge
+    restore_gate = clip.split("var canRestoreAsShotWB")[1].split("func restoreAsShotWB")[0]
+    assert "wbEnabled" in restore_gate
+    assert "isWritingDeliverables" in restore_gate
+    assert "showDeliverSheet" in restore_gate
+    assert "asShotCCT" in restore_gate
+    restore = clip.split("func restoreAsShotWB")[1].split("func selectAdjacentClip")[0]
+    assert "canRestoreAsShotWB" in restore
+    assert "wbSource = .asShot" in restore
+    assert "wbSource = .unknown" in restore
+    assert "wbCCT = nil" in restore
+    assert "5600" not in restore
+    assert "6504" not in restore
+    assert "setWBParams" not in restore
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    assert "色温 +100" in app
+    assert "色温 −100" in app
+    assert "回到机内" in app
+    assert "nudgeWBCCT(100)" in app
+    assert "nudgeWBCCT(-100)" in app
+    assert "restoreAsShotWB" in app
+    deliver = _read(DELIVER)
+    assert "sharedGradeWriteLine" in deliver
+    line = clip.split("var sharedGradeWriteLine")[1].split("var showsProcessLockedButton")[0]
+    assert "这一套会套到已锁定素材" in line
+    assert "曝光" in line
+    assert "白平衡关" in line
+    assert "绿品" in line
+    plan = _read(PLAN)
+    assert "−100 K" in plan
+    assert "回到机内" in plan
+    assert "不猜 5600" in plan
+    assert "这一套会套到已锁定素材" in plan
+
+
 def test_idt_lock_stays_on_the_clip_being_previewed():
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]

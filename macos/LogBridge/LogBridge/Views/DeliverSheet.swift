@@ -33,6 +33,9 @@ struct DeliverSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             clipList
 
+            Text(session.sharedGradeWriteLine)
+                .font(.body.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text("每条已锁定素材用自己的成对 IDT。曝光和白平衡用检查器里当前这一套，套到这些素材上。")
                 .font(.callout)
                 .foregroundStyle(.secondary)

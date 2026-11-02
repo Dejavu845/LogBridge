@@ -246,6 +246,27 @@ final class SessionModel: ObservableObject {
         "\(lockedClipCount) 条已锁定 / \(pendingClipCount) 条待选"
     }
 
+    /// 写出说明上的这一套。和检查器同一套曝光、白平衡，套到已锁定素材。
+    /// 不另记数字，也不在色温空着时填 5600。
+    var sharedGradeWriteLine: String {
+        let exposure: String
+        if graph.exposureEnabled {
+            exposure = String(format: "曝光 %+.2f 档", graph.exposureStops)
+        } else {
+            exposure = "曝光关"
+        }
+        let wb: String
+        if !graph.wbEnabled {
+            wb = "白平衡关"
+        } else if let cct = graph.wbCCT {
+            let tint = String(format: "%+.1f", graph.wbTint)
+            wb = "\(graph.wbSource.title) \(Int(cct.rounded())) K · 绿品 \(tint)"
+        } else {
+            wb = graph.wbSource.title
+        }
+        return "这一套会套到已锁定素材：\(exposure) · \(wb)"
+    }
+
     /// Primary button is shown only when at least one paired IDT is locked.
     var showsProcessLockedButton: Bool {
         settings.blockUnlockedIDT && lockedClipCount > 0
@@ -1008,6 +1029,60 @@ final class SessionModel: ObservableObject {
     func resetExposureStops() {
         guard canNudgeExposure else { return }
         setExposureStops(0)
+    }
+
+    /// ±100 K on the current CCT. Same graph as the inspector slider.
+    /// Empty CCT stays empty — do not start from 6504 or 5600.
+    /// Off while writing or while a sheet is up. Does not turn white balance on.
+    var canNudgeWB: Bool {
+        graph.wbEnabled
+            && graph.wbCCT != nil
+            && !isWritingDeliverables
+            && !showSettings
+            && !showImporter
+            && !showDeliverSheet
+    }
+
+    func nudgeWBCCT(_ delta: Double) {
+        guard canNudgeWB, let cct = graph.wbCCT else { return }
+        let next = min(10000, max(2000, (cct + delta).rounded()))
+        guard next != cct else { return }
+        setWBParams(cct: next)
+    }
+
+    /// Back to this clip's as-shot CCT and tint. No as-shot: clear the knobs.
+    /// Does not fill a missing camera temperature. Does not turn white balance on.
+    var canRestoreAsShotWB: Bool {
+        guard graph.wbEnabled,
+              !isWritingDeliverables,
+              !showSettings,
+              !showImporter,
+              !showDeliverSheet
+        else { return false }
+        if let shot = graph.asShotCCT {
+            let atShot = graph.wbSource == .asShot
+                && graph.wbCCT == shot
+                && abs(graph.wbTint - graph.asShotTint) <= 1e-3
+            return !atShot
+        }
+        let cleared = graph.wbCCT == nil && graph.wbSource == .unknown && abs(graph.wbTint) <= 1e-3
+        return !cleared
+    }
+
+    func restoreAsShotWB() {
+        guard canRestoreAsShotWB else { return }
+        if let shot = graph.asShotCCT {
+            graph.wbCCT = shot
+            graph.wbTint = graph.asShotTint
+            graph.wbSource = .asShot
+        } else {
+            graph.wbCCT = nil
+            graph.wbTint = 0
+            graph.wbSource = .unknown
+        }
+        persistGraphWBToSelectedClip()
+        preview.invalidateWBODT()
+        refreshPreview()
     }
 
     /// Up/Down in the main window: move selected clip in the sidebar list.

@@ -86,6 +86,22 @@ private struct LogBridgeCommands: Commands {
             .keyboardShortcut("0", modifiers: [.command, .option])
             .disabled(sessionFocus?.session?.canNudgeExposure != true)
             Divider()
+            Button("色温 +100") {
+                sessionFocus?.session?.nudgeWBCCT(100)
+            }
+            .keyboardShortcut("]", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canNudgeWB != true)
+            Button("色温 −100") {
+                sessionFocus?.session?.nudgeWBCCT(-100)
+            }
+            .keyboardShortcut("[", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canNudgeWB != true)
+            Button("回到机内") {
+                sessionFocus?.session?.restoreAsShotWB()
+            }
+            .keyboardShortcut("9", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canRestoreAsShotWB != true)
+            Divider()
             Button("下一条待选") {
                 sessionFocus?.session?.selectNextPendingFromMenu()
             }

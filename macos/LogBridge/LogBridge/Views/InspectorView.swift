@@ -194,6 +194,16 @@ struct WBInspector: View {
                         .font(.caption.monospacedDigit())
                         .frame(width: 72, alignment: .trailing)
                 }
+                HStack(spacing: 8) {
+                    Button("−100 K") { session.nudgeWBCCT(-100) }
+                        .disabled(!session.canNudgeWB || (session.graph.wbCCT ?? 2000) <= 2000)
+                    Button("回到机内") { session.restoreAsShotWB() }
+                        .disabled(!session.canRestoreAsShotWB)
+                    Button("+100 K") { session.nudgeWBCCT(100) }
+                        .disabled(!session.canNudgeWB || (session.graph.wbCCT ?? 10000) >= 10000)
+                }
+                .controlSize(.regular)
+                .help("每次 100 K，或回到机内色温和绿品。没有机内读数就清空，不猜 5600。空值不能步进。菜单「调色」是同一套。仅预览。")
                 HStack {
                     Text("绿品")
                         .font(.caption)
