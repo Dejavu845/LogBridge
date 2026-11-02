@@ -409,6 +409,14 @@ enum ClipListFilter: String, CaseIterable, Identifiable {
     }
 }
 
+/// A typed exposure or color temperature. Out of range does not clamp into a guess.
+private enum TypedGradeField {
+    case empty
+    case unrecognized
+    case outOfRange
+    case value(Double)
+}
+
 final class SessionModel: ObservableObject {
     @Published var clips: [Clip] = []
     /// 全部 / 待选 / 已锁定. The monitor keeps the current clip until selection moves.
@@ -426,6 +434,10 @@ final class SessionModel: ObservableObject {
     @Published var dropTargeted = false
     @Published var lastExportNote: String = ""
     @Published var lastImportNote: String = ""
+    /// Shown under the typed exposure field. Empty after a value is accepted.
+    @Published var typedExposureNote: String = ""
+    /// Shown under the typed color-temperature field. Empty after a value is accepted.
+    @Published var typedCCTNote: String = ""
     @Published var pickingNeutral: Bool = false {
         didSet {
             if pickingNeutral {
@@ -2071,6 +2083,97 @@ final class SessionModel: ObservableObject {
         closeSharedGradeStroke()
     }
 
+    /// `+0.50`, `0.5`, or `0.5档`. Rounded to 0.01. Outside −8…+8 is refused.
+    /// Does not invent a stop, and does not turn exposure on.
+    static func parseTypedExposureStops(_ text: String) -> TypedGradeField {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return .empty }
+        var body = trimmed
+        if body.hasSuffix("档") {
+            body = String(body.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if body.isEmpty { return .unrecognized }
+        guard let value = Double(body), value.isFinite else { return .unrecognized }
+        let rounded = (value * 100).rounded() / 100
+        if rounded < -8 || rounded > 8 { return .outOfRange }
+        return .value(rounded)
+    }
+
+    /// One step on the shared exposure. Same graph as the slider.
+    /// A bad string leaves the stops alone. Playback frame stays.
+    @discardableResult
+    func applyTypedExposureStops(_ text: String) -> Bool {
+        guard canNudgeExposure else { return false }
+        switch Self.parseTypedExposureStops(text) {
+        case .empty:
+            typedExposureNote = "先写出档，如 +0.50"
+            return false
+        case .unrecognized:
+            typedExposureNote = "认不出这个档"
+            return false
+        case .outOfRange:
+            typedExposureNote = "档要在 −8 到 +8"
+            return false
+        case .value(let stops):
+            typedExposureNote = ""
+            closeSharedGradeStroke()
+            setExposureStops(stops)
+            closeSharedGradeStroke()
+            return true
+        }
+    }
+
+    /// White balance is on, and no sheet is up. An empty temperature can still be typed.
+    /// Does not turn white balance on, and does not start from a stand-in temperature.
+    var canTypeWBCCT: Bool {
+        graph.wbEnabled
+            && !isWritingDeliverables
+            && !showSettings
+            && !showImporter
+            && !showDeliverSheet
+    }
+
+    /// `4500` or `4500 K`, nearest integer. Outside 2000…10000 is refused.
+    static func parseTypedWBCCT(_ text: String) -> TypedGradeField {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return .empty }
+        var body = trimmed
+        if body.hasSuffix("K") || body.hasSuffix("k") {
+            body = String(body.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if body.isEmpty { return .unrecognized }
+        guard let value = Double(body), value.isFinite else { return .unrecognized }
+        let rounded = value.rounded()
+        if rounded < 2000 || rounded > 10000 { return .outOfRange }
+        return .value(rounded)
+    }
+
+    /// One step on the shared color temperature. Same graph as the slider.
+    /// Filling an empty temperature is the typed number, not a guess.
+    /// The same number again does not change the source chip.
+    @discardableResult
+    func applyTypedWBCCT(_ text: String) -> Bool {
+        guard canTypeWBCCT else { return false }
+        switch Self.parseTypedWBCCT(text) {
+        case .empty:
+            typedCCTNote = "先写出色温，如 4500"
+            return false
+        case .unrecognized:
+            typedCCTNote = "认不出这个色温"
+            return false
+        case .outOfRange:
+            typedCCTNote = "色温要在 2000 到 10000"
+            return false
+        case .value(let cct):
+            typedCCTNote = ""
+            if graph.wbCCT == cct { return true }
+            closeSharedGradeStroke()
+            setWBParams(cct: cct)
+            closeSharedGradeStroke()
+            return true
+        }
+    }
+
     /// ±100 K on the current CCT. Same graph as the inspector slider.
     /// Empty CCT stays empty — do not start from 6504 or 5600.
     /// Off while writing or while a sheet is up. Does not turn white balance on.
@@ -2281,6 +2384,7 @@ final class SessionModel: ObservableObject {
 
     func setExposureStops(_ stops: Double) {
         guard abs(stops - graph.exposureStops) > 1e-9 else { return }
+        typedExposureNote = ""
         rememberSharedGrade(stroke: .exposure)
         touchSharedGrade()
         graph.exposureStops = stops
@@ -2322,6 +2426,7 @@ final class SessionModel: ObservableObject {
         }
         touchSharedGrade()
         if let cct {
+            typedCCTNote = ""
             graph.wbCCT = cct
             graph.wbSource = .user
         }

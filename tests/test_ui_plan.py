@@ -1395,3 +1395,72 @@ def test_locked_pair_moves_only_when_the_next_pending_list_has_it():
     assert "⇧⌘]" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_typed_exposure_and_color_temperature_stay_on_the_shared_grade():
+    """Typing a stop or Kelvin uses the same set as the sliders. A bad string changes nothing."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    exposure = clip.split("static func parseTypedExposureStops")[1].split("func applyTypedExposureStops")[0]
+    assert "hasSuffix(\"档\")" in exposure
+    assert "rounded < -8 || rounded > 8" in exposure
+    assert "return .outOfRange" in exposure
+    assert "return .value(rounded)" in exposure
+    for token in ("5600", "6504", "24", "30", "setIDT", "setPreviewFrame"):
+        assert token not in exposure, token
+    apply_ev = clip.split("func applyTypedExposureStops")[1].split("var canTypeWBCCT")[0]
+    assert "canNudgeExposure" in apply_ev
+    assert "先写出档，如 +0.50" in apply_ev
+    assert "认不出这个档" in apply_ev
+    assert "档要在 −8 到 +8" in apply_ev
+    assert "closeSharedGradeStroke()" in apply_ev
+    assert "setExposureStops(stops)" in apply_ev
+    assert "setExposureEnabled" not in apply_ev
+    assert "setIDT" not in apply_ev
+    assert "setPreviewFrame" not in apply_ev
+    for token in ("5600", "6504", "24", "30"):
+        assert token not in apply_ev, token
+    gate = clip.split("var canTypeWBCCT")[1].split("static func parseTypedWBCCT")[0]
+    assert "graph.wbEnabled" in gate
+    assert "wbCCT != nil" not in gate
+    assert "isWritingDeliverables" in gate
+    assert "showSettings" in gate
+    assert "showImporter" in gate
+    assert "showDeliverSheet" in gate
+    assert "setWBEnabled" not in gate
+    cct = clip.split("static func parseTypedWBCCT")[1].split("func applyTypedWBCCT")[0]
+    assert 'hasSuffix("K")' in cct
+    assert "rounded < 2000 || rounded > 10000" in cct
+    assert "return .outOfRange" in cct
+    for token in ("5600", "6504", "24", "30"):
+        assert token not in cct, token
+    apply_cct = clip.split("func applyTypedWBCCT(_ text: String) -> Bool {")[1].split("\n    }\n")[0]
+    assert "canTypeWBCCT" in apply_cct
+    assert "先写出色温，如 4500" in apply_cct
+    assert "认不出这个色温" in apply_cct
+    assert "色温要在 2000 到 10000" in apply_cct
+    assert "graph.wbCCT == cct" in apply_cct
+    assert "setWBParams(cct: cct)" in apply_cct
+    assert "closeSharedGradeStroke()" in apply_cct
+    assert "setExposureStops" not in apply_cct
+    assert "setIDT" not in apply_cct
+    assert "setPreviewFrame" not in apply_cct
+    for token in ("5600", "6504", "24", "30"):
+        assert token not in apply_cct, token
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    assert 'Button("写入档")' in inspector
+    assert "applyTypedExposureStops(exposureDraft)" in inspector
+    assert "typedExposureNote" in inspector
+    assert 'Button("写入色温")' in inspector
+    assert "applyTypedWBCCT(cctDraft)" in inspector
+    assert "canTypeWBCCT" in inspector
+    assert "typedCCTNote" in inspector
+    assert 'TextField("如 +0.50"' in inspector
+    assert 'TextField("如 4500"' in inspector
+    plan = _read(PLAN)
+    assert "写入档" in plan
+    assert "写入色温" in plan
+    assert "认不出这个档" in plan
+    assert "认不出这个色温" in plan
+    assert "不猜 5600 或 6504" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

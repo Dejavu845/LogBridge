@@ -220,6 +220,7 @@ struct InspectorView: View {
 
 struct WBInspector: View {
     @ObservedObject var session: SessionModel
+    @State private var cctDraft = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -299,6 +300,28 @@ struct WBInspector: View {
                         .frame(width: 72, alignment: .trailing)
                 }
                 HStack(spacing: 8) {
+                    TextField("如 4500", text: $cctDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospacedDigit())
+                        .frame(width: 96)
+                        .disabled(!session.canTypeWBCCT)
+                        .onSubmit { commitCCT() }
+                    Button("写入色温") { commitCCT() }
+                        .disabled(!session.canTypeWBCCT)
+                }
+                .controlSize(.regular)
+                .onAppear { syncCCTDraft() }
+                .onChange(of: session.graph.wbCCT) { _, _ in
+                    syncCCTDraft()
+                }
+                .help("写入这一套色温。4500 或 4500 K，收到整数。色温空着时也可以写入，这是你填的，不猜。超出 2000 到 10000 不改数字。和滑条是同一套，写出仍用这一套。一次写入算一步，可撤销。")
+                if !session.typedCCTNote.isEmpty {
+                    Text(session.typedCCTNote)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
                     Button("−100 K") { session.nudgeWBCCT(-100) }
                         .disabled(!session.canNudgeWB || (session.graph.wbCCT ?? 2000) <= 2000)
                     Button("回到机内") { session.restoreAsShotWB() }
@@ -348,6 +371,21 @@ struct WBInspector: View {
             Text("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。这一套不跟素材换。")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func syncCCTDraft() {
+        if let cct = session.graph.wbCCT {
+            cctDraft = String(Int(cct.rounded()))
+        } else {
+            cctDraft = ""
+        }
+    }
+
+    /// A refused string stays in the field so it can be corrected.
+    private func commitCCT() {
+        if session.applyTypedWBCCT(cctDraft) {
+            syncCCTDraft()
         }
     }
 
@@ -456,6 +494,7 @@ struct ODTInspector: View {
 
 struct ExposureInspector: View {
     @ObservedObject var session: SessionModel
+    @State private var exposureDraft = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -483,6 +522,28 @@ struct ExposureInspector: View {
                         .frame(width: 78, alignment: .trailing)
                 }
                 HStack(spacing: 8) {
+                    TextField("如 +0.50", text: $exposureDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospacedDigit())
+                        .frame(width: 96)
+                        .disabled(!session.canNudgeExposure)
+                        .onSubmit { commitExposure() }
+                    Button("写入档") { commitExposure() }
+                        .disabled(!session.canNudgeExposure)
+                }
+                .controlSize(.regular)
+                .onAppear { syncExposureDraft() }
+                .onChange(of: session.graph.exposureStops) { _, _ in
+                    syncExposureDraft()
+                }
+                .help("写入这一套曝光。+0.50、0.5 或 0.5档，按 0.01 档收。超出 −8 到 +8 不改数字。和滑条、步进是同一套，写出仍用这一套。一次写入算一步，可撤销。不把曝光打开。")
+                if !session.typedExposureNote.isEmpty {
+                    Text(session.typedExposureNote)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
                     Button("−0.10") { session.nudgeExposureStops(-0.10) }
                         .disabled(session.graph.exposureStops <= -8)
                     Button("归零") { session.resetExposureStops() }
@@ -503,6 +564,17 @@ struct ExposureInspector: View {
             Text("仅预览")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func syncExposureDraft() {
+        exposureDraft = String(format: "%+.2f", session.graph.exposureStops)
+    }
+
+    /// A refused string stays in the field so it can be corrected.
+    private func commitExposure() {
+        if session.applyTypedExposureStops(exposureDraft) {
+            syncExposureDraft()
         }
     }
 }
