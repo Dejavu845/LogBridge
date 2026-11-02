@@ -36,7 +36,7 @@ struct ContentView: View {
                         zoom: monitorZoom,
                         panBus: monitorPan
                     )
-                        .frame(minHeight: 200, maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(maxWidth: .infinity, minHeight: 200, maxHeight: .infinity)
                         .layoutPriority(1)
                     ProcessLockedBar(session: session)
                     AdvancedPanel(session: session, isExpanded: $settings.advancedPanelExpanded)
