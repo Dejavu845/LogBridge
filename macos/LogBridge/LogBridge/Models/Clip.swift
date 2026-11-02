@@ -424,6 +424,13 @@ private enum TypedGradeField {
     case value(Double)
 }
 
+/// What the write sheet may show of the monitor. The still is not a second grade.
+struct DeliverPreviewGlance {
+    var showStill: Bool
+    var sheetNote: String
+    var barCaution: String?
+}
+
 final class SessionModel: ObservableObject {
     @Published var clips: [Clip] = []
     /// 全部 / 待选 / 已锁定. The monitor keeps the current clip until selection moves.
@@ -1122,6 +1129,128 @@ final class SessionModel: ObservableObject {
     /// Primary button is shown only when at least one paired IDT is locked.
     var showsProcessLockedButton: Bool {
         settings.blockUnlockedIDT && lockedClipCount > 0
+    }
+
+    /// 写出说明上的当前预览帧，和监视器同一幅时才放。
+    /// 看调色前、HDR、709 关、高级 EXR 都不把监视器那一幅当成将写出的画面。
+    /// 不另存一套调色，不猜色温，不猜帧率。
+    var deliverPreviewGlance: DeliverPreviewGlance {
+        Self.makeDeliverPreviewGlance(
+            hasSelection: selectedClip != nil,
+            selectedLocked: selectedClip?.hasLockedPair == true,
+            gradeBefore: previewShowsGradeBefore,
+            comparing: monitorLayout == .compare,
+            odt: graph.odt,
+            format: settings.exportFormat,
+            hasPicture: preview.odtImage != nil
+        )
+    }
+
+    /// 小图下的文件名和帧数。静帧不写帧率。读不到范围时只写第几帧，不猜 24 或 30。
+    var deliverPreviewFrameLabel: String {
+        guard let clip = selectedClip else { return "" }
+        return Self.deliverPreviewFrameLabel(
+            filename: clip.filename,
+            isStill: clip.isStill,
+            frameIndex: previewFrameIndex,
+            lastFrame: previewScrubLastFrame
+        )
+    }
+
+    static func deliverPreviewFrameLabel(
+        filename: String,
+        isStill: Bool,
+        frameIndex: Int,
+        lastFrame: Int?
+    ) -> String {
+        if isStill {
+            return "\(filename) · 静帧"
+        }
+        let shown = frameIndex + 1
+        if let lastFrame {
+            return "\(filename) · 第 \(shown) / 共 \(lastFrame + 1) 帧"
+        }
+        return "\(filename) · 第 \(shown) 帧"
+    }
+
+    /// The write sheet may show the monitor frame only when that frame is the
+    /// Rec.709 picture default ProRes bakes. 调色前 drops exposure and white
+    /// balance. HDR and a closed 709 pane are a different picture. EXR is
+    /// ACES2065-1 with this grade, not the monitor. Does not guess a temperature.
+    static func makeDeliverPreviewGlance(
+        hasSelection: Bool,
+        selectedLocked: Bool,
+        gradeBefore: Bool,
+        comparing: Bool,
+        odt: ODTMode,
+        format: ExportFormat,
+        hasPicture: Bool
+    ) -> DeliverPreviewGlance {
+        if !hasSelection {
+            return DeliverPreviewGlance(
+                showStill: false,
+                sheetNote: "先点一条。写出仍用检查器里这一套。",
+                barCaution: nil
+            )
+        }
+        if !selectedLocked {
+            return DeliverPreviewGlance(
+                showStill: false,
+                sheetNote: "当前这条还没锁定，不会写出。已锁定的会套上上面这一套。",
+                barCaution: nil
+            )
+        }
+        if gradeBefore {
+            return DeliverPreviewGlance(
+                showStill: false,
+                sheetNote: "监视器正在看调色前，这一幅不含曝光和白平衡。写出仍用上面这一套，不是调色前。",
+                barCaution: "监视器在看调色前。写出仍是检查器里这一套。"
+            )
+        }
+        if format == .exrACES2065 {
+            return DeliverPreviewGlance(
+                showStill: false,
+                sheetNote: "高级 EXR 写出的是套上这一套的 ACES2065-1，不是监视器上这一幅。仅预览。",
+                barCaution: "高级 EXR 不是监视器这一幅。写出的是套上这一套的 ACES2065-1。"
+            )
+        }
+        if odt.isHDR {
+            let name = odt == .hlg ? "HLG" : "PQ"
+            return DeliverPreviewGlance(
+                showStill: false,
+                sheetNote: "这次监视器是 \(name)。默认 ProRes 仍按 Rec.709 写出这一套，不是这一幅 HDR。仅预览。",
+                barCaution: "这次是 \(name) 预览。ProRes 仍按 Rec.709 写出这一套。"
+            )
+        }
+        if odt == .off {
+            return DeliverPreviewGlance(
+                showStill: false,
+                sheetNote: "709 预览关。写出的 ProRes 仍按 Rec.709 套上这一套。仅预览。",
+                barCaution: "709 预览关。ProRes 仍按 Rec.709 写出这一套。"
+            )
+        }
+        if comparing {
+            let note = hasPicture
+                ? "对照时这一小图是右幅。写出按这一套的 Rec.709，不是左幅调色前。已锁定的每一条都套这一套，每条仍用自己的成对 IDT。预览长边会缩小，写出是片源尺寸。仅预览。"
+                : "对照时右幅才是这一套，这一帧还没有画面。写出按这一套的 Rec.709，不是左幅调色前。"
+            return DeliverPreviewGlance(
+                showStill: hasPicture,
+                sheetNote: note,
+                barCaution: "对照时写出是右幅这一套，不是左幅调色前。"
+            )
+        }
+        if !hasPicture {
+            return DeliverPreviewGlance(
+                showStill: false,
+                sheetNote: "这一帧还没有画面。写出仍用上面这一套。预览长边会缩小，写出是片源尺寸。仅预览。",
+                barCaution: nil
+            )
+        }
+        return DeliverPreviewGlance(
+            showStill: true,
+            sheetNote: "当前这条这一帧，和监视器同一幅。默认 ProRes 按这一套的 Rec.709 写出。已锁定的每一条都套这一套，每条仍用自己的成对 IDT。预览长边会缩小，写出是片源尺寸。仅预览，不是最终画面。",
+            barCaution: nil
+        )
     }
 
     /// ACEScct / EXR export for locked clips. Pending clips in the same bin

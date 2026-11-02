@@ -36,6 +36,7 @@ struct DeliverSheet: View {
             Text(session.sharedGradeWriteLine)
                 .font(.body.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
+            deliverPreviewGlance
             if !session.lockedClips.isEmpty {
                 Text(session.deliverDiskNote)
                     .font(.callout)
@@ -163,6 +164,44 @@ struct DeliverSheet: View {
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// Current frame of the selected clip, only when it is the Rec.709 look
+    /// default ProRes bakes. 调色前 / HDR / EXR stay words. Not written to disk.
+    @ViewBuilder
+    private var deliverPreviewGlance: some View {
+        let glance = session.deliverPreviewGlance
+        VStack(alignment: .leading, spacing: 8) {
+            if let image = session.preview.odtImage, glance.showStill {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(session.deliverPreviewFrameLabel)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 280, maxHeight: 158)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(alignment: .topLeading) {
+                            Text("仅预览")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.black.opacity(0.55))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .padding(6)
+                        }
+                        .help("和监视器当前这一帧同一幅。预览长边会缩小，写出是片源尺寸。不另存一套调色。")
+                }
+            }
+            Text(glance.sheetNote)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var deliverableNote: String {

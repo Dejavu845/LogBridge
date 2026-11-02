@@ -716,6 +716,16 @@ struct ProcessLockedBar: View {
                     .font(.body.weight(.semibold))
                     .lineLimit(2)
             }
+            if let caution = session.deliverPreviewGlance.barCaution,
+               session.showsProcessLockedButton,
+               !session.isWritingDeliverables,
+               !session.openingExportFolder {
+                Text(caution)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
+                    .help("监视器若在看调色前、对照的左幅、HDR，或这次是高级 EXR，写出仍用检查器里这一套。不改检查器，也不改写出。")
+            }
             Text("\(session.settings.exportFormat.labelZH) · \(deliverableNote)")
                 .font(.callout)
                 .foregroundStyle(.secondary)

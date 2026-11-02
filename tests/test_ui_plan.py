@@ -1691,6 +1691,51 @@ def test_compare_layout_shows_grade_before_beside_the_shared_set():
         assert token not in plan
 
 
+def test_write_sheet_shows_the_graded_frame_only_when_it_matches_the_write():
+    """The sheet still is the Rec.709 monitor frame. 调色前 / HDR / EXR are words."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    glance = clip.split("static func makeDeliverPreviewGlance")[1].split("var canProcess")[0]
+    assert "previewShowsGradeBefore" not in glance
+    assert "gradeBefore" in glance
+    assert "showStill: false" in glance
+    assert "不是调色前" in glance
+    assert "监视器在看调色前。写出仍是检查器里这一套。" in glance
+    assert "exrACES2065" in glance
+    assert "不是监视器上这一幅" in glance
+    assert "isHDR" in glance
+    assert "不是这一幅 HDR" in glance
+    assert "odt == .off" in glance
+    assert "709 预览关" in glance
+    assert "comparing" in glance
+    assert "不是左幅调色前" in glance
+    assert "showStill: hasPicture" in glance
+    assert "showStill: true" in glance
+    assert "和监视器同一幅" in glance
+    assert "不是最终画面" in glance
+    assert "5600" not in glance
+    assert "6504" not in glance
+    label = clip.split("static func deliverPreviewFrameLabel")[1].split("static func makeDeliverPreviewGlance")[0]
+    assert "静帧" in label
+    assert "frameIndex + 1" in label
+    assert "lastFrame" in label
+    for token in ("5600", "6504", "24", "30", "fps"):
+        assert token not in label, token
+    deliver = _read(DELIVER)
+    assert "deliverPreviewGlance" in deliver
+    assert "仅预览" in deliver
+    assert "odtImage" in deliver
+    assert "sharedGradeWriteLine" in deliver
+    content = _read(CONTENT)
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert "barCaution" in bar
+    assert bar.count("Button(") == 1
+    plan = _read(PLAN)
+    assert "这一小图和监视器同一幅" in plan
+    assert "不把监视器那一幅放进说明" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
+
+
 def test_repeat_import_does_not_add_another_row():
     """A second drop of the same path stays one row. Selection and the grade stay."""
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
