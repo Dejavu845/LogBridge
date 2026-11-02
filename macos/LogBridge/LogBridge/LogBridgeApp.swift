@@ -55,7 +55,8 @@ private struct LogBridgeCommands: Commands {
                 sessionFocus?.session?.presentImporter()
             }
             .keyboardShortcut("o")
-            .disabled(sessionFocus?.session?.openingExportFolder == true)
+            .disabled(sessionFocus?.session?.openingExportFolder == true
+                      || sessionFocus?.session?.showImporter == true)
             Button("从列表拿掉（不删文件）") {
                 sessionFocus?.session?.removeSelectedClipFromSession(respectTextInput: false)
             }
@@ -66,19 +67,23 @@ private struct LogBridgeCommands: Commands {
                 sessionFocus?.session?.presentSettings()
             }
             .keyboardShortcut(",")
+            .disabled(sessionFocus?.session?.openingExportFolder == true
+                      || sessionFocus?.session?.showImporter == true)
         }
         CommandGroup(after: .newItem) {
             Button("写出…") {
                 guard let session = sessionFocus?.session,
                       session.showsProcessLockedButton,
                       !session.isWritingDeliverables,
-                      !session.openingExportFolder else { return }
+                      !session.openingExportFolder,
+                      !session.showImporter else { return }
                 session.presentDeliverSheet()
             }
             .keyboardShortcut("e")
             .disabled(sessionFocus?.session?.showsProcessLockedButton != true
                       || sessionFocus?.session?.isWritingDeliverables == true
-                      || sessionFocus?.session?.openingExportFolder == true)
+                      || sessionFocus?.session?.openingExportFolder == true
+                      || sessionFocus?.session?.showImporter == true)
         }
         CommandMenu("调色") {
             Button("曝光 +0.10") {

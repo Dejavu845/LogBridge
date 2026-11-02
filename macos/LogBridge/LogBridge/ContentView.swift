@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Single window for local grading and delivery. Not an editor timeline.
 /// List | large preview | inspector that follows the selection.
@@ -51,13 +50,6 @@ struct ContentView: View {
         .onDrop(of: [.fileURL], isTargeted: $session.dropTargeted) { providers in
             session.importProviders(providers)
             return true
-        }
-        .fileImporter(
-            isPresented: $session.showImporter,
-            allowedContentTypes: [.movie, .quickTimeMovie, .mpeg4Movie, .folder, .item],
-            allowsMultipleSelection: true
-        ) { result in
-            session.handleImporter(result)
         }
         .sheet(isPresented: presentedSheet, onDismiss: {
             session.activeSheet = nil
@@ -173,12 +165,13 @@ private struct WorkspaceToolbar: View {
             Spacer(minLength: 12)
             Button("添加…") { session.presentImporter() }
                 .controlSize(.large)
-                .disabled(session.openingExportFolder)
+                .disabled(session.openingExportFolder || session.showImporter)
+                .help("选素材或文件夹，面板贴在这个窗口上。下次从上次的文件夹打开。取消则不读入。不改这一套调色。")
             Button("设置") {
                 session.presentSettings()
             }
             .controlSize(.large)
-            .disabled(session.openingExportFolder)
+            .disabled(session.openingExportFolder || session.showImporter)
             .help("全局偏好。改完即生效。")
             Button(session.isWritingDeliverables ? "取消" : "写出") {
                 if session.isWritingDeliverables {
@@ -189,6 +182,7 @@ private struct WorkspaceToolbar: View {
             }
             .controlSize(.large)
             .disabled(session.openingExportFolder
+                      || session.showImporter
                       || (!session.isWritingDeliverables && !session.showsProcessLockedButton))
             .help("先看写出说明。确认后选文件夹贴在这个窗口上。整段代理，代理精度。")
         }

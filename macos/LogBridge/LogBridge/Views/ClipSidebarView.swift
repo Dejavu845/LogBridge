@@ -175,9 +175,10 @@ struct ClipSidebarView: View {
                 Spacer()
                 Button("添加…") { session.presentImporter() }
                     .controlSize(.regular)
-                    .disabled(session.openingExportFolder)
+                    .disabled(session.openingExportFolder || session.showImporter)
                 Button("设置") { session.presentSettings() }
                     .controlSize(.regular)
+                    .disabled(session.showImporter)
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
@@ -362,7 +363,7 @@ private struct DropZone: View {
         .onTapGesture {
             onTap()
         }
-        .help("同一文件再拖一次，不另加一行。源文件留在原处。不改这一套调色，也不改成对 IDT。")
+        .help("点这里或顶栏「添加…」，面板贴在这个窗口上，从上次的文件夹打开。取消则不读入。同一文件再拖一次，不另加一行。源文件留在原处。不改这一套调色，也不改成对 IDT。")
     }
 }
 

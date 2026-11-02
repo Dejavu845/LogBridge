@@ -1778,3 +1778,49 @@ def test_repeat_import_does_not_add_another_row():
     assert "不把当前画面再解一遍" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_add_panel_sticks_to_the_window_and_reopens_the_last_folder():
+    """添加… is a sheet on this window. Cancel reads nothing. Next open starts at the last folder."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    present = clip.split("func presentImporter()")[1].split("func presentDeliverSheet()")[0]
+    assert "beginSheetModal" in present
+    assert "panel.begin" in present
+    assert "showImporter = false" in present
+    assert "guard response == .OK" in present
+    assert present.index("showImporter = false") < present.index("guard response == .OK")
+    assert "handleImporter" in present
+    assert "lastImportDirectoryURL" in present
+    assert "directoryURL = remembered" in present
+    assert "取消则不读入" in present
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in present, token
+    remembered = clip.split("static func directoryToRememberAfterImport")[1].split("func exportResolve")[0]
+    assert "isDir.boolValue" in remembered
+    assert "return standard" in remembered
+    assert "deletingLastPathComponent" in remembered
+    assert "return nil" in remembered
+    for token in ("setIDT", "5600", "6504", "24", "30"):
+        assert token not in remembered, token
+    apply = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    assert "directoryToRememberAfterImport" in apply
+    assert "rememberImportDirectory" in apply
+    hint = clip.split("var loopStepHint")[1].split("var showsProcessLockedButton")[0]
+    assert "正在打开添加" in hint
+    settings = _read(ROOT / "macos/LogBridge/LogBridge/Models/AppSettings.swift")
+    assert "lastImportDirectoryPath" in settings
+    assert "logbridge.lastImportDirectory" in settings
+    assert "lastImportDirectoryURL" in settings
+    content = _read(CONTENT)
+    assert "fileImporter" not in content
+    assert "showImporter" in content
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('Button("添加…")')[1].split('Button("设置…")')[0]
+    assert "showImporter" in menu
+    plan = _read(PLAN)
+    assert "正在打开添加" in plan
+    assert "面板贴在这个窗口上" in plan
+    assert "取消则不读入" in plan
+    assert "不在 ⌘, 里" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

@@ -15,6 +15,7 @@ final class AppSettings: ObservableObject {
         static let defaultPreviewODT = "logbridge.defaultPreviewODT"
         static let promptEstimateWB = "logbridge.promptEstimateWBOnImport"
         static let lastExportDirectory = "logbridge.lastExportDirectory"
+        static let lastImportDirectory = "logbridge.lastImportDirectory"
         static let advancedPanelExpanded = "logbridge.advancedPanelExpanded"
         static let exportFormat = "logbridge.exportFormat"
         static let windowAppearance = "logbridge.windowAppearance"
@@ -75,6 +76,33 @@ final class AppSettings: ObservableObject {
         lastExportDirectoryPath = url.path
     }
 
+    /// Last folder used by 添加… or a drop. The next add panel starts here.
+    /// Not a preference row. ⌘, does not edit it.
+    @Published var lastImportDirectoryPath: String? {
+        didSet {
+            if let path = lastImportDirectoryPath, !path.isEmpty {
+                UserDefaults.standard.set(path, forKey: Key.lastImportDirectory)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Key.lastImportDirectory)
+            }
+        }
+    }
+
+    /// Existing directory, or nil if the remembered path is gone.
+    var lastImportDirectoryURL: URL? {
+        guard let path = lastImportDirectoryPath, !path.isEmpty else { return nil }
+        let url = URL(fileURLWithPath: path, isDirectory: true)
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
+            return nil
+        }
+        return url
+    }
+
+    func rememberImportDirectory(_ url: URL) {
+        lastImportDirectoryPath = url.path
+    }
+
     private init() {
         let raw = UserDefaults.standard.string(forKey: Key.defaultPreviewODT) ?? ODTMode.rec709.rawValue
         defaultPreviewODT = ODTMode(rawValue: raw) ?? .rec709
@@ -85,6 +113,7 @@ final class AppSettings: ObservableObject {
         let appearanceRaw = UserDefaults.standard.string(forKey: Key.windowAppearance) ?? WindowAppearance.system.rawValue
         windowAppearance = WindowAppearance(rawValue: appearanceRaw) ?? .system
         lastExportDirectoryPath = UserDefaults.standard.string(forKey: Key.lastExportDirectory)
+        lastImportDirectoryPath = UserDefaults.standard.string(forKey: Key.lastImportDirectory)
     }
 }
 

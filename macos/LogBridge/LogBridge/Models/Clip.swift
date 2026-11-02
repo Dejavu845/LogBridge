@@ -1119,6 +1119,7 @@ final class SessionModel: ObservableObject {
     var loopStepHint: String {
         if isWritingDeliverables { return "正在写出代理" }
         if openingExportFolder { return "正在打开选文件夹" }
+        if showImporter { return "正在打开添加" }
         if clips.isEmpty { return "先拖入或点添加" }
         if !showsProcessLockedButton { return "在右侧检查器选成对 IDT" }
         if canRevealLastExport { return "已写出代理。可再调色，或在状态栏打开 Finder" }
@@ -2857,7 +2858,7 @@ final class SessionModel: ObservableObject {
 
     /// Global preferences. Does not change the selected clip.
     func presentSettings() {
-        guard !openingExportFolder else { return }
+        guard !openingExportFolder, !showImporter else { return }
         closeSharedGradeStroke()
         stopPreviewPlayback()
         activeSheet = .settings
@@ -2865,17 +2866,45 @@ final class SessionModel: ObservableObject {
         showDeliverSheet = false
     }
 
-    /// Importer. Held while the folder panel is opening, so that sheet cannot
-    /// eat the write that was just confirmed.
+    /// Add panel, stuck to this window. Starts in the last imported folder.
+    /// Cancel reads nothing and leaves the list, the selection, and the grade.
+    /// The same flag blocks the write sheet from opening on top of it.
     func presentImporter() {
-        guard !openingExportFolder else { return }
+        guard !openingExportFolder, !showImporter, !showSettings, !showDeliverSheet, !isWritingDeliverables else {
+            return
+        }
         closeSharedGradeStroke()
         showImporter = true
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.canCreateDirectories = false
+        panel.prompt = "添加"
+        panel.message = "选素材或文件夹。面板贴在这个窗口上。取消则不读入。同一文件不会另加一行。"
+        if let remembered = settings.lastImportDirectoryURL {
+            panel.directoryURL = remembered
+        }
+        let finish: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self else { return }
+            self.showImporter = false
+            guard response == .OK else { return }
+            let urls = panel.urls
+            guard !urls.isEmpty else { return }
+            self.handleImporter(.success(urls))
+        }
+        if let window = Self.exportFolderHostWindow() {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            panel.beginSheetModal(for: window, completionHandler: finish)
+        } else {
+            panel.begin(completionHandler: finish)
+        }
     }
 
     /// Write sheet. Folder panel opens only after this sheet has gone.
     func presentDeliverSheet() {
-        guard !isWritingDeliverables, !openingExportFolder else { return }
+        guard !isWritingDeliverables, !openingExportFolder, !showImporter else { return }
         closeSharedGradeStroke()
         stopPreviewPlayback()
         activeSheet = .deliver
@@ -2978,6 +3007,9 @@ final class SessionModel: ObservableObject {
         stopPreviewPlayback()
         // Keep the security scope for the session so preview decode can reopen the URL.
         _ = url.startAccessingSecurityScopedResource()
+        if let dir = Self.directoryToRememberAfterImport(url) {
+            settings.rememberImportDirectory(dir)
+        }
         lastImportNote = "正在读入…"
         let existingPaths = Set(clips.map { Self.clipIdentityPath($0.url) })
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -3134,6 +3166,27 @@ final class SessionModel: ObservableObject {
         return out.sorted {
             $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
         }
+    }
+
+    /// Where the next 添加 panel opens. A folder is kept as itself.
+    /// A file keeps its parent. A missing path keeps nothing.
+    /// Does not assign an IDT and does not touch the grade.
+    static func directoryToRememberAfterImport(_ url: URL) -> URL? {
+        let standard = url.standardizedFileURL
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: standard.path, isDirectory: &isDir) else {
+            return nil
+        }
+        if isDir.boolValue {
+            return standard
+        }
+        let parent = standard.deletingLastPathComponent()
+        var parentIsDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: parent.path, isDirectory: &parentIsDir),
+              parentIsDir.boolValue else {
+            return nil
+        }
+        return parent
     }
 
     func exportResolve() {
