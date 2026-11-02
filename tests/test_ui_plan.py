@@ -2599,6 +2599,74 @@ def test_last_lock_scrolls_the_inspector_to_exposure():
     readme = _read(ROOT / "README.md")
     trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
     assert "这一窗没有别的待选时，锁上后检查器滚到曝光，不改数字；还有待选时不滚。" in trial
+
+def _toggled_split_and_grade(current):
+    """Same branches as SessionModel.toggledSplitAndGradeLayout. 源 and 对照 stay put."""
+    if current == "split":
+        return "grade"
+    if current == "grade":
+        return "split"
+    return None
+
+
+def test_v_toggles_split_and_grade_without_leaving_source_or_compare():
+    """V enlarges the grade or returns to the split. It does not edit the shared set.
+
+    源 and 对照 are not in this toggle. Text fields keep the letter.
+    """
+    assert _toggled_split_and_grade("split") == "grade"
+    assert _toggled_split_and_grade("grade") == "split"
+    assert _toggled_split_and_grade("source") is None
+    assert _toggled_split_and_grade("compare") is None
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func toggledSplitAndGradeLayout(")[1].split("var canToggleSplitAndGrade")[0]
+    assert "case .split: return .grade" in fn
+    assert "case .grade: return .split" in fn
+    assert "case .source, .compare: return nil" in fn
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in fn, token
+    gate = clip.split("var canToggleSplitAndGrade")[1].split("func toggleSplitAndGrade()")[0]
+    assert "toggledSplitAndGradeLayout(monitorLayout) != nil" in gate
+    for name in (
+        "isWritingDeliverables",
+        "showSettings",
+        "showImporter",
+        "showDeliverSheet",
+        "openingExportFolder",
+        "pickingNeutral",
+    ):
+        assert name in gate, name
+    body = clip.split("func toggleSplitAndGrade()")[1].split("func setMonitorLayout")[0]
+    assert "canToggleSplitAndGrade" in body
+    assert "setMonitorLayout(next)" in body
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "stopPreviewPlayback", "5600", "6504"):
+        assert token not in body, token
+    content = _read(CONTENT)
+    header = content.split("struct MonitorHeader")[1].split("struct InspectorColumn")[0]
+    assert 'Text("V 切换")' in header
+    assert "canToggleSplitAndGrade" in header
+    assert "session.toggleSplitAndGrade()" in content
+    key = content.split("private func consumeSplitGradeKey")[1].split("private func consumeShuttleKey")[0]
+    assert '== "v"' in key
+    assert "isPlaybackKeyConsumedByControl()" in key
+    assert "isEscapeReservedByPresentedUI" in key
+    assert "onToggleSplitAndGrade?() == true" in key
+    assert "consumeSplitGradeKey(event)" in content
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('Button("分屏与预览")')[1].split("Divider()")[0]
+    assert "toggleSplitAndGrade()" in menu
+    assert "canToggleSplitAndGrade" in menu
+    assert "keyboardShortcut" not in menu
+    assert "菜单不标快捷键" in menu
+    plan = _read(PLAN)
+    assert "监视器旁写「V 切换」" in plan
+    assert "正在看源或对照时不写这一句" in plan
+    assert "分屏与预览" in plan
+    assert "菜单不标快捷键" in plan
+    readme = _read(ROOT / "README.md")
+    trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
+    assert "V 切换" in trial
+    assert "正在看源或对照时，V 不改画面" in trial
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial
