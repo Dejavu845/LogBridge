@@ -362,6 +362,7 @@ private struct DropZone: View {
         .onTapGesture {
             onTap()
         }
+        .help("同一文件再拖一次，不另加一行。源文件留在原处。不改这一套调色，也不改成对 IDT。")
     }
 }
 

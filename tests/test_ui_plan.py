@@ -1689,3 +1689,47 @@ def test_compare_layout_shows_grade_before_beside_the_shared_set():
     assert "对照调色前后" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_repeat_import_does_not_add_another_row():
+    """A second drop of the same path stays one row. Selection and the grade stay."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    identity = clip.split("static func clipIdentityPath")[1].split("static func importPathIsAlreadyKept")[0]
+    assert "standardizedFileURL" in identity
+    assert "resolvingSymlinksInPath" in identity
+    for token in ("setIDT", "setExposureStops", "setPreviewFrame", "5600", "6504"):
+        assert token not in identity, token
+    kept = clip.split("static func importPathIsAlreadyKept")[1].split("static func importDuplicateNote")[0]
+    assert "existingPaths.contains(path)" in kept
+    assert "acceptedThisDrop.contains(path)" in kept
+    assert "return" in kept
+    for token in ("setIDT", "5600", "6504", "24", "30"):
+        assert token not in kept, token
+    note = clip.split("static func importDuplicateNote")[1].split("func importURL")[0]
+    assert "count > 0" in note
+    assert 'return ""' in note
+    assert "同一文件" in note
+    assert "没有另加一行" in note
+    for token in ("5600", "6504", "没有能读的素材"):
+        assert token not in note, token
+    apply = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    assert "importPathIsAlreadyKept" in apply
+    assert "refusedThisDrop" in apply
+    assert "alreadyListed += 1" in apply
+    assert "acceptedThisDrop.insert(path)" in apply
+    assert "var added: [Clip] = []" in apply
+    assert "repeated += 1" in apply
+    assert "importDuplicateNote(count: repeated)" in apply
+    assert "added.isEmpty, skipped.isEmpty, repeated == 0" in apply
+    assert "if !added.isEmpty {\n                    self.refreshPreview()" in apply
+    assert "selectedID = pending.id" in apply
+    for token in ("setIDT", "setExposureStops", "setPreviewFrame", "setWBParams"):
+        assert token not in apply, token
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    assert "同一文件再拖一次，不另加一行" in sidebar
+    plan = _read(PLAN)
+    assert "同一文件 N 条已经在列表里，没有另加一行。" in plan
+    assert "全是重复时，筛选和查找也不动" in plan
+    assert "不把当前画面再解一遍" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

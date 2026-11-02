@@ -2822,24 +2822,66 @@ final class SessionModel: ObservableObject {
         return "未导入 \(skipped.count) 条：\n" + skipped.joined(separator: "\n")
     }
 
+    /// One file, one row. A symlink and its target share this path.
+    /// Does not assign an IDT and does not touch the grade.
+    static func clipIdentityPath(_ url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    /// True when this path is already in the window, or already accepted in this drop.
+    static func importPathIsAlreadyKept(
+        _ url: URL,
+        existingPaths: Set<String>,
+        acceptedThisDrop: Set<String>
+    ) -> Bool {
+        let path = clipIdentityPath(url)
+        return existingPaths.contains(path) || acceptedThisDrop.contains(path)
+    }
+
+    /// Sidebar line when a drop repeats a file that is staying in the list.
+    /// Empty when nothing was repeated. Does not invent a color temperature.
+    static func importDuplicateNote(count: Int) -> String {
+        guard count > 0 else { return "" }
+        return "同一文件 \(count) 条已经在列表里，没有另加一行。"
+    }
+
     func importURL(_ url: URL) {
         stopPreviewPlayback()
         // Keep the security scope for the session so preview decode can reopen the URL.
         _ = url.startAccessingSecurityScopedResource()
         lastImportNote = "正在读入…"
+        let existingPaths = Set(clips.map { Self.clipIdentityPath($0.url) })
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let files = Self.expandToClipURLs(url)
             var skipped: [String] = []
             var built: [Clip] = []
+            var alreadyListed = 0
+            var acceptedThisDrop: Set<String> = []
+            var refusedThisDrop: Set<String> = []
             for file in files {
+                let path = Self.clipIdentityPath(file)
+                if Self.importPathIsAlreadyKept(
+                    file,
+                    existingPaths: existingPaths,
+                    acceptedThisDrop: acceptedThisDrop
+                ) {
+                    alreadyListed += 1
+                    continue
+                }
+                // A second copy of a file this drop already refused stays one chip.
+                if refusedThisDrop.contains(path) {
+                    continue
+                }
                 let probe = MediaFormat.probe(url: file)
                 if probe.decision == .refuse {
+                    refusedThisDrop.insert(path)
                     skipped.append("\(file.lastPathComponent)：\(probe.note)")
                     continue
                 }
                 if probe.decision == .tryDecode {
                     // MXF: only keep if the system can open a video track.
                     if MediaFormat.codecFourCC(url: file) == nil {
+                        refusedThisDrop.insert(path)
                         skipped.append("\(file.lastPathComponent)：\(MediaFormat.noteMxfNoTrack)")
                         continue
                     }
@@ -2848,6 +2890,7 @@ final class SessionModel: ObservableObject {
                 let extent = MediaFormat.extent(url: file)
                 // Never silently assign an IDT. S-Log3 without gamut stays nil.
                 let shot = detection.asShotCCT
+                acceptedThisDrop.insert(path)
                 built.append(Clip(
                     id: UUID(),
                     url: file,
@@ -2873,31 +2916,47 @@ final class SessionModel: ObservableObject {
             }
             DispatchQueue.main.async {
                 guard let self else { return }
+                // A parallel drop may have listed this path while we were probing.
+                var kept = Set(self.clips.map { Self.clipIdentityPath($0.url) })
+                var added: [Clip] = []
+                var repeated = alreadyListed
                 for clip in built {
+                    let path = Self.clipIdentityPath(clip.url)
+                    if kept.contains(path) {
+                        repeated += 1
+                        continue
+                    }
+                    kept.insert(path)
                     self.clips.append(clip)
+                    added.append(clip)
                 }
                 // After drop/import: first pending/unlocked so 待选 is obvious.
                 // All-locked keeps first / existing selection. Does not lock IDT.
-                if let pending = built.first(where: { !$0.hasLockedPair }) {
+                // A drop that only repeats files leaves the selection where it is.
+                if let pending = added.first(where: { !$0.hasLockedPair }) {
                     self.selectedID = pending.id
                     self.noteSelectionForSharedGrade(pending)
-                } else if self.selectedID == nil, let first = built.first {
+                } else if self.selectedID == nil, let first = added.first {
                     self.selectedID = first.id
                     self.noteSelectionForSharedGrade(first)
                 }
                 // A 待选 / 已锁定 filter must not hide the rows that just arrived.
-                if !built.isEmpty, Self.importFilterHidesNewRow(self.clipListFilter, built: built) {
+                if !added.isEmpty, Self.importFilterHidesNewRow(self.clipListFilter, built: added) {
                     self.clipListFilter = .all
                 }
                 // A filename query must not hide them either. A query that still
                 // matches every new row stays, so the list does not jump open.
-                if !built.isEmpty, Self.importQueryHidesNewRow(self.clipListQuery, built: built) {
+                if !added.isEmpty, Self.importQueryHidesNewRow(self.clipListQuery, built: added) {
                     self.clipListQuery = ""
                 }
-                let needsPicker = built.contains { !$0.hasLockedPair }
-                var note = Self.importArrivalNote(imported: built.count, needsPicker: needsPicker)
-                if built.isEmpty, skipped.isEmpty {
+                let needsPicker = added.contains { !$0.hasLockedPair }
+                var note = Self.importArrivalNote(imported: added.count, needsPicker: needsPicker)
+                if added.isEmpty, skipped.isEmpty, repeated == 0 {
                     note = Self.importEmptyNote()
+                }
+                if repeated > 0 {
+                    let dup = Self.importDuplicateNote(count: repeated)
+                    note = note.isEmpty ? dup : note + "\n" + dup
                 }
                 if !skipped.isEmpty {
                     let skips = Self.importSkipSummary(skipped)
@@ -2905,13 +2964,16 @@ final class SessionModel: ObservableObject {
                 }
                 self.lastImportNote = note
                 if self.settings.promptEstimateWBOnImport {
-                    let locked = built.contains { $0.hasLockedPair }
+                    let locked = added.contains { $0.hasLockedPair }
                     let hint = "可点「估计白平衡」查看估计，确认后才写入。不是校准，不猜 5600。"
                     if locked {
                         self.lastImportNote = (self.lastImportNote.isEmpty ? hint : self.lastImportNote + "\n" + hint)
                     }
                 }
-                self.refreshPreview()
+                // Repeats do not decode again, so the current frame stays up.
+                if !added.isEmpty {
+                    self.refreshPreview()
+                }
             }
         }
     }
