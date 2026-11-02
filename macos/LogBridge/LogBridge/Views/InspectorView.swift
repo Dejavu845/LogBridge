@@ -110,9 +110,10 @@ private struct PairedIDTChoices: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("点一行锁定。选完停在这条看预览。")
+            Text("点一行锁定。选完停在这条看预览。这一窗没有别的待选时，滚到曝光，不改数字。还有待选时留在这一列。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if pairs.count <= IDT.pairListShowsSearchAfter {
                 Text("按 \(shortListKeyLabel) 锁定这一列。已经是这一对时，帧和播放留着。整表较长时没有数字键，不从整表里猜。")
                     .font(.caption)

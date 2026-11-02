@@ -2551,3 +2551,54 @@ def test_write_sheet_pins_confirm_and_marks_the_monitor_clip():
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial
+
+
+def _inspector_scroll_after_lock(*, pending_remain, blocked):
+    """Same branches as SessionModel.inspectorScrollAfterLock. Nil stays put."""
+    if blocked or pending_remain:
+        return None
+    return "exposure"
+
+
+def test_last_lock_scrolls_the_inspector_to_exposure():
+    """The last lock reveals the grade. Other pending clips stay on the pair list.
+
+    Scrolling does not edit exposure, white balance, the frame, or the pair.
+    """
+    assert _inspector_scroll_after_lock(pending_remain=False, blocked=False) == "exposure"
+    assert _inspector_scroll_after_lock(pending_remain=True, blocked=False) is None
+    assert _inspector_scroll_after_lock(pending_remain=False, blocked=True) is None
+    assert _inspector_scroll_after_lock(pending_remain=True, blocked=True) is None
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func inspectorScrollAfterLock")[1].split("static func inspectorPinnedPairLine")[0]
+    assert "if blocked || pendingRemain { return nil }" in fn
+    assert "return inspectorExposureAnchor" in fn
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "setODT", "5600", "6504"):
+        assert token not in fn, token
+    body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]
+    assert "id == selectedID" in body
+    assert "inspectorScrollAfterLock(" in body
+    assert "pendingClipCount > 0" in body
+    assert "requestInspectorScroll(anchor)" in body
+    assert "refreshPreview()" in body
+    assert body.index("refreshPreview()") < body.index("inspectorScrollAfterLock(")
+    assert "selectNextPendingAfterLock" not in body
+    for token in ("setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in body, token
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    choices = inspector.split("struct PairedIDTChoices")[1].split("struct InspectorView")[0]
+    assert "这一窗没有别的待选时，滚到曝光，不改数字。还有待选时留在这一列。" in choices
+    assert "点一行锁定" in choices
+    reveal = inspector.split("onChange(of: session.inspectorScrollToken)")[1].split("struct WBInspector")[0]
+    assert "exposureOpen = true" in reveal
+    assert "wbOpen = true" in reveal
+    plan = _read(PLAN)
+    assert "这一窗没有别的待选时，检查器滚到曝光" in plan
+    assert "还有待选时不滚" in plan
+    assert "不改数字，不改预览帧" in plan
+    readme = _read(ROOT / "README.md")
+    trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
+    assert "这一窗没有别的待选时，锁上后检查器滚到曝光，不改数字；还有待选时不滚。" in trial
+    for token in BANNED_CONTACT:
+        assert token not in plan
+        assert token not in trial

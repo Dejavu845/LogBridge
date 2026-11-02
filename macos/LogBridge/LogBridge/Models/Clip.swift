@@ -1242,7 +1242,7 @@ final class SessionModel: ObservableObject {
 
     /// Scroll id for the paired-IDT block. Pending selection returns here.
     static let inspectorPairedIDTAnchor = "paired-idt"
-    /// Scroll id for exposure. Only the 调色 step asks for this.
+    /// Scroll id for exposure. 调色 asks for this, and so does the last lock.
     /// Changing clips does not. Does not change the grade or the frame.
     static let inspectorExposureAnchor = "exposure"
 
@@ -1251,6 +1251,16 @@ final class SessionModel: ObservableObject {
     /// Nil means do not scroll. Does not change the grade, the pair, or the frame.
     static func inspectorScrollAnchor(selectedIsPending: Bool) -> String? {
         selectedIsPending ? inspectorPairedIDTAnchor : nil
+    }
+
+    /// After a pair is locked on the clip being previewed.
+    /// Nothing else is still pending: reveal exposure, same as 调色.
+    /// Another clip is still pending: stay, so 下一条待选 remains in view.
+    /// A sheet or a write in progress does not scroll.
+    /// Nil means do not scroll. Does not change the grade, the pair, or the frame.
+    static func inspectorScrollAfterLock(pendingRemain: Bool, blocked: Bool) -> String? {
+        if blocked || pendingRemain { return nil }
+        return inspectorExposureAnchor
     }
 
     /// Pair name pinned under the inspector title. Only a locked pair.
@@ -2491,6 +2501,19 @@ final class SessionModel: ObservableObject {
         // Stay on this clip so the preview shows the pair just chosen.
         // 下一条待选 is explicit. Mid-write does not move selection. Does not lock the next IDT.
         refreshPreview()
+        // Last pending clip in this window: the next step is the grade.
+        // Other pending clips stay on the pair list. Numbers and the frame stay.
+        if id == selectedID,
+           let anchor = Self.inspectorScrollAfterLock(
+            pendingRemain: pendingClipCount > 0,
+            blocked: isWritingDeliverables
+                || openingExportFolder
+                || showSettings
+                || showImporter
+                || showDeliverSheet
+           ) {
+            requestInspectorScroll(anchor)
+        }
     }
 
     /// After locking the selected pending clip, select the next pending/unlocked
