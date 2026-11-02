@@ -1,117 +1,295 @@
 import SwiftUI
 
-/// Paired IDT picker pinned under the preview. Always visible.
+/// Paired IDT for the selected clip. Lives in the inspector column, always visible.
 /// Visible during write; picker is not swappable mid-write.
 /// Do not bury this in 「高级」. Unlocked IDT blocks / skips process.
 struct PairedIDTBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("成对 IDT")
-                    .font(.caption.weight(.semibold))
-                Text("先选 Log 与色域，才能处理")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .font(.headline)
                 Spacer(minLength: 8)
                 if let clip = session.selectedClip {
                     Text(clip.verificationBadge)
-                        .font(.caption2.weight(clip.isPending ? .regular : .semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
+                        .font(.caption.weight(clip.isPending ? .regular : .semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
                         .background(clip.isPending ? Color.yellow.opacity(0.28) : Color.orange.opacity(0.2))
                         .clipShape(Capsule())
                 }
             }
+            Text("本片色彩。先选 Log 与色域，才能处理。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if let clip = session.selectedClip {
-                // One locked pair per row. Never two independent curve/gamut dropdowns.
-                Picker("用户选择成对 IDT", selection: Binding(
-                    get: { clip.idt },
-                    set: { newValue in
-                        if let idt = newValue {
-                            session.setIDT(clip.id, idt)
-                        }
-                    }
-                )) {
-                    Text("— 先选择成对 IDT —").tag(Optional<IDT>.none)
-                    ForEach(clip.pickerPairs) { pair in
-                        Text(pair.pairLabel).tag(Optional(pair))
-                    }
-                }
-                .labelsHidden()
-                .controlSize(.small)
-                .frame(maxWidth: 420)
-                .disabled(session.isExporting)
-                // S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。
-                .help("S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。")
-                HStack(spacing: 6) {
+                // One column of complete pairs. Never two independent curve/gamut dropdowns.
+                PairedIDTChoices(session: session, clip: clip)
+                    .help("S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。点一行才锁定。")
+                HStack(spacing: 8) {
                     Text("来源：\(clip.detectionSource.title)")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                     if clip.veniceDetected {
                         Text("检测到 Venice")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if let reason = clip.processSkipReason {
-                        Text(reason)
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                            .lineLimit(1)
-                    }
+                }
+                if let reason = clip.processSkipReason {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(clip.detectionNote)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                if clip.hasLockedPair, session.pendingClipCount > 0 {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button("下一条待选") {
+                            session.selectNextPendingAfterLock(lockedID: clip.id)
+                        }
+                        .controlSize(.regular)
+                        .disabled(session.isExporting)
+                        .help("这条留在列表里。去下一条还没选成对 IDT 的素材，不替你选。")
+                        Button("这一对给下一条待选") {
+                            session.applyLockedPairToNextPending()
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canApplyLockedPairToNextPending)
+                        .help("把当前这一对写到下一条还没锁定的素材上，而且这一对已经在它的成对列表里。然后停在那一条看预览。不改曝光和白平衡。下一条的列表里没有这一对时不起作用，也不跳去更后面的一条。⇧⌘] 和菜单「调色」是同一套。")
+                        Button("这一对给后面连续的待选") {
+                            session.applyLockedPairToFollowingPending()
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canApplyLockedPairToFollowingPending)
+                        .help("从下一条起，自己的成对列表里已有这一对就写上，并继续。已经锁定的跳过。碰到没有这一对的就停在那一条，不替它选，也不再往后。前面的待选不往回写。不改曝光和白平衡。⌃⌘] 和菜单「调色」是同一套。")
+                    }
+                    if let note = session.applyPairToNextPendingNote {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let note = session.followingPairApplyBlockedNote {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if !session.followingPairApplyNote.isEmpty {
+                    Text(session.followingPairApplyNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else {
                 Text("先点一条素材。读不到元数据就在这里选成对 IDT，不猜。")
-                    .font(.caption2)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.primary.opacity(0.03))
     }
 }
 
-/// Right inspector: Exposure + WB three states only.
-/// IDT lives under the preview — not in 「高级」. Node strip / export only.
-struct InspectorView: View {
+/// Visible paired-IDT rows. A click locks that pair and stays on this clip.
+/// Search only hides rows. One remaining match does not lock itself.
+private struct PairedIDTChoices: View {
     @ObservedObject var session: SessionModel
+    let clip: Clip
+    @State private var pairQuery = ""
+
+    private var pairs: [IDT] { clip.pickerPairs }
+
+    private var showSearch: Bool { pairs.count > IDT.pairListShowsSearchAfter }
+
+    private var shown: [IDT] {
+        showSearch ? IDT.filteredPairs(pairs, query: pairQuery) : pairs
+    }
+
+    private var queryIsBlank: Bool {
+        pairQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// 1、2 on a two-row list. The full catalog never gets these labels.
+    private var shortListKeyLabel: String {
+        pairs.indices.map { String($0 + 1) }.joined(separator: "、")
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 7) {
-                ExposureInspector(session: session)
-                Divider()
-                WBInspector(session: session)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("点一行锁定。选完停在这条看预览。这一窗没有别的待选时，滚到曝光，不改数字。还有待选时留在这一列。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if pairs.count <= IDT.pairListShowsSearchAfter {
+                Text("按 \(shortListKeyLabel) 锁定这一列。已经是这一对时，帧和播放留着。整表较长时没有数字键，不从整表里猜。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .disabled(session.isExporting)
-            .opacity(session.isExporting ? 0.45 : 1)
-            .padding(6)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            if showSearch {
+                HStack(spacing: 8) {
+                    TextField("查找 Log 或色域", text: $pairQuery)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(session.isExporting)
+                    if !queryIsBlank {
+                        Button("清空") { pairQuery = "" }
+                            .controlSize(.regular)
+                            .disabled(session.isExporting)
+                    }
+                }
+                .help("只收下面这一列。可输入索尼、Sony、LogC、佳能。不会因为只剩一对就替你选。")
+            }
+            if let current = clip.idt, showSearch, !queryIsBlank, !shown.contains(current) {
+                Text("当前这一对不在查找里。清空后仍是 \(current.pairLabel)。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if shown.isEmpty {
+                Text("没有匹配的成对 IDT。清空查找再点一行。")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if shown.count > 6 {
+                ScrollView {
+                    pairRows
+                }
+                .frame(maxHeight: 180)
+            } else {
+                pairRows
+            }
         }
+        .onChange(of: session.selectedID) { _, _ in
+            pairQuery = ""
+        }
+    }
+
+    /// Short lists name the digit. A long catalog stays a click, so 1 is not a guess.
+    private func pairRowHelp(_ pair: IDT) -> String {
+        let digit: String
+        if pairs.count <= IDT.pairListShowsSearchAfter, let index = pairs.firstIndex(of: pair) {
+            digit = "按 \(index + 1) 或点这一行。"
+        } else {
+            digit = "点这一行。"
+        }
+        if clip.idt == pair {
+            return "已经是这一对。预览按这一对。再按一次不重解这一帧。"
+        }
+        return "\(digit)锁定成对 IDT。停在这条看预览，不替下一条选。整表较长时没有数字键。"
+    }
+
+    private var pairRows: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(shown) { pair in
+                Button {
+                    if clip.idt != pair {
+                        session.setIDT(clip.id, pair)
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if pairs.count <= IDT.pairListShowsSearchAfter, let index = pairs.firstIndex(of: pair) {
+                            Text("\(index + 1)")
+                                .font(.caption.monospacedDigit().weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16, alignment: .leading)
+                        }
+                        Text(pair.pairLabel)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                        Spacer(minLength: 8)
+                        if clip.idt == pair {
+                            Text("当前")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(clip.idt == pair ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04))
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(session.isExporting)
+                .help(pairRowHelp(pair))
+            }
+        }
+    }
+}
+
+/// Right inspector: Exposure + WB, folded sections, follow the selection.
+/// IDT stays above this view — not in 「高级」. Changes apply immediately.
+struct InspectorView: View {
+    @ObservedObject var session: SessionModel
+    @State private var exposureOpen = true
+    @State private var wbOpen = true
+
+    var body: some View {
+        // 外层检查器已整栏滚动，这里不再套一层，避免矮窗口里滚不动。
+        VStack(alignment: .leading, spacing: 12) {
+            DisclosureGroup(isExpanded: $exposureOpen) {
+                ExposureInspector(session: session)
+                    .padding(.top, 6)
+            } label: {
+                Text("曝光")
+                    .font(.headline)
+            }
+            .id(SessionModel.inspectorExposureAnchor)
+            DisclosureGroup(isExpanded: $wbOpen) {
+                WBInspector(session: session)
+                    .padding(.top, 6)
+            } label: {
+                Text("白平衡")
+                    .font(.headline)
+            }
+        }
+        .disabled(session.isExporting)
+        .opacity(session.isExporting ? 0.45 : 1)
+        .onChange(of: session.inspectorScrollToken) { _, _ in
+            guard session.inspectorScrollTarget == SessionModel.inspectorExposureAnchor else { return }
+            exposureOpen = true
+            wbOpen = true
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.primary.opacity(0.02))
     }
 }
 
 struct WBInspector: View {
     @ObservedObject var session: SessionModel
+    @State private var cctDraft = ""
+    @State private var tintDraft = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("白平衡")
-                .font(.caption.weight(.semibold))
+        VStack(alignment: .leading, spacing: 8) {
             Toggle("启用白平衡（可旁路，不烘焙）", isOn: Binding(
                 get: { session.graph.wbEnabled },
                 set: { session.setWBEnabled($0) }
             ))
-            .controlSize(.small)
+            .controlSize(.regular)
+            if let clip = session.selectedClip {
+                Text(cameraReadingLine(clip))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             // Three states only. Estimate chip lights AFTER confirm, never on propose.
             // 机内 / 估计确认才写 / 灰卡 — distinct tone + weight at a glance.
             HStack(spacing: 4) {
@@ -138,12 +316,12 @@ struct WBInspector: View {
                 Button(session.pickingNeutral ? "在预览上点灰卡…" : "点灰卡") {
                     session.pickingNeutral.toggle()
                 }
-                .controlSize(.small)
+                .controlSize(.regular)
                 .help("点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。")
                 Button("估计白平衡") {
                     session.proposeAutoWB()
                 }
-                .controlSize(.small)
+                .controlSize(.regular)
                 .help("白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。")
             }
             if session.graph.autoWBCCT != nil {
@@ -155,7 +333,7 @@ struct WBInspector: View {
                     Button("确认估计") {
                         session.confirmAutoWB()
                     }
-                    .controlSize(.small)
+                    .controlSize(.regular)
                 }
             }
             if session.graph.wbEnabled {
@@ -171,11 +349,43 @@ struct WBInspector: View {
                         in: 2000...10000,
                         step: 10
                     )
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     Text(session.graph.wbCCT.map { "\(Int($0)) K" } ?? "机内未知")
                         .font(.caption.monospacedDigit())
                         .frame(width: 72, alignment: .trailing)
                 }
+                HStack(spacing: 8) {
+                    TextField("如 4500", text: $cctDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospacedDigit())
+                        .frame(width: 96)
+                        .disabled(!session.canTypeWBCCT)
+                        .onSubmit { commitCCT() }
+                    Button("写入色温") { commitCCT() }
+                        .disabled(!session.canTypeWBCCT)
+                }
+                .controlSize(.regular)
+                .onAppear { syncCCTDraft() }
+                .onChange(of: session.graph.wbCCT) { _, _ in
+                    syncCCTDraft()
+                }
+                .help("写入这一套色温。4500 或 4500 K，收到整数。色温空着时也可以写入，这是你填的，不猜。超出 2000 到 10000 不改数字。和滑条是同一套，写出仍用这一套。一次写入算一步，可撤销。")
+                if !session.typedCCTNote.isEmpty {
+                    Text(session.typedCCTNote)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
+                    Button("−100 K") { session.nudgeWBCCT(-100) }
+                        .disabled(!session.canNudgeWB || (session.graph.wbCCT ?? 2000) <= 2000)
+                    Button("回到机内") { session.restoreAsShotWB() }
+                        .disabled(!session.canRestoreAsShotWB)
+                    Button("+100 K") { session.nudgeWBCCT(100) }
+                        .disabled(!session.canNudgeWB || (session.graph.wbCCT ?? 10000) >= 10000)
+                }
+                .controlSize(.regular)
+                .help("每次 100 K。回到机内把当前这条的机内色温和绿品写入这一套。没有机内读数就清空，不猜 5600。换一条素材不会自己改掉这一套。空值不能步进。菜单「调色」是同一套。仅预览。")
                 HStack {
                     Text("绿品")
                         .font(.caption)
@@ -188,11 +398,43 @@ struct WBInspector: View {
                         in: -10...10,
                         step: 0.1
                     )
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     Text(String(format: "%.1f", session.graph.wbTint))
                         .font(.caption.monospacedDigit())
                         .frame(width: 52, alignment: .trailing)
                 }
+                HStack(spacing: 8) {
+                    TextField("如 +1.5", text: $tintDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospacedDigit())
+                        .frame(width: 96)
+                        .disabled(!session.canTypeWBTint)
+                        .onSubmit { commitTint() }
+                    Button("写入绿品") { commitTint() }
+                        .disabled(!session.canTypeWBTint)
+                }
+                .controlSize(.regular)
+                .onAppear { syncTintDraft() }
+                .onChange(of: session.graph.wbTint) { _, _ in
+                    syncTintDraft()
+                }
+                .help("写入这一套绿品。+1.5、1.5 或 1.5绿品，按 0.1 收。超出 −10 到 +10 不改数字。色温空着时不能写入。和滑条、步进是同一套，色温不动，写出仍用这一套。一次写入算一步，可撤销。不把白平衡打开。")
+                if !session.typedTintNote.isEmpty {
+                    Text(session.typedTintNote)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
+                    Button("−1") { session.nudgeWBTint(-1) }
+                        .disabled(!session.canNudgeWBTint || session.graph.wbTint <= -10)
+                    Button("绿品归零") { session.resetWBTint() }
+                        .disabled(!session.canNudgeWBTint || abs(session.graph.wbTint) < 0.001)
+                    Button("+1") { session.nudgeWBTint(1) }
+                        .disabled(!session.canNudgeWBTint || session.graph.wbTint >= 10)
+                }
+                .controlSize(.regular)
+                .help("每次 1，或把绿品收到 0。色温不动。色温空着时不能步进。回到机内才把当前这条的机内绿品写入这一套。菜单「调色」是同一套。仅预览。")
                 Picker("适应方法", selection: Binding(
                     get: { session.graph.wbMethod },
                     set: { session.setWBParams(method: $0) }
@@ -200,13 +442,48 @@ struct WBInspector: View {
                     Text("Bradford").tag("bradford")
                     Text("CAT02").tag("cat02")
                 }
-                .controlSize(.small)
-                .frame(maxWidth: 200)
+                .controlSize(.regular)
+                .frame(maxWidth: .infinity)
             }
-            Text("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。")
+            Text("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。这一套不跟素材换。")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
+    }
+
+    private func syncCCTDraft() {
+        if let cct = session.graph.wbCCT {
+            cctDraft = String(Int(cct.rounded()))
+        } else {
+            cctDraft = ""
+        }
+    }
+
+    /// A refused string stays in the field so it can be corrected.
+    private func commitCCT() {
+        if session.applyTypedWBCCT(cctDraft) {
+            syncCCTDraft()
+        }
+    }
+
+    private func syncTintDraft() {
+        tintDraft = String(format: "%+.1f", session.graph.wbTint)
+    }
+
+    /// A refused string stays in the field so it can be corrected.
+    private func commitTint() {
+        if session.applyTypedWBTint(tintDraft) {
+            syncTintDraft()
+        }
+    }
+
+    /// Camera reading for the selected clip. Not the shared knobs.
+    private func cameraReadingLine(_ clip: Clip) -> String {
+        if let cct = clip.asShotCCT {
+            let tint = String(format: "%+.1f", clip.asShotTint)
+            return "这条机内 \(Int(cct.rounded())) K · 绿品 \(tint)。换一条不会改这一套。回到机内才换成这条。"
+        }
+        return "这条读不到机内色温。换一条不会改这一套。回到机内会清空，不猜 5600。"
     }
 }
 
@@ -305,16 +582,15 @@ struct ODTInspector: View {
 
 struct ExposureInspector: View {
     @ObservedObject var session: SessionModel
+    @State private var exposureDraft = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("曝光")
-                .font(.caption.weight(.semibold))
+        VStack(alignment: .leading, spacing: 8) {
             Toggle("启用曝光（0 档 = 不动）", isOn: Binding(
                 get: { session.graph.exposureEnabled },
                 set: { session.setExposureEnabled($0) }
             ))
-            .controlSize(.small)
+            .controlSize(.regular)
             if session.graph.exposureEnabled {
                 HStack(spacing: 6) {
                     Text("档")
@@ -328,11 +604,43 @@ struct ExposureInspector: View {
                         in: -8...8,
                         step: 0.05
                     )
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     Text(String(format: "%+.2f 档", session.graph.exposureStops))
-                        .font(.caption.monospacedDigit())
-                        .frame(width: 56, alignment: .trailing)
+                        .font(.body.monospacedDigit())
+                        .frame(width: 78, alignment: .trailing)
                 }
+                HStack(spacing: 8) {
+                    TextField("如 +0.50", text: $exposureDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospacedDigit())
+                        .frame(width: 96)
+                        .disabled(!session.canNudgeExposure)
+                        .onSubmit { commitExposure() }
+                    Button("写入档") { commitExposure() }
+                        .disabled(!session.canNudgeExposure)
+                }
+                .controlSize(.regular)
+                .onAppear { syncExposureDraft() }
+                .onChange(of: session.graph.exposureStops) { _, _ in
+                    syncExposureDraft()
+                }
+                .help("写入这一套曝光。+0.50、0.5 或 0.5档，按 0.01 档收。超出 −8 到 +8 不改数字。和滑条、步进是同一套，写出仍用这一套。一次写入算一步，可撤销。不把曝光打开。")
+                if !session.typedExposureNote.isEmpty {
+                    Text(session.typedExposureNote)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
+                    Button("−0.10") { session.nudgeExposureStops(-0.10) }
+                        .disabled(session.graph.exposureStops <= -8)
+                    Button("归零") { session.resetExposureStops() }
+                        .disabled(abs(session.graph.exposureStops) < 0.001)
+                    Button("+0.10") { session.nudgeExposureStops(0.10) }
+                        .disabled(session.graph.exposureStops >= 8)
+                }
+                .controlSize(.regular)
+                .help("每次 0.10 档，或归零。预览和监视器读数一起变。菜单「调色」是同一套。仅预览。")
                 Text(String(format: "线性增益 = %.4f", pow(2.0, session.graph.exposureStops)))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
@@ -344,6 +652,17 @@ struct ExposureInspector: View {
             Text("仅预览")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func syncExposureDraft() {
+        exposureDraft = String(format: "%+.2f", session.graph.exposureStops)
+    }
+
+    /// A refused string stays in the field so it can be corrected.
+    private func commitExposure() {
+        if session.applyTypedExposureStops(exposureDraft) {
+            syncExposureDraft()
         }
     }
 }

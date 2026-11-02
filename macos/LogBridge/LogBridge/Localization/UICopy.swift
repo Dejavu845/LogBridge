@@ -25,6 +25,7 @@ enum UICopy {
     static let PROCESS_BUTTON_HELP_UI = "写出的是 ProRes 视频（422 HQ），不是 EXR 图序列。整段代理，代理精度。"
     static let PROCESS_DELIVERABLE_NOTE_UI = "代理 ProRes，可直接拖进剪辑软件。整段代理，代理精度。"
     static let FOLDER_PICKER_MESSAGE_UI = "每条素材一个 Rec.709 预览代理 .mov（ProRes 422 HQ）。整段代理，代理精度。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。"
+    static let FOLDER_PICKER_MESSAGE_EXR = "已锁定片段写出 ACES2065-1 代理 EXR 序列（_ACES2065-1_proxy），不是 mov。整段代理，代理精度。未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。"
     static let ADVANCED_EXPORT_HELP = "只处理已锁定片段。待选跳过。默认 ProRes 422 HQ；高级可选 ACES2065-1 EXR。不必全部锁定。"
     static let ADVANCED_DISCLOSURE_HELP = "节点与导出。默认 ProRes；EXR 为高级选项。展开状态会记住。整段代理，代理精度。"
     static let PROGRESS_STATUS_HELP = "按每一帧写入 ProRes；高级可选 EXR 图序列"
