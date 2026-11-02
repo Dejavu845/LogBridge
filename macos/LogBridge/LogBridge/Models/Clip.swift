@@ -1348,7 +1348,10 @@ final class SessionModel: ObservableObject {
         if showImporter { return "正在打开添加" }
         if clips.isEmpty { return "先拖入或点添加。按回车也是添加。" }
         if canReturnToWriteSheet {
-            return "从写出说明过来。检查器里「回到写出说明」只重新打开说明，不开始写文件。"
+            if selectedClip?.hasLockedPair == true {
+                return "这一条已锁定。检查器标题里「回到写出说明」还在，滚到曝光也不收起。不开始写文件。"
+            }
+            return "从写出说明过来。检查器标题里「回到写出说明」只重新打开说明，不开始写文件。"
         }
         if !showsProcessLockedButton { return "在右侧检查器选成对 IDT。按回车滚到这一列，不替你选。" }
         if canRevealLastExport { return "已写出代理。可再调色，或在状态栏打开 Finder" }

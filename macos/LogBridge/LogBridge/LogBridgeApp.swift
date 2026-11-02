@@ -84,6 +84,11 @@ private struct LogBridgeCommands: Commands {
                       || sessionFocus?.session?.isWritingDeliverables == true
                       || sessionFocus?.session?.openingExportFolder == true
                       || sessionFocus?.session?.showImporter == true)
+            Button("回到写出说明") {
+                sessionFocus?.session?.returnToWriteSheet()
+            }
+            .disabled(sessionFocus?.session?.canReturnToWriteSheet != true)
+            .help("从写出说明点「去选成对 IDT」之后，重新打开说明。不选文件夹，也不开始写文件。不改这一套曝光和白平衡。不是从说明过来时是灰的。检查器标题是同一套，滚到曝光也不收起。")
         }
         CommandMenu("调色") {
             Button("跟当前这一步") {

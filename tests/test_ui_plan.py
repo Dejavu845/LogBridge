@@ -2886,22 +2886,39 @@ def test_inspector_can_reopen_the_write_sheet_after_a_skipped_row():
     hint = clip.split("var loopStepHint")[1].split("var exportFolderOpenNote")[0]
     assert "从写出说明过来" in hint
     assert "if canReturnToWriteSheet" in hint
+    assert "hasLockedPair" in hint
+    assert "滚到曝光也不收起" in hint
+    content = _read(CONTENT)
+    assert content.count('Button("回到写出说明")') == 1
+    head, tail = content.split("ScrollViewReader", 1)
+    assert 'Button("回到写出说明")' in head
+    assert "session.returnToWriteSheet()" in head
+    assert "canReturnToWriteSheet" in head
+    assert "滚到曝光时这一下还在" in head
+    assert 'Button("回到写出说明")' not in tail
     inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
-    assert 'Button("回到写出说明")' in inspector
-    assert "session.returnToWriteSheet()" in inspector
-    assert "不开始写文件" in inspector
+    assert 'Button("回到写出说明")' not in inspector
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('Button("回到写出说明")')[1].split("CommandMenu")[0]
+    assert "returnToWriteSheet()" in menu
+    assert "canReturnToWriteSheet" in menu
+    assert "keyboardShortcut" not in menu
     deliver = _read(DELIVER)
     assert "回到这份说明" in deliver
+    assert "留在标题" in deliver
     locked = deliver.split("ForEach(session.lockedClips)")[1].split('Text("会跳过")')[0]
     assert "回到写出说明" not in locked
     assert "去选成对 IDT" not in locked
     plan = _read(PLAN)
-    assert "检查器里有「回到写出说明」" in plan
+    assert "检查器标题里有「回到写出说明」" in plan
+    assert "不在会滚动的成对 IDT 里" in plan
+    assert "滚到曝光时这一下还在" in plan
     assert "不是从说明过来时没有这一下" in plan
     assert "会写出的一条没有这一下" in plan
     readme = _read(ROOT / "README.md")
     trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
     assert "回到写出说明" in trial
+    assert "留在标题" in trial
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial
