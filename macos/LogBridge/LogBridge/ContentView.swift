@@ -543,7 +543,7 @@ private struct InspectorColumn: View {
                 if session.canReturnToWriteSheet {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(session.selectedClip?.hasLockedPair == true
-                             ? "这一条已锁定。回到写出说明，不开始写文件。滚到曝光时这一下还在。"
+                             ? "从写出说明过来。这一条已锁定。回到写出说明，不开始写文件。滚到曝光时这一下还在。"
                              : "从写出说明过来。选好或先看看，再回到说明。不开始写文件。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -552,7 +552,7 @@ private struct InspectorColumn: View {
                             session.returnToWriteSheet()
                         }
                         .controlSize(.regular)
-                        .help("重新打开写出说明，和顶栏「写出」一样。不选文件夹，也不开始写文件。不改这一套曝光和白平衡，不改成对 IDT，也不改预览帧。播放会停。标题固定，滚到曝光和白平衡时这一下还在。不是从说明里点「去选成对 IDT」过来时，没有这一下。说明打开后就收起。菜单「文件」是同一套。")
+                        .help("重新打开写出说明，和顶栏「写出」一样。不选文件夹，也不开始写文件。不改这一套曝光和白平衡，不改成对 IDT，也不改预览帧。播放会停。标题固定，滚到曝光和白平衡时这一下还在。从说明里点「去选成对 IDT」或「去看这条」过来才有这一下。不是从说明过来时，没有这一下。说明打开后就收起。菜单「文件」是同一套。")
                     }
                     .padding(.top, 4)
                 }

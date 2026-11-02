@@ -1349,7 +1349,7 @@ final class SessionModel: ObservableObject {
         if clips.isEmpty { return "先拖入或点添加。按回车也是添加。" }
         if canReturnToWriteSheet {
             if selectedClip?.hasLockedPair == true {
-                return "这一条已锁定。检查器标题里「回到写出说明」还在，滚到曝光也不收起。不开始写文件。"
+                return "从写出说明过来。这一条已锁定。检查器标题里「回到写出说明」还在，滚到曝光也不收起。不开始写文件。"
             }
             return "从写出说明过来。检查器标题里「回到写出说明」只重新打开说明，不开始写文件。"
         }
@@ -3546,8 +3546,9 @@ final class SessionModel: ObservableObject {
     }
 
     /// A skipped row on the write sheet can leave for that clip's paired list.
-    /// A locked row, a write in progress, and the folder panel stay on the sheet.
-    /// Does not pick a pair and does not start writing.
+    /// The clip already on the monitor stays. Another locked row uses
+    /// `focusLockedClipFromWriteSheet`. A write in progress and the folder
+    /// panel stay on the sheet. Does not pick a pair and does not start writing.
     static func canLeaveWriteSheetForSkippedClip(
         sheetOpen: Bool,
         writing: Bool,
@@ -3578,6 +3579,44 @@ final class SessionModel: ObservableObject {
         selectedID = id
         requestInspectorScroll(Self.inspectorPairedIDTAnchor)
         revealSelectedClipInList()
+        return true
+    }
+
+    /// Another locked row can leave the sheet so its preview can be checked.
+    /// The row already on the monitor has no such leave: 关闭 is enough.
+    /// Does not change the pair or this grade, and does not start writing.
+    static func canLeaveWriteSheetToViewClip(
+        sheetOpen: Bool,
+        writing: Bool,
+        openingFolder: Bool,
+        hasLockedPair: Bool,
+        isCurrent: Bool
+    ) -> Bool {
+        sheetOpen && !writing && !openingFolder && hasLockedPair && !isCurrent
+    }
+
+    /// Close the write sheet and show this other locked clip on the monitor.
+    /// The inspector scrolls to exposure. The numbers stay. The preview starts
+    /// at that clip's first frame, same as a list tap. A filter or query that
+    /// hides the row is widened. The inspector title can reopen the sheet.
+    /// Does not pick a folder and does not start writing.
+    @discardableResult
+    func focusLockedClipFromWriteSheet(_ id: UUID) -> Bool {
+        guard let clip = clips.first(where: { $0.id == id }) else { return false }
+        guard Self.canLeaveWriteSheetToViewClip(
+            sheetOpen: showDeliverSheet,
+            writing: isWritingDeliverables,
+            openingFolder: openingExportFolder,
+            hasLockedPair: clip.hasLockedPair,
+            isCurrent: selectedID == id
+        ) else { return false }
+        deliverSheetConfirmed = false
+        showDeliverSheet = false
+        writeSheetReturnOffered = true
+        stopPreviewPlayback()
+        selectedID = id
+        revealSelectedClipInList()
+        focusGradeControls()
         return true
     }
 

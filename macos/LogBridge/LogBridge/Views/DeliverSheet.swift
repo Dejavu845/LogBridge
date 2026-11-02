@@ -3,7 +3,8 @@ import SwiftUI
 /// 写出是独立一步，不是偏好设置，也不是保存对话框。
 /// 确认后由主窗口写出条打开系统选文件夹。本面板只收集确认。
 /// 当前这一条标出来。会跳过的一条可以去选成对 IDT，不替你选。
-/// 选好后，检查器标题可以回到这份说明，不开始写文件。滚到曝光时这一下还在。
+/// 会写出里不是当前这条时，可以去看预览，不改数字。
+/// 选好或看完后，检查器标题可以回到这份说明，不开始写文件。滚到曝光时这一下还在。
 /// 确认和关闭留在下面，说明长了中间自己滚。
 struct DeliverSheet: View {
     @ObservedObject var session: SessionModel
@@ -13,7 +14,7 @@ struct DeliverSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("写出代理")
                     .font(.title2.weight(.semibold))
-                Text("看清楚再选文件夹。未锁定的会跳过，不猜。会跳过的一条可以去选成对 IDT。选好后可在检查器标题回到这份说明。当前这条会标出来。确认和关闭留在下面。")
+                Text("看清楚再选文件夹。未锁定的会跳过，不猜。会跳过的一条可以去选成对 IDT。不是当前这条的已锁定素材可以去看预览。看完或选好后可在检查器标题回到这份说明。当前这条会标出来。确认和关闭留在下面。")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -119,6 +120,12 @@ struct DeliverSheet: View {
                         if !session.lockedClips.isEmpty {
                             Text("会写出")
                                 .font(.subheadline.weight(.semibold))
+                            if session.lockedClips.contains(where: { $0.id != session.selectedID }) {
+                                Text("不是当前这条时，点「去看这条」关掉说明，停在那一条看预览，并滚到曝光。不改数字，也不开始写文件。看完可在检查器标题回到这份说明。当前这条没有这一下。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                             ForEach(session.lockedClips) { clip in
                                 clipLine(
                                     clipID: clip.id,
@@ -176,7 +183,7 @@ struct DeliverSheet: View {
         HStack(alignment: .top, spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(willWrite ? Color.accentColor : Color.yellow.opacity(0.95))
-                .frame(width: 4, height: accentHeight(fact: fact, output: output, willWrite: willWrite))
+                .frame(width: 4, height: accentHeight(fact: fact, output: output, extraButton: !willWrite || !current))
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(name)
@@ -209,6 +216,14 @@ struct DeliverSheet: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+                if willWrite && !current {
+                    Button("去看这条") {
+                        session.focusLockedClipFromWriteSheet(clipID)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .help("关掉写出说明，停在这一条看预览，并滚到曝光。不改数字，不改成对 IDT，也不开始写文件。预览回到这一条的开头，和点列表一样。筛选或查找挡着就让这一条回到列表。检查器标题里「回到写出说明」只重新打开说明。当前这条没有这一下。会跳过的一条仍是「去选成对 IDT」。")
+                }
                 if !willWrite {
                     Button("去选成对 IDT") {
                         session.focusSkippedClipFromWriteSheet(clipID)
@@ -226,13 +241,13 @@ struct DeliverSheet: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(current ? Color.accentColor.opacity(0.12) : Color.clear)
         )
-        .accessibilityElement(children: willWrite ? .combine : .contain)
+        .accessibilityElement(children: (willWrite && current) ? .combine : .contain)
     }
 
-    /// Skip rows add the button. Locked rows stay the name, the pair, and the file.
-    private func accentHeight(fact: String?, output: String?, willWrite: Bool) -> CGFloat {
+    /// A leave button needs a taller accent. The current locked row has none.
+    private func accentHeight(fact: String?, output: String?, extraButton: Bool) -> CGFloat {
         let base: CGFloat = output == nil ? (fact == nil ? 34 : 50) : (fact == nil ? 48 : 64)
-        return willWrite ? base : base + 32
+        return extraButton ? base + 32 : base
     }
 
     /// Current frame of the selected clip, only when it is the Rec.709 look

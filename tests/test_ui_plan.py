@@ -2702,7 +2702,7 @@ def test_skipped_write_row_returns_to_the_paired_idt_without_writing():
     assert "sheetOpen && !writing && !openingFolder && !hasLockedPair" in gate
     for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "processLockedClips", "5600", "6504"):
         assert token not in gate, token
-    body = clip.split("func focusSkippedClipFromWriteSheet")[1].split("func openWriteSheetFromMonitorLine")[0]
+    body = clip.split("func focusSkippedClipFromWriteSheet")[1].split("static func canLeaveWriteSheetToViewClip")[0]
     assert "canLeaveWriteSheetForSkippedClip(" in body
     assert "clip.hasLockedPair" in body
     assert "deliverSheetConfirmed = false" in body
@@ -2729,7 +2729,7 @@ def test_skipped_write_row_returns_to_the_paired_idt_without_writing():
     line = deliver.split("private func clipLine")[1].split("private func accentHeight")[0]
     assert "if !willWrite" in line
     assert "focusSkippedClipFromWriteSheet(clipID)" in line
-    assert ".accessibilityElement(children: willWrite ? .combine : .contain)" in line
+    assert ".accessibilityElement(children: (willWrite && current) ? .combine : .contain)" in line
     plan = _read(PLAN)
     assert "会跳过的一条可以点「去选成对 IDT」" in plan
     assert "会写出的一条没有这一下" in plan
@@ -2877,7 +2877,7 @@ def test_inspector_can_reopen_the_write_sheet_after_a_skipped_row():
     assert "processLockedClips" not in body
     for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
         assert token not in body, token
-    leave = clip.split("func focusSkippedClipFromWriteSheet")[1].split("func openWriteSheetFromMonitorLine")[0]
+    leave = clip.split("func focusSkippedClipFromWriteSheet")[1].split("static func canLeaveWriteSheetToViewClip")[0]
     assert "writeSheetReturnOffered = true" in leave
     assert leave.index("showDeliverSheet = false") < leave.index("writeSheetReturnOffered = true")
     opened = clip.split("func presentDeliverSheet()")[1].split("func importProviders")[0]
@@ -2919,6 +2919,81 @@ def test_inspector_can_reopen_the_write_sheet_after_a_skipped_row():
     trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
     assert "回到写出说明" in trial
     assert "留在标题" in trial
+    for token in BANNED_CONTACT:
+        assert token not in plan
+        assert token not in trial
+
+
+def _can_leave_write_sheet_to_view(*, sheet_open, writing, opening_folder, has_locked_pair, is_current):
+    """Same gate as SessionModel.canLeaveWriteSheetToViewClip. The monitor's clip stays."""
+    return bool(sheet_open and not writing and not opening_folder and has_locked_pair and not is_current)
+
+
+def test_write_sheet_can_preview_another_locked_clip():
+    """A locked row that is not on the monitor can be opened for a look.
+
+    The current row has no such button. Numbers, the pair, and the write stay put.
+    The inspector can reopen the sheet afterwards.
+    """
+    assert _can_leave_write_sheet_to_view(
+        sheet_open=True, writing=False, opening_folder=False, has_locked_pair=True, is_current=False
+    ) is True
+    assert _can_leave_write_sheet_to_view(
+        sheet_open=True, writing=False, opening_folder=False, has_locked_pair=True, is_current=True
+    ) is False
+    assert _can_leave_write_sheet_to_view(
+        sheet_open=True, writing=False, opening_folder=False, has_locked_pair=False, is_current=False
+    ) is False
+    assert _can_leave_write_sheet_to_view(
+        sheet_open=False, writing=False, opening_folder=False, has_locked_pair=True, is_current=False
+    ) is False
+    assert _can_leave_write_sheet_to_view(
+        sheet_open=True, writing=True, opening_folder=False, has_locked_pair=True, is_current=False
+    ) is False
+    assert _can_leave_write_sheet_to_view(
+        sheet_open=True, writing=False, opening_folder=True, has_locked_pair=True, is_current=False
+    ) is False
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("static func canLeaveWriteSheetToViewClip(")[1].split("func focusLockedClipFromWriteSheet")[0]
+    assert "sheetOpen && !writing && !openingFolder && hasLockedPair && !isCurrent" in gate
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "processLockedClips", "5600", "6504"):
+        assert token not in gate, token
+    body = clip.split("func focusLockedClipFromWriteSheet")[1].split("func openWriteSheetFromMonitorLine")[0]
+    assert "canLeaveWriteSheetToViewClip(" in body
+    assert "deliverSheetConfirmed = false" in body
+    assert "showDeliverSheet = false" in body
+    assert "writeSheetReturnOffered = true" in body
+    assert body.index("deliverSheetConfirmed = false") < body.index("showDeliverSheet = false")
+    assert body.index("showDeliverSheet = false") < body.index("writeSheetReturnOffered = true")
+    assert "stopPreviewPlayback()" in body
+    assert "selectedID = id" in body
+    assert "revealSelectedClipInList()" in body
+    assert "focusGradeControls()" in body
+    assert body.index("selectedID = id") < body.index("focusGradeControls()")
+    assert "processLockedClips" not in body
+    assert "presentDeliverSheet" not in body
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in body, token
+    deliver = _read(DELIVER)
+    assert 'Button("去看这条")' in deliver
+    assert "focusLockedClipFromWriteSheet(clipID)" in deliver
+    assert "if willWrite && !current" in deliver
+    line = deliver.split("private func clipLine")[1].split("private func accentHeight")[0]
+    assert line.index("if willWrite && !current") < line.index('Button("去看这条")')
+    assert line.index('Button("去看这条")') < line.index("if !willWrite")
+    assert "focusLockedClipFromWriteSheet(clipID)" in line
+    skipped = deliver.split('Text("会跳过")')[1].split("private func revealCurrentClip")[0]
+    assert "去看这条" not in skipped
+    assert "去选成对 IDT" in skipped
+    plan = _read(PLAN)
+    assert "可以点「去看这条」" in plan
+    assert "当前这条没有这一下" in plan
+    assert "会跳过的一条没有这一下" in plan
+    assert "不改数字" in plan
+    readme = _read(ROOT / "README.md")
+    trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
+    assert "去看这条" in trial
+    assert "当前这条没有这一下" in trial
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial
