@@ -932,6 +932,9 @@ struct SplitPreview: View {
             image: session.preview.compareBeforeImage,
             picking: false
         )
+        .overlay {
+            paneGap(image: session.preview.compareBeforeImage, waitingOnPair: false)
+        }
     }
 
     private var sourcePane: some View {
@@ -942,6 +945,9 @@ struct SplitPreview: View {
             zoom: shownZoom,
             panBus: panBus
         )
+        .overlay {
+            paneGap(image: session.preview.sourceImage, waitingOnPair: false)
+        }
     }
 
     private var gradePaneTitle: String {
@@ -969,6 +975,36 @@ struct SplitPreview: View {
                 session.failClosedHDRPreviewLayer()
             }
         )
+        .overlay {
+            paneGap(
+                image: session.preview.odtImage,
+                waitingOnPair: session.selectedClip?.isPending == true
+            )
+        }
+    }
+
+    /// Black pane only. A frame that is already up stays uncovered.
+    /// Write and a clip still waiting on a paired IDT keep their own lines.
+    @ViewBuilder
+    private func paneGap(image: CGImage?, waitingOnPair: Bool) -> some View {
+        let note: String? = session.isExporting ? nil : SessionModel.monitorPaneGapNote(
+            imageMissing: image == nil,
+            isWorking: session.preview.isWorking,
+            status: session.preview.status,
+            waitingOnPair: waitingOnPair
+        )
+        if let note {
+            Text(note)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .allowsHitTesting(false)
+                .help("这一格还没画面。正在解码，或这一帧解不出来。不改这一套调色，不参与写出。")
+        }
     }
 
     /// Rec.709 or HDR host. Grey-card hits only the pane that asks for them.

@@ -522,8 +522,16 @@ final class SessionModel: ObservableObject {
     private let writeCancel = WriteCancelFlag()
     private var lastProgressUptime: TimeInterval = 0
 
+    /// Preview frames publish on `preview`, not on this model. Forward them
+    /// or the monitor stays on the last session change and a finished frame
+    /// never appears. Does not change the grade or the write.
+    private var previewChangeForward: AnyCancellable?
+
     init() {
         graph.odt = settings.defaultPreviewODT
+        previewChangeForward = preview.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
     }
 
     deinit {
@@ -646,6 +654,24 @@ final class SessionModel: ObservableObject {
         previewShowsGradeBefore.toggle()
         preview.invalidateWBODT()
         refreshPreview()
+    }
+
+    /// Why one monitor pane is still black. A picture that is up gets nothing.
+    /// The grade pane of a clip that still needs a paired IDT stays quiet:
+    /// that next step is already on the monitor. Does not change the grade
+    /// or the write, and does not invent a frame rate.
+    static func monitorPaneGapNote(
+        imageMissing: Bool,
+        isWorking: Bool,
+        status: String,
+        waitingOnPair: Bool
+    ) -> String? {
+        guard imageMissing, !waitingOnPair else { return nil }
+        if isWorking { return "正在解码预览…" }
+        if status == "解不出预览帧" || status == "解码失败" {
+            return status
+        }
+        return nil
     }
 
     func refreshPreview() {

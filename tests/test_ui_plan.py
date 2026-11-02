@@ -1592,6 +1592,43 @@ def test_remove_from_list_leaves_the_file_and_the_shared_grade():
         assert token not in plan
 
 
+def test_finished_preview_reaches_the_monitor_without_another_click():
+    """A decoded frame publishes on the preview engine. The window has to hear it."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    init_body = clip.split("init() {")[1].split("deinit {")[0]
+    assert "preview.objectWillChange" in init_body
+    assert "objectWillChange.send()" in init_body
+    assert "setExposureStops" not in init_body
+    assert "setIDT" not in init_body
+    note = clip.split("static func monitorPaneGapNote(")[1].split("func refreshPreview()")[0]
+    assert 'return "正在解码预览…"' in note
+    assert 'status == "解不出预览帧"' in note
+    assert 'status == "解码失败"' in note
+    assert "waitingOnPair" in note
+    assert "imageMissing" in note
+    assert "5600" not in note
+    assert "6504" not in note
+    assert "setExposureStops" not in note
+    assert "setIDT" not in note
+    assert "setPreviewFrame" not in note
+    content = _read(CONTENT)
+    preview = content.split("struct SplitPreview")[1].split("struct PreviewScrubBar")[0]
+    assert "monitorPaneGapNote" in preview
+    assert "session.isExporting ? nil" in preview
+    assert "waitingOnPair: session.selectedClip?.isPending == true" in preview
+    assert "waitingOnPair: false" in preview
+    assert "sourceImage" in preview
+    assert "compareBeforeImage" in preview
+    assert "odtImage" in preview
+    plan = _read(PLAN)
+    assert "正在解码预览…" in plan
+    assert "解不出预览帧" in plan
+    assert "解码失败" in plan
+    assert "不用再点一下才出现" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
+
+
 def test_compare_layout_shows_grade_before_beside_the_shared_set():
     """对照 is two preview panes. The left drops exposure and WB. Write keeps the set."""
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
