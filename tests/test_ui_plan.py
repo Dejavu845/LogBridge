@@ -2740,3 +2740,117 @@ def test_skipped_write_row_returns_to_the_paired_idt_without_writing():
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial
+
+
+def _following_pair_apply(rows, start):
+    """Same walk as SessionModel.followingPairApply. Does not wrap."""
+    ids = [row[0] for row in rows]
+    if start not in ids:
+        return [], None
+    index = ids.index(start) + 1
+    lock = []
+    while index < len(rows):
+        _, pending, lists = rows[index]
+        if not pending:
+            index += 1
+            continue
+        if lists:
+            lock.append(rows[index][0])
+            index += 1
+            continue
+        if not lock:
+            return [], None
+        return lock, rows[index][0]
+    if not lock:
+        return [], None
+    return lock, lock[-1]
+
+
+def test_following_pending_clips_take_the_pair_until_one_lacks_it():
+    """The current pair is written forward while each clip already lists it.
+
+    A clip whose list lacks the pair stops the run. Earlier pending clips stay pending.
+    Exposure and white balance stay put.
+    """
+    rows = [
+        ("a", False, True),
+        ("b", True, True),
+        ("c", False, True),
+        ("d", True, True),
+        ("e", True, False),
+        ("f", True, True),
+    ]
+    assert _following_pair_apply(rows, "a") == (["b", "d"], "e")
+    assert _following_pair_apply(rows, "d") == ([], None)
+    assert _following_pair_apply(
+        [("a", True, True), ("b", False, True), ("c", True, True)],
+        "b",
+    ) == (["c"], "c")
+    assert _following_pair_apply(
+        [("a", True, True), ("b", False, True)],
+        "b",
+    ) == ([], None)
+    assert _following_pair_apply([("a", False, True), ("b", True, True)], "a") == (["b"], "b")
+    assert _following_pair_apply([], "a") == ([], None)
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func followingPairApply(")[1].split("private func currentFollowingPairApply")[0]
+    assert "startIndex + 1" in fn
+    assert "if !row.pending" in fn
+    assert "if row.listsPair" in fn
+    assert "if lockIDs.isEmpty" in fn
+    assert "landOn: row.id" in fn
+    assert "landOn: last" in fn
+    assert "dropFirst" not in fn
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in fn, token
+    body = clip.split("func applyLockedPairToFollowingPending()")[1].split("private func currentSharedGradeSnapshot")[0]
+    assert "canApplyLockedPairToFollowingPending" in body
+    assert "assignLockedPair(id, idt)" in body
+    assert "selectedID = land" in body
+    assert "noteSelectionForSharedGrade(landed)" in body
+    assert "revealSelectedClipInList()" in body
+    assert "refreshPreview()" in body
+    assert "inspectorScrollAfterLock" in body
+    assert "keepingFollowingPairNote = true" in body
+    assert "已把这一对写到后面" in body
+    assert "停在这里，不替它选。" in body
+    assert "停在最后这一条看预览。" in body
+    assert "setIDT(" not in body
+    for token in ("setExposureStops", "setWBParams", "setODT", "setPreviewFrame", "5600", "6504"):
+        assert token not in body, token
+    gate = clip.split("var canApplyLockedPairToFollowingPending")[1].split("var followingPairApplyBlockedNote")[0]
+    for name in (
+        "isWritingDeliverables",
+        "showSettings",
+        "showImporter",
+        "showDeliverSheet",
+        "openingExportFolder",
+    ):
+        assert name in gate, name
+    assert "currentFollowingPairApply().lockIDs.isEmpty" in gate
+    note = clip.split("var followingPairApplyBlockedNote")[1].split("func applyLockedPairToFollowingPending")[0]
+    assert "后面没有待选。这一对不往回写。" in note
+    assert "applyPairToNextPendingNote == nil" in note
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    assert 'Button("这一对给后面连续的待选")' in inspector
+    assert "applyLockedPairToFollowingPending()" in inspector
+    assert "canApplyLockedPairToFollowingPending" in inspector
+    assert "followingPairApplyBlockedNote" in inspector
+    assert "followingPairApplyNote" in inspector
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('Button("这一对给后面连续的待选")')[1].split("Divider()")[0]
+    assert "applyLockedPairToFollowingPending()" in menu
+    assert "canApplyLockedPairToFollowingPending" in menu
+    assert 'keyboardShortcut("]", modifiers: [.command, .control])' in menu
+    plan = _read(PLAN)
+    assert "这一对给后面连续的待选" in plan
+    assert "不往回写" in plan
+    assert "⌃⌘]" in plan
+    assert "后面没有待选。这一对不往回写。" in plan
+    readme = _read(ROOT / "README.md")
+    trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
+    assert "这一对给后面连续的待选" in trial
+    assert "不往回写" in trial
+    for token in BANNED_CONTACT:
+        assert token not in plan
+        assert token not in trial

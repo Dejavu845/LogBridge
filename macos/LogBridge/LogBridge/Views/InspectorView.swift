@@ -63,6 +63,12 @@ struct PairedIDTBar: View {
                         .controlSize(.regular)
                         .disabled(!session.canApplyLockedPairToNextPending)
                         .help("把当前这一对写到下一条还没锁定的素材上，而且这一对已经在它的成对列表里。然后停在那一条看预览。不改曝光和白平衡。下一条的列表里没有这一对时不起作用，也不跳去更后面的一条。⇧⌘] 和菜单「调色」是同一套。")
+                        Button("这一对给后面连续的待选") {
+                            session.applyLockedPairToFollowingPending()
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canApplyLockedPairToFollowingPending)
+                        .help("从下一条起，自己的成对列表里已有这一对就写上，并继续。已经锁定的跳过。碰到没有这一对的就停在那一条，不替它选，也不再往后。前面的待选不往回写。不改曝光和白平衡。⌃⌘] 和菜单「调色」是同一套。")
                     }
                     if let note = session.applyPairToNextPendingNote {
                         Text(note)
@@ -70,6 +76,18 @@ struct PairedIDTBar: View {
                             .foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    if let note = session.followingPairApplyBlockedNote {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if !session.followingPairApplyNote.isEmpty {
+                    Text(session.followingPairApplyNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
                 Text("先点一条素材。读不到元数据就在这里选成对 IDT，不猜。")

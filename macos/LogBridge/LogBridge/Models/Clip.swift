@@ -440,7 +440,13 @@ final class SessionModel: ObservableObject {
     /// Bumps after 「显示这条」 puts the selected row back. The list scrolls to it.
     /// Does not change the selection, the grade, or the frame.
     @Published var listRevealToken = 0
-    @Published var selectedID: UUID?
+    @Published var selectedID: UUID? {
+        didSet {
+            if selectedID != oldValue, !keepingFollowingPairNote, !followingPairApplyNote.isEmpty {
+                followingPairApplyNote = ""
+            }
+        }
+    }
     /// Bumps when a loop step asks the inspector to scroll. The target is the anchor.
     /// Selection changes do not use this. Does not change the grade or the frame.
     @Published var inspectorScrollToken = 0
@@ -463,6 +469,10 @@ final class SessionModel: ObservableObject {
     @Published var typedCCTNote: String = ""
     /// Shown under the typed green–magenta field. Empty after a value is accepted.
     @Published var typedTintNote: String = ""
+    /// After 「这一对给后面连续的待选」. Cleared when the selection moves another way.
+    @Published var followingPairApplyNote: String = ""
+    /// Selection changes inside that action must keep the note.
+    private var keepingFollowingPairNote = false
     @Published var pickingNeutral: Bool = false {
         didSet {
             if pickingNeutral {
@@ -2523,15 +2533,7 @@ final class SessionModel: ObservableObject {
     }
 
     func setIDT(_ id: UUID, _ idt: IDT) {
-        guard let idx = clips.firstIndex(where: { $0.id == id }) else { return }
-        closeSharedGradeStroke()
-        clips[idx].idt = idt
-        clips[idx].detectedCurve = idt.curve
-        clips[idx].detectedGamut = idt.gamut
-        clips[idx].detectionSource = .user
-        clips[idx].needsUserPicker = false
-        clips[idx].detectionNote = "用户选择成对 IDT"
-        preview.invalidateIDT(clipID: id)
+        guard assignLockedPair(id, idt) else { return }
         // Stay on this clip so the preview shows the pair just chosen.
         // 下一条待选 is explicit. Mid-write does not move selection. Does not lock the next IDT.
         refreshPreview()
@@ -2548,6 +2550,26 @@ final class SessionModel: ObservableObject {
            ) {
             requestInspectorScroll(anchor)
         }
+    }
+
+    /// Writes this pair onto one clip. Does not move the selection or the frame,
+    /// and does not refresh the monitor. A run of clips calls this, then refreshes once.
+    /// Does not change exposure or white balance.
+    @discardableResult
+    private func assignLockedPair(_ id: UUID, _ idt: IDT) -> Bool {
+        guard let idx = clips.firstIndex(where: { $0.id == id }) else { return false }
+        closeSharedGradeStroke()
+        clips[idx].idt = idt
+        clips[idx].detectedCurve = idt.curve
+        clips[idx].detectedGamut = idt.gamut
+        clips[idx].detectionSource = .user
+        clips[idx].needsUserPicker = false
+        clips[idx].detectionNote = "用户选择成对 IDT"
+        preview.invalidateIDT(clipID: id)
+        if !keepingFollowingPairNote, !followingPairApplyNote.isEmpty {
+            followingPairApplyNote = ""
+        }
+        return true
     }
 
     /// After locking the selected pending clip, select the next pending/unlocked
@@ -2669,6 +2691,141 @@ final class SessionModel: ObservableObject {
         selectedID = next.id
         noteSelectionForSharedGrade(next)
         setIDT(next.id, idt)
+    }
+
+    struct FollowingPairRow {
+        var id: UUID
+        var pending: Bool
+        var listsPair: Bool
+    }
+
+    struct FollowingPairApplyPlan {
+        var lockIDs: [UUID]
+        var landOn: UUID?
+    }
+
+    /// Clips after this one, in list order. Already-locked rows are skipped.
+    /// A pending row is included only while its own list contains this pair.
+    /// The first pending row that does not stops the run. Does not wrap.
+    /// An empty lock list means do not move. Does not guess a pair.
+    static func followingPairApply(rows: [FollowingPairRow], after start: UUID) -> FollowingPairApplyPlan {
+        guard let startIndex = rows.firstIndex(where: { $0.id == start }) else {
+            return FollowingPairApplyPlan(lockIDs: [], landOn: nil)
+        }
+        var lockIDs: [UUID] = []
+        var index = startIndex + 1
+        while index < rows.count {
+            let row = rows[index]
+            if !row.pending {
+                index += 1
+                continue
+            }
+            if row.listsPair {
+                lockIDs.append(row.id)
+                index += 1
+                continue
+            }
+            if lockIDs.isEmpty {
+                return FollowingPairApplyPlan(lockIDs: [], landOn: nil)
+            }
+            return FollowingPairApplyPlan(lockIDs: lockIDs, landOn: row.id)
+        }
+        guard let last = lockIDs.last else {
+            return FollowingPairApplyPlan(lockIDs: [], landOn: nil)
+        }
+        return FollowingPairApplyPlan(lockIDs: lockIDs, landOn: last)
+    }
+
+    /// The plan for the selected clip's locked pair. Empty when it cannot run.
+    private func currentFollowingPairApply() -> FollowingPairApplyPlan {
+        guard let clip = selectedClip,
+              clip.hasLockedPair,
+              let idt = clip.idt,
+              !idt.isStub
+        else {
+            return FollowingPairApplyPlan(lockIDs: [], landOn: nil)
+        }
+        let rows = clips.map { item in
+            FollowingPairRow(
+                id: item.id,
+                pending: !item.hasLockedPair,
+                listsPair: item.pickerPairs.contains(idt)
+            )
+        }
+        return Self.followingPairApply(rows: rows, after: clip.id)
+    }
+
+    /// Same gates as writing the pair onto the next pending clip.
+    /// Enabled only when at least one later pending clip already lists this pair,
+    /// with no pending clip in between whose list lacks it.
+    var canApplyLockedPairToFollowingPending: Bool {
+        guard !isWritingDeliverables,
+              !showSettings,
+              !showImporter,
+              !showDeliverSheet,
+              !openingExportFolder
+        else { return false }
+        return !currentFollowingPairApply().lockIDs.isEmpty
+    }
+
+    /// Why the forward run is grey while the single next-clip action may still work.
+    /// Nil when the next pending clip itself lacks the pair: that note already says so.
+    /// Does not guess a pair and does not wrap backward.
+    var followingPairApplyBlockedNote: String? {
+        guard !isWritingDeliverables,
+              !showSettings,
+              !showImporter,
+              !showDeliverSheet,
+              !openingExportFolder,
+              selectedClip?.hasLockedPair == true,
+              pendingClipCount > 0,
+              !canApplyLockedPairToFollowingPending
+        else { return nil }
+        guard applyPairToNextPendingNote == nil else { return nil }
+        return "后面没有待选。这一对不往回写。"
+    }
+
+    /// Write this pair onto each later pending clip whose own list contains it,
+    /// until one does not. Stay on the last clip written, or on the clip that stopped
+    /// the run. Does not wrap. Does not change exposure or white balance.
+    /// Does not start a write. Playback stops. The landed clip's preview starts over.
+    func applyLockedPairToFollowingPending() {
+        guard canApplyLockedPairToFollowingPending,
+              let clip = selectedClip,
+              let idt = clip.idt,
+              !idt.isStub
+        else { return }
+        let plan = currentFollowingPairApply()
+        guard !plan.lockIDs.isEmpty, let land = plan.landOn else { return }
+        keepingFollowingPairNote = true
+        defer { keepingFollowingPairNote = false }
+        stopPreviewPlayback()
+        for id in plan.lockIDs {
+            _ = assignLockedPair(id, idt)
+        }
+        selectedID = land
+        if let landed = clips.first(where: { $0.id == land }) {
+            noteSelectionForSharedGrade(landed)
+        }
+        revealSelectedClipInList()
+        refreshPreview()
+        if clips.first(where: { $0.id == land })?.hasLockedPair == true,
+           let anchor = Self.inspectorScrollAfterLock(
+            pendingRemain: pendingClipCount > 0,
+            blocked: isWritingDeliverables
+                || openingExportFolder
+                || showSettings
+                || showImporter
+                || showDeliverSheet
+           ) {
+            requestInspectorScroll(anchor)
+        }
+        let count = plan.lockIDs.count
+        if clips.first(where: { $0.id == land })?.hasLockedPair == true {
+            followingPairApplyNote = "已把这一对写到后面 \(count) 条。停在最后这一条看预览。"
+        } else {
+            followingPairApplyNote = "已把这一对写到后面 \(count) 条。这一条的列表里没有这一对，停在这里，不替它选。"
+        }
     }
 
     private func currentSharedGradeSnapshot() -> SharedGradeSnapshot {

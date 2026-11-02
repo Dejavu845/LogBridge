@@ -150,6 +150,12 @@ private struct LogBridgeCommands: Commands {
             }
             .keyboardShortcut("]", modifiers: [.command, .shift])
             .disabled(sessionFocus?.session?.canApplyLockedPairToNextPending != true)
+            Button("这一对给后面连续的待选") {
+                sessionFocus?.session?.applyLockedPairToFollowingPending()
+            }
+            .keyboardShortcut("]", modifiers: [.command, .control])
+            .disabled(sessionFocus?.session?.canApplyLockedPairToFollowingPending != true)
+            .help("从下一条起，自己的列表里已有这一对就写上，并继续。碰到没有这一对的就停在那一条，不替它选，也不再往后。不往回写。不改曝光和白平衡。⌃⌘] 是同一套。")
             Divider()
             Button("锁定第 1 对") {
                 sessionFocus?.session?.lockShortListPair(at: 1)
