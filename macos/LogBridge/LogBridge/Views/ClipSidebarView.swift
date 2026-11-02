@@ -48,7 +48,7 @@ final class ClipPosterCache: ObservableObject {
         order.removeAll { $0 == id }
     }
 
-    private func finish(id: UUID, outcome: Result<CGImage, String>) {
+    private func finish(id: UUID, outcome: Result<CGImage, PosterDecodeFailure>) {
         inflight.remove(id)
         guard alive.contains(id) else { return }
         switch outcome {
@@ -59,9 +59,9 @@ final class ClipPosterCache: ObservableObject {
             order.removeAll { $0 == id }
             order.append(id)
             evictIfNeeded()
-        case .failure(let note):
+        case .failure(let failure):
             var next = failures
-            next[id] = note
+            next[id] = failure.note
             failures = next
         }
     }
@@ -78,20 +78,25 @@ final class ClipPosterCache: ObservableObject {
 
     /// Same first-frame decode as the source pane. frameIndex stays 0, so a
     /// missing frame rate is not invented and the picture does not follow the scrub.
-    private static func decodeFirstFrame(url: URL) -> Result<CGImage, String> {
+    private static func decodeFirstFrame(url: URL) -> Result<CGImage, PosterDecodeFailure> {
         do {
             guard let image = try PreviewEngine.decodeDownscaled(
                 url: url,
                 maxLongEdge: longEdge,
                 frameIndex: 0
             ) else {
-                return .failure("解不出预览帧")
+                return .failure(PosterDecodeFailure(note: "解不出预览帧"))
             }
             return .success(image)
         } catch {
-            return .failure(PreviewEngine.userFacingFailureNote(error))
+            return .failure(PosterDecodeFailure(note: PreviewEngine.userFacingFailureNote(error)))
         }
     }
+}
+
+/// Why a list picture did not decode. `Result` needs an `Error`, not a bare string.
+private struct PosterDecodeFailure: Error {
+    let note: String
 }
 
 /// Small source picture. The corner says 源 so it is not read as the grade.
@@ -163,6 +168,7 @@ struct ClipSidebarView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("素材")
                     .font(.title3.weight(.semibold))
+                    .help("右键一条，或用菜单「文件」里的「从列表拿掉（不删文件）」，只从这一窗拿掉。源文件留在原处，已经写出的代理也不删。Delete 拿掉当前这条。不改这一套调色，也不改成对 IDT。")
                 Text(session.clips.isEmpty ? "没有素材" : "\(session.clips.count) 条")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -255,6 +261,15 @@ struct ClipSidebarView: View {
                             .onTapGesture {
                                 session.selectedID = clip.id
                                 session.refreshPreview()
+                            }
+                            .contextMenu {
+                                Button("从列表拿掉（不删文件）") {
+                                    session.removeSelectedClipFromSession(
+                                        clipID: clip.id,
+                                        respectTextInput: false
+                                    )
+                                }
+                                .disabled(!session.canRemoveClipsFromSession)
                             }
                         }
                     }

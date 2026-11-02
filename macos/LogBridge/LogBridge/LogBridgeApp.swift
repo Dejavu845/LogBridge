@@ -56,6 +56,10 @@ private struct LogBridgeCommands: Commands {
             }
             .keyboardShortcut("o")
             .disabled(sessionFocus?.session?.openingExportFolder == true)
+            Button("从列表拿掉（不删文件）") {
+                sessionFocus?.session?.removeSelectedClipFromSession(respectTextInput: false)
+            }
+            .disabled(sessionFocus?.session?.canRemoveSelectedClip != true)
         }
         CommandGroup(replacing: .appSettings) {
             Button("设置…") {

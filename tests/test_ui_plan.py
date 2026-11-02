@@ -1550,3 +1550,43 @@ def test_clip_list_search_narrows_rows_without_moving_the_grade():
     assert "不写整条路径" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_remove_from_list_leaves_the_file_and_the_shared_grade():
+    """Taking a row off the bin does not touch the source file or the grade."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("var canRemoveClipsFromSession")[1].split("var canRemoveSelectedClip")[0]
+    assert "isWritingDeliverables" in gate
+    assert "showSettings" in gate
+    assert "showImporter" in gate
+    assert "showDeliverSheet" in gate
+    assert "openingExportFolder" in gate
+    assert "FileManager" not in gate
+    remove = clip.split("func removeSelectedClipFromSession")[1].split("static func isArrowConsumedByTextInput")[0]
+    assert "canRemoveClipsFromSession" in remove
+    assert "respectTextInput" in remove
+    assert "isArrowConsumedByTextInput()" in remove
+    assert "removedWasSelected" in remove
+    assert "stopPreviewPlayback()" in remove
+    assert "preview.evict(clipID: id)" in remove
+    assert "posters.drop(id: id)" in remove
+    assert "noteSelectionForSharedGrade" in remove
+    for token in ("setExposureStops", "setWBParams", "setIDT", "setPreviewFrame", "setODT", "5600", "6504", "FileManager"):
+        assert token not in remove, token
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    assert 'Button("从列表拿掉（不删文件）")' in sidebar
+    assert "canRemoveClipsFromSession" in sidebar
+    assert "respectTextInput: false" in sidebar
+    assert "clipID: clip.id" in sidebar
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('Button("添加…")')[1].split('Button("设置…")')[0]
+    assert 'Button("从列表拿掉（不删文件）")' in menu
+    assert "removeSelectedClipFromSession(respectTextInput: false)" in menu
+    assert "canRemoveSelectedClip" in menu
+    plan = _read(PLAN)
+    assert "从列表拿掉（不删文件）" in plan
+    assert "源文件留在原处" in plan
+    assert "已经写出的代理也不删" in plan
+    assert "没有确认面板" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

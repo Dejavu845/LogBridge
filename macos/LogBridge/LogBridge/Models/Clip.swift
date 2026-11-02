@@ -2112,7 +2112,8 @@ final class SessionModel: ObservableObject {
 
     /// `+0.50`, `0.5`, or `0.5档`. Rounded to 0.01. Outside −8…+8 is refused.
     /// Does not invent a stop, and does not turn exposure on.
-    static func parseTypedExposureStops(_ text: String) -> TypedGradeField {
+    /// File-private: the result type stays private to this file.
+    fileprivate static func parseTypedExposureStops(_ text: String) -> TypedGradeField {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return .empty }
         var body = trimmed
@@ -2161,7 +2162,8 @@ final class SessionModel: ObservableObject {
     }
 
     /// `4500` or `4500 K`, nearest integer. Outside 2000…10000 is refused.
-    static func parseTypedWBCCT(_ text: String) -> TypedGradeField {
+    /// File-private: the result type stays private to this file.
+    fileprivate static func parseTypedWBCCT(_ text: String) -> TypedGradeField {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return .empty }
         var body = trimmed
@@ -2207,7 +2209,8 @@ final class SessionModel: ObservableObject {
 
     /// `+1.5`, `1.5`, or `1.5绿品`. Rounded to 0.1. Outside −10…+10 is refused.
     /// Does not invent a tint, and does not turn white balance on.
-    static func parseTypedWBTint(_ text: String) -> TypedGradeField {
+    /// File-private: the result type stays private to this file.
+    fileprivate static func parseTypedWBTint(_ text: String) -> TypedGradeField {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return .empty }
         var body = trimmed
@@ -2349,28 +2352,49 @@ final class SessionModel: ObservableObject {
         posters.request(id: id, url: url)
     }
 
-    /// Delete / Backspace: drop the selected clip from the SESSION only.
-    /// Does not delete, trash, or move the source file. Does not delete an
-    /// already-written `_proxy` folder — leave it on disk; just drop the row.
-    /// After remove, select next, else previous. Preview chrome follows #33
-    /// (`processSkipReason` / `exportChip` on the new selected clip).
-    /// #40: evict the removed clip's preview cache.
-    /// Mid-write (#32 / #41): ignore — do not change selection, do not cancel
-    /// (Escape cancels). Text / numeric / search fields keep Delete.
-    /// No confirm sheet. No extra button.
+    /// List edits are closed while writing, while a sheet is up, or while the
+    /// folder panel is on its way. The source file is never touched.
+    var canRemoveClipsFromSession: Bool {
+        !clips.isEmpty
+            && !isWritingDeliverables
+            && !showSettings
+            && !showImporter
+            && !showDeliverSheet
+            && !openingExportFolder
+    }
+
+    /// File menu. Needs a selected row. Same gate as taking any row off the list.
+    var canRemoveSelectedClip: Bool {
+        canRemoveClipsFromSession && selectedID != nil
+    }
+
+    /// Delete / Backspace, the File menu, or the row menu: drop a clip from
+    /// the SESSION only. Does not trash or move the source file. Does not
+    /// remove an already-written `_proxy` — leave it on disk; just drop the row.
+    /// `clipID` nil drops the selected row. Another row leaves the selection.
+    /// Dropping the selected row selects next, else previous.
+    /// #40: evict that clip's preview cache. The list picture goes with the row.
+    /// Mid-write: ignore — do not change selection, do not cancel
+    /// (Escape cancels). Text / numeric / search fields keep Delete
+    /// unless the menu set `respectTextInput` to false.
+    /// No confirm sheet. No extra button in the row chrome.
+    /// Does not edit the shared grade or any paired IDT.
     @discardableResult
-    func removeSelectedClipFromSession() -> Bool {
-        guard !isWritingDeliverables else { return false }
-        guard !showSettings, !showImporter, !showDeliverSheet else { return false }
-        guard !Self.isArrowConsumedByTextInput() else { return false }
-        guard let id = selectedID, let idx = clips.firstIndex(where: { $0.id == id }) else {
+    func removeSelectedClipFromSession(clipID: UUID? = nil, respectTextInput: Bool = true) -> Bool {
+        if respectTextInput, Self.isArrowConsumedByTextInput() { return false }
+        guard canRemoveClipsFromSession else { return false }
+        guard let id = clipID ?? selectedID, let idx = clips.firstIndex(where: { $0.id == id }) else {
             return false
         }
+        let removedWasSelected = selectedID == id
         // Session list only. Source file and any already-written `_proxy` stay.
-        stopPreviewPlayback()
+        if removedWasSelected {
+            stopPreviewPlayback()
+        }
         clips.remove(at: idx)
         preview.evict(clipID: id)
         posters.drop(id: id)
+        guard removedWasSelected else { return true }
         if clips.indices.contains(idx) {
             selectedID = clips[idx].id
             noteSelectionForSharedGrade(clips[idx])
