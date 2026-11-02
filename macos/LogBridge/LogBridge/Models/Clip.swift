@@ -276,6 +276,26 @@ struct Clip: Identifiable, Hashable {
         guard frames >= 1 else { return nil }
         return frames
     }
+
+    /// Next frame while the preview is playing. Nil means stop.
+    /// A loop returns to the first frame only when this range has more than one frame.
+    /// Does not invent a rate, and does not move exposure or white balance.
+    static func previewPlayNextFrame(index: Int, last: Int, loops: Bool) -> Int? {
+        guard last >= 0, index >= 0, index <= last else { return nil }
+        if index < last { return index + 1 }
+        if loops, last > 0 { return 0 }
+        return nil
+    }
+
+    /// Frame shown when playback starts. Nil means it cannot start.
+    /// Loop at the last frame begins again at the first. Otherwise stay here.
+    /// The last frame without a loop does not start. Does not invent a rate.
+    static func previewPlayStartFrame(index: Int, last: Int, loops: Bool) -> Int? {
+        guard last >= 0, index >= 0, index <= last else { return nil }
+        if index < last { return index }
+        if loops, last > 0 { return 0 }
+        return nil
+    }
 }
 
 enum DetectionSource: String, Hashable {
@@ -435,8 +455,11 @@ final class SessionModel: ObservableObject {
     /// Metadata fps captured with the scrub range. Nil when there is nothing to play.
     /// Playback uses this. It does not probe again, and it does not invent a rate.
     @Published var previewPlaybackFPS: Double? = nil
-    /// Preview transport. Picture only. Stops at the last frame. Not a write.
+    /// Preview transport. Picture only. Stops at the last frame unless loop is on.
     @Published var isPreviewPlaying = false
+    /// Playback wraps to the first frame. Off keeps stop-at-end. Not an in/out.
+    /// Switching clips keeps this. It does not change the shared grade or the write.
+    @Published var previewLoops = false
     private var previewPlayTimer: Timer?
     private var previewScrubClipID: UUID?
 
@@ -720,11 +743,17 @@ final class SessionModel: ObservableObject {
     }
 
     /// Play only when this clip already has a scrub range and a metadata fps.
-    /// Stills, missing rate, the last frame, grey-card pick, sheets, and write stay stopped.
+    /// Stills, missing rate, grey-card pick, sheets, and write stay stopped.
+    /// The last frame stays stopped unless loop is on, and a one-frame range never loops.
     var canPlayPreview: Bool {
-        guard canStepPreviewForward, !pickingNeutral else { return false }
+        guard !pickingNeutral else { return false }
         guard let fps = previewPlaybackFPS, fps.isFinite, fps > 0 else { return false }
-        return true
+        guard let last = previewScrubLastFrame, last >= 0 else { return false }
+        if previewLoops {
+            guard canStepPreviewFrame, last > 0 else { return false }
+            return true
+        }
+        return canStepPreviewForward
     }
 
     /// Space and the scrub button. Pause is allowed until a sheet or a write takes the window.
@@ -736,7 +765,7 @@ final class SessionModel: ObservableObject {
     }
 
     /// Start or stop preview playback. Does not move exposure, white balance, or the write.
-    /// At the last frame this does not jump back to the first frame.
+    /// At the last frame this jumps back only when loop is on.
     @discardableResult
     func togglePreviewPlayback() -> Bool {
         if isPreviewPlaying {
@@ -746,12 +775,42 @@ final class SessionModel: ObservableObject {
         return startPreviewPlayback()
     }
 
+    /// The loop control is there only for a real rate and more than one frame.
+    var showsPreviewLoop: Bool {
+        guard let last = previewScrubLastFrame, last > 0 else { return false }
+        guard let fps = previewPlaybackFPS, fps.isFinite, fps > 0 else { return false }
+        return true
+    }
+
+    /// Same sheet and write gates as a frame step. Grey-card sampling stays put.
+    var canTogglePreviewLoop: Bool {
+        showsPreviewLoop && canStepPreviewFrame && !pickingNeutral
+    }
+
+    /// Turn loop on or off. Does not move the frame, the shared grade, or the write.
+    /// Playback keeps going; the next end either wraps or stops.
+    @discardableResult
+    func togglePreviewLoop() -> Bool {
+        guard canTogglePreviewLoop else { return false }
+        previewLoops.toggle()
+        return true
+    }
+
     /// One frame per tick, at the metadata rate. Waits out a preview that is still drawing.
     /// Does not skip ahead, and does not invent a frame rate.
+    /// Loop at the last frame begins at the first before the timer starts.
     @discardableResult
     func startPreviewPlayback() -> Bool {
-        guard canPlayPreview, let fps = previewPlaybackFPS else { return false }
+        guard canPlayPreview, let fps = previewPlaybackFPS, let last = previewScrubLastFrame else { return false }
+        guard let start = Clip.previewPlayStartFrame(
+            index: previewFrameIndex,
+            last: last,
+            loops: previewLoops
+        ) else { return false }
         stopPreviewPlayback()
+        if start != previewFrameIndex {
+            setPreviewFrame(start)
+        }
         isPreviewPlaying = true
         // Cap the timer so a wild metadata value cannot spin. Still one frame each fire.
         let interval = 1.0 / min(fps, 120)
@@ -773,12 +832,20 @@ final class SessionModel: ObservableObject {
 
     private func advancePreviewPlayback() {
         guard isPreviewPlaying else { return }
-        guard canStepPreviewForward, !pickingNeutral else {
+        if preview.isWorking { return }
+        guard !pickingNeutral, let last = previewScrubLastFrame else {
             stopPreviewPlayback()
             return
         }
-        if preview.isWorking { return }
-        setPreviewFrame(previewFrameIndex + 1, keepPlaying: true)
+        guard let next = Clip.previewPlayNextFrame(
+            index: previewFrameIndex,
+            last: last,
+            loops: previewLoops
+        ) else {
+            stopPreviewPlayback()
+            return
+        }
+        setPreviewFrame(next, keepPlaying: true)
     }
 
     /// Typed clock, seconds, or 第 N 帧. Same rate as the readout. No invented rate.

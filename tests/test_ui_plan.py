@@ -929,6 +929,110 @@ def test_preview_playback_uses_metadata_rate_and_stops_at_the_end():
     assert "已写出代理。可再调色，或在状态栏打开 Finder" in plan
 
 
+def _preview_play_next(index: int, last: int, loops: bool) -> int | None:
+    """Mirror of Clip.previewPlayNextFrame. Nil means playback stops."""
+    if last < 0 or index < 0 or index > last:
+        return None
+    if index < last:
+        return index + 1
+    if loops and last > 0:
+        return 0
+    return None
+
+
+def _preview_play_start(index: int, last: int, loops: bool) -> int | None:
+    """Mirror of Clip.previewPlayStartFrame. Nil means playback cannot start."""
+    if last < 0 or index < 0 or index > last:
+        return None
+    if index < last:
+        return index
+    if loops and last > 0:
+        return 0
+    return None
+
+
+def test_preview_loop_wraps_to_the_first_frame_and_leaves_the_grade():
+    """Loop is optional. Off still stops at the end. Turning it on does not move the grade."""
+    assert _preview_play_next(0, 10, False) == 1
+    assert _preview_play_next(9, 10, False) == 10
+    assert _preview_play_next(10, 10, False) is None
+    assert _preview_play_next(10, 10, True) == 0
+    assert _preview_play_next(4, 10, True) == 5
+    assert _preview_play_next(0, 0, True) is None
+    assert _preview_play_next(0, 0, False) is None
+    assert _preview_play_next(-1, 10, True) is None
+    assert _preview_play_next(11, 10, True) is None
+    assert _preview_play_start(3, 10, False) == 3
+    assert _preview_play_start(10, 10, False) is None
+    assert _preview_play_start(10, 10, True) == 0
+    assert _preview_play_start(0, 10, True) == 0
+    assert _preview_play_start(0, 0, True) is None
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    nxt = clip.split("static func previewPlayNextFrame")[1].split("static func previewPlayStartFrame")[0]
+    assert "index < last" in nxt
+    assert "loops, last > 0" in nxt
+    assert "return 0" in nxt
+    assert "return nil" in nxt
+    start_fn = clip.split("static func previewPlayStartFrame")[1].split("enum DetectionSource")[0]
+    assert "index < last" in start_fn
+    assert "loops, last > 0" in start_fn
+    assert "return 0" in start_fn
+    assert "return nil" in start_fn
+    for token in ("24", "30", "5600", "6504", "setExposureStops", "setWBParams"):
+        assert token not in nxt, token
+        assert token not in start_fn, token
+    assert "previewLoops = false" in clip
+    show = clip.split("var showsPreviewLoop")[1].split("var canTogglePreviewLoop")[0]
+    assert "last > 0" in show
+    assert "previewPlaybackFPS" in show
+    gate = clip.split("var canTogglePreviewLoop")[1].split("func togglePreviewLoop")[0]
+    assert "showsPreviewLoop" in gate
+    assert "canStepPreviewFrame" in gate
+    assert "pickingNeutral" in gate
+    toggle = clip.split("func togglePreviewLoop")[1].split("func startPreviewPlayback")[0]
+    assert "previewLoops.toggle()" in toggle
+    assert "setPreviewFrame" not in toggle
+    assert "setExposureStops" not in toggle
+    assert "setWBParams" not in toggle
+    assert "touchSharedGrade" not in toggle
+    play = clip.split("var canPlayPreview")[1].split("var canTogglePreviewPlayback")[0]
+    assert "previewLoops" in play
+    assert "canStepPreviewForward" in play
+    assert "last > 0" in play
+    begin = clip.split("func startPreviewPlayback")[1].split("func stopPreviewPlayback")[0]
+    assert "previewPlayStartFrame" in begin
+    assert "loops: previewLoops" in begin
+    advance = clip.split("func advancePreviewPlayback")[1].split("var canJumpPreviewToClock")[0]
+    assert "previewPlayNextFrame" in advance
+    assert "loops: previewLoops" in advance
+    assert "keepPlaying: true" in advance
+    assert advance.index("preview.isWorking") < advance.index("setPreviewFrame")
+    content = _read(CONTENT)
+    bar = content.split("struct PreviewScrubBar")[1].split("struct WriteProgressLine")[0]
+    assert 'Button(session.previewLoops ? "循环中" : "循环")' in bar
+    assert "showsPreviewLoop" in bar
+    assert "togglePreviewLoop()" in bar
+    assert "canTogglePreviewLoop" in bar
+    assert "循环播放" in bar
+    assert "播放中" in bar
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    assert "循环播放" in menu
+    assert "关掉循环" in menu
+    assert "togglePreviewLoop()" in menu
+    assert "canTogglePreviewLoop" in menu
+    assert 'keyboardShortcut("l", modifiers: [.command, .option])' in menu
+    plan = _read(PLAN)
+    assert "循环播放" in plan
+    assert "回到第 1 帧接着播" in plan
+    assert "只有一帧" in plan
+    assert "⌥⌘L" in plan
+    assert "到最后一帧就停" in plan
+    assert "不改曝光和白平衡" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
+
+
 def test_media_fact_line_is_shared_and_does_not_invent_a_rate():
     """List, monitor, inspector, and the write sheet name the source. No 24/30 fill-in."""
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")

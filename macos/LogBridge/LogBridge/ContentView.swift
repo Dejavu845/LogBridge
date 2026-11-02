@@ -950,7 +950,15 @@ struct PreviewScrubBar: View {
                     }
                     .controlSize(.regular)
                     .disabled(!session.canTogglePreviewPlayback)
-                    .help("按这条素材自己的帧率走预览。这一帧还没画完就等它，到最后一帧就停，不绕回。空格是同一套。不改曝光和白平衡，不参与写出。读不到帧率就不能播。")
+                    .help("按这条素材自己的帧率走预览。这一帧还没画完就等它。循环关掉时到最后一帧就停，不绕回。循环打开时回到第 1 帧接着播。空格是同一套。不改曝光和白平衡，不参与写出。读不到帧率就不能播。")
+                    if session.showsPreviewLoop {
+                        Button(session.previewLoops ? "循环中" : "循环") {
+                            session.togglePreviewLoop()
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canTogglePreviewLoop)
+                        .help("打开后，播放到最后一帧回到第 1 帧接着播。关掉则到最后一帧就停，不绕回。⌥⌘L 是同一套。只有一帧、静帧或读不到帧率时没有这一下。打开或关掉不改当前帧，不改这一套曝光和白平衡，也不参与写出。")
+                    }
                     Button("回到开头") {
                         session.jumpPreviewToStart()
                     }
@@ -1068,7 +1076,9 @@ struct PreviewScrubBar: View {
                 line += " · \(clock)"
             }
         }
-        if session.isPreviewPlaying {
+        if session.previewLoops {
+            line += session.isPreviewPlaying ? " · 循环播放" : " · 循环"
+        } else if session.isPreviewPlaying {
             line += " · 播放中"
         }
         return line

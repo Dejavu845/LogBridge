@@ -159,6 +159,11 @@ private struct LogBridgeCommands: Commands {
                 sessionFocus?.session?.togglePreviewPlayback()
             }
             .disabled(sessionFocus?.session?.canTogglePreviewPlayback != true)
+            Button(sessionFocus?.session?.previewLoops == true ? "关掉循环" : "循环播放") {
+                sessionFocus?.session?.togglePreviewLoop()
+            }
+            .keyboardShortcut("l", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canTogglePreviewLoop != true)
             Divider()
             Button(sessionFocus?.session?.previewShowsGradeBefore == true ? "回到调色" : "看调色前") {
                 sessionFocus?.session?.togglePreviewGradeBefore()
