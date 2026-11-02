@@ -2,7 +2,8 @@ import SwiftUI
 
 /// 写出是独立一步，不是偏好设置，也不是保存对话框。
 /// 确认后由主窗口写出条打开系统选文件夹。本面板只收集确认。
-/// 当前这一条标出来。确认和关闭留在下面，说明长了中间自己滚。
+/// 当前这一条标出来。会跳过的一条可以去选成对 IDT，不替你选。
+/// 确认和关闭留在下面，说明长了中间自己滚。
 struct DeliverSheet: View {
     @ObservedObject var session: SessionModel
 
@@ -11,7 +12,7 @@ struct DeliverSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("写出代理")
                     .font(.title2.weight(.semibold))
-                Text("看清楚再选文件夹。未锁定的会跳过，不猜。当前这条会标出来。确认和关闭留在下面。")
+                Text("看清楚再选文件夹。未锁定的会跳过，不猜。会跳过的一条可以去选成对 IDT。当前这条会标出来。确认和关闭留在下面。")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -119,6 +120,7 @@ struct DeliverSheet: View {
                                 .font(.subheadline.weight(.semibold))
                             ForEach(session.lockedClips) { clip in
                                 clipLine(
+                                    clipID: clip.id,
                                     name: clip.filename,
                                     detail: clip.lockedPairLabel,
                                     fact: clip.mediaFactLine,
@@ -133,8 +135,13 @@ struct DeliverSheet: View {
                             Text("会跳过")
                                 .font(.subheadline.weight(.semibold))
                                 .padding(.top, session.lockedClips.isEmpty ? 0 : 4)
+                            Text("点「去选成对 IDT」关掉说明，停在那一条。不替你选，也不开始写文件。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                             ForEach(skippedClips) { clip in
                                 clipLine(
+                                    clipID: clip.id,
                                     name: clip.filename,
                                     detail: clip.processSkipReason ?? "先选择成对 IDT",
                                     fact: clip.mediaFactLine,
@@ -164,11 +171,11 @@ struct DeliverSheet: View {
         }
     }
 
-    private func clipLine(name: String, detail: String, fact: String?, output: String?, willWrite: Bool, current: Bool) -> some View {
+    private func clipLine(clipID: UUID, name: String, detail: String, fact: String?, output: String?, willWrite: Bool, current: Bool) -> some View {
         HStack(alignment: .top, spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(willWrite ? Color.accentColor : Color.yellow.opacity(0.95))
-                .frame(width: 4, height: output == nil ? (fact == nil ? 34 : 50) : (fact == nil ? 48 : 64))
+                .frame(width: 4, height: accentHeight(fact: fact, output: output, willWrite: willWrite))
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(name)
@@ -201,6 +208,14 @@ struct DeliverSheet: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+                if !willWrite {
+                    Button("去选成对 IDT") {
+                        session.focusSkippedClipFromWriteSheet(clipID)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .help("关掉写出说明，停在这一条，滚到成对 IDT。不替你选，也不开始写文件。已经是当前这条时，预览帧留着。换到另一条时，和点列表一样，预览回到那一条的开头。筛选或查找挡着就让这一条回到列表。不改这一套曝光和白平衡，也不改成对 IDT。")
+                }
             }
             Spacer(minLength: 0)
         }
@@ -210,7 +225,13 @@ struct DeliverSheet: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(current ? Color.accentColor.opacity(0.12) : Color.clear)
         )
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: willWrite ? .combine : .contain)
+    }
+
+    /// Skip rows add the button. Locked rows stay the name, the pair, and the file.
+    private func accentHeight(fact: String?, output: String?, willWrite: Bool) -> CGFloat {
+        let base: CGFloat = output == nil ? (fact == nil ? 34 : 50) : (fact == nil ? 48 : 64)
+        return willWrite ? base : base + 32
     }
 
     /// Current frame of the selected clip, only when it is the Rec.709 look

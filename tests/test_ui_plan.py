@@ -2670,3 +2670,73 @@ def test_v_toggles_split_and_grade_without_leaving_source_or_compare():
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial
+
+
+def _can_leave_write_sheet_for_skipped_clip(*, sheet_open, writing, opening_folder, has_locked_pair):
+    """Same gate as SessionModel.canLeaveWriteSheetForSkippedClip. Locked rows stay on the sheet."""
+    return bool(sheet_open and not writing and not opening_folder and not has_locked_pair)
+
+
+def test_skipped_write_row_returns_to_the_paired_idt_without_writing():
+    """A skipped row closes the write sheet and scrolls to that clip's paired list.
+
+    It does not pick a pair and does not start the write. A locked row has no button.
+    """
+    assert _can_leave_write_sheet_for_skipped_clip(
+        sheet_open=True, writing=False, opening_folder=False, has_locked_pair=False
+    ) is True
+    assert _can_leave_write_sheet_for_skipped_clip(
+        sheet_open=False, writing=False, opening_folder=False, has_locked_pair=False
+    ) is False
+    assert _can_leave_write_sheet_for_skipped_clip(
+        sheet_open=True, writing=True, opening_folder=False, has_locked_pair=False
+    ) is False
+    assert _can_leave_write_sheet_for_skipped_clip(
+        sheet_open=True, writing=False, opening_folder=True, has_locked_pair=False
+    ) is False
+    assert _can_leave_write_sheet_for_skipped_clip(
+        sheet_open=True, writing=False, opening_folder=False, has_locked_pair=True
+    ) is False
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("static func canLeaveWriteSheetForSkippedClip(")[1].split("func focusSkippedClipFromWriteSheet")[0]
+    assert "sheetOpen && !writing && !openingFolder && !hasLockedPair" in gate
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "processLockedClips", "5600", "6504"):
+        assert token not in gate, token
+    body = clip.split("func focusSkippedClipFromWriteSheet")[1].split("func openWriteSheetFromMonitorLine")[0]
+    assert "canLeaveWriteSheetForSkippedClip(" in body
+    assert "clip.hasLockedPair" in body
+    assert "deliverSheetConfirmed = false" in body
+    assert "showDeliverSheet = false" in body
+    assert body.index("deliverSheetConfirmed = false") < body.index("showDeliverSheet = false")
+    assert "stopPreviewPlayback()" in body
+    assert "selectedID = id" in body
+    assert "inspectorPairedIDTAnchor" in body
+    assert "revealSelectedClipInList()" in body
+    assert body.index("selectedID = id") < body.index("revealSelectedClipInList()")
+    assert "processLockedClips" not in body
+    assert "presentDeliverSheet" not in body
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in body, token
+    deliver = _read(DELIVER)
+    assert 'Button("去选成对 IDT")' in deliver
+    assert "focusSkippedClipFromWriteSheet(clipID)" in deliver
+    assert "不替你选，也不开始写文件" in deliver
+    skipped = deliver.split('Text("会跳过")')[1].split("private func revealCurrentClip")[0]
+    assert "去选成对 IDT" in skipped
+    locked = deliver.split("ForEach(session.lockedClips)")[1].split('Text("会跳过")')[0]
+    assert "willWrite: true" in locked
+    assert "去选成对 IDT" not in locked
+    line = deliver.split("private func clipLine")[1].split("private func accentHeight")[0]
+    assert "if !willWrite" in line
+    assert "focusSkippedClipFromWriteSheet(clipID)" in line
+    assert ".accessibilityElement(children: willWrite ? .combine : .contain)" in line
+    plan = _read(PLAN)
+    assert "会跳过的一条可以点「去选成对 IDT」" in plan
+    assert "会写出的一条没有这一下" in plan
+    assert "也不开始写文件" in plan
+    readme = _read(ROOT / "README.md")
+    trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
+    assert "去选成对 IDT" in trial
+    for token in BANNED_CONTACT:
+        assert token not in plan
+        assert token not in trial

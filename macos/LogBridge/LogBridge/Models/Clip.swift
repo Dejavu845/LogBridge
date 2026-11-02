@@ -3355,6 +3355,41 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// A skipped row on the write sheet can leave for that clip's paired list.
+    /// A locked row, a write in progress, and the folder panel stay on the sheet.
+    /// Does not pick a pair and does not start writing.
+    static func canLeaveWriteSheetForSkippedClip(
+        sheetOpen: Bool,
+        writing: Bool,
+        openingFolder: Bool,
+        hasLockedPair: Bool
+    ) -> Bool {
+        sheetOpen && !writing && !openingFolder && !hasLockedPair
+    }
+
+    /// Close the write sheet and stay on this skipped clip.
+    /// The inspector scrolls to the paired list. This does not lock a pair.
+    /// The same clip keeps its preview frame. Another clip follows the list tap:
+    /// the preview starts at that clip's first frame. A filter or query that hides
+    /// the row is widened, same as 「显示这条」. Does not start writing.
+    @discardableResult
+    func focusSkippedClipFromWriteSheet(_ id: UUID) -> Bool {
+        guard let clip = clips.first(where: { $0.id == id }) else { return false }
+        guard Self.canLeaveWriteSheetForSkippedClip(
+            sheetOpen: showDeliverSheet,
+            writing: isWritingDeliverables,
+            openingFolder: openingExportFolder,
+            hasLockedPair: clip.hasLockedPair
+        ) else { return false }
+        deliverSheetConfirmed = false
+        showDeliverSheet = false
+        stopPreviewPlayback()
+        selectedID = id
+        requestInspectorScroll(Self.inspectorPairedIDTAnchor)
+        revealSelectedClipInList()
+        return true
+    }
+
     /// The line under the monitor. Same sheet as 写出 and ⌘E.
     /// Does not open the folder panel and does not start writing.
     /// Playback stops. The frame, the pair, and this grade stay.
