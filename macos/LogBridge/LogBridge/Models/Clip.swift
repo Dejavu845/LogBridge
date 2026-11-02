@@ -483,6 +483,9 @@ final class SessionModel: ObservableObject {
     @Published var showSettings = false
     /// 写出说明。确认后才走 processLockedClips 的选文件夹。不是偏好设置。
     @Published var showDeliverSheet = false
+    /// 从写出说明点「去选成对 IDT」之后为真。检查器可以回到说明。
+    /// 说明再次打开就清掉。不选文件夹，也不开始写文件。
+    @Published var writeSheetReturnOffered = false
     /// Which sheet is on screen. Cleared only after dismiss, so the content
     /// does not flip from the write sheet to preferences while it is closing.
     @Published var activeSheet: WorkspaceSheet?
@@ -1344,6 +1347,9 @@ final class SessionModel: ObservableObject {
         if openingExportFolder { return "正在打开选文件夹" }
         if showImporter { return "正在打开添加" }
         if clips.isEmpty { return "先拖入或点添加。按回车也是添加。" }
+        if canReturnToWriteSheet {
+            return "从写出说明过来。检查器里「回到写出说明」只重新打开说明，不开始写文件。"
+        }
         if !showsProcessLockedButton { return "在右侧检查器选成对 IDT。按回车滚到这一列，不替你选。" }
         if canRevealLastExport { return "已写出代理。可再调色，或在状态栏打开 Finder" }
         if pendingClipCount > 0 {
@@ -3512,6 +3518,30 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// After 「去选成对 IDT」, the inspector can reopen the write sheet.
+    /// Absent until that leave succeeds. Opening the sheet clears the offer.
+    /// Does not pick a folder, does not start writing, and does not edit the grade.
+    static func canReturnToWriteSheet(offered: Bool, canOpenWrite: Bool) -> Bool {
+        offered && canOpenWrite
+    }
+
+    var canReturnToWriteSheet: Bool {
+        Self.canReturnToWriteSheet(
+            offered: writeSheetReturnOffered,
+            canOpenWrite: canStartWriteFromLoop
+        )
+    }
+
+    /// Reopen the write sheet after leaving it to pick a pair.
+    /// Same sheet as 写出. Does not pick a folder and does not start writing.
+    /// The pair, this grade, and the preview frame stay. Playback stops.
+    @discardableResult
+    func returnToWriteSheet() -> Bool {
+        guard canReturnToWriteSheet else { return false }
+        presentDeliverSheet()
+        return true
+    }
+
     /// A skipped row on the write sheet can leave for that clip's paired list.
     /// A locked row, a write in progress, and the folder panel stay on the sheet.
     /// Does not pick a pair and does not start writing.
@@ -3540,6 +3570,7 @@ final class SessionModel: ObservableObject {
         ) else { return false }
         deliverSheetConfirmed = false
         showDeliverSheet = false
+        writeSheetReturnOffered = true
         stopPreviewPlayback()
         selectedID = id
         requestInspectorScroll(Self.inspectorPairedIDTAnchor)
@@ -3560,6 +3591,7 @@ final class SessionModel: ObservableObject {
     /// Write sheet. Folder panel opens only after this sheet has gone.
     func presentDeliverSheet() {
         guard !isWritingDeliverables, !openingExportFolder, !showImporter else { return }
+        writeSheetReturnOffered = false
         closeSharedGradeStroke()
         stopPreviewPlayback()
         activeSheet = .deliver

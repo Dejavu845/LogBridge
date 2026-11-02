@@ -49,6 +49,19 @@ struct PairedIDTBar: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
+                if session.canReturnToWriteSheet {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("从写出说明过来。选好或先看看，再回到说明。不开始写文件。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("回到写出说明") {
+                            session.returnToWriteSheet()
+                        }
+                        .controlSize(.regular)
+                        .help("重新打开写出说明，和顶栏「写出」一样。不选文件夹，也不开始写文件。不改这一套曝光和白平衡，不改成对 IDT，也不改预览帧。播放会停。不是从说明里点「去选成对 IDT」过来时，没有这一下。说明打开后就收起。")
+                    }
+                }
                 if clip.hasLockedPair, session.pendingClipCount > 0 {
                     VStack(alignment: .leading, spacing: 8) {
                         Button("下一条待选") {

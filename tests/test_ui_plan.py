@@ -2851,6 +2851,57 @@ def test_following_pending_clips_take_the_pair_until_one_lacks_it():
     trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
     assert "这一对给后面连续的待选" in trial
     assert "不往回写" in trial
+
+
+def _can_return_to_write_sheet(*, offered, can_open_write):
+    """Same gate as SessionModel.canReturnToWriteSheet. The sheet must be openable."""
+    return bool(offered and can_open_write)
+
+
+def test_inspector_can_reopen_the_write_sheet_after_a_skipped_row():
+    """Leaving a skipped row offers a way back. Opening the sheet clears it.
+
+    The click does not pick a folder, does not start the write, and does not edit the grade.
+    """
+    assert _can_return_to_write_sheet(offered=True, can_open_write=True) is True
+    assert _can_return_to_write_sheet(offered=False, can_open_write=True) is False
+    assert _can_return_to_write_sheet(offered=True, can_open_write=False) is False
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("static func canReturnToWriteSheet(")[1].split("var canReturnToWriteSheet")[0]
+    assert "offered && canOpenWrite" in gate
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "processLockedClips", "5600", "6504"):
+        assert token not in gate, token
+    body = clip.split("func returnToWriteSheet()")[1].split("static func canLeaveWriteSheetForSkippedClip")[0]
+    assert "guard canReturnToWriteSheet else { return false }" in body
+    assert "presentDeliverSheet()" in body
+    assert "processLockedClips" not in body
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in body, token
+    leave = clip.split("func focusSkippedClipFromWriteSheet")[1].split("func openWriteSheetFromMonitorLine")[0]
+    assert "writeSheetReturnOffered = true" in leave
+    assert leave.index("showDeliverSheet = false") < leave.index("writeSheetReturnOffered = true")
+    opened = clip.split("func presentDeliverSheet()")[1].split("func importProviders")[0]
+    assert "writeSheetReturnOffered = false" in opened
+    assert opened.index("writeSheetReturnOffered = false") < opened.index("showDeliverSheet = true")
+    hint = clip.split("var loopStepHint")[1].split("var exportFolderOpenNote")[0]
+    assert "从写出说明过来" in hint
+    assert "if canReturnToWriteSheet" in hint
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    assert 'Button("回到写出说明")' in inspector
+    assert "session.returnToWriteSheet()" in inspector
+    assert "不开始写文件" in inspector
+    deliver = _read(DELIVER)
+    assert "回到这份说明" in deliver
+    locked = deliver.split("ForEach(session.lockedClips)")[1].split('Text("会跳过")')[0]
+    assert "回到写出说明" not in locked
+    assert "去选成对 IDT" not in locked
+    plan = _read(PLAN)
+    assert "检查器里有「回到写出说明」" in plan
+    assert "不是从说明过来时没有这一下" in plan
+    assert "会写出的一条没有这一下" in plan
+    readme = _read(ROOT / "README.md")
+    trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
+    assert "回到写出说明" in trial
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial
