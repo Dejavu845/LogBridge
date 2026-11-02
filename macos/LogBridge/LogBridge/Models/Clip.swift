@@ -208,6 +208,9 @@ final class SessionModel: ObservableObject {
     @Published var activeSheet: WorkspaceSheet?
     /// Deliver sheet sets this; ProcessLockedBar starts the existing folder panel.
     @Published var deliverSheetConfirmed = false
+    /// Write sheet has closed and the folder panel is not up yet, or is up.
+    /// The top bar says so, so a quiet gap is not a missed click. Cancel writes nothing.
+    @Published var openingExportFolder = false
     @Published var isWritingDeliverables = false
     /// Same busy flag. Preview progress + inspector / IDT lock read this.
     var isExporting: Bool { isWritingDeliverables }
@@ -519,6 +522,7 @@ final class SessionModel: ObservableObject {
     /// 主路径现在走到哪。顶栏一行，不另开一页。
     var loopStepHint: String {
         if isWritingDeliverables { return "正在写出代理" }
+        if openingExportFolder { return "正在打开选文件夹" }
         if clips.isEmpty { return "先拖入或点添加" }
         if !showsProcessLockedButton { return "在右侧检查器选成对 IDT" }
         if canRevealLastExport { return "已写出代理。可再调色，或在状态栏打开 Finder" }
@@ -562,10 +566,14 @@ final class SessionModel: ObservableObject {
     /// Never guess an IDT. 不是一步还原. One process entry point.
     /// Mixed bins are allowed. 整段代理，代理精度.
     func processLockedClips() {
-        if isWritingDeliverables { return }
+        if isWritingDeliverables {
+            openingExportFolder = false
+            return
+        }
         let locked = clips.filter(\.hasLockedPair)
         let skipped = clips.filter { !$0.hasLockedPair }
         guard !locked.isEmpty else {
+            openingExportFolder = false
             lastExportNote = skipped.first?.processSkipReason ?? "先选择 Log 与色域"
             return
         }
@@ -584,12 +592,38 @@ final class SessionModel: ObservableObject {
         if let remembered = settings.lastExportDirectoryURL {
             panel.directoryURL = remembered
         }
-        panel.begin { [weak self] response in
-            guard let self, response == .OK, let dest = panel.url else { return }
+        openingExportFolder = true
+        let finish: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard let self else { return }
+            self.openingExportFolder = false
+            guard response == .OK, let dest = panel.url else { return }
             _ = dest.startAccessingSecurityScopedResource()
             self.settings.rememberExportDirectory(dest)
             self.writeLockedDeliverables(locked: locked, skippedCount: skipped.count, dest: dest)
         }
+        // Stick the panel to this window. A free-floating panel after the
+        // write sheet closes is easy to miss, and then nothing is written.
+        if let window = Self.exportFolderHostWindow() {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            panel.beginSheetModal(for: window, completionHandler: finish)
+        } else {
+            panel.begin(completionHandler: finish)
+        }
+    }
+
+    /// The content window, not a sheet. Nil when AppKit has no host yet.
+    static func exportFolderHostWindow() -> NSWindow? {
+        let hosts = NSApp.windows.filter { window in
+            window.isVisible && window.canBecomeMain && !window.isSheet && window.level == .normal
+        }
+        if let key = NSApp.keyWindow, hosts.contains(where: { $0 === key }) {
+            return key
+        }
+        if let main = NSApp.mainWindow, hosts.contains(where: { $0 === main }) {
+            return main
+        }
+        return hosts.first
     }
 
     /// Writes ACES2065-1 AP0 proxy EXR sequences for locked clips only.
@@ -1648,15 +1682,23 @@ final class SessionModel: ObservableObject {
 
     /// Global preferences. Does not change the selected clip.
     func presentSettings() {
+        guard !openingExportFolder else { return }
         stopPreviewPlayback()
         activeSheet = .settings
         showSettings = true
         showDeliverSheet = false
     }
 
+    /// Importer. Held while the folder panel is opening, so that sheet cannot
+    /// eat the write that was just confirmed.
+    func presentImporter() {
+        guard !openingExportFolder else { return }
+        showImporter = true
+    }
+
     /// Write sheet. Folder panel opens only after this sheet has gone.
     func presentDeliverSheet() {
-        guard !isWritingDeliverables else { return }
+        guard !isWritingDeliverables, !openingExportFolder else { return }
         stopPreviewPlayback()
         activeSheet = .deliver
         showDeliverSheet = true

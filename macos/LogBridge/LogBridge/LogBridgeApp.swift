@@ -52,9 +52,10 @@ private struct LogBridgeCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("添加…") {
-                sessionFocus?.session?.showImporter = true
+                sessionFocus?.session?.presentImporter()
             }
             .keyboardShortcut("o")
+            .disabled(sessionFocus?.session?.openingExportFolder == true)
         }
         CommandGroup(replacing: .appSettings) {
             Button("设置…") {
@@ -66,12 +67,14 @@ private struct LogBridgeCommands: Commands {
             Button("写出…") {
                 guard let session = sessionFocus?.session,
                       session.showsProcessLockedButton,
-                      !session.isWritingDeliverables else { return }
+                      !session.isWritingDeliverables,
+                      !session.openingExportFolder else { return }
                 session.presentDeliverSheet()
             }
             .keyboardShortcut("e")
             .disabled(sessionFocus?.session?.showsProcessLockedButton != true
-                      || sessionFocus?.session?.isWritingDeliverables == true)
+                      || sessionFocus?.session?.isWritingDeliverables == true
+                      || sessionFocus?.session?.openingExportFolder == true)
         }
         CommandMenu("调色") {
             Button("曝光 +0.10") {

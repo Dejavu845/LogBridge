@@ -127,12 +127,14 @@ private struct WorkspaceToolbar: View {
                     .help("打开后的下一步。导入、选成对 IDT、调色、写出，都在这一窗。")
             }
             Spacer(minLength: 12)
-            Button("添加…") { session.showImporter = true }
+            Button("添加…") { session.presentImporter() }
                 .controlSize(.large)
+                .disabled(session.openingExportFolder)
             Button("设置") {
                 session.presentSettings()
             }
             .controlSize(.large)
+            .disabled(session.openingExportFolder)
             .help("全局偏好。改完即生效。")
             Button(session.isWritingDeliverables ? "取消" : "写出") {
                 if session.isWritingDeliverables {
@@ -142,8 +144,9 @@ private struct WorkspaceToolbar: View {
                 }
             }
             .controlSize(.large)
-            .disabled(!session.isWritingDeliverables && !session.showsProcessLockedButton)
-            .help("先看写出说明，再选文件夹。整段代理，代理精度。")
+            .disabled(session.openingExportFolder
+                      || (!session.isWritingDeliverables && !session.showsProcessLockedButton))
+            .help("先看写出说明。确认后选文件夹贴在这个窗口上。整段代理，代理精度。")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -492,8 +495,14 @@ struct ProcessLockedBar: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .disabled(session.openingExportFolder)
                     .help(UICopy.PROCESS_BUTTON_HELP_UI)
                 }
+            }
+            if session.openingExportFolder {
+                Text("写出说明已收起。选文件夹会贴在这个窗口上。取消则不写出。")
+                    .font(.body.weight(.semibold))
+                    .lineLimit(2)
             }
             Text("\(session.settings.exportFormat.labelZH) · \(deliverableNote)")
                 .font(.callout)
@@ -522,18 +531,23 @@ struct ProcessLockedBar: View {
         .onChange(of: session.deliverSheetConfirmed) { _, confirmed in
             guard confirmed else { return }
             session.deliverSheetConfirmed = false
+            session.openingExportFolder = true
             openFolderPanelAfterSheet()
         }
     }
 
     /// NSOpenPanel on top of a dismissing sheet often never appears.
-    /// Wait until the write sheet is gone, then use the existing folder panel.
+    /// Wait until the write sheet is gone, then attach the folder panel to this window.
+    /// Settings or the importer during the wait aborts. Cancel writes nothing.
     private func openFolderPanelAfterSheet() {
         let session = session
         func kick(_ attempt: Int) {
             DispatchQueue.main.async {
+                if session.showSettings || session.showImporter || session.isWritingDeliverables {
+                    session.openingExportFolder = false
+                    return
+                }
                 let sheetStillUp = session.showDeliverSheet
-                    || session.showSettings
                     || NSApp.windows.contains { $0.attachedSheet != nil }
                 if sheetStillUp, attempt < 40 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {

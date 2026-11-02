@@ -14,8 +14,9 @@ struct ClipSidebarView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("添加…") { session.showImporter = true }
+                Button("添加…") { session.presentImporter() }
                     .controlSize(.regular)
+                    .disabled(session.openingExportFolder)
                 Button("设置") { session.presentSettings() }
                     .controlSize(.regular)
             }
@@ -24,7 +25,7 @@ struct ClipSidebarView: View {
             .padding(.bottom, 8)
 
             DropZone(targeted: session.dropTargeted, empty: session.clips.isEmpty) {
-                session.showImporter = true
+                session.presentImporter()
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)

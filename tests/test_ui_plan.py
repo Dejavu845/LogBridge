@@ -56,6 +56,34 @@ def test_settings_apply_immediately_without_save_cancel():
     assert "默认写出格式" in settings
 
 
+def test_folder_panel_sticks_to_the_window_after_the_write_sheet():
+    """Confirming the write sheet must not go quiet. The folder panel stays on this window."""
+    content = _read(CONTENT)
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert "openingExportFolder = true" in bar
+    assert "选文件夹会贴在这个窗口上" in bar
+    assert "取消则不写出" in bar
+    assert "attachedSheet" in bar
+    assert "showImporter" in bar
+    assert bar.count("Button(") == 1
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    body = clip.split("func processLockedClips()")[1].split("static func exportFolderHostWindow")[0]
+    assert "beginSheetModal" in body
+    assert "panel.begin" in body
+    assert "openingExportFolder = false" in body
+    assert "rememberExportDirectory" in body
+    hint = clip.split("var loopStepHint")[1].split("var showsProcessLockedButton")[0]
+    assert "正在打开选文件夹" in hint
+    deliver = _read(DELIVER)
+    assert "选文件夹贴在这个窗口上" in deliver
+    assert "取消则不写出" in deliver
+    plan = _read(PLAN)
+    assert "正在打开选文件夹" in plan
+    assert "贴在主窗口" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
+
+
 def test_deliver_sheet_is_separate_from_preferences():
     deliver = _read(DELIVER)
     content = _read(CONTENT)

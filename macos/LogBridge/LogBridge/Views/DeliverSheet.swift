@@ -50,6 +50,9 @@ struct DeliverSheet: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Text("确认后说明收起，选文件夹贴在这个窗口上。选好才开始写出。取消则不写出。")
+                .font(.body.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
 
             if let reason = session.processBlockedReason, !session.showsProcessLockedButton {
                 Text(reason)
