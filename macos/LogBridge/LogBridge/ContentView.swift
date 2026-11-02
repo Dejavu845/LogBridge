@@ -46,8 +46,10 @@ struct ContentView: View {
         ) { result in
             session.handleImporter(result)
         }
-        .sheet(isPresented: presentedSheet) {
-            if session.showDeliverSheet {
+        .sheet(isPresented: presentedSheet, onDismiss: {
+            session.activeSheet = nil
+        }) {
+            if session.activeSheet == .deliver {
                 DeliverSheet(session: session)
             } else {
                 SettingsView(settings: session.settings, session: session)
@@ -119,8 +121,7 @@ private struct WorkspaceToolbar: View {
             Button("添加…") { session.showImporter = true }
                 .controlSize(.large)
             Button("设置") {
-                session.showDeliverSheet = false
-                session.showSettings = true
+                session.presentSettings()
             }
             .controlSize(.large)
             .help("全局偏好。改完即生效。")
@@ -128,8 +129,7 @@ private struct WorkspaceToolbar: View {
                 if session.isWritingDeliverables {
                     session.cancelLockedDeliverables()
                 } else {
-                    session.showSettings = false
-                    session.showDeliverSheet = true
+                    session.presentDeliverSheet()
                 }
             }
             .controlSize(.large)
@@ -325,8 +325,7 @@ struct ProcessLockedBar: View {
                         if session.isWritingDeliverables {
                             session.cancelLockedDeliverables()
                         } else {
-                            session.showSettings = false
-                            session.showDeliverSheet = true
+                            session.presentDeliverSheet()
                         }
                     }
                     .buttonStyle(.borderedProminent)

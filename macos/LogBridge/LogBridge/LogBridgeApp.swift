@@ -58,16 +58,14 @@ private struct LogBridgeCommands: Commands {
         }
         CommandGroup(replacing: .appSettings) {
             Button("设置…") {
-                sessionFocus?.session?.showDeliverSheet = false
-                sessionFocus?.session?.showSettings = true
+                sessionFocus?.session?.presentSettings()
             }
             .keyboardShortcut(",")
         }
         CommandGroup(after: .newItem) {
             Button("写出…") {
                 guard let session = sessionFocus?.session, !session.isWritingDeliverables else { return }
-                session.showSettings = false
-                session.showDeliverSheet = true
+                session.presentDeliverSheet()
             }
             .keyboardShortcut("e")
         }

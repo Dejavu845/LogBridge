@@ -66,6 +66,14 @@ struct PairedIDTBar: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
+                if clip.hasLockedPair, session.pendingClipCount > 0 {
+                    Button("下一条待选") {
+                        session.selectNextPendingAfterLock(lockedID: clip.id)
+                    }
+                    .controlSize(.regular)
+                    .disabled(session.isExporting)
+                    .help("这条留在列表里。去下一条还没选成对 IDT 的素材，不替你选。")
+                }
             } else {
                 Text("先点一条素材。读不到元数据就在这里选成对 IDT，不猜。")
                     .font(.callout)

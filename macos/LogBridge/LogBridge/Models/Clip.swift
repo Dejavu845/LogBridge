@@ -129,6 +129,11 @@ struct ProxyDiskEstimate {
     var pickerSuffix: String { note + "。" }
 }
 
+enum WorkspaceSheet: Equatable {
+    case settings
+    case deliver
+}
+
 final class SessionModel: ObservableObject {
     @Published var clips: [Clip] = []
     @Published var selectedID: UUID?
@@ -142,6 +147,9 @@ final class SessionModel: ObservableObject {
     @Published var showSettings = false
     /// 写出说明。确认后才走 processLockedClips 的选文件夹。不是偏好设置。
     @Published var showDeliverSheet = false
+    /// Which sheet is on screen. Cleared only after dismiss, so the content
+    /// does not flip from the write sheet to preferences while it is closing.
+    @Published var activeSheet: WorkspaceSheet?
     /// Deliver sheet sets this; ProcessLockedBar starts the existing folder panel.
     @Published var deliverSheetConfirmed = false
     @Published var isWritingDeliverables = false
@@ -935,7 +943,6 @@ final class SessionModel: ObservableObject {
 
     func setIDT(_ id: UUID, _ idt: IDT) {
         guard let idx = clips.firstIndex(where: { $0.id == id }) else { return }
-        let wasPending = !clips[idx].hasLockedPair
         clips[idx].idt = idt
         clips[idx].detectedCurve = idt.curve
         clips[idx].detectedGamut = idt.gamut
@@ -943,11 +950,8 @@ final class SessionModel: ObservableObject {
         clips[idx].needsUserPicker = false
         clips[idx].detectionNote = "用户选择成对 IDT"
         preview.invalidateIDT(clipID: id)
-        // Lock of the selected pending clip: land on the next 待选.
-        // Mid-write (#32) does not change selection. Does not lock the next IDT.
-        if wasPending, !isWritingDeliverables {
-            selectNextPendingAfterLock(lockedID: id)
-        }
+        // Stay on this clip so the preview shows the pair just chosen.
+        // 下一条待选 is explicit. Mid-write does not move selection. Does not lock the next IDT.
         refreshPreview()
     }
 
@@ -1159,6 +1163,21 @@ final class SessionModel: ObservableObject {
         ) else { return }
         pickNeutral(linearRGB: rgb)
         pickingNeutral = false
+    }
+
+    /// Global preferences. Does not change the selected clip.
+    func presentSettings() {
+        activeSheet = .settings
+        showSettings = true
+        showDeliverSheet = false
+    }
+
+    /// Write sheet. Folder panel opens only after this sheet has gone.
+    func presentDeliverSheet() {
+        guard !isWritingDeliverables else { return }
+        activeSheet = .deliver
+        showDeliverSheet = true
+        showSettings = false
     }
 
     func importProviders(_ providers: [NSItemProvider]) {

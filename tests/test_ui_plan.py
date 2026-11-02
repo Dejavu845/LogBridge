@@ -68,3 +68,14 @@ def test_deliver_sheet_is_separate_from_preferences():
     assert "attachedSheet" in bar
     assert "下一步：在右侧检查器选成对 IDT" in bar
     assert "DeliverSheet" not in _read(SETTINGS)
+    assert "session.activeSheet == .deliver" in content
+    assert "if session.showDeliverSheet" not in content
+
+
+def test_idt_lock_stays_on_the_clip_being_previewed():
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]
+    assert "selectNextPendingAfterLock" not in body
+    assert "refreshPreview()" in body
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    assert "下一条待选" in inspector
