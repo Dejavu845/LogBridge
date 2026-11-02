@@ -1127,6 +1127,14 @@ final class SessionModel: ObservableObject {
         return "可调色，再点写出"
     }
 
+    /// 写出说明、监视器下那一行、选文件夹面板共用。只写文件夹名。
+    /// 文件夹不在了就不写名字。不在 ⌘, 里。不改这一套调色。
+    var exportFolderOpenNote: String {
+        Self.exportFolderOpenNote(
+            folderName: Self.exportFolderResumeName(from: settings.lastExportDirectoryURL)
+        )
+    }
+
     /// Primary button is shown only when at least one paired IDT is locked.
     var showsProcessLockedButton: Bool {
         settings.blockUnlockedIDT && lockedClipCount > 0
@@ -1278,6 +1286,24 @@ final class SessionModel: ObservableObject {
         return clip.processSkipReason
     }
 
+    /// Last path component only. The write sheet names the folder, not the whole path.
+    /// Nil when nothing was remembered. Does not invent a folder name.
+    static func exportFolderResumeName(from url: URL?) -> String? {
+        guard let url else { return nil }
+        let name = url.lastPathComponent
+        if name.isEmpty || name == "/" || name == "." || name == ".." { return nil }
+        return name
+    }
+
+    /// Where the next folder panel opens. A missing name means the system location.
+    /// The caller still says cancel writes nothing. Does not change the grade.
+    static func exportFolderOpenNote(folderName: String?) -> String {
+        if let folderName, !folderName.isEmpty {
+            return "选文件夹会从上次写出的文件夹打开：\(folderName)。"
+        }
+        return "还没有上次写出的文件夹，或那个文件夹已经不在了。选文件夹从系统给出的位置打开。"
+    }
+
     /// Batch: write one ACES2065-1 AP0 proxy EXR sequence per locked clip
     /// and the session Resolve package (XML / DCTL / cube / README).
     /// Unlocked stay listed with a Chinese reason. After the batch,
@@ -1306,9 +1332,16 @@ final class SessionModel: ObservableObject {
         panel.prompt = "写出"
         let format = settings.exportFormat
         let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url), format: format)
+        // Same folder the sheet just named. Gone folders stay nil, so the name is not invented.
+        let remembered = settings.lastExportDirectoryURL
+        let resumeName = Self.exportFolderResumeName(from: remembered)
         // Default ProRes 422 HQ; EXR remains advanced. The size note follows that choice.
-        panel.message = Self.folderPickerMessage(format: format) + estimate.pickerSuffix
-        if let remembered = settings.lastExportDirectoryURL {
+        panel.message = Self.folderPickerMessage(format: format)
+            + estimate.pickerSuffix
+            + "\n"
+            + Self.exportFolderOpenNote(folderName: resumeName)
+            + "取消则不写出。"
+        if let remembered {
             panel.directoryURL = remembered
         }
         openingExportFolder = true

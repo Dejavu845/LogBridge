@@ -1883,3 +1883,52 @@ def test_short_pair_list_locks_from_a_digit_without_guessing_the_catalog():
     assert "菜单上不标快捷键" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_write_sheet_names_the_last_export_folder_without_the_full_path():
+    """The sheet, the bar, and the folder panel name the last folder, or say it is gone."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    name = clip.split("static func exportFolderResumeName")[1].split("static func exportFolderOpenNote")[0]
+    assert "lastPathComponent" in name
+    assert 'name == "/"' in name
+    assert "return nil" in name
+    assert "return name" in name
+    assert ".path" not in name
+    for token in ("setIDT", "setExposureStops", "5600", "6504", "24", "30"):
+        assert token not in name, token
+    note = clip.split("static func exportFolderOpenNote")[1].split("func processLockedClips()")[0]
+    assert "选文件夹会从上次写出的文件夹打开" in note
+    assert "还没有上次写出的文件夹" in note
+    assert "选文件夹从系统给出的位置打开" in note
+    assert "folderName" in note
+    for token in ("setIDT", "setExposureStops", "setWBParams", "5600", "6504", ".path"):
+        assert token not in note, token
+    body = clip.split("func processLockedClips()")[1].split("static func exportFolderHostWindow")[0]
+    assert "exportFolderResumeName(from: remembered)" in body
+    assert "exportFolderOpenNote(folderName: resumeName)" in body
+    assert "lastExportDirectoryURL" in body
+    assert "panel.directoryURL = remembered" in body
+    assert body.index("exportFolderResumeName") < body.index("panel.directoryURL = remembered")
+    assert "取消则不写出。" in body
+    for token in ("setIDT", "setExposureStops", "5600", "6504"):
+        assert token not in body.split("panel.message")[1].split("openingExportFolder = true")[0], token
+    deliver = _read(DELIVER)
+    assert "session.exportFolderOpenNote" in deliver
+    assert "不写整条路径" in deliver
+    assert "选文件夹贴在这个窗口上" in deliver
+    assert "取消则不写出" in deliver
+    content = _read(CONTENT)
+    bar = content.split("struct ProcessLockedBar")[1].split("struct AdvancedPanel")[0]
+    assert "session.exportFolderOpenNote" in bar
+    assert "选文件夹会贴在这个窗口上" in bar
+    assert "取消则不写出" in bar
+    settings = _read(SETTINGS)
+    assert "lastExportDirectory" not in settings
+    assert "exportFolderOpenNote" not in settings
+    plan = _read(PLAN)
+    assert "选文件夹会从上次写出的文件夹打开" in plan
+    assert "不写整条路径" in plan
+    assert "选文件夹从系统给出的位置打开" in plan
+    assert "不在 ⌘, 里" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

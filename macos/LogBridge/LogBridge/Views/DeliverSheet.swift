@@ -54,6 +54,10 @@ struct DeliverSheet: View {
             Text("确认后说明收起，选文件夹贴在这个窗口上。选好才开始写出。取消则不写出。")
                 .font(.body.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
+            Text(session.exportFolderOpenNote)
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
+                .help("只写文件夹的名字，不写整条路径。那个文件夹还在才用。不在设置里，没有保存按钮。取消则不写出。不改这一套曝光和白平衡，也不改成对 IDT。")
 
             if let reason = session.processBlockedReason, !session.showsProcessLockedButton {
                 Text(reason)

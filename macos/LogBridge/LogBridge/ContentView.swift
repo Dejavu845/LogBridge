@@ -730,9 +730,10 @@ struct ProcessLockedBar: View {
                 }
             }
             if session.openingExportFolder {
-                Text("写出说明已收起。选文件夹会贴在这个窗口上。取消则不写出。")
+                Text("写出说明已收起。选文件夹会贴在这个窗口上。取消则不写出。\(session.exportFolderOpenNote)")
                     .font(.body.weight(.semibold))
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help("和写出说明同一句。只写文件夹的名字，不写整条路径。那个文件夹还在才用。取消则不写出。")
             }
             if let caution = session.deliverPreviewGlance.barCaution,
                session.showsProcessLockedButton,
