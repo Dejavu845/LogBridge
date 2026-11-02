@@ -72,6 +72,19 @@ def test_deliver_sheet_is_separate_from_preferences():
     assert "if session.showDeliverSheet" not in content
 
 
+def test_monitor_can_enlarge_the_grade_preview():
+    content = _read(CONTENT)
+    assert "enum MonitorLayout" in content
+    assert "case grade" in content
+    assert 'Text("分屏")' in content or 'return "分屏"' in content
+    assert "HSplitView" in content
+    assert "SourcePreviewView" in content
+    assert "Rec709PreviewView" in content
+    preview = content.split("struct SplitPreview")[1]
+    assert "pickingNeutral" in preview
+    assert "shownLayout" in preview
+
+
 def test_idt_lock_stays_on_the_clip_being_previewed():
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]

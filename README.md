@@ -48,7 +48,7 @@ Uncompressed half RGB. Large on disk (~6 bytes/pixel). Prefer ProRes unless you 
 5. For each **待选** clip, pick a paired Log + gamut IDT in the right inspector. The row stays selected so the preview updates. **下一条待选** moves to the next unlocked clip.
 6. Click **处理已锁定片段**, read the write sheet, then pick a folder.
 
-The window is one screen: media list, large preview (badge 仅预览), inspector for the selected clip. ⌘, is global preferences (they apply immediately). There is no editing timeline. Details and the Mac click-through are in `docs/ui-plan.md`.
+The window is one screen: media list, large preview (badge 仅预览), inspector for the selected clip. The monitor defaults to a split; choose **预览** to enlarge the grade. ⌘, is global preferences (they apply immediately). There is no editing timeline. Details and the Mac click-through are in `docs/ui-plan.md`.
 
 Trial copy is not notarized. Gatekeeper may require right-click → Open.
 

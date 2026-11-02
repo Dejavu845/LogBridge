@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @StateObject private var session = SessionModel()
     @ObservedObject private var settings = AppSettings.shared
+    @State private var monitorLayout: MonitorLayout = .split
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,8 +21,8 @@ struct ContentView: View {
                 ClipSidebarView(session: session)
                     .frame(minWidth: 240, idealWidth: 292, maxWidth: 380)
                 VStack(spacing: 0) {
-                    MonitorHeader()
-                    SplitPreview(session: session)
+                    MonitorHeader(layout: $monitorLayout)
+                    SplitPreview(session: session, layout: monitorLayout)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .layoutPriority(1)
                     ProcessLockedBar(session: session)
@@ -142,15 +143,52 @@ private struct WorkspaceToolbar: View {
     }
 }
 
+/// How the monitor uses its space. Default stays the source | grade split.
+enum MonitorLayout: String, CaseIterable, Identifiable {
+    case split
+    case source
+    case grade
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .split: return "分屏"
+        case .source: return "源"
+        case .grade: return "预览"
+        }
+    }
+
+    var caption: String {
+        switch self {
+        case .split: return "左：源（相机 Log）  右：预览"
+        case .source: return "源（相机 Log）"
+        case .grade: return "预览放大。角标仍是仅预览。"
+        }
+    }
+}
+
 private struct MonitorHeader: View {
+    @Binding var layout: MonitorLayout
+
     var body: some View {
         HStack(spacing: 8) {
             Text("监视器")
                 .font(.headline)
-            Text("左：源（相机 Log）  右：预览")
+            Text(layout.caption)
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Spacer()
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Picker("画面", selection: $layout) {
+                ForEach(MonitorLayout.allCases) { item in
+                    Text(item.label).tag(item)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 210)
+            .labelsHidden()
+            .help("分屏对照，或把预览放大来看调色。点灰卡时会显示预览。仅预览。")
             Text("仅预览")
                 .font(.caption.weight(.bold))
                 .padding(.horizontal, 8)
@@ -446,12 +484,28 @@ struct AdvancedPanel: View {
 
 struct SplitPreview: View {
     @ObservedObject var session: SessionModel
+    var layout: MonitorLayout
+
+    /// Grey-card sampling hits the grade pane. Keep that pane up while sampling.
+    private var shownLayout: MonitorLayout {
+        if session.pickingNeutral, !session.isExporting, layout == .source {
+            return .grade
+        }
+        return layout
+    }
 
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
-                HSplitView {
+                switch shownLayout {
+                case .split:
+                    HSplitView {
+                        sourcePane
+                        previewPane
+                    }
+                case .source:
                     sourcePane
+                case .grade:
                     previewPane
                 }
                 PreviewScrubBar(session: session)
