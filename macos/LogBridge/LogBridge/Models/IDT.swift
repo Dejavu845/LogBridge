@@ -90,6 +90,36 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// Inspector search haystack. Chinese brand words sit beside the English names.
+    /// Matching this string does not select a pair.
+    var searchText: String {
+        "\(pairLabel) \(curve) \(gamut) \(ocioName) \(brandSearch)"
+    }
+
+    /// Short Chinese brand so 索尼 / 佳能 / 阿莱 find the same rows as Sony / Canon / ARRI.
+    private var brandSearch: String {
+        switch self {
+        case .arriLogC4AWG4, .arriLogC3EI800AWG3:
+            return "阿莱"
+        case .sonySLog3SGamut3, .sonySLog3SGamut3Cine, .sonySLog3SGamut3Venice, .sonySLog3SGamut3CineVenice:
+            return "索尼"
+        case .panasonicVLogVGamut:
+            return "松下"
+        case .fujiFLog2BT2020:
+            return "富士"
+        case .nikonNLogBT2020:
+            return "尼康"
+        case .redLog3G10RWG:
+            return "红"
+        case .canonCLog2CGamut, .canonCLog2BT2020, .canonCLog3CGamut, .canonCLog3BT2020:
+            return "佳能"
+        case .appleLogBT2020, .appleLog2AWG:
+            return "苹果"
+        case .djiDLogDGamut, .djiDLogMStub:
+            return "大疆"
+        }
+    }
+
     var menuLabel: String {
         if isStub {
             return "\(pairLabel) — stub, not implemented"
@@ -177,6 +207,18 @@ enum IDT: String, CaseIterable, Identifiable, Hashable {
             }
         }
         return pairs
+    }
+
+    /// Full catalog shows a search field. Two-pair picks stay a short list.
+    static let pairListShowsSearchAfter = 4
+
+    /// Narrows the pairs the inspector is already allowed to show.
+    /// An empty query keeps that list, in the same order.
+    /// Does not pick a pair, and does not invent a temperature.
+    static func filteredPairs(_ pairs: [IDT], query: String) -> [IDT] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return pairs }
+        return pairs.filter { $0.searchText.localizedStandardContains(trimmed) }
     }
 
     static func isSLog3(_ curve: String?) -> Bool {

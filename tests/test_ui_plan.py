@@ -494,6 +494,46 @@ def test_idt_lock_stays_on_the_clip_being_previewed():
     assert "下一条待选" in inspector
 
 
+def test_paired_idt_is_a_visible_list_and_search_does_not_lock():
+    """The inspector shows pairs as rows. Search hides rows and never locks one."""
+    idt = _read(ROOT / "macos/LogBridge/LogBridge/Models/IDT.swift")
+    assert "static let pairListShowsSearchAfter = 4" in idt
+    fn = idt.split("static func filteredPairs")[1].split("static func isSLog3")[0]
+    assert "trimmingCharacters" in fn
+    assert "searchText" in fn
+    assert "localizedStandardContains" in fn
+    assert "return pairs" in fn
+    assert "setIDT" not in fn
+    assert "5600" not in fn
+    assert "6504" not in fn
+    brands = idt.split("var searchText")[1].split("var menuLabel")[0]
+    for word in ("索尼", "佳能", "阿莱", "松下", "富士", "尼康", "苹果", "大疆"):
+        assert word in brands, word
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    choices = inspector.split("struct PairedIDTChoices")[1].split("struct InspectorView")[0]
+    assert 'TextField("查找 Log 或色域"' in choices
+    assert "filteredPairs" in choices
+    assert "pairListShowsSearchAfter" in choices
+    assert "setIDT(clip.id, pair)" in choices
+    assert "clip.idt != pair" in choices
+    assert "点一行锁定" in choices
+    assert "没有匹配的成对 IDT" in choices
+    assert "当前这一对不在查找里" in choices
+    assert 'Button("清空")' in choices
+    assert "maxHeight: 180" in choices
+    assert "onChange(of: session.selectedID)" in choices
+    assert 'pairQuery = ""' in choices
+    assert "isExporting" in choices
+    assert "Picker(" not in choices
+    bar = inspector.split("struct PairedIDTBar")[1].split("struct PairedIDTChoices")[0]
+    assert "PairedIDTChoices" in bar
+    plan = _read(PLAN)
+    assert "查找 Log 或色域" in plan
+    assert "点一行" in plan
+    assert "不会因为只剩一对就替你选" in plan
+    assert "索尼" in plan
+
+
 def test_preview_playback_uses_metadata_rate_and_stops_at_the_end():
     """Play is preview transport. It does not invent a rate or move the shared grade."""
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")

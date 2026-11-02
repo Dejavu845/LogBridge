@@ -26,26 +26,9 @@ struct PairedIDTBar: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let clip = session.selectedClip {
-                // One locked pair per row. Never two independent curve/gamut dropdowns.
-                Picker("用户选择成对 IDT", selection: Binding(
-                    get: { clip.idt },
-                    set: { newValue in
-                        if let idt = newValue {
-                            session.setIDT(clip.id, idt)
-                        }
-                    }
-                )) {
-                    Text("— 先选择成对 IDT —").tag(Optional<IDT>.none)
-                    ForEach(clip.pickerPairs) { pair in
-                        Text(pair.pairLabel).tag(Optional(pair))
-                    }
-                }
-                .labelsHidden()
-                .controlSize(.large)
-                .frame(maxWidth: .infinity)
-                .disabled(session.isExporting)
-                // S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。
-                .help("S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。")
+                // One column of complete pairs. Never two independent curve/gamut dropdowns.
+                PairedIDTChoices(session: session, clip: clip)
+                    .help("S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。点一行才锁定。")
                 HStack(spacing: 8) {
                     Text("来源：\(clip.detectionSource.title)")
                         .font(.caption)
@@ -84,6 +67,107 @@ struct PairedIDTBar: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.primary.opacity(0.03))
+    }
+}
+
+/// Visible paired-IDT rows. A click locks that pair and stays on this clip.
+/// Search only hides rows. One remaining match does not lock itself.
+private struct PairedIDTChoices: View {
+    @ObservedObject var session: SessionModel
+    let clip: Clip
+    @State private var pairQuery = ""
+
+    private var pairs: [IDT] { clip.pickerPairs }
+
+    private var showSearch: Bool { pairs.count > IDT.pairListShowsSearchAfter }
+
+    private var shown: [IDT] {
+        showSearch ? IDT.filteredPairs(pairs, query: pairQuery) : pairs
+    }
+
+    private var queryIsBlank: Bool {
+        pairQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("点一行锁定。选完停在这条看预览。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if showSearch {
+                HStack(spacing: 8) {
+                    TextField("查找 Log 或色域", text: $pairQuery)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(session.isExporting)
+                    if !queryIsBlank {
+                        Button("清空") { pairQuery = "" }
+                            .controlSize(.regular)
+                            .disabled(session.isExporting)
+                    }
+                }
+                .help("只收下面这一列。可输入索尼、Sony、LogC、佳能。不会因为只剩一对就替你选。")
+            }
+            if let current = clip.idt, showSearch, !queryIsBlank, !shown.contains(current) {
+                Text("当前这一对不在查找里。清空后仍是 \(current.pairLabel)。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if shown.isEmpty {
+                Text("没有匹配的成对 IDT。清空查找再点一行。")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if shown.count > 6 {
+                ScrollView {
+                    pairRows
+                }
+                .frame(maxHeight: 180)
+            } else {
+                pairRows
+            }
+        }
+        .onChange(of: session.selectedID) { _, _ in
+            pairQuery = ""
+        }
+    }
+
+    private var pairRows: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(shown) { pair in
+                Button {
+                    if clip.idt != pair {
+                        session.setIDT(clip.id, pair)
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(pair.pairLabel)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                        Spacer(minLength: 8)
+                        if clip.idt == pair {
+                            Text("当前")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(clip.idt == pair ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04))
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(session.isExporting)
+                .help(clip.idt == pair
+                      ? "已经是这一对。预览按这一对。"
+                      : "点这一行锁定成对 IDT。停在这条看预览，不替下一条选。")
+            }
+        }
     }
 }
 
