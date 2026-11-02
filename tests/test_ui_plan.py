@@ -503,6 +503,12 @@ def test_preview_playback_uses_metadata_rate_and_stops_at_the_end():
     assert "pickingNeutral" in play
     assert "keepPlaying: true" in play
     assert "preview.isWorking" in play
+    advance = clip.split("func advancePreviewPlayback")[1].split("var lockedClips")[0]
+    assert advance.index("preview.isWorking") < advance.index("setPreviewFrame")
+    engine = _read(ROOT / "macos/LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    scrub = engine.split("func scrub(")[1].split("private func applyScrub")[0]
+    assert "isWorking = true" in scrub
+    assert scrub.index("isWorking = true") < scrub.index("applyScrub")
     assert "conservativeFPS" not in play
     assert "5600" not in play
     assert "6504" not in play

@@ -439,6 +439,10 @@ final class PreviewEngine: ObservableObject {
             }
             return
         }
+        // Playback waits on this flag and does not ask for the next frame.
+        // Scrub used to leave it false, so the timer stacked decodes and the
+        // picture jumped to whichever frame finished last.
+        isWorking = true
         let graphCopy = graph
         enqueuePreview { [weak self] in
             self?.applyScrub(clip: clip, graph: graphCopy, frameIndex: frameIndex, generation: gen)
