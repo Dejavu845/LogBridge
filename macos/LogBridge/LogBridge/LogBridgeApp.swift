@@ -164,6 +164,10 @@ private struct LogBridgeCommands: Commands {
                 sessionFocus?.session?.togglePreviewPlayback()
             }
             .disabled(sessionFocus?.session?.canTogglePreviewPlayback != true)
+            Button(sessionFocus?.session?.isPreviewPlaying == true && sessionFocus?.session?.previewPlaysBackward == true ? "暂停倒放" : "倒放预览") {
+                sessionFocus?.session?.playPreviewBackward()
+            }
+            .disabled(sessionFocus?.session?.canTogglePreviewReverse != true)
             Button(sessionFocus?.session?.previewLoops == true ? "关掉循环" : "循环播放") {
                 sessionFocus?.session?.togglePreviewLoop()
             }

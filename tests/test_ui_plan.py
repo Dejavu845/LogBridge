@@ -929,9 +929,15 @@ def test_preview_playback_uses_metadata_rate_and_stops_at_the_end():
     assert "已写出代理。可再调色，或在状态栏打开 Finder" in plan
 
 
-def _preview_play_next(index: int, last: int, loops: bool) -> int | None:
+def _preview_play_next(index: int, last: int, loops: bool, backward: bool = False) -> int | None:
     """Mirror of Clip.previewPlayNextFrame. Nil means playback stops."""
     if last < 0 or index < 0 or index > last:
+        return None
+    if backward:
+        if index > 0:
+            return index - 1
+        if loops and last > 0:
+            return last
         return None
     if index < last:
         return index + 1
@@ -940,9 +946,15 @@ def _preview_play_next(index: int, last: int, loops: bool) -> int | None:
     return None
 
 
-def _preview_play_start(index: int, last: int, loops: bool) -> int | None:
+def _preview_play_start(index: int, last: int, loops: bool, backward: bool = False) -> int | None:
     """Mirror of Clip.previewPlayStartFrame. Nil means playback cannot start."""
     if last < 0 or index < 0 or index > last:
+        return None
+    if backward:
+        if index > 0:
+            return index
+        if loops and last > 0:
+            return last
         return None
     if index < last:
         return index
@@ -1029,6 +1041,95 @@ def test_preview_loop_wraps_to_the_first_frame_and_leaves_the_grade():
     assert "⌥⌘L" in plan
     assert "到最后一帧就停" in plan
     assert "不改曝光和白平衡" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
+
+
+def test_preview_reverse_stops_at_the_first_frame_and_leaves_the_grade():
+    """Backward playback stops on frame 0. Loop wraps to the last frame. Grade stays put."""
+    assert _preview_play_next(5, 10, False, backward=True) == 4
+    assert _preview_play_next(1, 10, False, backward=True) == 0
+    assert _preview_play_next(0, 10, False, backward=True) is None
+    assert _preview_play_next(0, 10, True, backward=True) == 10
+    assert _preview_play_next(10, 10, True, backward=True) == 9
+    assert _preview_play_next(0, 0, True, backward=True) is None
+    assert _preview_play_next(0, 0, False, backward=True) is None
+    assert _preview_play_next(-1, 10, True, backward=True) is None
+    assert _preview_play_next(11, 10, True, backward=True) is None
+    assert _preview_play_next(4, 10, False, backward=False) == 5
+    assert _preview_play_start(5, 10, False, backward=True) == 5
+    assert _preview_play_start(0, 10, False, backward=True) is None
+    assert _preview_play_start(0, 10, True, backward=True) == 10
+    assert _preview_play_start(1, 10, True, backward=True) == 1
+    assert _preview_play_start(0, 0, True, backward=True) is None
+    assert _preview_play_start(10, 10, False, backward=False) is None
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    nxt = clip.split("static func previewPlayNextFrame")[1].split("static func previewPlayStartFrame")[0]
+    assert "backward" in nxt
+    assert "index - 1" in nxt
+    assert "return last" in nxt
+    assert "index < last" in nxt
+    assert "return 0" in nxt
+    start_fn = clip.split("static func previewPlayStartFrame")[1].split("enum DetectionSource")[0]
+    assert "backward" in start_fn
+    assert "return last" in start_fn
+    assert "index > 0" in start_fn
+    for token in ("24", "30", "5600", "6504", "setExposureStops", "setWBParams"):
+        assert token not in nxt, token
+        assert token not in start_fn, token
+    assert "previewPlaysBackward = false" in clip
+    gate = clip.split("var canReversePreview")[1].split("var canTogglePreviewReverse")[0]
+    assert "previewLoops" in gate
+    assert "canStepPreviewBackward" in gate
+    assert "last > 0" in gate
+    assert "previewPlaybackFPS" in gate
+    toggle = clip.split("var canTogglePreviewReverse")[1].split("func togglePreviewPlayback")[0]
+    assert "previewPlaysBackward" in toggle
+    assert "canReversePreview" in toggle
+    reverse = clip.split("func playPreviewBackward")[1].split("func pausePreviewPlayback")[0]
+    assert "startPreviewPlayback(backward: true)" in reverse
+    assert "stopPreviewPlayback()" in reverse
+    for token in ("24", "30", "5600", "6504", "setExposureStops", "setWBParams", "setPreviewFrame"):
+        assert token not in reverse, token
+    pause = clip.split("func pausePreviewPlayback")[1].split("var canJumpPreviewToClock")[0]
+    assert "isPreviewPlaying" in pause
+    assert "stopPreviewPlayback()" in pause
+    assert "setExposureStops" not in pause
+    begin = clip.split("func startPreviewPlayback")[1].split("func stopPreviewPlayback")[0]
+    assert "backward: backward" in begin
+    assert "canReversePreview" in begin
+    advance = clip.split("func advancePreviewPlayback")[1].split("func playPreviewBackward")[0]
+    assert "backward: previewPlaysBackward" in advance
+    assert "keepPlaying: true" in advance
+    content = _read(CONTENT)
+    bar = content.split("struct PreviewScrubBar")[1].split("struct WriteProgressLine")[0]
+    assert 'Button(session.isPreviewPlaying && session.previewPlaysBackward ? "倒放中" : "倒放")' in bar
+    assert "playPreviewBackward()" in bar
+    assert "canTogglePreviewReverse" in bar
+    assert "循环倒放" in bar
+    assert "倒放中" in bar
+    assert "播放中" in bar
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert "consumeShuttleKey" in monitor
+    assert 'key == "j"' in monitor
+    assert 'key == "k"' in monitor
+    assert 'key == "l"' in monitor
+    assert "isPlaybackKeyConsumedByControl" in monitor
+    assert "onPlayBackward" in monitor
+    assert "onPausePlayback" in monitor
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    assert "倒放预览" in menu
+    assert "暂停倒放" in menu
+    assert "playPreviewBackward()" in menu
+    assert "canTogglePreviewReverse" in menu
+    plan = _read(PLAN)
+    assert "倒放预览" in plan
+    assert "到第 1 帧就停" in plan
+    assert "回到最后一帧接着倒放" in plan
+    assert "不猜 24 或 30" in plan
+    assert "不改曝光和白平衡" in plan
+    assert "这不是时间线" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
 

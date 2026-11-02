@@ -278,20 +278,32 @@ struct Clip: Identifiable, Hashable {
     }
 
     /// Next frame while the preview is playing. Nil means stop.
-    /// A loop returns to the first frame only when this range has more than one frame.
+    /// Forward loop returns to the first frame only when this range has more than one frame.
+    /// Backward stops on the first frame, or returns to the last when loop is on.
     /// Does not invent a rate, and does not move exposure or white balance.
-    static func previewPlayNextFrame(index: Int, last: Int, loops: Bool) -> Int? {
+    static func previewPlayNextFrame(index: Int, last: Int, loops: Bool, backward: Bool = false) -> Int? {
         guard last >= 0, index >= 0, index <= last else { return nil }
+        if backward {
+            if index > 0 { return index - 1 }
+            if loops, last > 0 { return last }
+            return nil
+        }
         if index < last { return index + 1 }
         if loops, last > 0 { return 0 }
         return nil
     }
 
     /// Frame shown when playback starts. Nil means it cannot start.
-    /// Loop at the last frame begins again at the first. Otherwise stay here.
-    /// The last frame without a loop does not start. Does not invent a rate.
-    static func previewPlayStartFrame(index: Int, last: Int, loops: Bool) -> Int? {
+    /// Forward loop at the last frame begins again at the first. Otherwise stay here.
+    /// Backward at the first frame begins at the last only when loop is on.
+    /// The end frame without a loop does not start. Does not invent a rate.
+    static func previewPlayStartFrame(index: Int, last: Int, loops: Bool, backward: Bool = false) -> Int? {
         guard last >= 0, index >= 0, index <= last else { return nil }
+        if backward {
+            if index > 0 { return index }
+            if loops, last > 0 { return last }
+            return nil
+        }
         if index < last { return index }
         if loops, last > 0 { return 0 }
         return nil
@@ -455,9 +467,13 @@ final class SessionModel: ObservableObject {
     /// Metadata fps captured with the scrub range. Nil when there is nothing to play.
     /// Playback uses this. It does not probe again, and it does not invent a rate.
     @Published var previewPlaybackFPS: Double? = nil
-    /// Preview transport. Picture only. Stops at the last frame unless loop is on.
+    /// Preview transport. Picture only. Forward stops at the last frame unless loop is on.
+    /// Backward stops at the first frame unless loop is on.
     @Published var isPreviewPlaying = false
-    /// Playback wraps to the first frame. Off keeps stop-at-end. Not an in/out.
+    /// True only while the current playback is stepping toward the first frame.
+    /// Cleared on stop. Not a grade, and not a write input.
+    @Published var previewPlaysBackward = false
+    /// Playback wraps at the end of the range. Off keeps stop-at-end. Not an in/out.
     /// Switching clips keeps this. It does not change the shared grade or the write.
     @Published var previewLoops = false
     private var previewPlayTimer: Timer?
@@ -764,6 +780,27 @@ final class SessionModel: ObservableObject {
         return canPlayPreview
     }
 
+    /// Reverse uses the same rate as forward. One frame cannot reverse.
+    /// Without loop, the first frame cannot start backward.
+    var canReversePreview: Bool {
+        guard !pickingNeutral else { return false }
+        guard let fps = previewPlaybackFPS, fps.isFinite, fps > 0 else { return false }
+        guard let last = previewScrubLastFrame, last >= 0 else { return false }
+        if previewLoops {
+            guard canStepPreviewFrame, last > 0 else { return false }
+            return true
+        }
+        return canStepPreviewBackward
+    }
+
+    /// 倒放 button. Already reversing can pause. Otherwise it must be able to start.
+    var canTogglePreviewReverse: Bool {
+        if isPreviewPlaying, previewPlaysBackward {
+            return canStepPreviewFrame && !pickingNeutral
+        }
+        return canReversePreview
+    }
+
     /// Start or stop preview playback. Does not move exposure, white balance, or the write.
     /// At the last frame this jumps back only when loop is on.
     @discardableResult
@@ -799,17 +836,23 @@ final class SessionModel: ObservableObject {
     /// One frame per tick, at the metadata rate. Waits out a preview that is still drawing.
     /// Does not skip ahead, and does not invent a frame rate.
     /// Loop at the last frame begins at the first before the timer starts.
+    /// Backward at the first frame begins at the last only when loop is on.
     @discardableResult
-    func startPreviewPlayback() -> Bool {
-        guard canPlayPreview, let fps = previewPlaybackFPS, let last = previewScrubLastFrame else { return false }
+    func startPreviewPlayback(backward: Bool = false) -> Bool {
+        let allowed = backward ? canReversePreview : canPlayPreview
+        guard allowed, let fps = previewPlaybackFPS, let last = previewScrubLastFrame else { return false }
         guard let start = Clip.previewPlayStartFrame(
             index: previewFrameIndex,
             last: last,
-            loops: previewLoops
+            loops: previewLoops,
+            backward: backward
         ) else { return false }
         stopPreviewPlayback()
         if start != previewFrameIndex {
             setPreviewFrame(start)
+        }
+        if previewPlaysBackward != backward {
+            previewPlaysBackward = backward
         }
         isPreviewPlaying = true
         // Cap the timer so a wild metadata value cannot spin. Still one frame each fire.
@@ -828,6 +871,9 @@ final class SessionModel: ObservableObject {
         if isPreviewPlaying {
             isPreviewPlaying = false
         }
+        if previewPlaysBackward {
+            previewPlaysBackward = false
+        }
     }
 
     private func advancePreviewPlayback() {
@@ -840,12 +886,33 @@ final class SessionModel: ObservableObject {
         guard let next = Clip.previewPlayNextFrame(
             index: previewFrameIndex,
             last: last,
-            loops: previewLoops
+            loops: previewLoops,
+            backward: previewPlaysBackward
         ) else {
             stopPreviewPlayback()
             return
         }
         setPreviewFrame(next, keepPlaying: true)
+    }
+
+    /// 倒放. Already reversing pauses. Forward playback switches to reverse.
+    /// Does not change exposure, white balance, or the write.
+    @discardableResult
+    func playPreviewBackward() -> Bool {
+        if isPreviewPlaying, previewPlaysBackward {
+            guard canTogglePreviewReverse else { return false }
+            stopPreviewPlayback()
+            return true
+        }
+        return startPreviewPlayback(backward: true)
+    }
+
+    /// K. Pauses whichever direction is running. Does nothing when already stopped.
+    @discardableResult
+    func pausePreviewPlayback() -> Bool {
+        guard isPreviewPlaying, canStepPreviewFrame, !pickingNeutral else { return false }
+        stopPreviewPlayback()
+        return true
     }
 
     /// Typed clock, seconds, or 第 N 帧. Same rate as the readout. No invented rate.

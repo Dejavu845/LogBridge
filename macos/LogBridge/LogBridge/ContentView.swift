@@ -101,6 +101,12 @@ struct ContentView: View {
                 onTogglePlayback: {
                     session.togglePreviewPlayback()
                 },
+                onPlayBackward: {
+                    session.playPreviewBackward()
+                },
+                onPausePlayback: {
+                    session.pausePreviewPlayback()
+                },
                 onUndoGrade: {
                     session.undoSharedGrade()
                 },
@@ -426,6 +432,7 @@ private struct InspectorColumn: View {
 /// frame (same as 上一帧 / 下一帧). Shift+Left/Right jumps about one second
 /// when this clip's rate was read. Home / End jump to the first or last
 /// preview frame. Space plays or pauses that preview.
+/// J reverses, L is the same as 播放, K only pauses. Text fields keep those letters.
 /// Escape while writing is the existing 取消
 /// (same cancelLockedDeliverables). Idle Escape does nothing.
 /// Delete / Backspace drops the selected clip from the session only
@@ -443,6 +450,8 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     var onJumpToEnd: () -> Bool
     var onStepSecond: (Int) -> Bool
     var onTogglePlayback: () -> Bool
+    var onPlayBackward: () -> Bool
+    var onPausePlayback: () -> Bool
     var onUndoGrade: () -> Bool
     var onRedoGrade: () -> Bool
     var onGradeStrokeEnd: () -> Void
@@ -457,6 +466,8 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         view.onJumpToEnd = onJumpToEnd
         view.onStepSecond = onStepSecond
         view.onTogglePlayback = onTogglePlayback
+        view.onPlayBackward = onPlayBackward
+        view.onPausePlayback = onPausePlayback
         view.onUndoGrade = onUndoGrade
         view.onRedoGrade = onRedoGrade
         view.onGradeStrokeEnd = onGradeStrokeEnd
@@ -472,6 +483,8 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         nsView.onJumpToEnd = onJumpToEnd
         nsView.onStepSecond = onStepSecond
         nsView.onTogglePlayback = onTogglePlayback
+        nsView.onPlayBackward = onPlayBackward
+        nsView.onPausePlayback = onPausePlayback
         nsView.onUndoGrade = onUndoGrade
         nsView.onRedoGrade = onRedoGrade
         nsView.onGradeStrokeEnd = onGradeStrokeEnd
@@ -490,6 +503,8 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         var onJumpToEnd: (() -> Bool)?
         var onStepSecond: ((Int) -> Bool)?
         var onTogglePlayback: (() -> Bool)?
+        var onPlayBackward: (() -> Bool)?
+        var onPausePlayback: (() -> Bool)?
         var onUndoGrade: (() -> Bool)?
         var onRedoGrade: (() -> Bool)?
         var onGradeStrokeEnd: (() -> Void)?
@@ -522,6 +537,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                 }
                 guard event.window === self.window else { return event }
                 if self.consumeGradeUndoKey(event) { return nil }
+                if self.consumeShuttleKey(event) { return nil }
                 switch event.keyCode {
                 case 126:
                     if SessionModel.isArrowConsumedByTextInput() { return event }
@@ -597,6 +613,28 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                 default:
                     return event
                 }
+            }
+        }
+
+        /// J reverse, L same as 播放, K pause. No modifiers. Text, sliders, and buttons keep the letters.
+        private func consumeShuttleKey(_ event: NSEvent) -> Bool {
+            guard let key = event.charactersIgnoringModifiers?.lowercased(), key.count == 1 else { return false }
+            guard key == "j" || key == "k" || key == "l" else { return false }
+            let flags = event.modifierFlags
+                .intersection(.deviceIndependentFlagsMask)
+                .subtracting([.numericPad, .function, .capsLock])
+            guard flags.isEmpty else { return false }
+            if SessionModel.isPlaybackKeyConsumedByControl() { return false }
+            if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: window) { return false }
+            switch key {
+            case "j":
+                return onPlayBackward?() == true
+            case "k":
+                return onPausePlayback?() == true
+            case "l":
+                return onTogglePlayback?() == true
+            default:
+                return false
             }
         }
 
@@ -950,14 +988,20 @@ struct PreviewScrubBar: View {
                     }
                     .controlSize(.regular)
                     .disabled(!session.canTogglePreviewPlayback)
-                    .help("按这条素材自己的帧率走预览。这一帧还没画完就等它。循环关掉时到最后一帧就停，不绕回。循环打开时回到第 1 帧接着播。空格是同一套。不改曝光和白平衡，不参与写出。读不到帧率就不能播。")
+                    .help("按这条素材自己的帧率走预览。这一帧还没画完就等它。循环关掉时到最后一帧就停，不绕回。循环打开时回到第 1 帧接着播。空格和 L 是同一套。K 只暂停。不改曝光和白平衡，不参与写出。读不到帧率就不能播。")
+                    Button(session.isPreviewPlaying && session.previewPlaysBackward ? "倒放中" : "倒放") {
+                        session.playPreviewBackward()
+                    }
+                    .controlSize(.regular)
+                    .disabled(!session.canTogglePreviewReverse)
+                    .help("从当前帧往回走，按这条自己的帧率。到第 1 帧就停，不绕回。循环打开时回到最后一帧接着倒放。正在向前播时改成倒放。再点一次暂停。J 是同一套。不改曝光和白平衡，不参与写出。读不到帧率就不能倒放。")
                     if session.showsPreviewLoop {
                         Button(session.previewLoops ? "循环中" : "循环") {
                             session.togglePreviewLoop()
                         }
                         .controlSize(.regular)
                         .disabled(!session.canTogglePreviewLoop)
-                        .help("打开后，播放到最后一帧回到第 1 帧接着播。关掉则到最后一帧就停，不绕回。⌥⌘L 是同一套。只有一帧、静帧或读不到帧率时没有这一下。打开或关掉不改当前帧，不改这一套曝光和白平衡，也不参与写出。")
+                        .help("打开后，播放到最后一帧回到第 1 帧接着播，倒放则回到最后一帧接着倒放。关掉则到头就停，不绕回。⌥⌘L 是同一套。只有一帧、静帧或读不到帧率时没有这一下。打开或关掉不改当前帧，不改这一套曝光和白平衡，也不参与写出。")
                     }
                     Button("回到开头") {
                         session.jumpPreviewToStart()
@@ -1077,9 +1121,13 @@ struct PreviewScrubBar: View {
             }
         }
         if session.previewLoops {
-            line += session.isPreviewPlaying ? " · 循环播放" : " · 循环"
+            if session.isPreviewPlaying {
+                line += session.previewPlaysBackward ? " · 循环倒放" : " · 循环播放"
+            } else {
+                line += " · 循环"
+            }
         } else if session.isPreviewPlaying {
-            line += " · 播放中"
+            line += session.previewPlaysBackward ? " · 倒放中" : " · 播放中"
         }
         return line
     }
