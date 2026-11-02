@@ -267,6 +267,26 @@ enum WorkspaceSheet: Equatable {
 
 /// Sidebar list filter. Does not change the shared grade or which clip is previewed
 /// until the user moves the selection inside the filtered rows.
+/// One continuous slider drag. A button or another knob starts a new step.
+private enum SharedGradeStroke {
+    case exposure
+    case cct
+    case tint
+}
+
+/// Exposure and white balance only. Not the paired IDT, the preview frame, or this viewing ODT.
+private struct SharedGradeSnapshot: Equatable {
+    var exposureEnabled: Bool
+    var exposureStops: Double
+    var wbEnabled: Bool
+    var wbCCT: Double?
+    var wbTint: Double
+    var wbMethod: String
+    var wbSource: WBSource
+    var asShotCCT: Double?
+    var asShotTint: Double
+}
+
 enum ClipListFilter: String, CaseIterable, Identifiable {
     case all
     case pending
@@ -353,6 +373,12 @@ final class SessionModel: ObservableObject {
     /// User edited exposure / WB, or a camera reading already filled the one shared set.
     /// Selection must not replace that set. Write uses the same set for every locked clip.
     private var sharedGradeTouched = false
+    /// Prior shared exposure / white-balance sets. The newest is last.
+    private var gradeUndoStack: [SharedGradeSnapshot] = []
+    private var gradeRedoStack: [SharedGradeSnapshot] = []
+    /// Non-nil while a slider drag is one undo step. Mouse-up clears it.
+    private var openGradeStroke: SharedGradeStroke?
+    private static let gradeUndoLimit = 40
     private let writeCancel = WriteCancelFlag()
     private var lastProgressUptime: TimeInterval = 0
 
@@ -1548,6 +1574,7 @@ final class SessionModel: ObservableObject {
 
     func setIDT(_ id: UUID, _ idt: IDT) {
         guard let idx = clips.firstIndex(where: { $0.id == id }) else { return }
+        closeSharedGradeStroke()
         clips[idx].idt = idt
         clips[idx].detectedCurve = idt.curve
         clips[idx].detectedGamut = idt.gamut
@@ -1595,6 +1622,103 @@ final class SessionModel: ObservableObject {
         selectNextPendingAfterLock(lockedID: clip.id)
     }
 
+    private func currentSharedGradeSnapshot() -> SharedGradeSnapshot {
+        SharedGradeSnapshot(
+            exposureEnabled: graph.exposureEnabled,
+            exposureStops: graph.exposureStops,
+            wbEnabled: graph.wbEnabled,
+            wbCCT: graph.wbCCT,
+            wbTint: graph.wbTint,
+            wbMethod: graph.wbMethod,
+            wbSource: graph.wbSource,
+            asShotCCT: graph.asShotCCT,
+            asShotTint: graph.asShotTint
+        )
+    }
+
+    /// Put a snapshot back. Does not record another step, and does not touch IDT or the frame.
+    private func applySharedGradeSnapshot(_ snap: SharedGradeSnapshot) {
+        touchSharedGrade()
+        graph.exposureEnabled = snap.exposureEnabled
+        graph.exposureStops = snap.exposureStops
+        graph.wbEnabled = snap.wbEnabled
+        graph.wbCCT = snap.wbCCT
+        graph.wbTint = snap.wbTint
+        graph.wbMethod = snap.wbMethod
+        graph.wbSource = snap.wbSource
+        graph.asShotCCT = snap.asShotCCT
+        graph.asShotTint = snap.asShotTint
+        persistGraphWBToSelectedClip()
+        preview.invalidateWBODT()
+        refreshPreview()
+    }
+
+    /// Remember the set before a user edit. The same slider stroke does not stack steps.
+    /// A nil stroke is one discrete step (a button, a toggle, a grey-card pick).
+    private func rememberSharedGrade(stroke: SharedGradeStroke?) {
+        if let stroke {
+            if openGradeStroke == stroke { return }
+            openGradeStroke = stroke
+        } else {
+            openGradeStroke = nil
+        }
+        gradeUndoStack.append(currentSharedGradeSnapshot())
+        if gradeUndoStack.count > Self.gradeUndoLimit {
+            gradeUndoStack.removeFirst(gradeUndoStack.count - Self.gradeUndoLimit)
+        }
+        gradeRedoStack.removeAll()
+    }
+
+    /// End the open slider stroke so the next drag is its own step.
+    func closeSharedGradeStroke() {
+        openGradeStroke = nil
+    }
+
+    /// Sheets, the folder panel, and a write block undo. An empty stack does too.
+    var canUndoSharedGrade: Bool {
+        !gradeUndoStack.isEmpty && canEditSharedGradeNow
+    }
+
+    var canRedoSharedGrade: Bool {
+        !gradeRedoStack.isEmpty && canEditSharedGradeNow
+    }
+
+    private var canEditSharedGradeNow: Bool {
+        !isWritingDeliverables
+            && !showSettings
+            && !showImporter
+            && !showDeliverSheet
+            && !openingExportFolder
+    }
+
+    /// Back to the previous exposure and white balance. Stops playback. Frame stays.
+    @discardableResult
+    func undoSharedGrade() -> Bool {
+        guard canUndoSharedGrade, let previous = gradeUndoStack.popLast() else { return false }
+        closeSharedGradeStroke()
+        stopPreviewPlayback()
+        gradeRedoStack.append(currentSharedGradeSnapshot())
+        if gradeRedoStack.count > Self.gradeUndoLimit {
+            gradeRedoStack.removeFirst(gradeRedoStack.count - Self.gradeUndoLimit)
+        }
+        applySharedGradeSnapshot(previous)
+        return true
+    }
+
+    /// Forward again after 撤销这一套. Same limits. Does not move the frame.
+    @discardableResult
+    func redoSharedGrade() -> Bool {
+        guard canRedoSharedGrade, let next = gradeRedoStack.popLast() else { return false }
+        closeSharedGradeStroke()
+        stopPreviewPlayback()
+        gradeUndoStack.append(currentSharedGradeSnapshot())
+        if gradeUndoStack.count > Self.gradeUndoLimit {
+            gradeUndoStack.removeFirst(gradeUndoStack.count - Self.gradeUndoLimit)
+        }
+        applySharedGradeSnapshot(next)
+        return true
+    }
+
     /// ±0.10 stop, or back to 0. Same graph as the inspector slider.
     /// Preview and the monitor readout follow via setExposureStops.
     /// Off while writing or while a sheet is up. Does not turn exposure on.
@@ -1608,13 +1732,17 @@ final class SessionModel: ObservableObject {
 
     func nudgeExposureStops(_ delta: Double) {
         guard canNudgeExposure else { return }
+        closeSharedGradeStroke()
         let rounded = ((graph.exposureStops + delta) * 100).rounded() / 100
         setExposureStops(min(8, max(-8, rounded)))
+        closeSharedGradeStroke()
     }
 
     func resetExposureStops() {
         guard canNudgeExposure else { return }
+        closeSharedGradeStroke()
         setExposureStops(0)
+        closeSharedGradeStroke()
     }
 
     /// ±100 K on the current CCT. Same graph as the inspector slider.
@@ -1633,7 +1761,9 @@ final class SessionModel: ObservableObject {
         guard canNudgeWB, let cct = graph.wbCCT else { return }
         let next = min(10000, max(2000, (cct + delta).rounded()))
         guard next != cct else { return }
+        closeSharedGradeStroke()
         setWBParams(cct: next)
+        closeSharedGradeStroke()
     }
 
     /// Back to this clip's as-shot CCT and tint. No as-shot: clear the knobs.
@@ -1661,6 +1791,7 @@ final class SessionModel: ObservableObject {
     /// Other clips keep this set until the user edits again.
     func restoreAsShotWB() {
         guard canRestoreAsShotWB else { return }
+        rememberSharedGrade(stroke: nil)
         let shot = selectedClip?.asShotCCT
         let shotTint = selectedClip?.asShotTint ?? 0
         if let shot {
@@ -1765,6 +1896,15 @@ final class SessionModel: ObservableObject {
         return false
     }
 
+    /// ⌘Z stays with text and the pair search. A slider is not text, so the grade can still step back.
+    static func isUndoConsumedByTextInput() -> Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+        if responder is NSTextView || responder is NSTextField || responder is NSSearchField || responder is NSText {
+            return true
+        }
+        return false
+    }
+
     /// Space stays with text, sliders, and a focused button (that button already uses Space).
     static func isPlaybackKeyConsumedByControl() -> Bool {
         if isArrowConsumedByTextInput() { return true }
@@ -1790,17 +1930,23 @@ final class SessionModel: ObservableObject {
         guard canNudgeWBTint else { return }
         let next = min(10, max(-10, graph.wbTint + delta))
         guard abs(next - graph.wbTint) > 1e-6 else { return }
+        closeSharedGradeStroke()
         setWBParams(tint: next)
+        closeSharedGradeStroke()
     }
 
     /// Tint back to 0. Color temperature stays. This is not 回到机内.
     func resetWBTint() {
         guard canNudgeWBTint else { return }
         guard abs(graph.wbTint) > 1e-3 else { return }
+        closeSharedGradeStroke()
         setWBParams(tint: 0)
+        closeSharedGradeStroke()
     }
 
     func setExposureEnabled(_ enabled: Bool) {
+        guard enabled != graph.exposureEnabled else { return }
+        rememberSharedGrade(stroke: nil)
         touchSharedGrade()
         graph.setEnabled(.exposure, enabled)
         preview.invalidateWBODT()
@@ -1808,6 +1954,8 @@ final class SessionModel: ObservableObject {
     }
 
     func setExposureStops(_ stops: Double) {
+        guard abs(stops - graph.exposureStops) > 1e-9 else { return }
+        rememberSharedGrade(stroke: .exposure)
         touchSharedGrade()
         graph.exposureStops = stops
         preview.invalidateWBODT()
@@ -1815,6 +1963,8 @@ final class SessionModel: ObservableObject {
     }
 
     func setWBEnabled(_ enabled: Bool) {
+        guard enabled != graph.wbEnabled else { return }
+        rememberSharedGrade(stroke: nil)
         touchSharedGrade()
         graph.setEnabled(.wb, enabled)
         preview.invalidateWBODT()
@@ -1832,6 +1982,18 @@ final class SessionModel: ObservableObject {
     }
 
     func setWBParams(cct: Double? = nil, tint: Double? = nil, method: String? = nil) {
+        let cctChanges = cct.map { graph.wbCCT != $0 || graph.wbSource != .user } ?? false
+        let tintValueChanges = tint.map { abs($0 - graph.wbTint) > 1e-9 } ?? false
+        let tintSourceChanges = tint != nil && graph.wbCCT != nil && graph.wbSource != .user
+        let methodChanges = method.map { $0 != graph.wbMethod } ?? false
+        guard cctChanges || tintValueChanges || tintSourceChanges || methodChanges else { return }
+        if cct != nil {
+            rememberSharedGrade(stroke: .cct)
+        } else if tint != nil {
+            rememberSharedGrade(stroke: .tint)
+        } else {
+            rememberSharedGrade(stroke: nil)
+        }
         touchSharedGrade()
         if let cct {
             graph.wbCCT = cct
@@ -1882,6 +2044,7 @@ final class SessionModel: ObservableObject {
     /// Grey-card pick: sample after IDT in ACES2065-1 (AP0) linear. Overrides metadata.
     func pickNeutral(linearRGB: SIMD3<Double>) {
         guard let est = WhiteBalanceNode.pickNeutral(linearRGB: linearRGB, rgbToXYZ: WhiteBalanceNode.ap0ToXYZ) else { return }
+        rememberSharedGrade(stroke: nil)
         touchSharedGrade()
         graph.wbCCT = est.cct
         graph.wbTint = est.tint
@@ -1908,6 +2071,7 @@ final class SessionModel: ObservableObject {
     /// Confirm estimate → absolute AP0 CAT. Grey-card wins. Empty stays empty.
     func confirmAutoWB() {
         guard graph.wbSource != .grey, let cct = graph.autoWBCCT else { return }
+        rememberSharedGrade(stroke: nil)
         touchSharedGrade()
         graph.wbCCT = cct
         graph.wbTint = graph.autoWBTint
@@ -1935,6 +2099,7 @@ final class SessionModel: ObservableObject {
     /// Global preferences. Does not change the selected clip.
     func presentSettings() {
         guard !openingExportFolder else { return }
+        closeSharedGradeStroke()
         stopPreviewPlayback()
         activeSheet = .settings
         showSettings = true
@@ -1945,12 +2110,14 @@ final class SessionModel: ObservableObject {
     /// eat the write that was just confirmed.
     func presentImporter() {
         guard !openingExportFolder else { return }
+        closeSharedGradeStroke()
         showImporter = true
     }
 
     /// Write sheet. Folder panel opens only after this sheet has gone.
     func presentDeliverSheet() {
         guard !isWritingDeliverables, !openingExportFolder else { return }
+        closeSharedGradeStroke()
         stopPreviewPlayback()
         activeSheet = .deliver
         showDeliverSheet = true

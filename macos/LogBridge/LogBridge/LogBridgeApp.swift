@@ -157,6 +157,15 @@ private struct LogBridgeCommands: Commands {
             }
             .keyboardShortcut("\\", modifiers: [.command, .option])
             .disabled(sessionFocus?.session?.canTogglePreviewGradeBefore != true)
+            Divider()
+            Button("撤销这一套") {
+                sessionFocus?.session?.undoSharedGrade()
+            }
+            .disabled(sessionFocus?.session?.canUndoSharedGrade != true)
+            Button("重做这一套") {
+                sessionFocus?.session?.redoSharedGrade()
+            }
+            .disabled(sessionFocus?.session?.canRedoSharedGrade != true)
         }
     }
 }

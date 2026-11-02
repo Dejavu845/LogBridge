@@ -97,6 +97,15 @@ struct ContentView: View {
                 },
                 onTogglePlayback: {
                     session.togglePreviewPlayback()
+                },
+                onUndoGrade: {
+                    session.undoSharedGrade()
+                },
+                onRedoGrade: {
+                    session.redoSharedGrade()
+                },
+                onGradeStrokeEnd: {
+                    session.closeSharedGradeStroke()
                 }
             )
         }
@@ -364,6 +373,19 @@ private struct InspectorColumn: View {
                                 .lineLimit(2)
                         }
                     }
+                    HStack(spacing: 8) {
+                        Button("撤销这一套") {
+                            session.undoSharedGrade()
+                        }
+                        .disabled(!session.canUndoSharedGrade)
+                        Button("重做这一套") {
+                            session.redoSharedGrade()
+                        }
+                        .disabled(!session.canRedoSharedGrade)
+                    }
+                    .controlSize(.regular)
+                    .padding(.top, 4)
+                    .help("回到上一次曝光和白平衡。一次拖动滑条算一步，松开后再拖是另一步。不改成对 IDT，不改预览帧，不改这次预览。⌘Z、⇧⌘Z 和菜单「调色」是同一套。查找框里的 ⌘Z 仍改文字。写出进行中不能撤销。")
                 } else if session.clips.isEmpty {
                     Text("先拖入或点「添加…」。选中一条后，这里跟这条。")
                         .font(.callout)
@@ -407,6 +429,7 @@ private struct InspectorColumn: View {
 /// No help overlay. No extra button. No confirm sheet.
 /// Same window only; text / numeric / search / slider first-responders keep
 /// arrows and Delete. Sheets / alerts / settings keep Escape and Delete.
+/// ⌘Z / ⇧⌘Z step the shared grade, unless a text field has the keys.
 private struct ClipListArrowMonitor: NSViewRepresentable {
     var handler: (Int) -> Bool
     var onEscape: () -> Bool
@@ -415,6 +438,9 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     var onJumpToStart: () -> Bool
     var onJumpToEnd: () -> Bool
     var onTogglePlayback: () -> Bool
+    var onUndoGrade: () -> Bool
+    var onRedoGrade: () -> Bool
+    var onGradeStrokeEnd: () -> Void
 
     func makeNSView(context: Context) -> MonitorView {
         let view = MonitorView()
@@ -425,6 +451,9 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         view.onJumpToStart = onJumpToStart
         view.onJumpToEnd = onJumpToEnd
         view.onTogglePlayback = onTogglePlayback
+        view.onUndoGrade = onUndoGrade
+        view.onRedoGrade = onRedoGrade
+        view.onGradeStrokeEnd = onGradeStrokeEnd
         return view
     }
 
@@ -436,6 +465,9 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         nsView.onJumpToStart = onJumpToStart
         nsView.onJumpToEnd = onJumpToEnd
         nsView.onTogglePlayback = onTogglePlayback
+        nsView.onUndoGrade = onUndoGrade
+        nsView.onRedoGrade = onRedoGrade
+        nsView.onGradeStrokeEnd = onGradeStrokeEnd
     }
 
     static func dismantleNSView(_ nsView: MonitorView, coordinator: ()) {
@@ -450,6 +482,9 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         var onJumpToStart: (() -> Bool)?
         var onJumpToEnd: (() -> Bool)?
         var onTogglePlayback: (() -> Bool)?
+        var onUndoGrade: (() -> Bool)?
+        var onRedoGrade: (() -> Bool)?
+        var onGradeStrokeEnd: (() -> Void)?
         private var monitor: Any?
 
         override func viewDidMoveToWindow() {
@@ -463,8 +498,14 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
 
         func installMonitor() {
             guard monitor == nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self, event.window === self.window else { return event }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseUp]) { [weak self] event in
+                guard let self else { return event }
+                if event.type == .leftMouseUp {
+                    self.onGradeStrokeEnd?()
+                    return event
+                }
+                guard event.window === self.window else { return event }
+                if self.consumeGradeUndoKey(event) { return nil }
                 switch event.keyCode {
                 case 126:
                     if SessionModel.isArrowConsumedByTextInput() { return event }
@@ -533,6 +574,19 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                     return event
                 }
             }
+        }
+
+        /// ⌘Z / ⇧⌘Z. Text and the pair search keep the keys. An empty stack does not eat the event.
+        private func consumeGradeUndoKey(_ event: NSEvent) -> Bool {
+            guard event.charactersIgnoringModifiers?.lowercased() == "z" else { return false }
+            let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+            let undo = flags == .command
+            let redo = flags == [.command, .shift]
+            guard undo || redo else { return false }
+            if SessionModel.isUndoConsumedByTextInput() { return false }
+            if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: window) { return false }
+            if undo { return onUndoGrade?() == true }
+            return onRedoGrade?() == true
         }
 
         func removeMonitor() {

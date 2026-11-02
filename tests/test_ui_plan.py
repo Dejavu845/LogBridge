@@ -835,3 +835,77 @@ def test_clip_posters_are_source_first_frames_and_not_the_grade():
     assert "不写入磁盘" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_shared_grade_undo_steps_back_without_moving_idt_or_the_frame():
+    """Undo restores exposure and white balance. One slider drag is one step."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    undo = clip.split("func undoSharedGrade()")[1].split("func redoSharedGrade()")[0]
+    assert "canUndoSharedGrade" in undo
+    assert "applySharedGradeSnapshot" in undo
+    assert "stopPreviewPlayback()" in undo
+    assert "gradeRedoStack" in undo
+    for token in ("setIDT", "setODT", "setPreviewFrame", "previewFrameIndex", "5600", "6504", "24", "30"):
+        assert token not in undo, token
+    redo = clip.split("func redoSharedGrade()")[1].split("var canNudgeExposure")[0]
+    assert "canRedoSharedGrade" in redo
+    assert "applySharedGradeSnapshot" in redo
+    assert "stopPreviewPlayback()" in redo
+    for token in ("setIDT", "setPreviewFrame", "5600", "6504"):
+        assert token not in redo, token
+    gate = clip.split("var canEditSharedGradeNow")[1].split("func undoSharedGrade")[0]
+    assert "isWritingDeliverables" in gate
+    assert "showSettings" in gate
+    assert "showImporter" in gate
+    assert "showDeliverSheet" in gate
+    assert "openingExportFolder" in gate
+    apply = clip.split("func applySharedGradeSnapshot")[1].split("func rememberSharedGrade")[0]
+    assert "graph.wbCCT = snap.wbCCT" in apply
+    assert "graph.exposureStops = snap.exposureStops" in apply
+    assert "invalidateWBODT" in apply
+    assert "refreshPreview()" in apply
+    for token in ("setIDT", "setODT", "setPreviewFrame", "5600", "6504"):
+        assert token not in apply, token
+    remember = clip.split("func rememberSharedGrade")[1].split("func closeSharedGradeStroke")[0]
+    assert "openGradeStroke == stroke" in remember
+    assert "gradeUndoStack.append" in remember
+    assert "gradeRedoStack.removeAll()" in remember
+    exposure = clip.split("func setExposureStops")[1].split("func setWBEnabled")[0]
+    assert "rememberSharedGrade(stroke: .exposure)" in exposure
+    assert "invalidateWBODT" in exposure
+    wb = clip.split("func setWBParams")[1].split("func applyClipWBToGraph")[0]
+    assert "rememberSharedGrade(stroke: .cct)" in wb
+    assert "rememberSharedGrade(stroke: .tint)" in wb
+    assert "5600" not in wb
+    assert "6504" not in wb
+    odt = clip.split("func setODT(")[1].split("func setWBParams")[0]
+    assert "rememberSharedGrade" not in odt
+    note = clip.split("func noteSelectionForSharedGrade")[1].split("func persistGraphWBToSelectedClip")[0]
+    assert "rememberSharedGrade" not in note
+    assert "sharedGradeIsFactory" in note
+    content = _read(CONTENT)
+    column = content.split("struct InspectorColumn")[1].split("struct ClipListArrowMonitor")[0]
+    assert 'Button("撤销这一套")' in column
+    assert 'Button("重做这一套")' in column
+    assert "undoSharedGrade()" in column
+    assert "redoSharedGrade()" in column
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert "leftMouseUp" in monitor
+    assert "onGradeStrokeEnd" in monitor
+    assert "consumeGradeUndoKey" in monitor
+    assert "isUndoConsumedByTextInput" in monitor
+    assert 'charactersIgnoringModifiers?.lowercased() == "z"' in monitor
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    assert 'Button("撤销这一套")' in menu
+    assert 'Button("重做这一套")' in menu
+    assert "undoSharedGrade()" in menu
+    assert "redoSharedGrade()" in menu
+    assert 'keyboardShortcut("z"' not in menu
+    plan = _read(PLAN)
+    assert "撤销这一套" in plan
+    assert "一次拖动滑条算一步" in plan
+    assert "不改成对 IDT" in plan
+    assert "不记进撤销" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
