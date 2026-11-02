@@ -1051,8 +1051,17 @@ struct SplitPreview: View {
                 PreviewScrubBar(session: session)
                 if session.isExporting {
                     WriteProgressLine(text: session.lastExportNote)
-                } else if let caption = session.selectedClip?.previewCaption {
-                    WriteProgressLine(text: caption)
+                } else {
+                    if let line = session.monitorWillWriteLine {
+                        WriteProgressLine(
+                            text: line,
+                            help: "和写出说明里「将得到」是同一个名字。只写文件名或文件夹名，不写整条路径。已锁定的都会写出，每条仍用自己的成对 IDT。待选会跳过，所以待选时没有这一行。点写出才打开说明。正在写出时这一行让给进度。不改这一套曝光和白平衡，也不改预览帧。",
+                            truncation: .middle
+                        )
+                    }
+                    if let caption = session.selectedClip?.previewCaption {
+                        WriteProgressLine(text: caption)
+                    }
                 }
             }
             if session.clips.isEmpty {
@@ -1396,21 +1405,25 @@ struct PreviewScrubBar: View {
     }
 }
 
-/// One Chinese line on the preview: write progress, or selected 待选 / 失败 / 已写出代理.
+/// One Chinese line on the preview: the file this locked clip will get,
+/// write progress, or selected 待选 / 失败 / 已写出代理.
 /// Mid-write wording is 「写出代理 i/N · 文件名 · 第 k 帧」 (「第 k / 共 m 帧」 when this clip's total is known). No cancel / process / retry button here.
 struct WriteProgressLine: View {
     let text: String
+    var help: String = UICopy.PROGRESS_STATUS_HELP
+    var truncation: Text.TruncationMode = .tail
 
     var body: some View {
         Text(text)
             .font(.callout.monospacedDigit())
             .foregroundStyle(.secondary)
             .lineLimit(1)
+            .truncationMode(truncation)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(Color.accentColor.opacity(0.08))
-            .help(UICopy.PROGRESS_STATUS_HELP)
+            .help(help)
     }
 }
 

@@ -712,6 +712,29 @@ final class SessionModel: ObservableObject {
         refreshPreview()
     }
 
+    /// Name the next write will create for the selected locked clip.
+    /// Same suffix as the write sheet. A pending clip is skipped, so it gets nil.
+    /// A write in progress yields the progress line instead. No full path.
+    /// Does not change exposure, white balance, the pair, or the frame.
+    static func monitorWillWriteLine(
+        selectedLocked: Bool,
+        exporting: Bool,
+        deliverableName: String,
+        lockedCount: Int,
+        pendingCount: Int
+    ) -> String? {
+        guard selectedLocked, !exporting, lockedCount > 0 else { return nil }
+        let name = deliverableName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        if lockedCount == 1 && pendingCount == 0 {
+            return "将得到 \(name)。点写出再选文件夹。"
+        }
+        if pendingCount > 0 {
+            return "已锁定 \(lockedCount) 条会写出，待选 \(pendingCount) 条会跳过。这一条将得到 \(name)"
+        }
+        return "已锁定 \(lockedCount) 条都会写出。这一条将得到 \(name)"
+    }
+
     /// Why one monitor pane is still black. A picture that is up gets nothing.
     /// The grade pane of a clip that still needs a paired IDT stays quiet:
     /// that next step is already on the monitor. Does not change the grade
@@ -1141,6 +1164,20 @@ final class SessionModel: ObservableObject {
     /// 「N 条已锁定 / M 条待选」
     var lockStatusText: String {
         "\(lockedClipCount) 条已锁定 / \(pendingClipCount) 条待选"
+    }
+
+    /// 监视器下、滑条下面。当前这条已锁定时，写出将得到的名字。
+    /// 和写出说明是同一个。只写文件名或文件夹名。待选不出现。正在写出时让给进度。
+    /// 不改这一套曝光和白平衡，不改成对 IDT，也不改预览帧。
+    var monitorWillWriteLine: String? {
+        guard let clip = selectedClip else { return nil }
+        return Self.monitorWillWriteLine(
+            selectedLocked: clip.hasLockedPair,
+            exporting: isWritingDeliverables,
+            deliverableName: clip.plannedDeliverableName(format: settings.exportFormat),
+            lockedCount: lockedClipCount,
+            pendingCount: pendingClipCount
+        )
     }
 
     /// Scroll id for the paired-IDT block. Pending selection returns here.
