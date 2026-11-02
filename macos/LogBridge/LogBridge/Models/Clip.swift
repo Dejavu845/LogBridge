@@ -437,6 +437,9 @@ final class SessionModel: ObservableObject {
     @Published var clipListFilter: ClipListFilter = .all
     /// Filename or parent-folder query. Narrows the list only. Blank keeps every filtered row.
     @Published var clipListQuery: String = ""
+    /// Bumps after 「显示这条」 puts the selected row back. The list scrolls to it.
+    /// Does not change the selection, the grade, or the frame.
+    @Published var listRevealToken = 0
     @Published var selectedID: UUID?
     /// Bumps when a loop step asks the inspector to scroll. The target is the anchor.
     /// Selection changes do not use this. Does not change the grade or the frame.
@@ -612,15 +615,21 @@ final class SessionModel: ObservableObject {
     /// The lock filter runs first. A filename query only narrows that list.
     var visibleClips: [Clip] {
         clips.filter { clip in
-            switch clipListFilter {
-            case .all:
-                break
-            case .pending:
-                if clip.hasLockedPair { return false }
-            case .locked:
-                if !clip.hasLockedPair { return false }
-            }
-            return Self.clipMatchesListQuery(clip, query: clipListQuery)
+            Self.clipMatchesListFilter(clip, filter: clipListFilter)
+                && Self.clipMatchesListQuery(clip, query: clipListQuery)
+        }
+    }
+
+    /// True when this row stays under 全部 / 待选 / 已锁定.
+    /// Does not look at the filename query. Does not lock an IDT or move the selection.
+    static func clipMatchesListFilter(_ clip: Clip, filter: ClipListFilter) -> Bool {
+        switch filter {
+        case .all:
+            return true
+        case .pending:
+            return !clip.hasLockedPair
+        case .locked:
+            return clip.hasLockedPair
         }
     }
 
@@ -634,6 +643,40 @@ final class SessionModel: ObservableObject {
         let folder = clip.folderName
         if !folder.isEmpty, folder.localizedStandardContains(needle) { return true }
         return false
+    }
+
+    /// What 「显示这条」 changes. Nil when there is no selection, or the row is already showing.
+    /// clearFilter returns the filter to 全部. clearQuery empties the filename query.
+    /// Does not move the selection, the grade, the pair, or the frame.
+    static func listRevealAdjustments(
+        hasSelection: Bool,
+        matchesFilter: Bool,
+        matchesQuery: Bool
+    ) -> (clearFilter: Bool, clearQuery: Bool)? {
+        guard hasSelection, !(matchesFilter && matchesQuery) else { return nil }
+        return (!matchesFilter, !matchesQuery)
+    }
+
+    /// Put the selected row back in the list.
+    /// A filter that hides it returns to 全部. A query that hides it is cleared.
+    /// Both, when both hide it. Already visible does nothing.
+    /// Playback, the grade, the pair, and the frame stay. Does not write.
+    @discardableResult
+    func revealSelectedClipInList() -> Bool {
+        guard let clip = selectedClip else { return false }
+        guard let adjust = Self.listRevealAdjustments(
+            hasSelection: true,
+            matchesFilter: Self.clipMatchesListFilter(clip, filter: clipListFilter),
+            matchesQuery: Self.clipMatchesListQuery(clip, query: clipListQuery)
+        ) else { return false }
+        if adjust.clearFilter {
+            clipListFilter = .all
+        }
+        if adjust.clearQuery {
+            clipListQuery = ""
+        }
+        listRevealToken += 1
+        return true
     }
 
     /// Factory knobs: nothing to protect yet. The next selected clip may fill them

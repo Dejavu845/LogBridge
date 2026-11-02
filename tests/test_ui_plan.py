@@ -2421,3 +2421,78 @@ def test_monitor_names_the_file_this_locked_clip_will_write():
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial
+
+
+def _list_reveal_adjustments(*, has_selection, matches_filter, matches_query):
+    """Same branches as SessionModel.listRevealAdjustments. Already visible stays put."""
+    if not has_selection or (matches_filter and matches_query):
+        return None
+    return (not matches_filter, not matches_query)
+
+
+def test_hidden_selection_can_be_shown_again_without_moving_the_grade():
+    """「显示这条」 only widens the list. It does not move the selection or the grade.
+
+    A pending filter that hid a just-locked clip goes back to 全部.
+    A filename query that hid the row is cleared. Both, when both hide it.
+    """
+    assert _list_reveal_adjustments(
+        has_selection=False, matches_filter=False, matches_query=False
+    ) is None
+    assert _list_reveal_adjustments(
+        has_selection=True, matches_filter=True, matches_query=True
+    ) is None
+    assert _list_reveal_adjustments(
+        has_selection=True, matches_filter=False, matches_query=True
+    ) == (True, False)
+    assert _list_reveal_adjustments(
+        has_selection=True, matches_filter=True, matches_query=False
+    ) == (False, True)
+    assert _list_reveal_adjustments(
+        has_selection=True, matches_filter=False, matches_query=False
+    ) == (True, True)
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    filt = clip.split("static func clipMatchesListFilter")[1].split("static func clipMatchesListQuery")[0]
+    assert "case .all:" in filt
+    assert "return true" in filt
+    assert "case .pending:" in filt
+    assert "return !clip.hasLockedPair" in filt
+    assert "case .locked:" in filt
+    assert "return clip.hasLockedPair" in filt
+    assert "clipListQuery" not in filt
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "selectedID", "5600", "6504"):
+        assert token not in filt, token
+    adjust = clip.split("static func listRevealAdjustments(")[1].split("func revealSelectedClipInList()")[0]
+    assert "guard hasSelection, !(matchesFilter && matchesQuery) else { return nil }" in adjust
+    assert "return (!matchesFilter, !matchesQuery)" in adjust
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "selectedID", "5600", "6504"):
+        assert token not in adjust, token
+    body = clip.split("func revealSelectedClipInList()")[1].split("private var sharedGradeIsFactory")[0]
+    assert "listRevealAdjustments(" in body
+    assert "clipMatchesListFilter(clip, filter: clipListFilter)" in body
+    assert "clipMatchesListQuery(clip, query: clipListQuery)" in body
+    assert "clipListFilter = .all" in body
+    assert 'clipListQuery = ""' in body
+    assert "listRevealToken += 1" in body
+    assert body.index("clearFilter") < body.index("clearQuery")
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "selectedID", "5600", "6504", "processLockedClips"):
+        assert token not in body, token
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    hidden = sidebar.split("hiddenSelectionNote")[1].split("ForEach(session.visibleClips)")[0]
+    assert 'Button("显示这条")' in hidden
+    assert "revealSelectedClipInList()" in hidden
+    assert "不改选中，不改这一套调色，不改成对 IDT，不改预览帧，也不参与写出" in hidden
+    scroll = sidebar.split("onChange(of: session.listRevealToken)")[1].split("background(Color.primary")[0]
+    assert "proxy.scrollTo(id, anchor: .center)" in scroll
+    assert "session.visibleClips.contains" in scroll
+    plan = _read(PLAN)
+    assert "旁边有「显示这条」" in plan
+    assert "两样都挡着就一起改" in plan
+    assert "已经看得到时没有这一下" in plan
+    assert "点完列表滚到这一行" in plan
+    readme = _read(ROOT / "README.md")
+    trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
+    assert "显示这条" in trial
+    for token in BANNED_CONTACT:
+        assert token not in plan
+        assert token not in trial

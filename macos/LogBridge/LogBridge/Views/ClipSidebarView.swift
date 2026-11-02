@@ -251,12 +251,19 @@ struct ClipSidebarView: View {
                         }
                         if let clip = session.selectedClip,
                            !session.visibleClips.contains(where: { $0.id == clip.id }) {
-                            Text(hiddenSelectionNote)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .padding(.horizontal, 4)
-                                .padding(.bottom, 4)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(hiddenSelectionNote)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Button("显示这条") {
+                                    session.revealSelectedClipInList()
+                                }
+                                .controlSize(.regular)
+                                .help("筛选挡着就回到全部，查找挡着就清空查找。两样都挡着就一起改。不改选中，不改这一套调色，不改成对 IDT，不改预览帧，也不参与写出。")
+                            }
+                            .padding(.horizontal, 4)
+                            .padding(.bottom, 4)
                         }
                         ForEach(session.visibleClips) { clip in
                             ClipRow(
@@ -293,6 +300,12 @@ struct ClipSidebarView: View {
                 }
                 .onChange(of: session.writingClipID) { _, id in
                     if let id {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                }
+                .onChange(of: session.listRevealToken) { _, _ in
+                    if let id = session.selectedID,
+                       session.visibleClips.contains(where: { $0.id == id }) {
                         proxy.scrollTo(id, anchor: .center)
                     }
                 }
