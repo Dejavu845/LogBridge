@@ -135,6 +135,10 @@ private struct LogBridgeCommands: Commands {
                 sessionFocus?.session?.jumpPreviewToStart()
             }
             .disabled(sessionFocus?.session?.canJumpPreviewToStart != true)
+            Button("退 1 秒") {
+                sessionFocus?.session?.stepPreviewBySecond(-1)
+            }
+            .disabled(sessionFocus?.session?.canStepPreviewSecondBackward != true)
             Button("上一帧") {
                 sessionFocus?.session?.stepPreviewFrame(-1)
             }
@@ -143,6 +147,10 @@ private struct LogBridgeCommands: Commands {
                 sessionFocus?.session?.stepPreviewFrame(1)
             }
             .disabled(sessionFocus?.session?.canStepPreviewForward != true)
+            Button("进 1 秒") {
+                sessionFocus?.session?.stepPreviewBySecond(1)
+            }
+            .disabled(sessionFocus?.session?.canStepPreviewSecondForward != true)
             Button("到结尾") {
                 sessionFocus?.session?.jumpPreviewToEnd()
             }

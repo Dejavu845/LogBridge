@@ -492,6 +492,71 @@ def test_preview_clock_uses_the_clip_rate_and_jumps_leave_the_grade():
         assert token not in plan
 
 
+def test_preview_second_step_uses_this_clip_rate_and_names_the_last_frame():
+    """One second is this clip's rate, rounded. The clock names the last frame too."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func previewSecondFrameCount")[1].split("enum DetectionSource")[0]
+    assert "fps.isFinite, fps > 0" in fn
+    assert "return nil" in fn
+    assert "rounded()" in fn
+    assert "frames >= 1" in fn
+    for token in ("24", "30", "5600", "6504", "setExposureStops", "setWBParams"):
+        assert token not in fn, token
+    end_clock = clip.split("var previewClockEndText")[1].split("var canStepPreviewFrame")[0]
+    assert "previewScrubLastFrame" in end_clock
+    assert "previewClock(frameIndex: last" in end_clock
+    assert "previewPlaybackFPS" in end_clock
+    step = clip.split("func stepPreviewBySecond")[1].split("var canPlayPreview")[0]
+    assert "previewSecondFrameCount" in step
+    assert "stopPreviewPlayback()" in step
+    assert "setPreviewFrame(next)" in step
+    assert "previewFrameIndex + delta" in step
+    assert "setExposureStops" not in step
+    assert "setWBParams" not in step
+    assert "touchSharedGrade" not in step
+    for token in ("24", "30", "5600", "6504"):
+        assert token not in step, token
+    show = clip.split("var showsPreviewSecondStep")[1].split("var canPlayPreview")[0]
+    assert "previewSecondFrameCount" in show
+    content = _read(CONTENT)
+    bar = content.split("struct PreviewScrubBar")[1].split("struct WriteProgressLine")[0]
+    assert 'Button("退 1 秒")' in bar
+    assert 'Button("进 1 秒")' in bar
+    assert "showsPreviewSecondStep" in bar
+    assert "stepPreviewBySecond(-1)" in bar
+    assert "stepPreviewBySecond(1)" in bar
+    assert "canStepPreviewSecondBackward" in bar
+    assert "canStepPreviewSecondForward" in bar
+    assert "previewClockText" in bar
+    assert "previewClockEndText" in bar
+    assert '" · \\(clock) / \\(end)"' in bar
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert "transportShiftOnly" in monitor
+    assert "onStepSecond?(-1)" in monitor
+    assert "onStepSecond?(1)" in monitor
+    assert "onStepFrame?(-1)" in monitor
+    assert "onStepFrame?(1)" in monitor
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    assert 'Button("退 1 秒")' in menu
+    assert 'Button("进 1 秒")' in menu
+    assert "stepPreviewBySecond(-1)" in menu
+    assert "stepPreviewBySecond(1)" in menu
+    assert "canStepPreviewSecondBackward" in menu
+    assert "canStepPreviewSecondForward" in menu
+    plan = _read(PLAN)
+    assert "退 1 秒" in plan
+    assert "进 1 秒" in plan
+    assert "大约 1 秒" in plan
+    assert "最后一帧" in plan
+    assert "不是片源时长" in plan
+    assert "滑条下面这一行" in plan
+    assert "不猜 24 或 30" in plan
+    assert "不改曝光和白平衡" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
+
+
 def test_grade_before_is_preview_only_and_leaves_the_shared_set():
     """Compare drops exposure and WB in the picture. Write keeps the shared set."""
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")

@@ -202,6 +202,15 @@ struct Clip: Identifiable, Hashable {
         }
         return String(format: "%d:%02d.%03d", minutes, secs, millis)
     }
+
+    /// Frames in about one second at this clip's rate. Nearest whole frame.
+    /// Nil when the rate is missing or rounds to nothing. Does not fill in a rate.
+    static func previewSecondFrameCount(fps: Double?) -> Int? {
+        guard let fps, fps.isFinite, fps > 0 else { return nil }
+        let frames = Int(fps.rounded())
+        guard frames >= 1 else { return nil }
+        return frames
+    }
 }
 
 enum DetectionSource: String, Hashable {
@@ -535,6 +544,12 @@ final class SessionModel: ObservableObject {
         Clip.previewClock(frameIndex: previewFrameIndex, fps: previewPlaybackFPS)
     }
 
+    /// Clock of the last scrub frame. Same rate. Not the source duration.
+    var previewClockEndText: String? {
+        guard let last = previewScrubLastFrame else { return nil }
+        return Clip.previewClock(frameIndex: last, fps: previewPlaybackFPS)
+    }
+
     /// Movie scrub range exists, and no sheet or write is up.
     /// Stills and missing fps/duration stay out: no invented frame count.
     var canStepPreviewFrame: Bool {
@@ -602,6 +617,40 @@ final class SessionModel: ObservableObject {
             return true
         }
         setPreviewFrame(last)
+        return true
+    }
+
+    /// Second-step buttons exist only when this clip's rate was read.
+    var showsPreviewSecondStep: Bool {
+        Clip.previewSecondFrameCount(fps: previewPlaybackFPS) != nil
+    }
+
+    /// Same window gates as a one-frame step, plus a real rate.
+    var canStepPreviewBySecond: Bool {
+        canStepPreviewFrame && showsPreviewSecondStep
+    }
+
+    var canStepPreviewSecondBackward: Bool {
+        canStepPreviewBySecond && previewFrameIndex > 0
+    }
+
+    var canStepPreviewSecondForward: Bool {
+        guard canStepPreviewBySecond, let last = previewScrubLastFrame else { return false }
+        return previewFrameIndex < last
+    }
+
+    /// About one second, in this clip's frames. Stops at the ends.
+    /// Does not change exposure, white balance, or the write.
+    @discardableResult
+    func stepPreviewBySecond(_ direction: Int) -> Bool {
+        guard canStepPreviewBySecond, direction != 0,
+              let frames = Clip.previewSecondFrameCount(fps: previewPlaybackFPS),
+              let last = previewScrubLastFrame else { return false }
+        stopPreviewPlayback()
+        let delta = direction < 0 ? -frames : frames
+        let next = min(max(previewFrameIndex + delta, 0), last)
+        if next == previewFrameIndex { return true }
+        setPreviewFrame(next)
         return true
     }
 

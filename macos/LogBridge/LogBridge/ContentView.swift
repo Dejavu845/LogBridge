@@ -95,6 +95,9 @@ struct ContentView: View {
                 onJumpToEnd: {
                     session.jumpPreviewToEnd()
                 },
+                onStepSecond: { direction in
+                    session.stepPreviewBySecond(direction)
+                },
                 onTogglePlayback: {
                     session.togglePreviewPlayback()
                 },
@@ -420,7 +423,8 @@ private struct InspectorColumn: View {
 }
 
 /// Window-level Up/Down for the sidebar list. Left/Right steps the preview
-/// frame (same as 上一帧 / 下一帧). Home / End jump to the first or last
+/// frame (same as 上一帧 / 下一帧). Shift+Left/Right jumps about one second
+/// when this clip's rate was read. Home / End jump to the first or last
 /// preview frame. Space plays or pauses that preview.
 /// Escape while writing is the existing 取消
 /// (same cancelLockedDeliverables). Idle Escape does nothing.
@@ -437,6 +441,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     var onStepFrame: (Int) -> Bool
     var onJumpToStart: () -> Bool
     var onJumpToEnd: () -> Bool
+    var onStepSecond: (Int) -> Bool
     var onTogglePlayback: () -> Bool
     var onUndoGrade: () -> Bool
     var onRedoGrade: () -> Bool
@@ -450,6 +455,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         view.onStepFrame = onStepFrame
         view.onJumpToStart = onJumpToStart
         view.onJumpToEnd = onJumpToEnd
+        view.onStepSecond = onStepSecond
         view.onTogglePlayback = onTogglePlayback
         view.onUndoGrade = onUndoGrade
         view.onRedoGrade = onRedoGrade
@@ -464,6 +470,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         nsView.onStepFrame = onStepFrame
         nsView.onJumpToStart = onJumpToStart
         nsView.onJumpToEnd = onJumpToEnd
+        nsView.onStepSecond = onStepSecond
         nsView.onTogglePlayback = onTogglePlayback
         nsView.onUndoGrade = onUndoGrade
         nsView.onRedoGrade = onRedoGrade
@@ -481,11 +488,20 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         var onStepFrame: ((Int) -> Bool)?
         var onJumpToStart: (() -> Bool)?
         var onJumpToEnd: (() -> Bool)?
+        var onStepSecond: ((Int) -> Bool)?
         var onTogglePlayback: (() -> Bool)?
         var onUndoGrade: (() -> Bool)?
         var onRedoGrade: (() -> Bool)?
         var onGradeStrokeEnd: (() -> Void)?
         private var monitor: Any?
+
+        /// Shift alone, ignoring flags arrow keys already carry.
+        private static func transportShiftOnly(_ event: NSEvent) -> Bool {
+            let flags = event.modifierFlags
+                .intersection(.deviceIndependentFlagsMask)
+                .subtracting([.numericPad, .function, .capsLock])
+            return flags == .shift
+        }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -517,10 +533,18 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                     return event
                 case 123:
                     if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if Self.transportShiftOnly(event) {
+                        if self.onStepSecond?(-1) == true { return nil }
+                        return event
+                    }
                     if self.onStepFrame?(-1) == true { return nil }
                     return event
                 case 124:
                     if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if Self.transportShiftOnly(event) {
+                        if self.onStepSecond?(1) == true { return nil }
+                        return event
+                    }
                     if self.onStepFrame?(1) == true { return nil }
                     return event
                 case 115:
@@ -917,56 +941,71 @@ struct PreviewScrubBar: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
         } else if let last = session.previewScrubLastFrame {
-            HStack(spacing: 10) {
-                Text("预览帧")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Button(session.isPreviewPlaying ? "暂停" : "播放") {
-                    session.togglePreviewPlayback()
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Button(session.isPreviewPlaying ? "暂停" : "播放") {
+                        session.togglePreviewPlayback()
+                    }
+                    .controlSize(.regular)
+                    .disabled(!session.canTogglePreviewPlayback)
+                    .help("按这条素材自己的帧率走预览。这一帧还没画完就等它，到最后一帧就停，不绕回。空格是同一套。不改曝光和白平衡，不参与写出。读不到帧率就不能播。")
+                    Button("回到开头") {
+                        session.jumpPreviewToStart()
+                    }
+                    .controlSize(.regular)
+                    .disabled(!session.canJumpPreviewToStart)
+                    .help("回到第 1 帧。Home 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                    if session.showsPreviewSecondStep {
+                        Button("退 1 秒") {
+                            session.stepPreviewBySecond(-1)
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canStepPreviewSecondBackward)
+                        .help("按这条帧率跳大约 1 秒，到头就停。⇧← 是同一套。读不到帧率就没有这一下。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                    }
+                    Button("上一帧") {
+                        session.stepPreviewFrame(-1)
+                    }
+                    .controlSize(.regular)
+                    .disabled(!session.canStepPreviewBackward)
+                    .help("每次一帧，到头就停。左方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                    Slider(
+                        value: Binding(
+                            get: { Double(session.previewFrameIndex) },
+                            set: { session.setPreviewFrame(Int($0.rounded())) }
+                        ),
+                        in: 0...Double(last),
+                        step: 1
+                    )
+                    .controlSize(.regular)
+                    .help("仅预览")
+                    Button("下一帧") {
+                        session.stepPreviewFrame(1)
+                    }
+                    .controlSize(.regular)
+                    .disabled(!session.canStepPreviewForward)
+                    .help("每次一帧，到头就停。右方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                    if session.showsPreviewSecondStep {
+                        Button("进 1 秒") {
+                            session.stepPreviewBySecond(1)
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canStepPreviewSecondForward)
+                        .help("按这条帧率跳大约 1 秒，到头就停。⇧→ 是同一套。读不到帧率就没有这一下。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                    }
+                    Button("到结尾") {
+                        session.jumpPreviewToEnd()
+                    }
+                    .controlSize(.regular)
+                    .disabled(!session.canJumpPreviewToEnd)
+                    .help("到最后一帧。End 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
                 }
-                .controlSize(.regular)
-                .disabled(!session.canTogglePreviewPlayback)
-                .help("按这条素材自己的帧率走预览。这一帧还没画完就等它，到最后一帧就停，不绕回。空格是同一套。不改曝光和白平衡，不参与写出。读不到帧率就不能播。")
-                Button("回到开头") {
-                    session.jumpPreviewToStart()
-                }
-                .controlSize(.regular)
-                .disabled(!session.canJumpPreviewToStart)
-                .help("回到第 1 帧。Home 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
-                Button("上一帧") {
-                    session.stepPreviewFrame(-1)
-                }
-                .controlSize(.regular)
-                .disabled(!session.canStepPreviewBackward)
-                .help("每次一帧，到头就停。左方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
-                Slider(
-                    value: Binding(
-                        get: { Double(session.previewFrameIndex) },
-                        set: { session.setPreviewFrame(Int($0.rounded())) }
-                    ),
-                    in: 0...Double(last),
-                    step: 1
-                )
-                .controlSize(.regular)
-                .help("仅预览")
-                Button("下一帧") {
-                    session.stepPreviewFrame(1)
-                }
-                .controlSize(.regular)
-                .disabled(!session.canStepPreviewForward)
-                .help("每次一帧，到头就停。右方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
-                Button("到结尾") {
-                    session.jumpPreviewToEnd()
-                }
-                .controlSize(.regular)
-                .disabled(!session.canJumpPreviewToEnd)
-                .help("到最后一帧。End 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
                 Text(previewFrameReadout(last: last))
                     .font(.body.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .frame(minWidth: 220, alignment: .trailing)
-                    .help("帧数是这条预览的第几帧。读到帧率时，后面的时间是这一帧除以这条帧率，不是片源时间码。读不到帧率就不写时间。不改这一套调色，不参与写出。")
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .help("帧数是这条预览的第几帧。读到帧率时，后面是当前这一帧 / 最后一帧的预览时间，都是这一帧除以这条帧率。右边不是片源时长，也不是时间码。读不到帧率就不写时间。不改这一套调色，不参与写出。")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -977,7 +1016,11 @@ struct PreviewScrubBar: View {
     private func previewFrameReadout(last: Int) -> String {
         var line = "第 \(session.previewFrameIndex + 1) / \(last + 1) 帧"
         if let clock = session.previewClockText {
-            line += " · \(clock)"
+            if let end = session.previewClockEndText {
+                line += " · \(clock) / \(end)"
+            } else {
+                line += " · \(clock)"
+            }
         }
         if session.isPreviewPlaying {
             line += " · 播放中"
