@@ -42,6 +42,12 @@ struct Clip: Identifiable, Hashable {
 
     var filename: String { url.lastPathComponent }
 
+    /// Parent folder name, so two files with the same name can be told apart.
+    /// Not the full path. Not a grade and not a deliverable.
+    var folderName: String {
+        url.deletingLastPathComponent().lastPathComponent
+    }
+
     /// File or folder the write will create. Same suffixes as the writers.
     /// ProRes: `{stem}_Rec709_proxy.mov`. EXR: `{stem}_ACES2065-1_proxy`.
     func plannedDeliverableName(format: ExportFormat) -> String {
@@ -422,6 +428,8 @@ final class SessionModel: ObservableObject {
     @Published var clips: [Clip] = []
     /// 全部 / 待选 / 已锁定. The monitor keeps the current clip until selection moves.
     @Published var clipListFilter: ClipListFilter = .all
+    /// Filename or parent-folder query. Narrows the list only. Blank keeps every filtered row.
+    @Published var clipListQuery: String = ""
     @Published var selectedID: UUID?
     @Published var selectedNode: NodeSlot = .idt
     @Published var graph = SerialGraph()
@@ -533,15 +541,31 @@ final class SessionModel: ObservableObject {
     }
 
     /// Rows the sidebar is showing. Arrow keys move inside this list.
+    /// The lock filter runs first. A filename query only narrows that list.
     var visibleClips: [Clip] {
-        switch clipListFilter {
-        case .all:
-            return clips
-        case .pending:
-            return clips.filter { !$0.hasLockedPair }
-        case .locked:
-            return clips.filter(\.hasLockedPair)
+        clips.filter { clip in
+            switch clipListFilter {
+            case .all:
+                break
+            case .pending:
+                if clip.hasLockedPair { return false }
+            case .locked:
+                if !clip.hasLockedPair { return false }
+            }
+            return Self.clipMatchesListQuery(clip, query: clipListQuery)
         }
+    }
+
+    /// True when this row stays in the bin search. A blank query keeps the row.
+    /// Matches the filename or the parent folder name. Does not lock an IDT,
+    /// move the selection, or change the shared grade.
+    static func clipMatchesListQuery(_ clip: Clip, query: String) -> Bool {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if needle.isEmpty { return true }
+        if clip.filename.localizedStandardContains(needle) { return true }
+        let folder = clip.folderName
+        if !folder.isEmpty, folder.localizedStandardContains(needle) { return true }
+        return false
     }
 
     /// Factory knobs: nothing to protect yet. The next selected clip may fill them
@@ -2658,6 +2682,13 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// True when the filename query would hide at least one clip from this drop.
+    static func importQueryHidesNewRow(_ query: String, built: [Clip]) -> Bool {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if needle.isEmpty { return false }
+        return built.contains { !clipMatchesListQuery($0, query: needle) }
+    }
+
     /// Multi-file refuse list. Header when more than one skip. Per-file chips unchanged.
     static func importSkipSummary(_ skipped: [String]) -> String {
         guard skipped.count > 1 else {
@@ -2732,6 +2763,11 @@ final class SessionModel: ObservableObject {
                 // A 待选 / 已锁定 filter must not hide the rows that just arrived.
                 if !built.isEmpty, Self.importFilterHidesNewRow(self.clipListFilter, built: built) {
                     self.clipListFilter = .all
+                }
+                // A filename query must not hide them either. A query that still
+                // matches every new row stays, so the list does not jump open.
+                if !built.isEmpty, Self.importQueryHidesNewRow(self.clipListQuery, built: built) {
+                    self.clipListQuery = ""
                 }
                 let needsPicker = built.contains { !$0.hasLockedPair }
                 var note = Self.importArrivalNote(imported: built.count, needsPicker: needsPicker)

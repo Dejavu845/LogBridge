@@ -1509,3 +1509,44 @@ def test_typed_tint_stays_on_the_shared_grade():
     assert "色温不动" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_clip_list_search_narrows_rows_without_moving_the_grade():
+    """A filename or folder query only hides rows. It does not lock an IDT or edit the grade."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    assert "var folderName: String" in clip
+    match = clip.split("static func clipMatchesListQuery")[1].split("private var sharedGradeIsFactory")[0]
+    assert "trimmingCharacters" in match
+    assert "needle.isEmpty" in match
+    assert "return true" in match
+    assert "clip.filename.localizedStandardContains(needle)" in match
+    assert "clip.folderName" in match
+    assert "folder.localizedStandardContains(needle)" in match
+    assert "return false" in match
+    for token in ("5600", "6504", "24", "30", "setIDT", "setExposureStops", "setPreviewFrame", "selectedID"):
+        assert token not in match, token
+    visible = clip.split("var visibleClips")[1].split("static func clipMatchesListQuery")[0]
+    assert "clipListFilter" in visible
+    assert "clipMatchesListQuery(clip, query: clipListQuery)" in visible
+    hides = clip.split("static func importQueryHidesNewRow")[1].split("static func importSkipSummary")[0]
+    assert "needle.isEmpty" in hides
+    assert "return false" in hides
+    assert "clipMatchesListQuery" in hides
+    apply = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    assert "importQueryHidesNewRow" in apply
+    assert 'clipListQuery = ""' in apply
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    assert 'TextField("查找文件名"' in sidebar
+    assert "clipListQuery" in sidebar
+    assert 'Button("清空")' in sidebar
+    assert "没有匹配的素材。清空查找再看列表。" in sidebar
+    assert "当前这条不在查找里。监视器不跟着查找换。" in sidebar
+    assert "当前这条不在这个筛选里。监视器不跟着筛选换。" in sidebar
+    assert "folderName" in sidebar
+    plan = _read(PLAN)
+    assert "查找文件名" in plan
+    assert "没有匹配的素材" in plan
+    assert "当前这条不在查找里" in plan
+    assert "不写整条路径" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

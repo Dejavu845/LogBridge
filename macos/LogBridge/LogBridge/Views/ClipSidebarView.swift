@@ -197,6 +197,20 @@ struct ClipSidebarView: View {
                 .help("全部 \(session.clips.count) 条，待选 \(session.pendingClipCount) 条，已锁定 \(session.lockedClipCount) 条。筛选只收列表，不改当前这一套调色。")
             }
 
+            if !session.clips.isEmpty {
+                HStack(spacing: 8) {
+                    TextField("查找文件名", text: $session.clipListQuery)
+                        .textFieldStyle(.roundedBorder)
+                    if !listQueryIsBlank {
+                        Button("清空") { session.clipListQuery = "" }
+                            .controlSize(.regular)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+                .help("只收下面这一列。可输入文件名或所在文件夹。不改选中，不改这一套调色，也不改成对 IDT。在这个框里，上下方向键改文字，不换条。")
+            }
+
             if !session.lastImportNote.isEmpty {
                 Text(session.lastImportNote)
                     .font(.callout)
@@ -212,17 +226,16 @@ struct ClipSidebarView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 4) {
                         if !session.clips.isEmpty && session.visibleClips.isEmpty {
-                            Text(session.clipListFilter == .pending
-                                 ? "没有待选。成对 IDT 都已选上。"
-                                 : "没有已锁定。先在检查器选成对 IDT。")
+                            Text(emptyListNote)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 8)
-                        } else if let clip = session.selectedClip,
-                                  !session.visibleClips.contains(where: { $0.id == clip.id }) {
-                            Text("当前这条不在这个筛选里。监视器不跟着筛选换。")
+                        }
+                        if let clip = session.selectedClip,
+                           !session.visibleClips.contains(where: { $0.id == clip.id }) {
+                            Text(hiddenSelectionNote)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -267,6 +280,27 @@ struct ClipSidebarView: View {
     private var importNoteIsProblem: Bool {
         let note = session.lastImportNote
         return note.contains("未导入") || note.contains("没有能读")
+    }
+
+    private var listQueryIsBlank: Bool {
+        session.clipListQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Query wins over the lock filter, so an empty search is not read as 「没有已锁定」.
+    private var emptyListNote: String {
+        if !listQueryIsBlank {
+            return "没有匹配的素材。清空查找再看列表。"
+        }
+        return session.clipListFilter == .pending
+            ? "没有待选。成对 IDT 都已选上。"
+            : "没有已锁定。先在检查器选成对 IDT。"
+    }
+
+    private var hiddenSelectionNote: String {
+        if !listQueryIsBlank {
+            return "当前这条不在查找里。监视器不跟着查找换。"
+        }
+        return "当前这条不在这个筛选里。监视器不跟着筛选换。"
     }
 }
 
@@ -344,6 +378,14 @@ struct ClipRow: View {
                         .background(clip.isPending ? Color.yellow.opacity(0.28) : Color.accentColor.opacity(0.16))
                         .foregroundStyle(clip.isPending ? Color.primary : Color.accentColor)
                         .clipShape(Capsule())
+                }
+                if !clip.folderName.isEmpty {
+                    Text(clip.folderName)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help("所在文件夹的名字。查找可按这个名字收列表。不是整条路径，不参与写出。")
                 }
                 Text(clip.lockedPairLabel)
                     .font(.callout)
