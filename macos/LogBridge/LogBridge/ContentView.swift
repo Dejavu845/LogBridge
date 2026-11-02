@@ -1097,7 +1097,9 @@ struct SplitPreview: View {
 }
 
 /// Movie: slider first…last from duration × metadata fps. Cache hit: 只重跑预览输出.
-/// Missing fps/duration: Chinese fail, no fake range. Stills: no slider.
+/// The slider is its own row so transport buttons cannot squeeze it. A narrow
+/// window scrolls that button row sideways. Missing fps/duration: Chinese fail,
+/// no fake range. Stills: no slider. Not a timeline.
 struct PreviewScrubBar: View {
     @ObservedObject var session: SessionModel
     @State private var jumpText = ""
@@ -1115,78 +1117,84 @@ struct PreviewScrubBar: View {
                 .padding(.vertical, 6)
         } else if let last = session.previewScrubLastFrame {
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Button(session.isPreviewPlaying ? "暂停" : "播放") {
-                        session.togglePreviewPlayback()
-                    }
-                    .controlSize(.regular)
-                    .disabled(!session.canTogglePreviewPlayback)
-                    .help("按这条素材自己的帧率走预览。这一帧还没画完就等它。循环关掉时到最后一帧就停，不绕回。循环打开时回到第 1 帧接着播。空格和 L 是同一套。K 只暂停。不改曝光和白平衡，不参与写出。读不到帧率就不能播。")
-                    Button(session.isPreviewPlaying && session.previewPlaysBackward ? "倒放中" : "倒放") {
-                        session.playPreviewBackward()
-                    }
-                    .controlSize(.regular)
-                    .disabled(!session.canTogglePreviewReverse)
-                    .help("从当前帧往回走，按这条自己的帧率。到第 1 帧就停，不绕回。循环打开时回到最后一帧接着倒放。正在向前播时改成倒放。再点一次暂停。J 是同一套。不改曝光和白平衡，不参与写出。读不到帧率就不能倒放。")
-                    if session.showsPreviewLoop {
-                        Button(session.previewLoops ? "循环中" : "循环") {
-                            session.togglePreviewLoop()
+                Slider(
+                    value: Binding(
+                        get: { Double(session.previewFrameIndex) },
+                        set: { session.setPreviewFrame(Int($0.rounded())) }
+                    ),
+                    in: 0...Double(last),
+                    step: 1
+                )
+                .controlSize(.regular)
+                .help("拖这一条看这一帧。按钮在下面，窗口窄时那一行可横着滚，不把滑条挤没。仅预览。不改这一套曝光和白平衡，也不参与写出。")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        Button(session.isPreviewPlaying ? "暂停" : "播放") {
+                            session.togglePreviewPlayback()
                         }
                         .controlSize(.regular)
-                        .disabled(!session.canTogglePreviewLoop)
-                        .help("打开后，播放到最后一帧回到第 1 帧接着播，倒放则回到最后一帧接着倒放。关掉则到头就停，不绕回。⌥⌘L 是同一套。只有一帧、静帧或读不到帧率时没有这一下。打开或关掉不改当前帧，不改这一套曝光和白平衡，也不参与写出。")
-                    }
-                    Button("回到开头") {
-                        session.jumpPreviewToStart()
-                    }
-                    .controlSize(.regular)
-                    .disabled(!session.canJumpPreviewToStart)
-                    .help("回到第 1 帧。Home 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
-                    if session.showsPreviewSecondStep {
-                        Button("退 1 秒") {
-                            session.stepPreviewBySecond(-1)
+                        .disabled(!session.canTogglePreviewPlayback)
+                        .help("按这条素材自己的帧率走预览。这一帧还没画完就等它。循环关掉时到最后一帧就停，不绕回。循环打开时回到第 1 帧接着播。空格和 L 是同一套。K 只暂停。不改曝光和白平衡，不参与写出。读不到帧率就不能播。")
+                        Button(session.isPreviewPlaying && session.previewPlaysBackward ? "倒放中" : "倒放") {
+                            session.playPreviewBackward()
                         }
                         .controlSize(.regular)
-                        .disabled(!session.canStepPreviewSecondBackward)
-                        .help("按这条帧率跳大约 1 秒，到头就停。⇧← 是同一套。读不到帧率就没有这一下。只改预览，不改这一套曝光和白平衡，也不参与写出。")
-                    }
-                    Button("上一帧") {
-                        session.stepPreviewFrame(-1)
-                    }
-                    .controlSize(.regular)
-                    .disabled(!session.canStepPreviewBackward)
-                    .help("每次一帧，到头就停。左方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
-                    Slider(
-                        value: Binding(
-                            get: { Double(session.previewFrameIndex) },
-                            set: { session.setPreviewFrame(Int($0.rounded())) }
-                        ),
-                        in: 0...Double(last),
-                        step: 1
-                    )
-                    .controlSize(.regular)
-                    .help("仅预览")
-                    Button("下一帧") {
-                        session.stepPreviewFrame(1)
-                    }
-                    .controlSize(.regular)
-                    .disabled(!session.canStepPreviewForward)
-                    .help("每次一帧，到头就停。右方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
-                    if session.showsPreviewSecondStep {
-                        Button("进 1 秒") {
-                            session.stepPreviewBySecond(1)
+                        .disabled(!session.canTogglePreviewReverse)
+                        .help("从当前帧往回走，按这条自己的帧率。到第 1 帧就停，不绕回。循环打开时回到最后一帧接着倒放。正在向前播时改成倒放。再点一次暂停。J 是同一套。不改曝光和白平衡，不参与写出。读不到帧率就不能倒放。")
+                        if session.showsPreviewLoop {
+                            Button(session.previewLoops ? "循环中" : "循环") {
+                                session.togglePreviewLoop()
+                            }
+                            .controlSize(.regular)
+                            .disabled(!session.canTogglePreviewLoop)
+                            .help("打开后，播放到最后一帧回到第 1 帧接着播，倒放则回到最后一帧接着倒放。关掉则到头就停，不绕回。⌥⌘L 是同一套。只有一帧、静帧或读不到帧率时没有这一下。打开或关掉不改当前帧，不改这一套曝光和白平衡，也不参与写出。")
+                        }
+                        Button("回到开头") {
+                            session.jumpPreviewToStart()
                         }
                         .controlSize(.regular)
-                        .disabled(!session.canStepPreviewSecondForward)
-                        .help("按这条帧率跳大约 1 秒，到头就停。⇧→ 是同一套。读不到帧率就没有这一下。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                        .disabled(!session.canJumpPreviewToStart)
+                        .help("回到第 1 帧。Home 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                        if session.showsPreviewSecondStep {
+                            Button("退 1 秒") {
+                                session.stepPreviewBySecond(-1)
+                            }
+                            .controlSize(.regular)
+                            .disabled(!session.canStepPreviewSecondBackward)
+                            .help("按这条帧率跳大约 1 秒，到头就停。⇧← 是同一套。读不到帧率就没有这一下。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                        }
+                        Button("上一帧") {
+                            session.stepPreviewFrame(-1)
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canStepPreviewBackward)
+                        .help("每次一帧，到头就停。左方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                        Button("下一帧") {
+                            session.stepPreviewFrame(1)
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canStepPreviewForward)
+                        .help("每次一帧，到头就停。右方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                        if session.showsPreviewSecondStep {
+                            Button("进 1 秒") {
+                                session.stepPreviewBySecond(1)
+                            }
+                            .controlSize(.regular)
+                            .disabled(!session.canStepPreviewSecondForward)
+                            .help("按这条帧率跳大约 1 秒，到头就停。⇧→ 是同一套。读不到帧率就没有这一下。只改预览，不改这一套曝光和白平衡，也不参与写出。")
+                        }
+                        Button("到结尾") {
+                            session.jumpPreviewToEnd()
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canJumpPreviewToEnd)
+                        .help("到最后一帧。End 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
                     }
-                    Button("到结尾") {
-                        session.jumpPreviewToEnd()
-                    }
-                    .controlSize(.regular)
-                    .disabled(!session.canJumpPreviewToEnd)
-                    .help("到最后一帧。End 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
                 }
+                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, maxHeight: 56, alignment: .leading)
+                .help("播放、倒放、回到开头、上一帧、下一帧在滑条下面。窗口窄时可横着滚，不把滑条挤没，也不把预览顶矮。不改这一套曝光和白平衡，也不参与写出。这不是时间线。")
                 if session.previewClockText != nil {
                     HStack(spacing: 8) {
                         TextField("0:01.500", text: $jumpText)

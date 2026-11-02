@@ -1988,3 +1988,36 @@ def test_write_sheet_names_the_last_export_folder_without_the_full_path():
     assert "不在 ⌘, 里" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_preview_slider_keeps_its_own_row_when_the_window_is_narrow():
+    """The scrub slider stays a full row. Transport buttons scroll under it."""
+    content = _read(CONTENT)
+    bar = content.split("struct PreviewScrubBar")[1].split("struct WriteProgressLine")[0]
+    play = 'Button(session.isPreviewPlaying ? "暂停" : "播放")'
+    assert "Slider(" in bar
+    assert play in bar
+    assert bar.index("Slider(") < bar.index(play)
+    assert bar.index(play) < bar.index('Button("上一帧")')
+    assert bar.index('Button("上一帧")') < bar.index('Button("下一帧")')
+    assert bar.index('Button("下一帧")') < bar.index('TextField("0:01.500"')
+    assert "ScrollView(.horizontal" in bar
+    assert "scrollBounceBehavior(.basedOnSize, axes: .horizontal)" in bar
+    assert "fixedSize(horizontal: false, vertical: true)" in bar
+    assert "maxHeight: 56" in bar
+    assert "不把滑条挤没" in bar
+    assert "可横着滚" in bar
+    assert "这不是时间线" in bar
+    assert "showsPreviewSecondStep" in bar
+    transport = bar.split("Slider(")[1].split("if session.previewClockText")[0]
+    for token in ("setExposureStops", "setWBParams", "setIDT", "5600", "6504"):
+        assert token not in transport, token
+    plan = _read(PLAN)
+    assert "预览帧滑条自己占一行" in plan
+    assert "不把滑条挤没" in plan
+    assert "可横着滚" in plan
+    assert "滑条留在上面" in plan
+    assert "滑条下面这一行" in plan
+    assert "这不是时间线" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
