@@ -2997,3 +2997,36 @@ def test_write_sheet_can_preview_another_locked_clip():
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial
+
+
+def test_write_sheet_rows_show_the_folder_and_the_source_still():
+    """Each write-sheet row names the parent folder and shows the source first frame.
+
+    Same glance as the list. Not the full path, not the grade, and not a write.
+    """
+    deliver = _read(DELIVER)
+    line = deliver.split("private func clipLine")[1].split("private func accentHeight")[0]
+    assert "source?.folderName" in line
+    assert "if !folder.isEmpty" in line
+    assert "不写整条路径" in line
+    assert "ClipSourcePoster(session: session, posters: session.posters, clip: source)" in line
+    assert line.index("ClipSourcePoster") < line.index('Button("去看这条")')
+    assert ".path" not in line
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "processLockedClips", "5600", "6504"):
+        assert token not in line, token
+    poster = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    tile = poster.split("struct ClipSourcePoster")[1].split("struct ClipSidebarView")[0]
+    assert 'Text("源")' in tile
+    assert 'Text("没有画面")' in tile
+    plan = _read(PLAN)
+    assert "每一行在文件名下写出所在文件夹的名字" in plan
+    assert "角上写「源」" in plan
+    assert "不是调色预览，不含曝光和白平衡，不参与写出" in plan
+    assert "会写出的一条没有这一下" in plan
+    readme = _read(ROOT / "README.md")
+    trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
+    assert "每一行文件名下有所在文件夹的名字" in trial
+    assert "角上写「源」" in trial
+    for token in BANNED_CONTACT:
+        assert token not in plan
+        assert token not in trial

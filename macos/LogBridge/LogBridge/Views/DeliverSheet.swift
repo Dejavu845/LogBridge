@@ -107,7 +107,7 @@ struct DeliverSheet: View {
 
     private var listHeight: CGFloat {
         let headers = (session.lockedClips.isEmpty ? 0 : 1) + (skippedClips.isEmpty ? 0 : 1)
-        let estimate = CGFloat(headers) * 28 + CGFloat(session.clips.count) * 62 + 8
+        let estimate = CGFloat(headers) * 28 + CGFloat(session.clips.count) * 88 + 8
         return min(240, max(44, estimate))
     }
 
@@ -180,10 +180,20 @@ struct DeliverSheet: View {
     }
 
     private func clipLine(clipID: UUID, name: String, detail: String, fact: String?, output: String?, willWrite: Bool, current: Bool) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        let source = session.clips.first { $0.id == clipID }
+        let folder = source?.folderName ?? ""
+        let bar = max(
+            48,
+            accentHeight(fact: fact, output: output, extraButton: !willWrite || !current)
+                + (folder.isEmpty ? 0 : 16)
+        )
+        return HStack(alignment: .top, spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(willWrite ? Color.accentColor : Color.yellow.opacity(0.95))
-                .frame(width: 4, height: accentHeight(fact: fact, output: output, extraButton: !willWrite || !current))
+                .frame(width: 4, height: bar)
+            if let source {
+                ClipSourcePoster(session: session, posters: session.posters, clip: source)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(name)
@@ -197,6 +207,14 @@ struct DeliverSheet: View {
                             .layoutPriority(1)
                             .help("和监视器是同一条。会写出或会跳过都标。不改选中，不改这一套曝光和白平衡，不改成对 IDT，也不开始写文件。")
                     }
+                }
+                if !folder.isEmpty {
+                    Text(folder)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help("所在文件夹的名字，和左侧列表同一句。只写文件夹名，不写整条路径。不参与写出。两份同名素材可以分开。")
                 }
                 Text(detail)
                     .font(.callout)
