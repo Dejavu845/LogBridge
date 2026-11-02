@@ -60,6 +60,53 @@ def test_swift_default_is_prores_and_writer_exists():
     assert "exportLockedEXR" in clip  # advanced path kept
 
 
+def test_prores_disk_note_names_one_byte_not_the_exr_figure():
+    from color.export_format import PRORES_DISK_ESTIMATE_ASSUMPTION
+
+    clips = [
+        BatchClip(
+            name="a.mov",
+            idt="sony_slog3_sgamut3",
+            width=1920,
+            height=1080,
+            fps=24.0,
+            duration_seconds=1.0,
+        )
+    ]
+    prores = estimate_locked_proxy_bytes(
+        clips, export_format=ExportFormat.PRORES_422_HQ
+    )
+    assert prores.bytes == 24 * 1920 * 1080 * 1
+    assert "未压缩浮点图" not in prores.note
+    assert PRORES_DISK_ESTIMATE_ASSUMPTION in prores.note
+    assert "1 字节" in prores.note
+
+
+def test_swift_disk_estimate_follows_export_format():
+    clip = (SWIFT / "Models" / "Clip.swift").read_text(encoding="utf-8")
+    estimate = clip.split("func estimateLockedProxyBytes")[1].split("var deliverDiskNote")[0]
+    assert "bytesPerProResHQPixel" in estimate
+    assert "bytesPerEXRPixel" in estimate
+    assert "diskEstimateAssumptionProRes" in estimate
+    assert "diskEstimateAssumption" in estimate
+    assert "format == .prores422HQ" in estimate
+    picker = clip.split("func processLockedClips()")[1].split("func writeLockedDeliverables")[0]
+    assert "folderPickerMessage" in picker
+    assert "format: format" in picker
+    write = clip.split("func writeLockedDeliverables")[1].split("func exportLockedEXR")[0]
+    assert "format: exportFormat" in write
+    assert "removeProResDeliverable" in write
+    assert "deliverDiskNote" in clip
+    deliver = (SWIFT / "Views" / "DeliverSheet.swift").read_text(encoding="utf-8")
+    assert "deliverDiskNote" in deliver
+    writer = (SWIFT / "Export" / "ProResWriter.swift").read_text(encoding="utf-8")
+    assert "final class EncodeSession" in writer
+    assert "func append(rgb:" in writer
+    prores = clip.split("func exportLockedProRes")[1].split("func cancelLockedDeliverables")[0]
+    assert "EncodeSession" in prores
+    assert "frames.append" not in prores
+
+
 def test_disk_estimate_prores_smaller_than_exr():
     clips = [
         BatchClip(

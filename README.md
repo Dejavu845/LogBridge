@@ -95,3 +95,5 @@ Status chips and failure notes stay Chinese and specific:
 
 
 Disk estimate (EXR advanced): **未压缩浮点图**, **6 bytes** / pixel, **24 fps × 60 s** guess when needed. **磁盘空间不足，未写出**.
+
+Default ProRes uses about **1 byte** per pixel per frame for that same check (a planning figure, not a measured bitrate). It does not reuse the 6-byte EXR figure, so a normal movie is not refused before it starts. The write sheet and the folder panel show the figure for the format you picked. ProRes frames are encoded as they are graded. If the Resolve package in the same folder is incomplete, that ProRes file is removed and the status is **达芬奇包不完整，未写出**.

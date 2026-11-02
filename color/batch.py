@@ -70,9 +70,10 @@ check), ``lastExportNote`` is one Chinese three-bucket summary:
 (existing chips only). Not a second process button. Not a summary page.
 Do not reuse the dest-disk 24 fps × 60 s guess in this summary.
 
-Before any EXR is written, estimate dest disk from **locked clips
-only**: frame count × pixel count × 6 bytes (uncompressed half
-RGB; EXR header / offset table is covered by a small margin). If
+Before a locked write, estimate dest disk from **locked clips
+only**. Default ProRes uses 1 byte per pixel (planning figure).
+The EXR path stays frame count × pixel count × 6 bytes (uncompressed
+half RGB; EXR header / offset table is covered by a small margin). If
 frame count is unknown, use duration×fps, or a conservative 24 fps
 × 60 s guess (said in the note). If free space < estimate + margin,
 do not start writing. Status: 「磁盘空间不足，未写出」 +
@@ -105,6 +106,7 @@ from .export_format import (
     FOLDER_PICKER_PRORES,
     PROCESS_BUTTON_HELP_PRORES,
     PROCESS_DELIVERABLE_NOTE_PRORES,
+    PRORES_DISK_ESTIMATE_ASSUMPTION,
     bytes_per_pixel,
     parse_export_format,
     prores_mov_name,
@@ -876,12 +878,17 @@ def clip_pixel_count(
 
 @dataclass(frozen=True)
 class ProxyDiskEstimate:
-    """Locked-only dest estimate. Uncompressed half RGB EXR (6 bytes / pixel)."""
+    """Locked-only dest estimate.
+
+    EXR uses uncompressed half RGB (6 bytes / pixel). Default ProRes uses
+    1 byte / pixel. The note names which figure was used.
+    """
 
     bytes: int
     used_frame_guess: bool
     used_pixel_guess: bool
     used_duration_fps: bool = False
+    assumption: str = DISK_ESTIMATE_ASSUMPTION
 
     @property
     def needed_bytes(self) -> int:
@@ -894,12 +901,12 @@ class ProxyDiskEstimate:
         size = format_proxy_bytes(self.bytes)
         if self.used_frame_guess:
             return (
-                f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}；"
+                f"约 {size}（{self.assumption}；"
                 f"帧数按每秒 {int(CONSERVATIVE_FPS)} 帧估算）"
             )
         if self.used_duration_fps:
-            return f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}；帧数按时长×帧率估算）"
-        return f"约 {size}（{DISK_ESTIMATE_ASSUMPTION}）"
+            return f"约 {size}（{self.assumption}；帧数按时长×帧率估算）"
+        return f"约 {size}（{self.assumption}）"
 
 
 def format_proxy_bytes(n: int) -> str:
@@ -926,6 +933,7 @@ def estimate_locked_proxy_bytes(
     invent a 4K×60s guess. When ``frames`` is omitted (folder picker),
     use clip timing or the conservative per-second guess.
     """
+    fmt = parse_export_format(export_format)
     frames_supplied = frames is not None
     frames = frames or {}
     total = 0
@@ -938,18 +946,24 @@ def estimate_locked_proxy_bytes(
             continue
         n_frames, frame_src = clip_frame_count(clip, rgb_frames)
         n_pixels, pixel_src = clip_pixel_count(clip, rgb_frames)
-        total += n_frames * n_pixels * bytes_per_pixel(parse_export_format(export_format))
+        total += n_frames * n_pixels * bytes_per_pixel(fmt)
         if frame_src == "guess":
             used_frame_guess = True
         elif frame_src == "duration_fps":
             used_duration_fps = True
         if pixel_src == "guess":
             used_pixel_guess = True
+    assumption = (
+        PRORES_DISK_ESTIMATE_ASSUMPTION
+        if fmt is ExportFormat.PRORES_422_HQ
+        else DISK_ESTIMATE_ASSUMPTION
+    )
     return ProxyDiskEstimate(
         bytes=int(total),
         used_frame_guess=used_frame_guess,
         used_pixel_guess=used_pixel_guess,
         used_duration_fps=used_duration_fps,
+        assumption=assumption,
     )
 
 

@@ -27,10 +27,11 @@ class ExportFormat(str, Enum):
 DEFAULT_EXPORT_FORMAT = ExportFormat.PRORES_422_HQ
 
 # Approximate payload for dest-disk estimates (bytes / pixel / frame).
-# ProRes 422 HQ is variable-rate; 1.0 B/px is a conservative upper bound
-# vs uncompressed half EXR at 6 B/px.
+# ProRes 422 HQ is variable-rate; 1.0 B/px is a planning upper bound
+# vs uncompressed half EXR at 6 B/px. Not a measured bitrate.
 BYTES_PER_PRORES_HQ_PIXEL = 1
 BYTES_PER_EXR_PIXEL = 6
+PRORES_DISK_ESTIMATE_ASSUMPTION = "ProRes 422 HQ，按每像素 1 字节估算"
 
 PRORES_DIR_SUFFIX = "_Rec709_proxy"  # stem only; file is .mov
 PRORES_FILE_SUFFIX = ".mov"

@@ -3,8 +3,8 @@ import CoreVideo
 import Foundation
 
 /// Writes Rec.709 preview proxies as ProRes 422 HQ (.mov).
-/// Pixel path: graded display RGB 0..1 float → 16-bit → AVAssetWriter.
-/// No IDT / WB math here. 整段代理，代理精度.
+/// Pixel path: graded display RGB 0..1 float → 8-bit BGRA → AVAssetWriter.
+/// One frame at a time. No IDT / WB math here. 整段代理，代理精度.
 enum ProResWriter {
     static let proresSuffix = "_Rec709_proxy.mov"
 
@@ -13,58 +13,86 @@ enum ProResWriter {
         return directory.appendingPathComponent("\(stem)\(proresSuffix)")
     }
 
-    /// Encode one ProRes 422 HQ movie from display-referred RGB frames.
-    static func writeRec709ProRes422HQ(
-        frames: [[Float]],
-        width: Int,
-        height: Int,
-        fps: Double,
-        to url: URL
-    ) throws {
-        if FileManager.default.fileExists(atPath: url.path) {
-            try FileManager.default.removeItem(at: url)
+    /// Holds the writer so an escaping frame callback can append without
+    /// keeping every frame in memory.
+    final class SessionBox {
+        var session: EncodeSession?
+    }
+
+    /// One ProRes 422 HQ movie. Call append, then finish, from the same queue.
+    final class EncodeSession {
+        private let writer: AVAssetWriter
+        private let input: AVAssetWriterInput
+        private let adaptor: AVAssetWriterInputPixelBufferAdaptor
+        private let width: Int
+        private let height: Int
+        private let frameDuration: CMTime
+        private let attrs: [String: Any]
+        private(set) var writtenFrames = 0
+        private var closed = false
+
+        init(width: Int, height: Int, fps: Double, to url: URL) throws {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+            guard width > 0, height > 0 else {
+                throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "解码失败"
+                ])
+            }
+            self.width = width
+            self.height = height
+            let rate = fps > 0 ? fps : 24.0
+            frameDuration = CMTime(value: 1, timescale: CMTimeScale(max(1, Int32(rate.rounded()))))
+            guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mov) else {
+                throw NSError(domain: "LogBridge", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "写出失败"
+                ])
+            }
+            self.writer = writer
+            let settings: [String: Any] = [
+                AVVideoCodecKey: AVVideoCodecType.proRes422HQ,
+                AVVideoWidthKey: width,
+                AVVideoHeightKey: height
+            ]
+            let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
+            input.expectsMediaDataInRealTime = false
+            self.input = input
+            attrs = [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height
+            ]
+            adaptor = AVAssetWriterInputPixelBufferAdaptor(
+                assetWriterInput: input,
+                sourcePixelBufferAttributes: attrs
+            )
+            guard writer.canAdd(input) else {
+                throw NSError(domain: "LogBridge", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "写出失败"
+                ])
+            }
+            writer.add(input)
+            guard writer.startWriting() else {
+                throw writer.error ?? NSError(domain: "LogBridge", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "写出失败"
+                ])
+            }
+            writer.startSession(atSourceTime: .zero)
         }
-        guard width > 0, height > 0, !frames.isEmpty else {
-            throw NSError(domain: "LogBridge", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "解码失败"
-            ])
-        }
-        let rate = fps > 0 ? fps : 24.0
-        guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mov) else {
-            throw NSError(domain: "LogBridge", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "写出失败"
-            ])
-        }
-        let settings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.proRes422HQ,
-            AVVideoWidthKey: width,
-            AVVideoHeightKey: height
-        ]
-        let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
-        input.expectsMediaDataInRealTime = false
-        let attrs: [String: Any] = [
-            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
-            kCVPixelBufferWidthKey as String: width,
-            kCVPixelBufferHeightKey as String: height
-        ]
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: input,
-            sourcePixelBufferAttributes: attrs
-        )
-        guard writer.canAdd(input) else {
-            throw NSError(domain: "LogBridge", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "写出失败"
-            ])
-        }
-        writer.add(input)
-        guard writer.startWriting() else {
-            throw writer.error ?? NSError(domain: "LogBridge", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "写出失败"
-            ])
-        }
-        writer.startSession(atSourceTime: .zero)
-        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(max(1, Int32(rate.rounded()))))
-        for (index, rgb) in frames.enumerated() {
+
+        func append(rgb: [Float]) throws {
+            guard !closed else {
+                throw NSError(domain: "LogBridge", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "写出失败"
+                ])
+            }
+            let pixels = width * height
+            guard rgb.count >= pixels * 3 else {
+                throw NSError(domain: "LogBridge", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "写出失败"
+                ])
+            }
             while !input.isReadyForMoreMediaData {
                 Thread.sleep(forTimeInterval: 0.002)
             }
@@ -91,7 +119,6 @@ enum ProResWriter {
             }
             let stride = CVPixelBufferGetBytesPerRow(buffer)
             let ptr = base.assumingMemoryBound(to: UInt8.self)
-            let pixels = width * height
             for p in 0..<pixels {
                 let r = max(0.0, min(1.0, Double(rgb[p * 3 + 0])))
                 let g = max(0.0, min(1.0, Double(rgb[p * 3 + 1])))
@@ -104,23 +131,65 @@ enum ProResWriter {
                 ptr[o + 2] = UInt8(r * 255.0 + 0.5)
                 ptr[o + 3] = 255
             }
-            let pts = CMTimeMultiply(frameDuration, multiplier: Int32(index))
+            let pts = CMTimeMultiply(frameDuration, multiplier: Int32(writtenFrames))
             if !adaptor.append(buffer, withPresentationTime: pts) {
                 throw writer.error ?? NSError(domain: "LogBridge", code: 3, userInfo: [
                     NSLocalizedDescriptionKey: "写出失败"
                 ])
             }
+            writtenFrames += 1
         }
-        input.markAsFinished()
-        let sem = DispatchSemaphore(value: 0)
-        writer.finishWriting {
-            sem.signal()
+
+        func finish() throws {
+            guard !closed else { return }
+            closed = true
+            input.markAsFinished()
+            let sem = DispatchSemaphore(value: 0)
+            writer.finishWriting {
+                sem.signal()
+            }
+            sem.wait()
+            if writer.status != .completed {
+                throw writer.error ?? NSError(domain: "LogBridge", code: 3, userInfo: [
+                    NSLocalizedDescriptionKey: "写出失败"
+                ])
+            }
         }
-        sem.wait()
-        if writer.status != .completed {
-            throw writer.error ?? NSError(domain: "LogBridge", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "写出失败"
+
+        func cancel() {
+            guard !closed else { return }
+            closed = true
+            if writer.status == .writing {
+                writer.cancelWriting()
+            }
+        }
+    }
+
+    /// Encode one ProRes 422 HQ movie from display-referred RGB frames.
+    static func writeRec709ProRes422HQ(
+        frames: [[Float]],
+        width: Int,
+        height: Int,
+        fps: Double,
+        to url: URL
+    ) throws {
+        guard !frames.isEmpty else {
+            throw NSError(domain: "LogBridge", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "解码失败"
             ])
+        }
+        let session = try EncodeSession(width: width, height: height, fps: fps, to: url)
+        do {
+            for frame in frames {
+                try session.append(rgb: frame)
+            }
+            try session.finish()
+        } catch {
+            session.cancel()
+            if FileManager.default.fileExists(atPath: url.path) {
+                try? FileManager.default.removeItem(at: url)
+            }
+            throw error
         }
     }
 }

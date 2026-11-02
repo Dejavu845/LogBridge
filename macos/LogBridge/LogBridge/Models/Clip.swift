@@ -116,12 +116,15 @@ enum DetectionSource: String, Hashable {
     }
 }
 
-/// Locked-clip dest estimate. Uncompressed half RGB EXR (6 bytes / pixel).
+/// Locked-clip dest estimate.
+/// EXR: uncompressed half RGB (6 bytes / pixel).
+/// Default ProRes: 1 byte / pixel. The note names which figure was used.
 /// Header / offset table is covered by the 10% + 64 MiB margin. 未完成.
 struct ProxyDiskEstimate {
     var bytes: Int64
     var usedFrameGuess: Bool
     var usedDurationFps: Bool
+    var assumption: String
 
     var neededWithMargin: Int64 {
         bytes + bytes / 10 + 64 * 1024 * 1024
@@ -129,13 +132,22 @@ struct ProxyDiskEstimate {
 
     var note: String {
         let size = SessionModel.formatProxyBytes(bytes)
+        if assumption == SessionModel.diskEstimateAssumption {
+            if usedFrameGuess {
+                return "约 \(size)（未压缩浮点图；帧数按每秒 24 帧估算）"
+            }
+            if usedDurationFps {
+                return "约 \(size)（未压缩浮点图；帧数按时长×帧率估算）"
+            }
+            return "约 \(size)（未压缩浮点图）"
+        }
         if usedFrameGuess {
-            return "约 \(size)（未压缩浮点图；帧数按每秒 24 帧估算）"
+            return "约 \(size)（\(assumption)；帧数按每秒 24 帧估算）"
         }
         if usedDurationFps {
-            return "约 \(size)（未压缩浮点图；帧数按时长×帧率估算）"
+            return "约 \(size)（\(assumption)；帧数按时长×帧率估算）"
         }
-        return "约 \(size)（未压缩浮点图）"
+        return "约 \(size)（\(assumption)）"
     }
 
     var pickerSuffix: String { note + "。" }
@@ -469,9 +481,10 @@ final class SessionModel: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = "写出"
-        let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
-        // Default ProRes 422 HQ; EXR remains advanced.
-        panel.message = UICopy.FOLDER_PICKER_MESSAGE_UI + estimate.pickerSuffix
+        let format = settings.exportFormat
+        let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url), format: format)
+        // Default ProRes 422 HQ; EXR remains advanced. The size note follows that choice.
+        panel.message = Self.folderPickerMessage(format: format) + estimate.pickerSuffix
         if let remembered = settings.lastExportDirectoryURL {
             panel.directoryURL = remembered
         }
@@ -489,7 +502,8 @@ final class SessionModel: ObservableObject {
     /// the half package and those `_proxy` folders are removed.
     /// Empty `_ACES2065-1_proxy` / 0 frames fail closed (帧数对不上 / 解码失败).
     func writeLockedDeliverables(locked: [Clip], skippedCount: Int, dest: URL) {
-        let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url))
+        let exportFormat = settings.exportFormat
+        let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url), format: exportFormat)
         if let free = destFreeBytesOverride ?? Self.destVolumeFreeBytes(dest),
            free < estimate.neededWithMargin {
             lastExportRevealURLs = []
@@ -526,7 +540,7 @@ final class SessionModel: ObservableObject {
                 )
                 do {
                     let url: URL
-                    if self.settings.exportFormat == .prores422HQ {
+                    if exportFormat == .prores422HQ {
                         url = try self.exportLockedProRes(
                             clip: clip,
                             graph: graphCopy,
@@ -583,19 +597,27 @@ final class SessionModel: ObservableObject {
                         exposureEnabled: graphCopy.exposureEnabled
                     )
                     try ResolveExporter.verifyResolveBundle(at: dest)
-                } catch {
-                    ResolveExporter.removeIncompleteResolveBundle(at: dest)
-                    let chip = Self.resolveIncompleteChip
-                    for clip in locked {
-                        let seq = ResolveExporter.deliverableSequenceDirectory(for: clip, in: dest)
-                        if written.contains(seq) {
-                            ResolveExporter.removeFailedProxySequence(at: seq)
-                            self.setExportChip(clipID: clip.id, chip)
-                            errors.append("\(clip.filename)：\(chip)")
-                        }
+            } catch {
+                ResolveExporter.removeIncompleteResolveBundle(at: dest)
+                let chip = Self.resolveIncompleteChip
+                let writtenPaths = Set(written.map { $0.standardizedFileURL.path })
+                for clip in locked {
+                    let seq = ResolveExporter.deliverableSequenceDirectory(for: clip, in: dest)
+                    let mov = ProResWriter.deliverableURL(for: clip, in: dest)
+                    let hitSeq = writtenPaths.contains(seq.standardizedFileURL.path)
+                    let hitMov = writtenPaths.contains(mov.standardizedFileURL.path)
+                    guard hitSeq || hitMov else { continue }
+                    if hitSeq {
+                        ResolveExporter.removeFailedProxySequence(at: seq)
                     }
-                    written.removeAll()
+                    if hitMov {
+                        Self.removeProResDeliverable(mov)
+                    }
+                    self.setExportChip(clipID: clip.id, chip)
+                    errors.append("\(clip.filename)：\(chip)")
                 }
+                written.removeAll()
+            }
             }
             let wrote = written.count
             let failed = locked.count - wrote
@@ -708,38 +730,42 @@ final class SessionModel: ObservableObject {
         if FileManager.default.fileExists(atPath: outURL.path) {
             try FileManager.default.removeItem(at: outURL)
         }
-        var frames: [[Float]] = []
-        var width = 0
-        var height = 0
+        let fps = Self.metadataFPS(for: clip) ?? Self.conservativeFPS
+        // Writer calls stay on one queue. Frames are not kept for the whole clip.
+        let encodeQueue = DispatchQueue(label: "logbridge.prores.encode")
+        let box = ProResWriter.SessionBox()
         do {
-            let count = try preview.exportGradedAP0Sequence(clip: clip, graph: graph) { index, rgb, w, h in
+            let count = try preview.exportGradedAP0Sequence(clip: clip, graph: graph) { _, rgb, w, h in
                 if self.writeCancel.isRequested {
                     throw LockedWriteCancel()
                 }
-                width = w
-                height = h
                 var display = rgb
                 PreviewColor.applyODT(rgb: &display)
-                frames.append(display)
-                onFrame?(index + 1)
+                var written = 0
+                try encodeQueue.sync {
+                    if box.session == nil {
+                        box.session = try ProResWriter.EncodeSession(width: w, height: h, fps: fps, to: outURL)
+                    }
+                    try box.session?.append(rgb: display)
+                    written = box.session?.writtenFrames ?? 0
+                }
+                onFrame?(written)
             }
-            if count < 1 || frames.isEmpty {
+            if count < 1 || box.session == nil {
                 throw NSError(domain: "LogBridge", code: 2, userInfo: [
                     NSLocalizedDescriptionKey: Self.decodeFailedChip
                 ])
             }
-            let fps = Self.metadataFPS(for: clip) ?? Self.conservativeFPS
-            try ProResWriter.writeRec709ProRes422HQ(
-                frames: frames,
-                width: width,
-                height: height,
-                fps: fps,
-                to: outURL
-            )
-        } catch {
-            if FileManager.default.fileExists(atPath: outURL.path) {
-                try? FileManager.default.removeItem(at: outURL)
+            try encodeQueue.sync {
+                try box.session?.finish()
+                box.session = nil
             }
+        } catch {
+            encodeQueue.sync {
+                box.session?.cancel()
+                box.session = nil
+            }
+            Self.removeProResDeliverable(outURL)
             throw error
         }
         return outURL
@@ -778,8 +804,10 @@ final class SessionModel: ObservableObject {
         "处理已锁定片段 — 已取消。\(processed) 条已处理 / \(skipped) 条已跳过（先选择 Log 与色域 / 先选择成对 IDT）。整段代理，代理精度。已实现（未验证）。"
     }
 
-    /// Uncompressed half RGB (3 × 2). Matches color/batch.py.
+    /// Uncompressed half RGB (3 × 2). Matches color/batch.py. EXR path only.
     static let bytesPerEXRPixel: Int64 = 6
+    /// Planning figure for ProRes 422 HQ. Not a measured bitrate. Matches color/export_format.py.
+    static let bytesPerProResHQPixel: Int64 = 1
     static let conservativeFPS = 24.0
 
     /// Metadata fps when present. Never invent; callers may fall back to conservativeFPS for ProRes encode only.
@@ -793,6 +821,23 @@ final class SessionModel: ObservableObject {
     static let conservativeHeight = 2160
     static let diskShortStatus = "磁盘空间不足，未写出"
     static let diskEstimateAssumption = "未压缩浮点图"
+    static let diskEstimateAssumptionProRes = "ProRes 422 HQ，按每像素 1 字节估算"
+
+    /// Picker copy follows the format about to be written.
+    static func folderPickerMessage(format: ExportFormat) -> String {
+        switch format {
+        case .prores422HQ:
+            return UICopy.FOLDER_PICKER_MESSAGE_UI
+        case .exrACES2065:
+            return UICopy.FOLDER_PICKER_MESSAGE_EXR
+        }
+    }
+
+    /// Drop a ProRes proxy this batch just wrote. Does not touch other movies.
+    static func removeProResDeliverable(_ url: URL) {
+        guard url.lastPathComponent.hasSuffix(ProResWriter.proresSuffix) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
     static let cancelledNote = "已取消"
     static let skippedBucket = "待选跳过"
     static let failedBucket = "失败原因"
@@ -831,7 +876,10 @@ final class SessionModel: ObservableObject {
     }
 
     /// Locked clips only. Pending URLs are not passed in.
-    static func estimateLockedProxyBytes(urls: [URL]) -> ProxyDiskEstimate {
+    /// ProRes uses 1 byte / pixel. EXR keeps 6. The note says which.
+    static func estimateLockedProxyBytes(urls: [URL], format: ExportFormat) -> ProxyDiskEstimate {
+        let bytesPerPixel = format == .prores422HQ ? bytesPerProResHQPixel : bytesPerEXRPixel
+        let assumption = format == .prores422HQ ? diskEstimateAssumptionProRes : diskEstimateAssumption
         var total: Int64 = 0
         var usedFrameGuess = false
         var usedDurationFps = false
@@ -839,15 +887,25 @@ final class SessionModel: ObservableObject {
             let ext = MediaFormat.extent(url: url)
             let (frames, frameSrc) = estimatedFrameCount(ext)
             let pixels = estimatedPixelCount(ext)
-            total += Int64(frames) * Int64(pixels) * bytesPerEXRPixel
+            total += Int64(frames) * Int64(pixels) * bytesPerPixel
             if frameSrc == "guess" { usedFrameGuess = true }
             if frameSrc == "duration_fps" { usedDurationFps = true }
         }
         return ProxyDiskEstimate(
             bytes: total,
             usedFrameGuess: usedFrameGuess,
-            usedDurationFps: usedDurationFps
+            usedDurationFps: usedDurationFps,
+            assumption: assumption
         )
+    }
+
+    /// Size line for the write sheet. Same figure the folder panel and the disk check use.
+    var deliverDiskNote: String {
+        let estimate = Self.estimateLockedProxyBytes(
+            urls: lockedClips.map(\.url),
+            format: settings.exportFormat
+        )
+        return "占用估算：\(estimate.note)。空间不够会停在磁盘空间不足，未写出。"
     }
 
     static func destVolumeFreeBytes(_ dest: URL) -> Int64? {
