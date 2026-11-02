@@ -231,6 +231,7 @@ struct InspectorView: View {
                 Text("曝光")
                     .font(.headline)
             }
+            .id(SessionModel.inspectorExposureAnchor)
             DisclosureGroup(isExpanded: $wbOpen) {
                 WBInspector(session: session)
                     .padding(.top, 6)
@@ -241,6 +242,11 @@ struct InspectorView: View {
         }
         .disabled(session.isExporting)
         .opacity(session.isExporting ? 0.45 : 1)
+        .onChange(of: session.inspectorScrollToken) { _, _ in
+            guard session.inspectorScrollTarget == SessionModel.inspectorExposureAnchor else { return }
+            exposureOpen = true
+            wbOpen = true
+        }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.primary.opacity(0.02))

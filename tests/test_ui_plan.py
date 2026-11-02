@@ -2021,3 +2021,112 @@ def test_preview_slider_keeps_its_own_row_when_the_window_is_narrow():
     assert "这不是时间线" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def _loop_step_index(
+    *,
+    clips_empty,
+    importing,
+    opening_folder,
+    writing,
+    locked_count,
+    selected_pending,
+):
+    """Same order as SessionModel.loopStepIndex. Write wins, then import, then pick IDT."""
+    if writing or opening_folder:
+        return 3
+    if clips_empty or importing:
+        return 0
+    if locked_count == 0 or selected_pending:
+        return 1
+    return 2
+
+
+def test_loop_steps_follow_import_grade_and_write():
+    """The title steps follow the open path. 调色 only reveals the knobs."""
+    assert _loop_step_index(
+        clips_empty=True, importing=False, opening_folder=False,
+        writing=False, locked_count=0, selected_pending=False,
+    ) == 0
+    assert _loop_step_index(
+        clips_empty=False, importing=True, opening_folder=False,
+        writing=False, locked_count=2, selected_pending=False,
+    ) == 0
+    assert _loop_step_index(
+        clips_empty=False, importing=False, opening_folder=False,
+        writing=True, locked_count=0, selected_pending=False,
+    ) == 3
+    assert _loop_step_index(
+        clips_empty=False, importing=False, opening_folder=True,
+        writing=False, locked_count=1, selected_pending=False,
+    ) == 3
+    assert _loop_step_index(
+        clips_empty=True, importing=True, opening_folder=False,
+        writing=True, locked_count=0, selected_pending=False,
+    ) == 3
+    assert _loop_step_index(
+        clips_empty=False, importing=False, opening_folder=False,
+        writing=False, locked_count=0, selected_pending=True,
+    ) == 1
+    assert _loop_step_index(
+        clips_empty=False, importing=False, opening_folder=False,
+        writing=False, locked_count=1, selected_pending=True,
+    ) == 1
+    assert _loop_step_index(
+        clips_empty=False, importing=False, opening_folder=False,
+        writing=False, locked_count=2, selected_pending=False,
+    ) == 2
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func loopStepIndex(")[1].split("var loopStepIndex")[0]
+    assert "if writing || openingFolder { return 3 }" in fn
+    assert "if clipsEmpty || importing { return 0 }" in fn
+    assert "if lockedCount == 0 || selectedPending { return 1 }" in fn
+    assert fn.index("return 3") < fn.index("return 0") < fn.index("return 1")
+    assert "return 2" in fn
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in fn, token
+    pending = clip.split("func focusPendingIDT()")[1].split("func focusGradeControls()")[0]
+    assert "inspectorPairedIDTAnchor" in pending
+    assert "selectNextPendingFromMenu()" in pending
+    assert "isPending" in pending
+    for token in ("setIDT", "setExposureStops", "setWBParams", "5600", "6504"):
+        assert token not in pending, token
+    grade = clip.split("func focusGradeControls()")[1].split("func requestInspectorScroll")[0]
+    assert "inspectorExposureAnchor" in grade
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in grade, token
+    content = _read(CONTENT)
+    strip = content.split("struct LoopStepStrip")[1].split("struct WorkspaceToolbar")[0]
+    assert "presentImporter()" in strip
+    assert "focusPendingIDT()" in strip
+    assert "focusGradeControls()" in strip
+    assert "presentDeliverSheet()" in strip
+    for label in ("导入", "选 IDT", "调色", "写出"):
+        assert label in strip
+    toolbar = content.split("struct WorkspaceToolbar")[1].split("enum MonitorLayout")[0]
+    assert "LoopStepStrip(session: session)" in toolbar
+    assert "session.loopStepHint" in toolbar
+    header = content.split("struct MonitorHeader")[1].split("struct InspectorColumn")[0]
+    assert "gradeClipTitle" in header
+    assert "gradeNumberLine" in header
+    assert "fixedSize(horizontal: true, vertical: false)" in header
+    assert header.index("Text(gradeClipTitle)") < header.index("Text(gradeNumberLine)")
+    assert "看调色前 ·" in header
+    assert "对照 ·" in header
+    column = content.split("struct InspectorColumn")[1].split("struct ClipListArrowMonitor")[0]
+    assert column.index("onChange(of: session.selectedID)") < column.index("onChange(of: session.inspectorScrollToken)")
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    body = inspector.split("struct InspectorView")[1].split("struct WBInspector")[0]
+    assert "inspectorExposureAnchor" in body
+    reveal = body.split("onChange(of: session.inspectorScrollToken)")[1]
+    assert "exposureOpen = true" in reveal
+    assert "wbOpen = true" in reveal
+    for token in ("setExposureStops", "setWBParams", "setIDT", "5600", "6504"):
+        assert token not in reveal, token
+    plan = _read(PLAN)
+    assert "导入、选 IDT、调色、写出" in plan
+    assert "不改数字，不改预览帧" in plan
+    assert "文件名可以截断" in plan
+    assert "不猜成对 IDT" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

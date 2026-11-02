@@ -438,6 +438,10 @@ final class SessionModel: ObservableObject {
     /// Filename or parent-folder query. Narrows the list only. Blank keeps every filtered row.
     @Published var clipListQuery: String = ""
     @Published var selectedID: UUID?
+    /// Bumps when a loop step asks the inspector to scroll. The target is the anchor.
+    /// Selection changes do not use this. Does not change the grade or the frame.
+    @Published var inspectorScrollToken = 0
+    var inspectorScrollTarget: String?
     @Published var selectedNode: NodeSlot = .idt
     @Published var graph = SerialGraph()
     @Published var showImporter = false {
@@ -1096,6 +1100,9 @@ final class SessionModel: ObservableObject {
 
     /// Scroll id for the paired-IDT block. Pending selection returns here.
     static let inspectorPairedIDTAnchor = "paired-idt"
+    /// Scroll id for exposure. Only the 调色 step asks for this.
+    /// Changing clips does not. Does not change the grade or the frame.
+    static let inspectorExposureAnchor = "exposure"
 
     /// A pending clip needs the paired-IDT list, which sits above the grade.
     /// A locked clip keeps the scroll, so exposure and white balance stay put.
@@ -1158,6 +1165,105 @@ final class SessionModel: ObservableObject {
     /// Primary button is shown only when at least one paired IDT is locked.
     var showsProcessLockedButton: Bool {
         settings.blockUnlockedIDT && lockedClipCount > 0
+    }
+
+    /// 0 导入，1 选 IDT，2 调色，3 写出。
+    /// Writing or the folder panel is the write step.
+    /// An empty bin, or the add panel, is import.
+    /// No locked pair yet, or the selected clip still pending, is pick IDT.
+    /// Otherwise the selected clip can be graded. The write button stays beside that.
+    /// Does not assign an IDT and does not move exposure or white balance.
+    static func loopStepIndex(
+        clipsEmpty: Bool,
+        importing: Bool,
+        openingFolder: Bool,
+        writing: Bool,
+        lockedCount: Int,
+        selectedPending: Bool
+    ) -> Int {
+        if writing || openingFolder { return 3 }
+        if clipsEmpty || importing { return 0 }
+        if lockedCount == 0 || selectedPending { return 1 }
+        return 2
+    }
+
+    var loopStepIndex: Int {
+        Self.loopStepIndex(
+            clipsEmpty: clips.isEmpty,
+            importing: showImporter,
+            openingFolder: openingExportFolder,
+            writing: isWritingDeliverables,
+            lockedCount: lockedClipCount,
+            selectedPending: selectedClip?.isPending == true
+        )
+    }
+
+    /// Same gate as 「添加…」. Cancel still reads nothing.
+    var canOpenImporter: Bool {
+        !openingExportFolder
+            && !showImporter
+            && !showSettings
+            && !showDeliverSheet
+            && !isWritingDeliverables
+    }
+
+    /// There is a pending clip, and a sheet is not covering the window.
+    var canFocusPendingIDT: Bool {
+        pendingClipCount > 0
+            && !isWritingDeliverables
+            && !openingExportFolder
+            && !showSettings
+            && !showImporter
+            && !showDeliverSheet
+    }
+
+    /// Current clip already has a pair. Scrolling does not edit the grade.
+    var canFocusGradeControls: Bool {
+        selectedClip?.hasLockedPair == true
+            && !isWritingDeliverables
+            && !openingExportFolder
+            && !showSettings
+            && !showImporter
+            && !showDeliverSheet
+    }
+
+    /// Opens the write sheet. Does not start writing by itself.
+    var canStartWriteFromLoop: Bool {
+        showsProcessLockedButton
+            && !isWritingDeliverables
+            && !openingExportFolder
+            && !showImporter
+            && !showSettings
+            && !showDeliverSheet
+    }
+
+    /// Pending clip: scroll to the paired list. Locked clip: the existing next-pending move.
+    /// Does not lock a pair. Does not change exposure or white balance.
+    func focusPendingIDT() {
+        guard canFocusPendingIDT else { return }
+        if selectedClip?.isPending == true {
+            requestInspectorScroll(Self.inspectorPairedIDTAnchor)
+            return
+        }
+        if canSelectNextPending {
+            selectNextPendingFromMenu()
+            return
+        }
+        guard let pending = clips.first(where: { $0.isPending }) else { return }
+        stopPreviewPlayback()
+        selectedID = pending.id
+        noteSelectionForSharedGrade(pending)
+    }
+
+    /// Show exposure and white balance. Numbers, the frame, and the pair stay.
+    func focusGradeControls() {
+        guard canFocusGradeControls else { return }
+        requestInspectorScroll(Self.inspectorExposureAnchor)
+    }
+
+    func requestInspectorScroll(_ anchor: String) {
+        inspectorScrollTarget = anchor
+        inspectorScrollToken += 1
     }
 
     /// 写出说明上的当前预览帧，和监视器同一幅时才放。

@@ -150,19 +150,86 @@ struct ContentView: View {
     }
 }
 
+/// Four steps under the title. The current one is marked.
+/// 导入 opens the add panel. 选 IDT scrolls to the pair list, or moves to the next pending clip.
+/// 调色 only reveals exposure and white balance. 写出 opens the write sheet.
+/// None of them assign an IDT or edit the shared grade.
+private struct LoopStepStrip: View {
+    @ObservedObject var session: SessionModel
+
+    var body: some View {
+        HStack(spacing: 4) {
+            loopChip(
+                "导入",
+                index: 0,
+                enabled: session.canOpenImporter,
+                help: "和「添加…」一样。面板贴在这个窗口上。取消则不读入。不改这一套曝光和白平衡。"
+            ) {
+                session.presentImporter()
+            }
+            loopChip(
+                "选 IDT",
+                index: 1,
+                enabled: session.canFocusPendingIDT,
+                help: "当前这条还没锁定，就滚到成对 IDT。已经锁定且后面还有待选，就去下一条待选，不替它选。不改这一套曝光和白平衡。"
+            ) {
+                session.focusPendingIDT()
+            }
+            loopChip(
+                "调色",
+                index: 2,
+                enabled: session.canFocusGradeControls,
+                help: "当前这条已锁定时，展开曝光和白平衡并滚到曝光。不改数字，不改预览帧，也不改成对 IDT。"
+            ) {
+                session.focusGradeControls()
+            }
+            loopChip(
+                "写出",
+                index: 3,
+                enabled: session.canStartWriteFromLoop,
+                help: "打开写出说明。没有已锁定时不起作用。正在写出时用顶栏「取消」。不改这一套曝光和白平衡。"
+            ) {
+                session.presentDeliverSheet()
+            }
+        }
+    }
+
+    private func loopChip(
+        _ title: String,
+        index: Int,
+        enabled: Bool,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        let current = session.loopStepIndex == index
+        return Button(title, action: action)
+            .buttonStyle(.plain)
+            .font(.caption.weight(current ? .semibold : .regular))
+            .foregroundStyle(current ? Color.accentColor : Color.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule().fill(current ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.05))
+            )
+            .disabled(!enabled)
+            .help(help)
+    }
+}
+
 /// Top bar: add, global settings, write. Not a multi-page shell.
 private struct WorkspaceToolbar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("LogBridge")
                     .font(.headline)
+                LoopStepStrip(session: session)
                 Text(session.loopStepHint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .help("打开后的下一步。导入、选成对 IDT、调色、写出，都在这一窗。")
             }
             Spacer(minLength: 12)
@@ -305,15 +372,25 @@ private struct MonitorHeader: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-                    Text(gradeReadout)
-                        .font(.callout.monospacedDigit())
+                }
+                HStack(spacing: 8) {
+                    Text(gradeClipTitle)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .help(session.previewShowsGradeBefore
-                              ? "画面不含曝光和白平衡。这一行仍是检查器里会写出的那一套。仅预览。"
-                              : "和右侧检查器是同一套。换一条素材，这一行的曝光和白平衡不改。仅预览。")
+                        .layoutPriority(0)
+                    Text(gradeNumberLine)
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .layoutPriority(1)
                 }
+                .help(session.previewShowsGradeBefore
+                      ? "画面不含曝光和白平衡。数字仍是检查器里会写出的那一套。文件名可以截断，曝光和白平衡留着。仅预览。"
+                      : "和右侧检查器是同一套。文件名可以截断，曝光和白平衡留着。换一条素材，这一套不改。仅预览。")
+                .accessibilityLabel(gradeReadout)
                 if let fact = session.selectedClip?.mediaFactLine {
                     Text(fact)
                         .font(.caption.monospacedDigit())
@@ -329,9 +406,38 @@ private struct MonitorHeader: View {
         .background(Color.primary.opacity(0.03))
     }
 
+    /// Filename only. It may truncate. The numbers live on `gradeNumberLine`.
+    private var gradeClipTitle: String {
+        session.selectedClip?.filename ?? ""
+    }
+
+    /// Exposure and white balance, without the filename, so a long name cannot eat them.
+    /// 看调色前 and 对照 stay in front of the numbers. Same set as the inspector. Preview only.
+    private var gradeNumberLine: String {
+        let numbers = gradeFacts.numbers
+        if session.previewShowsGradeBefore {
+            return "看调色前 · \(numbers)"
+        }
+        if session.monitorLayout == .compare {
+            return "对照 · \(numbers)"
+        }
+        return numbers
+    }
+
     /// 监视器上的调色读数。数字来自当前检查器，不另存一套，也不参与写出。
     private var gradeReadout: String {
-        let clipName = session.selectedClip?.filename ?? ""
+        let facts = gradeFacts
+        let body = facts.name.isEmpty ? facts.numbers : "\(facts.name) · \(facts.numbers)"
+        if session.previewShowsGradeBefore {
+            return "看调色前 · \(body)"
+        }
+        if session.monitorLayout == .compare {
+            return "对照 · \(body)"
+        }
+        return body
+    }
+
+    private var gradeFacts: (name: String, numbers: String) {
         let exposure: String
         if session.graph.exposureEnabled {
             exposure = String(format: "曝光 %+.2f 档", session.graph.exposureStops)
@@ -348,14 +454,7 @@ private struct MonitorHeader: View {
             wb = session.graph.wbSource.title
         }
         let pending = session.selectedClip?.isPending == true ? "待选 · " : ""
-        let line = "\(clipName) · \(pending)\(exposure) · \(wb)"
-        if session.previewShowsGradeBefore {
-            return "看调色前 · \(line)"
-        }
-        if session.monitorLayout == .compare {
-            return "对照 · \(line)"
-        }
-        return line
+        return (gradeClipTitle, "\(pending)\(exposure) · \(wb)")
     }
 }
 
@@ -451,6 +550,10 @@ private struct InspectorColumn: View {
                     guard let anchor = SessionModel.inspectorScrollAnchor(
                         selectedIsPending: session.selectedClip?.isPending == true
                     ) else { return }
+                    proxy.scrollTo(anchor, anchor: .top)
+                }
+                .onChange(of: session.inspectorScrollToken) { _, _ in
+                    guard let anchor = session.inspectorScrollTarget else { return }
                     proxy.scrollTo(anchor, anchor: .top)
                 }
             }
