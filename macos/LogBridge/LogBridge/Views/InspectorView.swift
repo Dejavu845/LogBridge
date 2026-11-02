@@ -221,6 +221,7 @@ struct InspectorView: View {
 struct WBInspector: View {
     @ObservedObject var session: SessionModel
     @State private var cctDraft = ""
+    @State private var tintDraft = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -349,6 +350,28 @@ struct WBInspector: View {
                         .frame(width: 52, alignment: .trailing)
                 }
                 HStack(spacing: 8) {
+                    TextField("如 +1.5", text: $tintDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospacedDigit())
+                        .frame(width: 96)
+                        .disabled(!session.canTypeWBTint)
+                        .onSubmit { commitTint() }
+                    Button("写入绿品") { commitTint() }
+                        .disabled(!session.canTypeWBTint)
+                }
+                .controlSize(.regular)
+                .onAppear { syncTintDraft() }
+                .onChange(of: session.graph.wbTint) { _, _ in
+                    syncTintDraft()
+                }
+                .help("写入这一套绿品。+1.5、1.5 或 1.5绿品，按 0.1 收。超出 −10 到 +10 不改数字。色温空着时不能写入。和滑条、步进是同一套，色温不动，写出仍用这一套。一次写入算一步，可撤销。不把白平衡打开。")
+                if !session.typedTintNote.isEmpty {
+                    Text(session.typedTintNote)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: 8) {
                     Button("−1") { session.nudgeWBTint(-1) }
                         .disabled(!session.canNudgeWBTint || session.graph.wbTint <= -10)
                     Button("绿品归零") { session.resetWBTint() }
@@ -386,6 +409,17 @@ struct WBInspector: View {
     private func commitCCT() {
         if session.applyTypedWBCCT(cctDraft) {
             syncCCTDraft()
+        }
+    }
+
+    private func syncTintDraft() {
+        tintDraft = String(format: "%+.1f", session.graph.wbTint)
+    }
+
+    /// A refused string stays in the field so it can be corrected.
+    private func commitTint() {
+        if session.applyTypedWBTint(tintDraft) {
+            syncTintDraft()
         }
     }
 

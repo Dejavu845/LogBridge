@@ -1464,3 +1464,48 @@ def test_typed_exposure_and_color_temperature_stay_on_the_shared_grade():
     assert "不猜 5600 或 6504" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_typed_tint_stays_on_the_shared_grade():
+    """Typing green–magenta uses the same set as the slider. A bad string changes nothing."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("var canTypeWBTint")[1].split("static func parseTypedWBTint")[0]
+    assert "canNudgeWBTint" in gate
+    assert "setWBEnabled" not in gate
+    tint = clip.split("static func parseTypedWBTint")[1].split("func applyTypedWBTint")[0]
+    assert 'hasSuffix("绿品")' in tint
+    assert "dropLast(2)" in tint
+    assert "rounded < -10 || rounded > 10" in tint
+    assert "return .outOfRange" in tint
+    assert "return .value(rounded)" in tint
+    for token in ("5600", "6504", "24", "30", "setIDT", "setPreviewFrame", "setWBEnabled"):
+        assert token not in tint, token
+    apply = clip.split("func applyTypedWBTint(_ text: String) -> Bool {")[1].split("\n    }\n")[0]
+    assert "canTypeWBTint" in apply
+    assert "先写出绿品，如 +1.5" in apply
+    assert "认不出这个绿品" in apply
+    assert "绿品要在 −10 到 +10" in apply
+    assert "abs(graph.wbTint - tint) <= 1e-9" in apply
+    assert "setWBParams(tint: tint)" in apply
+    assert "closeSharedGradeStroke()" in apply
+    assert "setExposureStops" not in apply
+    assert "setIDT" not in apply
+    assert "setPreviewFrame" not in apply
+    assert "setWBEnabled" not in apply
+    assert "wbCCT" not in apply
+    for token in ("5600", "6504", "24", "30"):
+        assert token not in apply, token
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    assert 'Button("写入绿品")' in inspector
+    assert "applyTypedWBTint(tintDraft)" in inspector
+    assert "canTypeWBTint" in inspector
+    assert "typedTintNote" in inspector
+    assert 'TextField("如 +1.5"' in inspector
+    plan = _read(PLAN)
+    assert "写入绿品" in plan
+    assert "认不出这个绿品" in plan
+    assert "绿品要在 −10 到 +10" in plan
+    assert "色温空着时不能写入" in plan
+    assert "色温不动" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

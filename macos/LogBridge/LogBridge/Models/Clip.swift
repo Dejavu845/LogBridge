@@ -409,7 +409,8 @@ enum ClipListFilter: String, CaseIterable, Identifiable {
     }
 }
 
-/// A typed exposure or color temperature. Out of range does not clamp into a guess.
+/// A typed exposure, color temperature, or green–magenta.
+/// Out of range does not clamp into a guess.
 private enum TypedGradeField {
     case empty
     case unrecognized
@@ -438,6 +439,8 @@ final class SessionModel: ObservableObject {
     @Published var typedExposureNote: String = ""
     /// Shown under the typed color-temperature field. Empty after a value is accepted.
     @Published var typedCCTNote: String = ""
+    /// Shown under the typed green–magenta field. Empty after a value is accepted.
+    @Published var typedTintNote: String = ""
     @Published var pickingNeutral: Bool = false {
         didSet {
             if pickingNeutral {
@@ -2174,6 +2177,52 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// Green–magenta can be typed only when a color temperature is already set.
+    /// Same gate as the tint step. Does not turn white balance on, and does not invent a temperature.
+    var canTypeWBTint: Bool { canNudgeWBTint }
+
+    /// `+1.5`, `1.5`, or `1.5绿品`. Rounded to 0.1. Outside −10…+10 is refused.
+    /// Does not invent a tint, and does not turn white balance on.
+    static func parseTypedWBTint(_ text: String) -> TypedGradeField {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return .empty }
+        var body = trimmed
+        if body.hasSuffix("绿品") {
+            body = String(body.dropLast(2)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if body.isEmpty { return .unrecognized }
+        guard let value = Double(body), value.isFinite else { return .unrecognized }
+        let rounded = (value * 10).rounded() / 10
+        if rounded < -10 || rounded > 10 { return .outOfRange }
+        return .value(rounded)
+    }
+
+    /// One step on the shared tint. Color temperature stays.
+    /// The same number again does not change the source chip.
+    /// A bad string leaves the tint alone. Playback frame stays.
+    @discardableResult
+    func applyTypedWBTint(_ text: String) -> Bool {
+        guard canTypeWBTint else { return false }
+        switch Self.parseTypedWBTint(text) {
+        case .empty:
+            typedTintNote = "先写出绿品，如 +1.5"
+            return false
+        case .unrecognized:
+            typedTintNote = "认不出这个绿品"
+            return false
+        case .outOfRange:
+            typedTintNote = "绿品要在 −10 到 +10"
+            return false
+        case .value(let tint):
+            typedTintNote = ""
+            if abs(graph.wbTint - tint) <= 1e-9 { return true }
+            closeSharedGradeStroke()
+            setWBParams(tint: tint)
+            closeSharedGradeStroke()
+            return true
+        }
+    }
+
     /// ±100 K on the current CCT. Same graph as the inspector slider.
     /// Empty CCT stays empty — do not start from 6504 or 5600.
     /// Off while writing or while a sheet is up. Does not turn white balance on.
@@ -2431,6 +2480,7 @@ final class SessionModel: ObservableObject {
             graph.wbSource = .user
         }
         if let tint {
+            typedTintNote = ""
             graph.wbTint = tint
             if graph.wbCCT != nil {
                 graph.wbSource = .user
