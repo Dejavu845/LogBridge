@@ -72,6 +72,9 @@ struct ContentView: View {
                 },
                 onDelete: {
                     session.removeSelectedClipFromSession()
+                },
+                onStepFrame: { delta in
+                    session.stepPreviewFrame(delta)
                 }
             )
         }
@@ -306,23 +309,26 @@ private struct InspectorColumn: View {
     }
 }
 
-/// Window-level Up/Down for the sidebar list. Escape while writing is the
-/// existing 取消 (same cancelLockedDeliverables). Idle Escape does nothing.
+/// Window-level Up/Down for the sidebar list. Left/Right steps the preview
+/// frame (same as 上一帧 / 下一帧). Escape while writing is the existing 取消
+/// (same cancelLockedDeliverables). Idle Escape does nothing.
 /// Delete / Backspace drops the selected clip from the session only
 /// (source file and already-written `_proxy` stay). Mid-write ignores Delete.
 /// No help overlay. No extra button. No confirm sheet.
-/// Same window only; text / numeric / search first-responders keep arrows
-/// and Delete. Sheets / alerts / settings keep Escape and Delete.
+/// Same window only; text / numeric / search / slider first-responders keep
+/// arrows and Delete. Sheets / alerts / settings keep Escape and Delete.
 private struct ClipListArrowMonitor: NSViewRepresentable {
     var handler: (Int) -> Bool
     var onEscape: () -> Bool
     var onDelete: () -> Bool
+    var onStepFrame: (Int) -> Bool
 
     func makeNSView(context: Context) -> MonitorView {
         let view = MonitorView()
         view.handler = handler
         view.onEscape = onEscape
         view.onDelete = onDelete
+        view.onStepFrame = onStepFrame
         return view
     }
 
@@ -330,6 +336,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         nsView.handler = handler
         nsView.onEscape = onEscape
         nsView.onDelete = onDelete
+        nsView.onStepFrame = onStepFrame
     }
 
     static func dismantleNSView(_ nsView: MonitorView, coordinator: ()) {
@@ -340,6 +347,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         var handler: ((Int) -> Bool)?
         var onEscape: (() -> Bool)?
         var onDelete: (() -> Bool)?
+        var onStepFrame: ((Int) -> Bool)?
         private var monitor: Any?
 
         override func viewDidMoveToWindow() {
@@ -363,6 +371,14 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                 case 125:
                     if SessionModel.isArrowConsumedByTextInput() { return event }
                     if self.handler?(1) == true { return nil }
+                    return event
+                case 123:
+                    if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if self.onStepFrame?(-1) == true { return nil }
+                    return event
+                case 124:
+                    if SessionModel.isArrowConsumedByTextInput() { return event }
+                    if self.onStepFrame?(1) == true { return nil }
                     return event
                 case 53:
                     if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
@@ -687,6 +703,12 @@ struct PreviewScrubBar: View {
                 Text("预览帧")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.secondary)
+                Button("上一帧") {
+                    session.stepPreviewFrame(-1)
+                }
+                .controlSize(.regular)
+                .disabled(!session.canStepPreviewBackward)
+                .help("每次一帧，到头就停。左方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
                 Slider(
                     value: Binding(
                         get: { Double(session.previewFrameIndex) },
@@ -697,6 +719,12 @@ struct PreviewScrubBar: View {
                 )
                 .controlSize(.regular)
                 .help("仅预览")
+                Button("下一帧") {
+                    session.stepPreviewFrame(1)
+                }
+                .controlSize(.regular)
+                .disabled(!session.canStepPreviewForward)
+                .help("每次一帧，到头就停。右方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
                 Text("第 \(session.previewFrameIndex + 1) / \(last + 1) 帧")
                     .font(.body.monospacedDigit())
                     .foregroundStyle(.secondary)

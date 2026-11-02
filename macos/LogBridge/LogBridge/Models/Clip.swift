@@ -310,6 +310,40 @@ final class SessionModel: ObservableObject {
         clips.filter { $0.needsUserPicker || $0.idt == nil }.count
     }
 
+    /// Movie scrub range exists, and no sheet or write is up.
+    /// Stills and missing fps/duration stay out: no invented frame count.
+    var canStepPreviewFrame: Bool {
+        previewScrubLastFrame != nil
+            && !isWritingDeliverables
+            && !showSettings
+            && !showImporter
+            && !showDeliverSheet
+    }
+
+    var canStepPreviewBackward: Bool {
+        canStepPreviewFrame && previewFrameIndex > 0
+    }
+
+    var canStepPreviewForward: Bool {
+        guard canStepPreviewFrame, let last = previewScrubLastFrame else { return false }
+        return previewFrameIndex < last
+    }
+
+    /// One preview frame. Same index as the slider. Stops at the ends.
+    /// Does not change exposure, white balance, or the write.
+    @discardableResult
+    func stepPreviewFrame(_ delta: Int) -> Bool {
+        guard canStepPreviewFrame, delta != 0 else { return false }
+        if delta < 0 {
+            guard previewFrameIndex > 0 else { return true }
+            setPreviewFrame(previewFrameIndex - 1)
+        } else {
+            guard let last = previewScrubLastFrame, previewFrameIndex < last else { return true }
+            setPreviewFrame(previewFrameIndex + 1)
+        }
+        return true
+    }
+
     var lockedClips: [Clip] { clips.filter(\.hasLockedPair) }
     var lockedClipCount: Int { lockedClips.count }
     var pendingClipCount: Int { clips.filter { !$0.hasLockedPair }.count }

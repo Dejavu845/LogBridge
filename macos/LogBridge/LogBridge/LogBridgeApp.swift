@@ -127,6 +127,15 @@ private struct LogBridgeCommands: Commands {
             }
             .keyboardShortcut("]", modifiers: [.command])
             .disabled(sessionFocus?.session?.canSelectNextPending != true)
+            Divider()
+            Button("上一帧") {
+                sessionFocus?.session?.stepPreviewFrame(-1)
+            }
+            .disabled(sessionFocus?.session?.canStepPreviewBackward != true)
+            Button("下一帧") {
+                sessionFocus?.session?.stepPreviewFrame(1)
+            }
+            .disabled(sessionFocus?.session?.canStepPreviewForward != true)
         }
     }
 }

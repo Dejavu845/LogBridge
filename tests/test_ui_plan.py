@@ -339,6 +339,60 @@ def test_tint_steps_zero_without_moving_temperature_and_the_monitor_shows_it():
     assert "−10 到 +10" in plan
 
 
+def test_preview_frame_steps_without_inventing_a_range_or_moving_the_grade():
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("var canStepPreviewFrame")[1].split("var canStepPreviewBackward")[0]
+    assert "previewScrubLastFrame" in gate
+    assert "isWritingDeliverables" in gate
+    assert "showSettings" in gate
+    assert "showImporter" in gate
+    assert "showDeliverSheet" in gate
+    back = clip.split("var canStepPreviewBackward")[1].split("var canStepPreviewForward")[0]
+    assert "previewFrameIndex > 0" in back
+    forward = clip.split("var canStepPreviewForward")[1].split("func stepPreviewFrame")[0]
+    assert "previewFrameIndex < last" in forward
+    step = clip.split("func stepPreviewFrame")[1].split("var lockedClips")[0]
+    assert "setPreviewFrame" in step
+    assert "previewFrameIndex - 1" in step
+    assert "previewFrameIndex + 1" in step
+    assert "return true" in step
+    assert "setExposureStops" not in step
+    assert "setWBParams" not in step
+    assert "touchSharedGrade" not in step
+    assert "24" not in step
+    assert "30" not in step
+    assert "5600" not in step
+    assert "6504" not in step
+    content = _read(CONTENT)
+    bar = content.split("struct PreviewScrubBar")[1].split("struct WriteProgressLine")[0]
+    assert 'Button("上一帧")' in bar
+    assert 'Button("下一帧")' in bar
+    assert "stepPreviewFrame(-1)" in bar
+    assert "stepPreviewFrame(1)" in bar
+    assert "canStepPreviewBackward" in bar
+    assert "canStepPreviewForward" in bar
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert "case 123:" in monitor
+    assert "case 124:" in monitor
+    assert "onStepFrame?(-1)" in monitor
+    assert "onStepFrame?(1)" in monitor
+    assert "isArrowConsumedByTextInput" in monitor
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    assert 'Button("上一帧")' in menu
+    assert 'Button("下一帧")' in menu
+    assert "stepPreviewFrame(-1)" in menu
+    assert "stepPreviewFrame(1)" in menu
+    assert "canStepPreviewBackward" in menu
+    assert "canStepPreviewForward" in menu
+    plan = _read(PLAN)
+    assert "上一帧" in plan
+    assert "下一帧" in plan
+    assert "到头就停" in plan
+    assert "不改曝光和白平衡" in plan
+    assert "不猜帧率" in plan
+
+
 def test_idt_lock_stays_on_the_clip_being_previewed():
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]
