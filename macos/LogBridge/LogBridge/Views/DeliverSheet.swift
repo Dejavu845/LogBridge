@@ -2,68 +2,78 @@ import SwiftUI
 
 /// 写出是独立一步，不是偏好设置，也不是保存对话框。
 /// 确认后由主窗口写出条打开系统选文件夹。本面板只收集确认。
+/// 当前这一条标出来。确认和关闭留在下面，说明长了中间自己滚。
 struct DeliverSheet: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("写出代理")
-                .font(.title2.weight(.semibold))
-            Text("看清楚再选文件夹。未锁定的会跳过，不猜。")
-                .font(.body)
-                .foregroundStyle(.secondary)
-
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(session.lockStatusText)
-                    .font(.title3.weight(.semibold))
-                Text(session.settings.exportFormat.labelZH)
-                    .font(.headline)
-                Text(session.settings.exportFormat.pickerHelpZH)
+                Text("写出代理")
+                    .font(.title2.weight(.semibold))
+                Text("看清楚再选文件夹。未锁定的会跳过，不猜。当前这条会标出来。确认和关闭留在下面。")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.primary.opacity(0.05))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
 
-            Text(deliverableNote)
-                .font(.body)
-                .fixedSize(horizontal: false, vertical: true)
-            clipList
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(session.lockStatusText)
+                            .font(.title3.weight(.semibold))
+                        Text(session.settings.exportFormat.labelZH)
+                            .font(.headline)
+                        Text(session.settings.exportFormat.pickerHelpZH)
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
 
-            Text(session.sharedGradeWriteLine)
-                .font(.body.weight(.semibold))
-                .fixedSize(horizontal: false, vertical: true)
-            deliverPreviewGlance
-            if !session.lockedClips.isEmpty {
-                Text(session.deliverDiskNote)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text(deliverableNote)
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                    clipList
+
+                    Text(session.sharedGradeWriteLine)
+                        .font(.body.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    deliverPreviewGlance
+                    if !session.lockedClips.isEmpty {
+                        Text(session.deliverDiskNote)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text("每条已锁定素材用自己的成对 IDT。曝光和白平衡用检查器里当前这一套，套到这些素材上。点过别的素材也不会换成那一条自己的曝光或白平衡。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("确认后说明收起，选文件夹贴在这个窗口上。选好才开始写出。取消则不写出。")
+                        .font(.body.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(session.exportFolderOpenNote)
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .help("只写文件夹的名字，不写整条路径。那个文件夹还在才用。不在设置里，没有保存按钮。取消则不写出。不改这一套曝光和白平衡，也不改成对 IDT。")
+
+                    if let reason = session.processBlockedReason, !session.showsProcessLockedButton {
+                        Text(reason)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text("每条已锁定素材用自己的成对 IDT。曝光和白平衡用检查器里当前这一套，套到这些素材上。点过别的素材也不会换成那一条自己的曝光或白平衡。")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("未锁定的跳过（先选择 Log 与色域 / 先选择成对 IDT）。已实现（未验证）。")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("确认后说明收起，选文件夹贴在这个窗口上。选好才开始写出。取消则不写出。")
-                .font(.body.weight(.semibold))
-                .fixedSize(horizontal: false, vertical: true)
-            Text(session.exportFolderOpenNote)
-                .font(.body)
-                .fixedSize(horizontal: false, vertical: true)
-                .help("只写文件夹的名字，不写整条路径。那个文件夹还在才用。不在设置里，没有保存按钮。取消则不写出。不改这一套曝光和白平衡，也不改成对 IDT。")
-
-            if let reason = session.processBlockedReason, !session.showsProcessLockedButton {
-                Text(reason)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.orange)
-            }
+            .frame(maxHeight: 480)
 
             HStack(spacing: 12) {
                 Button("关闭") {
@@ -80,10 +90,11 @@ struct DeliverSheet: View {
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!session.showsProcessLockedButton)
+                .help("留在说明下面。回车是这一下。说明收起后才选文件夹，选好才开始写文件。不改这一套曝光和白平衡，也不改成对 IDT。")
             }
         }
         .padding(24)
-        .frame(minWidth: 560, minHeight: 360)
+        .frame(minWidth: 560, minHeight: 360, maxHeight: 720)
     }
 
     /// Clips the write will skip. Same rule as the batch: no locked pair.
@@ -100,52 +111,78 @@ struct DeliverSheet: View {
     @ViewBuilder
     private var clipList: some View {
         if !session.clips.isEmpty {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    if !session.lockedClips.isEmpty {
-                        Text("会写出")
-                            .font(.subheadline.weight(.semibold))
-                        ForEach(session.lockedClips) { clip in
-                            clipLine(
-                                name: clip.filename,
-                                detail: clip.lockedPairLabel,
-                                fact: clip.mediaFactLine,
-                                output: clip.plannedDeliverableName(format: session.settings.exportFormat),
-                                willWrite: true
-                            )
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if !session.lockedClips.isEmpty {
+                            Text("会写出")
+                                .font(.subheadline.weight(.semibold))
+                            ForEach(session.lockedClips) { clip in
+                                clipLine(
+                                    name: clip.filename,
+                                    detail: clip.lockedPairLabel,
+                                    fact: clip.mediaFactLine,
+                                    output: clip.plannedDeliverableName(format: session.settings.exportFormat),
+                                    willWrite: true,
+                                    current: clip.id == session.selectedID
+                                )
+                                .id(clip.id)
+                            }
+                        }
+                        if !skippedClips.isEmpty {
+                            Text("会跳过")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.top, session.lockedClips.isEmpty ? 0 : 4)
+                            ForEach(skippedClips) { clip in
+                                clipLine(
+                                    name: clip.filename,
+                                    detail: clip.processSkipReason ?? "先选择成对 IDT",
+                                    fact: clip.mediaFactLine,
+                                    output: nil,
+                                    willWrite: false,
+                                    current: clip.id == session.selectedID
+                                )
+                                .id(clip.id)
+                            }
                         }
                     }
-                    if !skippedClips.isEmpty {
-                        Text("会跳过")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.top, session.lockedClips.isEmpty ? 0 : 4)
-                        ForEach(skippedClips) { clip in
-                            clipLine(
-                                name: clip.filename,
-                                detail: clip.processSkipReason ?? "先选择成对 IDT",
-                                fact: clip.mediaFactLine,
-                                output: nil,
-                                willWrite: false
-                            )
-                        }
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: listHeight)
+                .onAppear {
+                    revealCurrentClip(with: proxy)
+                }
             }
-            .frame(height: listHeight)
         }
     }
 
-    private func clipLine(name: String, detail: String, fact: String?, output: String?, willWrite: Bool) -> some View {
+    /// The monitor's clip, inside this list. Does not change the selection or the grade.
+    private func revealCurrentClip(with proxy: ScrollViewProxy) {
+        guard let id = session.selectedID else { return }
+        DispatchQueue.main.async {
+            proxy.scrollTo(id, anchor: .center)
+        }
+    }
+
+    private func clipLine(name: String, detail: String, fact: String?, output: String?, willWrite: Bool, current: Bool) -> some View {
         HStack(alignment: .top, spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(willWrite ? Color.accentColor : Color.yellow.opacity(0.95))
                 .frame(width: 4, height: output == nil ? (fact == nil ? 34 : 50) : (fact == nil ? 48 : 64))
             VStack(alignment: .leading, spacing: 2) {
-                Text(name)
-                    .font(.body)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 8) {
+                    Text(name)
+                        .font(.body)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if current {
+                        Text("当前这条")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .layoutPriority(1)
+                            .help("和监视器是同一条。会写出或会跳过都标。不改选中，不改这一套曝光和白平衡，不改成对 IDT，也不开始写文件。")
+                    }
+                }
                 Text(detail)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -167,6 +204,12 @@ struct DeliverSheet: View {
             }
             Spacer(minLength: 0)
         }
+        .padding(.vertical, current ? 4 : 0)
+        .padding(.horizontal, current ? 4 : 0)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(current ? Color.accentColor.opacity(0.12) : Color.clear)
+        )
         .accessibilityElement(children: .combine)
     }
 

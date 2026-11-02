@@ -2496,3 +2496,58 @@ def test_hidden_selection_can_be_shown_again_without_moving_the_grade():
     for token in BANNED_CONTACT:
         assert token not in plan
         assert token not in trial
+
+
+def _sheet_scroll_closes_before(source: str, marker: str) -> bool:
+    """The first ScrollView in source closes before marker. Buttons can sit under it."""
+    start = source.find("ScrollView {")
+    if start < 0 or marker not in source:
+        return False
+    depth = 0
+    opened = source.find("{", start)
+    for index in range(opened, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index < source.find(marker)
+    return False
+
+
+def test_write_sheet_pins_confirm_and_marks_the_monitor_clip():
+    """The confirm stays under the notes. The monitor's clip is marked and scrolled into view.
+
+    Marking does not start a write and does not edit the shared grade.
+    """
+    deliver = _read(DELIVER)
+    body = deliver.split("var body: some View")[1].split("private var skippedClips")[0]
+    assert body.count("ScrollView {") == 1
+    assert _sheet_scroll_closes_before(body, 'Button("选出文件夹并写出")')
+    assert _sheet_scroll_closes_before(body, 'Button("关闭")')
+    assert body.index("ScrollView {") < body.index('Button("选出文件夹并写出")')
+    assert ".frame(maxHeight: 480)" in body
+    assert ".keyboardShortcut(.defaultAction)" in body
+    assert ".keyboardShortcut(.cancelAction)" in body
+    assert "deliverSheetConfirmed = true" in body
+    assert "processLockedClips" not in deliver
+    listing = deliver.split("private var clipList")[1].split("private func revealCurrentClip")[0]
+    assert listing.count("clip.id == session.selectedID") == 2
+    assert listing.count(".id(clip.id)") == 2
+    assert "proxy.scrollTo(id, anchor: .center)" in deliver
+    assert 'Text("当前这条")' in deliver
+    assert "会写出或会跳过都标" in deliver
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "5600", "6504"):
+        assert token not in deliver, token
+    plan = _read(PLAN)
+    assert "当前这一条标「当前这条」" in plan
+    assert "留在说明下面" in plan
+    assert "不在这一下开始写文件" in plan
+    readme = _read(ROOT / "README.md")
+    trial = readme.split("## 本机打开试用")[1].split("## Quick start")[0]
+    assert "当前这一条标「当前这条」" in trial
+    assert "确认和关闭留在下面" in trial
+    for token in BANNED_CONTACT:
+        assert token not in plan
+        assert token not in trial
