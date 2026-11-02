@@ -1578,6 +1578,34 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// How many clips landed, and the next step. Does not assign an IDT.
+    /// Zero means the caller still has to say the folder had nothing readable,
+    /// or to attach the skip list. Does not invent 5600.
+    static func importArrivalNote(imported: Int, needsPicker: Bool) -> String {
+        guard imported > 0 else { return "" }
+        if needsPicker {
+            return "读入 \(imported) 条。在右侧检查器选成对 IDT。"
+        }
+        return "读入 \(imported) 条。可在监视器看预览，再点写出。"
+    }
+
+    /// Dropped path expanded to nothing the bin can list.
+    static func importEmptyNote() -> String {
+        "没有能读的素材。拖 MOV、MP4、TIFF、DPX、EXR，或含这些的文件夹。"
+    }
+
+    /// True when the sidebar filter would hide at least one clip from this drop.
+    static func importFilterHidesNewRow(_ filter: ClipListFilter, built: [Clip]) -> Bool {
+        switch filter {
+        case .all:
+            return false
+        case .pending:
+            return built.contains { $0.hasLockedPair }
+        case .locked:
+            return built.contains { !$0.hasLockedPair }
+        }
+    }
+
     /// Multi-file refuse list. Header when more than one skip. Per-file chips unchanged.
     static func importSkipSummary(_ skipped: [String]) -> String {
         guard skipped.count > 1 else {
@@ -1589,6 +1617,7 @@ final class SessionModel: ObservableObject {
     func importURL(_ url: URL) {
         // Keep the security scope for the session so preview decode can reopen the URL.
         _ = url.startAccessingSecurityScopedResource()
+        lastImportNote = "正在读入…"
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let files = Self.expandToClipURLs(url)
             var skipped: [String] = []
@@ -1641,9 +1670,20 @@ final class SessionModel: ObservableObject {
                     self.selectedID = first.id
                     self.noteSelectionForSharedGrade(first)
                 }
-                if !skipped.isEmpty {
-                    self.lastImportNote = Self.importSkipSummary(skipped)
+                // A 待选 / 已锁定 filter must not hide the rows that just arrived.
+                if !built.isEmpty, Self.importFilterHidesNewRow(self.clipListFilter, built: built) {
+                    self.clipListFilter = .all
                 }
+                let needsPicker = built.contains { !$0.hasLockedPair }
+                var note = Self.importArrivalNote(imported: built.count, needsPicker: needsPicker)
+                if built.isEmpty, skipped.isEmpty {
+                    note = Self.importEmptyNote()
+                }
+                if !skipped.isEmpty {
+                    let skips = Self.importSkipSummary(skipped)
+                    note = note.isEmpty ? skips : note + "\n" + skips
+                }
+                self.lastImportNote = note
                 if self.settings.promptEstimateWBOnImport {
                     let locked = built.contains { $0.hasLockedPair }
                     let hint = "可点「估计白平衡」查看估计，确认后才写入。不是校准，不猜 5600。"

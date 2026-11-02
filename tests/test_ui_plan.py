@@ -450,6 +450,41 @@ def test_grade_before_is_preview_only_and_leaves_the_shared_set():
     assert "检查器数字不动" in plan
 
 
+def test_import_names_what_arrived_and_the_filter_cannot_hide_it():
+    """A drop always answers. A pending/locked filter cannot swallow the new rows."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    arrival = clip.split("static func importArrivalNote")[1].split("static func importEmptyNote")[0]
+    assert "读入" in arrival
+    assert "在右侧检查器选成对 IDT" in arrival
+    assert "可在监视器看预览，再点写出" in arrival
+    assert "imported > 0" in arrival
+    assert "5600" not in arrival
+    assert "6504" not in arrival
+    empty = clip.split("static func importEmptyNote")[1].split("static func importFilterHidesNewRow")[0]
+    assert "没有能读的素材" in empty
+    assert "5600" not in empty
+    hides = clip.split("static func importFilterHidesNewRow")[1].split("static func importSkipSummary")[0]
+    assert "case .all" in hides
+    assert "return false" in hides
+    assert "hasLockedPair" in hides
+    apply = clip.split("func importURL")[1].split("private static let clipExtensions")[0]
+    assert 'lastImportNote = "正在读入…"' in apply
+    assert "importArrivalNote" in apply
+    assert "importEmptyNote" in apply
+    assert "importFilterHidesNewRow" in apply
+    assert "clipListFilter = .all" in apply
+    assert "Self.importSkipSummary(skipped)" in apply
+    assert "needsUserPicker" in apply
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    assert "lastImportNote" in sidebar
+    assert "importNoteIsProblem" in sidebar
+    assert "没有能读" in sidebar
+    plan = _read(PLAN)
+    assert "正在读入" in plan
+    assert "没有能读的素材" in plan
+    assert "读入 N 条" in plan
+
+
 def test_idt_lock_stays_on_the_clip_being_previewed():
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]

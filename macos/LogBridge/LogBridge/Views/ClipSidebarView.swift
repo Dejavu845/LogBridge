@@ -45,10 +45,13 @@ struct ClipSidebarView: View {
 
             if !session.lastImportNote.isEmpty {
                 Text(session.lastImportNote)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                    .foregroundStyle(importNoteIsProblem ? Color.orange : Color.secondary)
+                    .lineLimit(6)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 6)
+                    .help(session.lastImportNote)
             }
 
             ScrollViewReader { proxy in
@@ -97,6 +100,12 @@ struct ClipSidebarView: View {
             }
         }
         .background(Color.primary.opacity(0.02))
+    }
+
+    /// Skip and empty-folder notes are the failure of this drop. Arrival stays quiet.
+    private var importNoteIsProblem: Bool {
+        let note = session.lastImportNote
+        return note.contains("未导入") || note.contains("没有能读")
     }
 }
 
