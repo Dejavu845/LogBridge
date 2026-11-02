@@ -183,11 +183,23 @@ final class SessionModel: ObservableObject {
     @Published var selectedID: UUID?
     @Published var selectedNode: NodeSlot = .idt
     @Published var graph = SerialGraph()
-    @Published var showImporter = false
+    @Published var showImporter = false {
+        didSet {
+            if showImporter {
+                stopPreviewPlayback()
+            }
+        }
+    }
     @Published var dropTargeted = false
     @Published var lastExportNote: String = ""
     @Published var lastImportNote: String = ""
-    @Published var pickingNeutral: Bool = false
+    @Published var pickingNeutral: Bool = false {
+        didSet {
+            if pickingNeutral {
+                stopPreviewPlayback()
+            }
+        }
+    }
     @Published var showSettings = false
     /// 写出说明。确认后才走 processLockedClips 的选文件夹。不是偏好设置。
     @Published var showDeliverSheet = false
@@ -214,6 +226,12 @@ final class SessionModel: ObservableObject {
     @Published var previewScrubLastFrame: Int? = nil
     /// 「读不到帧率，未核对」 / 「读不到时长，未核对」. No slider. No 24/30 guess.
     @Published var previewScrubFail: String? = nil
+    /// Metadata fps captured with the scrub range. Nil when there is nothing to play.
+    /// Playback uses this. It does not probe again, and it does not invent a rate.
+    @Published var previewPlaybackFPS: Double? = nil
+    /// Preview transport. Picture only. Stops at the last frame. Not a write.
+    @Published var isPreviewPlaying = false
+    private var previewPlayTimer: Timer?
     private var previewScrubClipID: UUID?
 
     let preview = PreviewEngine()
@@ -226,6 +244,10 @@ final class SessionModel: ObservableObject {
 
     init() {
         graph.odt = settings.defaultPreviewODT
+    }
+
+    deinit {
+        previewPlayTimer?.invalidate()
     }
 
     var selectedClip: Clip? {
@@ -307,6 +329,7 @@ final class SessionModel: ObservableObject {
         // clip's preview source/linear/graded and drops a stale first-frame
         // if selection already moved on. Write path is not this cache.
         if selectedID != previewScrubClipID {
+            stopPreviewPlayback()
             resetPreviewScrub()
         }
         preview.refresh(clip: selectedClip, graph: graphForPreview, frameIndex: previewFrameIndex)
@@ -319,7 +342,11 @@ final class SessionModel: ObservableObject {
 
     /// Slider: first…last from duration × metadata fps. No 24/30 guess.
     /// Cache hit for that frame: ODT only. Miss: decode that frame only.
-    func setPreviewFrame(_ index: Int) {
+    /// A drag or a click stops playback. The play timer passes keepPlaying.
+    func setPreviewFrame(_ index: Int, keepPlaying: Bool = false) {
+        if !keepPlaying {
+            stopPreviewPlayback()
+        }
         guard let last = previewScrubLastFrame else { return }
         let next = max(0, min(index, last))
         previewFrameIndex = next
@@ -332,11 +359,13 @@ final class SessionModel: ObservableObject {
         previewFrameIndex = 0
         previewScrubLastFrame = nil
         previewScrubFail = nil
+        previewPlaybackFPS = nil
         guard let clip = selectedClip else { return }
         if MediaFormat.probe(url: clip.url).kind == .still {
             return
         }
-        let (count, err) = Self.expectedSourceFrames(MediaFormat.extent(url: clip.url))
+        let ext = MediaFormat.extent(url: clip.url)
+        let (count, err) = Self.expectedSourceFrames(ext)
         if let err {
             // missingFpsChip / missingDurationChip
             previewScrubFail = err
@@ -344,6 +373,9 @@ final class SessionModel: ObservableObject {
         }
         if let count {
             previewScrubLastFrame = max(0, count - 1)
+            if let fps = ext.fps, fps.isFinite, fps > 0 {
+                previewPlaybackFPS = fps
+            }
         }
     }
 
@@ -381,6 +413,7 @@ final class SessionModel: ObservableObject {
     @discardableResult
     func stepPreviewFrame(_ delta: Int) -> Bool {
         guard canStepPreviewFrame, delta != 0 else { return false }
+        stopPreviewPlayback()
         if delta < 0 {
             guard previewFrameIndex > 0 else { return true }
             setPreviewFrame(previewFrameIndex - 1)
@@ -389,6 +422,68 @@ final class SessionModel: ObservableObject {
             setPreviewFrame(previewFrameIndex + 1)
         }
         return true
+    }
+
+    /// Play only when this clip already has a scrub range and a metadata fps.
+    /// Stills, missing rate, the last frame, grey-card pick, sheets, and write stay stopped.
+    var canPlayPreview: Bool {
+        guard canStepPreviewForward, !pickingNeutral else { return false }
+        guard let fps = previewPlaybackFPS, fps.isFinite, fps > 0 else { return false }
+        return true
+    }
+
+    /// Space and the scrub button. Pause is allowed until a sheet or a write takes the window.
+    var canTogglePreviewPlayback: Bool {
+        if isPreviewPlaying {
+            return canStepPreviewFrame && !pickingNeutral
+        }
+        return canPlayPreview
+    }
+
+    /// Start or stop preview playback. Does not move exposure, white balance, or the write.
+    /// At the last frame this does not jump back to the first frame.
+    @discardableResult
+    func togglePreviewPlayback() -> Bool {
+        if isPreviewPlaying {
+            stopPreviewPlayback()
+            return true
+        }
+        return startPreviewPlayback()
+    }
+
+    /// One frame per tick, at the metadata rate. Waits out a preview that is still drawing.
+    /// Does not skip ahead, and does not invent a frame rate.
+    @discardableResult
+    func startPreviewPlayback() -> Bool {
+        guard canPlayPreview, let fps = previewPlaybackFPS else { return false }
+        stopPreviewPlayback()
+        isPreviewPlaying = true
+        // Cap the timer so a wild metadata value cannot spin. Still one frame each fire.
+        let interval = 1.0 / min(fps, 120)
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            self?.advancePreviewPlayback()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        previewPlayTimer = timer
+        return true
+    }
+
+    func stopPreviewPlayback() {
+        previewPlayTimer?.invalidate()
+        previewPlayTimer = nil
+        if isPreviewPlaying {
+            isPreviewPlaying = false
+        }
+    }
+
+    private func advancePreviewPlayback() {
+        guard isPreviewPlaying else { return }
+        guard canStepPreviewForward, !pickingNeutral else {
+            stopPreviewPlayback()
+            return
+        }
+        if preview.isWorking { return }
+        setPreviewFrame(previewFrameIndex + 1, keepPlaying: true)
     }
 
     var lockedClips: [Clip] { clips.filter(\.hasLockedPair) }
@@ -426,6 +521,7 @@ final class SessionModel: ObservableObject {
         if isWritingDeliverables { return "正在写出代理" }
         if clips.isEmpty { return "先拖入或点添加" }
         if !showsProcessLockedButton { return "在右侧检查器选成对 IDT" }
+        if canRevealLastExport { return "已写出代理。可再调色，或在状态栏打开 Finder" }
         if pendingClipCount > 0 { return "可调色并写出；待选仍要选 IDT" }
         return "可调色，再点写出"
     }
@@ -502,6 +598,7 @@ final class SessionModel: ObservableObject {
     /// the half package and those `_proxy` folders are removed.
     /// Empty `_ACES2065-1_proxy` / 0 frames fail closed (帧数对不上 / 解码失败).
     func writeLockedDeliverables(locked: [Clip], skippedCount: Int, dest: URL) {
+        stopPreviewPlayback()
         let exportFormat = settings.exportFormat
         let estimate = Self.estimateLockedProxyBytes(urls: locked.map(\.url), format: exportFormat)
         if let free = destFreeBytesOverride ?? Self.destVolumeFreeBytes(dest),
@@ -1192,11 +1289,13 @@ final class SessionModel: ObservableObject {
         guard selectedID == lockedID else { return }
         guard let currentIdx = clips.firstIndex(where: { $0.id == lockedID }) else { return }
         if let next = clips.dropFirst(currentIdx + 1).first(where: { !$0.hasLockedPair }) {
+            stopPreviewPlayback()
             selectedID = next.id
             noteSelectionForSharedGrade(next)
             return
         }
         if let wrap = clips.first(where: { $0.id != lockedID && !$0.hasLockedPair }) {
+            stopPreviewPlayback()
             selectedID = wrap.id
             noteSelectionForSharedGrade(wrap)
         }
@@ -1320,11 +1419,13 @@ final class SessionModel: ObservableObject {
         if let id = selectedID, let idx = rows.firstIndex(where: { $0.id == id }) {
             let next = idx + step
             guard rows.indices.contains(next) else { return false }
+            stopPreviewPlayback()
             selectedID = rows[next].id
             noteSelectionForSharedGrade(rows[next])
             return true
         }
         let idx = step > 0 ? 0 : rows.count - 1
+        stopPreviewPlayback()
         selectedID = rows[idx].id
         noteSelectionForSharedGrade(rows[idx])
         return true
@@ -1348,6 +1449,7 @@ final class SessionModel: ObservableObject {
             return false
         }
         // Session list only. Source file and any already-written `_proxy` stay.
+        stopPreviewPlayback()
         clips.remove(at: idx)
         preview.evict(clipID: id)
         if clips.indices.contains(idx) {
@@ -1375,6 +1477,12 @@ final class SessionModel: ObservableObject {
             return true
         }
         return false
+    }
+
+    /// Space stays with text, sliders, and a focused button (that button already uses Space).
+    static func isPlaybackKeyConsumedByControl() -> Bool {
+        if isArrowConsumedByTextInput() { return true }
+        return NSApp.keyWindow?.firstResponder is NSButton
     }
 
     /// Sheets / alerts / other key windows keep Escape. Do not steal dismiss.
@@ -1540,6 +1648,7 @@ final class SessionModel: ObservableObject {
 
     /// Global preferences. Does not change the selected clip.
     func presentSettings() {
+        stopPreviewPlayback()
         activeSheet = .settings
         showSettings = true
         showDeliverSheet = false
@@ -1548,6 +1657,7 @@ final class SessionModel: ObservableObject {
     /// Write sheet. Folder panel opens only after this sheet has gone.
     func presentDeliverSheet() {
         guard !isWritingDeliverables else { return }
+        stopPreviewPlayback()
         activeSheet = .deliver
         showDeliverSheet = true
         showSettings = false
@@ -1615,6 +1725,7 @@ final class SessionModel: ObservableObject {
     }
 
     func importURL(_ url: URL) {
+        stopPreviewPlayback()
         // Keep the security scope for the session so preview decode can reopen the URL.
         _ = url.startAccessingSecurityScopedResource()
         lastImportNote = "正在读入…"

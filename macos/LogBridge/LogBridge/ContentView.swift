@@ -75,6 +75,9 @@ struct ContentView: View {
                 },
                 onStepFrame: { delta in
                     session.stepPreviewFrame(delta)
+                },
+                onTogglePlayback: {
+                    session.togglePreviewPlayback()
                 }
             )
         }
@@ -332,7 +335,8 @@ private struct InspectorColumn: View {
 }
 
 /// Window-level Up/Down for the sidebar list. Left/Right steps the preview
-/// frame (same as 上一帧 / 下一帧). Escape while writing is the existing 取消
+/// frame (same as 上一帧 / 下一帧). Space plays or pauses that preview.
+/// Escape while writing is the existing 取消
 /// (same cancelLockedDeliverables). Idle Escape does nothing.
 /// Delete / Backspace drops the selected clip from the session only
 /// (source file and already-written `_proxy` stay). Mid-write ignores Delete.
@@ -344,6 +348,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     var onEscape: () -> Bool
     var onDelete: () -> Bool
     var onStepFrame: (Int) -> Bool
+    var onTogglePlayback: () -> Bool
 
     func makeNSView(context: Context) -> MonitorView {
         let view = MonitorView()
@@ -351,6 +356,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         view.onEscape = onEscape
         view.onDelete = onDelete
         view.onStepFrame = onStepFrame
+        view.onTogglePlayback = onTogglePlayback
         return view
     }
 
@@ -359,6 +365,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         nsView.onEscape = onEscape
         nsView.onDelete = onDelete
         nsView.onStepFrame = onStepFrame
+        nsView.onTogglePlayback = onTogglePlayback
     }
 
     static func dismantleNSView(_ nsView: MonitorView, coordinator: ()) {
@@ -370,6 +377,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         var onEscape: (() -> Bool)?
         var onDelete: (() -> Bool)?
         var onStepFrame: ((Int) -> Bool)?
+        var onTogglePlayback: (() -> Bool)?
         private var monitor: Any?
 
         override func viewDidMoveToWindow() {
@@ -401,6 +409,13 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                 case 124:
                     if SessionModel.isArrowConsumedByTextInput() { return event }
                     if self.onStepFrame?(1) == true { return nil }
+                    return event
+                case 49:
+                    if SessionModel.isPlaybackKeyConsumedByControl() { return event }
+                    if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
+                        return event
+                    }
+                    if self.onTogglePlayback?() == true { return nil }
                     return event
                 case 53:
                     if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: self.window) {
@@ -739,6 +754,12 @@ struct PreviewScrubBar: View {
                 Text("预览帧")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.secondary)
+                Button(session.isPreviewPlaying ? "暂停" : "播放") {
+                    session.togglePreviewPlayback()
+                }
+                .controlSize(.regular)
+                .disabled(!session.canTogglePreviewPlayback)
+                .help("按这条素材自己的帧率走预览。这一帧还没画完就等它，到最后一帧就停，不绕回。空格是同一套。不改曝光和白平衡，不参与写出。读不到帧率就不能播。")
                 Button("上一帧") {
                     session.stepPreviewFrame(-1)
                 }
@@ -761,10 +782,13 @@ struct PreviewScrubBar: View {
                 .controlSize(.regular)
                 .disabled(!session.canStepPreviewForward)
                 .help("每次一帧，到头就停。右方向键是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
-                Text("第 \(session.previewFrameIndex + 1) / \(last + 1) 帧")
+                Text(session.isPreviewPlaying
+                     ? "第 \(session.previewFrameIndex + 1) / \(last + 1) 帧 · 播放中"
+                     : "第 \(session.previewFrameIndex + 1) / \(last + 1) 帧")
                     .font(.body.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .frame(minWidth: 120, alignment: .trailing)
+                    .lineLimit(1)
+                    .frame(minWidth: 180, alignment: .trailing)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)

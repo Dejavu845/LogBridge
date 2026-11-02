@@ -492,3 +492,61 @@ def test_idt_lock_stays_on_the_clip_being_previewed():
     assert "refreshPreview()" in body
     inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
     assert "下一条待选" in inspector
+
+
+def test_preview_playback_uses_metadata_rate_and_stops_at_the_end():
+    """Play is preview transport. It does not invent a rate or move the shared grade."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    play = clip.split("var canPlayPreview")[1].split("var lockedClips")[0]
+    assert "previewPlaybackFPS" in play
+    assert "canStepPreviewForward" in play
+    assert "pickingNeutral" in play
+    assert "keepPlaying: true" in play
+    assert "preview.isWorking" in play
+    assert "conservativeFPS" not in play
+    assert "5600" not in play
+    assert "6504" not in play
+    assert "24" not in play
+    assert "30" not in play
+    assert "setExposureStops" not in play
+    assert "setWBParams" not in play
+    assert "touchSharedGrade" not in play
+    reset = clip.split("func resetPreviewScrub()")[1].split("var pendingPickerCount")[0]
+    assert "previewPlaybackFPS = nil" in reset
+    assert "previewPlaybackFPS = fps" in reset
+    manual = clip.split("func setPreviewFrame")[1].split("func resetPreviewScrub")[0]
+    assert "keepPlaying" in manual
+    assert "stopPreviewPlayback()" in manual
+    step = clip.split("func stepPreviewFrame")[1].split("var canPlayPreview")[0]
+    assert "stopPreviewPlayback()" in step
+    gates = clip.split("func presentSettings()")[1].split("func presentDeliverSheet()")[0]
+    assert "stopPreviewPlayback()" in gates
+    deliver = clip.split("func presentDeliverSheet()")[1].split("func importProviders")[0]
+    assert "stopPreviewPlayback()" in deliver
+    writing = clip.split("func writeLockedDeliverables")[1].split("DispatchQueue.global")[0]
+    assert writing.index("stopPreviewPlayback()") < writing.index("isWritingDeliverables = true")
+    hint = clip.split("var loopStepHint")[1].split("var showsProcessLockedButton")[0]
+    assert "已写出代理。可再调色，或在状态栏打开 Finder" in hint
+    assert "可调色，再点写出" in hint
+    content = _read(CONTENT)
+    bar = content.split("struct PreviewScrubBar")[1].split("struct WriteProgressLine")[0]
+    assert 'Button(session.isPreviewPlaying ? "暂停" : "播放")' in bar
+    assert "togglePreviewPlayback()" in bar
+    assert "canTogglePreviewPlayback" in bar
+    assert "播放中" in bar
+    monitor = content.split("struct ClipListArrowMonitor")[1].split("struct ProcessLockedBar")[0]
+    assert "case 49:" in monitor
+    assert "isPlaybackKeyConsumedByControl" in monitor
+    assert "onTogglePlayback" in monitor
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    assert "播放预览" in menu
+    assert "暂停预览" in menu
+    assert "togglePreviewPlayback()" in menu
+    assert "canTogglePreviewPlayback" in menu
+    plan = _read(PLAN)
+    assert "播放预览" in plan
+    assert "到最后一帧就停" in plan
+    assert "不猜帧率" in plan
+    assert "不改曝光和白平衡" in plan
+    assert "已写出代理。可再调色，或在状态栏打开 Finder" in plan

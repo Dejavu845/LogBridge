@@ -136,6 +136,10 @@ private struct LogBridgeCommands: Commands {
                 sessionFocus?.session?.stepPreviewFrame(1)
             }
             .disabled(sessionFocus?.session?.canStepPreviewForward != true)
+            Button(sessionFocus?.session?.isPreviewPlaying == true ? "暂停预览" : "播放预览") {
+                sessionFocus?.session?.togglePreviewPlayback()
+            }
+            .disabled(sessionFocus?.session?.canTogglePreviewPlayback != true)
             Divider()
             Button(sessionFocus?.session?.previewShowsGradeBefore == true ? "回到调色" : "看调色前") {
                 sessionFocus?.session?.togglePreviewGradeBefore()
