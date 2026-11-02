@@ -110,6 +110,9 @@ struct ContentView: View {
                 onFollowLoop: {
                     session.followLoopWithReturn()
                 },
+                onToggleSplitAndGrade: {
+                    session.toggleSplitAndGrade()
+                },
                 onGradeStrokeEnd: {
                     session.closeSharedGradeStroke()
                 }
@@ -318,7 +321,14 @@ private struct MonitorHeader: View {
                 .pickerStyle(.segmented)
                 .frame(width: 268)
                 .labelsHidden()
-                .help("分屏是源和预览。对照是调色前和这一套，左右同时看，不改检查器，也不改写出。未锁定时不能切到对照。点灰卡时仍在预览上取样。仅预览。")
+                .help("分屏是源和预览。对照是调色前和这一套，左右同时看，不改检查器，也不改写出。未锁定时不能切到对照。按 V 只在分屏和预览之间换，源和对照不在这一下里。点灰卡时仍在预览上取样。仅预览。")
+                if session.canToggleSplitAndGrade {
+                    Text("V 切换")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help("按 V 在分屏和预览之间换。菜单「调色」里的「分屏与预览」是同一套，菜单不标快捷键。正在看源或对照时不出现这一句，V 也不改画面。查找框、手填档、手填色温、手填绿品、跳到仍吃 V。写出进行中，或设置、写出说明、导入、正在打开选文件夹、点灰卡时不起作用。不改这一套曝光和白平衡，不改成对 IDT，不改预览帧，也不参与写出。")
+                }
                 Button(session.previewShowsGradeBefore ? "回到调色" : "看调色前") {
                     session.togglePreviewGradeBefore()
                 }
@@ -581,6 +591,7 @@ private struct InspectorColumn: View {
 /// Bare 1…4 lock a short paired-IDT list. Text fields keep the digits.
 /// A long catalog has no digit, so 1 does not lock the first catalog row.
 /// Return follows the marked step, except 写出. Text fields keep Return.
+/// Bare V toggles 分屏 and 预览. Text fields keep V. 源 and 对照 do not.
 private struct ClipListArrowMonitor: NSViewRepresentable {
     var handler: (Int) -> Bool
     var onEscape: () -> Bool
@@ -596,6 +607,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     var onRedoGrade: () -> Bool
     var onLockShortPair: (Int) -> Bool
     var onFollowLoop: () -> Bool
+    var onToggleSplitAndGrade: () -> Bool
     var onGradeStrokeEnd: () -> Void
 
     func makeNSView(context: Context) -> MonitorView {
@@ -614,6 +626,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         view.onRedoGrade = onRedoGrade
         view.onLockShortPair = onLockShortPair
         view.onFollowLoop = onFollowLoop
+        view.onToggleSplitAndGrade = onToggleSplitAndGrade
         view.onGradeStrokeEnd = onGradeStrokeEnd
         return view
     }
@@ -633,6 +646,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         nsView.onRedoGrade = onRedoGrade
         nsView.onLockShortPair = onLockShortPair
         nsView.onFollowLoop = onFollowLoop
+        nsView.onToggleSplitAndGrade = onToggleSplitAndGrade
         nsView.onGradeStrokeEnd = onGradeStrokeEnd
     }
 
@@ -655,6 +669,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
         var onRedoGrade: (() -> Bool)?
         var onLockShortPair: ((Int) -> Bool)?
         var onFollowLoop: (() -> Bool)?
+        var onToggleSplitAndGrade: (() -> Bool)?
         var onGradeStrokeEnd: (() -> Void)?
         private var monitor: Any?
 
@@ -686,6 +701,7 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
                 guard event.window === self.window else { return event }
                 if self.consumeGradeUndoKey(event) { return nil }
                 if self.consumeShuttleKey(event) { return nil }
+                if self.consumeSplitGradeKey(event) { return nil }
                 if self.consumeShortPairKey(event) { return nil }
                 switch event.keyCode {
                 case 126:
@@ -788,6 +804,19 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
             if SessionModel.isArrowConsumedByTextInput() { return false }
             if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: window) { return false }
             return onLockShortPair?(digit) == true
+        }
+
+        /// Bare V toggles 分屏 and 预览. No modifiers. Text, sliders, and buttons keep the letter.
+        /// 源 and 对照, a write, and a sheet make the session refuse, so this does not eat the key.
+        private func consumeSplitGradeKey(_ event: NSEvent) -> Bool {
+            guard event.charactersIgnoringModifiers?.lowercased() == "v" else { return false }
+            let flags = event.modifierFlags
+                .intersection(.deviceIndependentFlagsMask)
+                .subtracting([.numericPad, .function, .capsLock])
+            guard flags.isEmpty else { return false }
+            if SessionModel.isPlaybackKeyConsumedByControl() { return false }
+            if SessionModel.isEscapeReservedByPresentedUI(event: event, monitorWindow: window) { return false }
+            return onToggleSplitAndGrade?() == true
         }
 
         /// J reverse, L same as 播放, K pause. No modifiers. Text, sliders, and buttons keep the letters.

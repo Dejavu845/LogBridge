@@ -216,6 +216,11 @@ private struct LogBridgeCommands: Commands {
             }
             .keyboardShortcut("/", modifiers: [.command, .option])
             .disabled(sessionFocus?.session?.canTogglePreviewCompare != true)
+            Button("分屏与预览") {
+                sessionFocus?.session?.toggleSplitAndGrade()
+            }
+            .disabled(sessionFocus?.session?.canToggleSplitAndGrade != true)
+            .help("在分屏和预览之间换。V 是同一套，菜单不标快捷键。正在看源或对照时不起作用。查找框、手填和跳到仍吃 V。不改这一套曝光和白平衡，不改预览帧，也不参与写出。")
             Divider()
             Button("撤销这一套") {
                 sessionFocus?.session?.undoSharedGrade()

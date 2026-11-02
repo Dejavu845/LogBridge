@@ -850,6 +850,40 @@ final class SessionModel: ObservableObject {
         )
     }
 
+    /// V and the 调色 menu. 分屏 and 预览 only.
+    /// 源 and 对照 stay on the segmented control and on ⌥⌘/. Nil means V does nothing.
+    /// Does not edit exposure, white balance, the paired IDT, or the preview frame.
+    static func toggledSplitAndGradeLayout(_ current: MonitorLayout) -> MonitorLayout? {
+        switch current {
+        case .split: return .grade
+        case .grade: return .split
+        case .source, .compare: return nil
+        }
+    }
+
+    /// Off on 源 and 对照, and while a sheet, the folder panel, a write, or a grey-card pick is up.
+    var canToggleSplitAndGrade: Bool {
+        guard Self.toggledSplitAndGradeLayout(monitorLayout) != nil else { return false }
+        guard !isWritingDeliverables,
+              !showSettings,
+              !showImporter,
+              !showDeliverSheet,
+              !openingExportFolder,
+              !pickingNeutral
+        else { return false }
+        return true
+    }
+
+    /// Enlarge the grade, or go back to the source | grade split. Same pictures.
+    @discardableResult
+    func toggleSplitAndGrade() -> Bool {
+        guard canToggleSplitAndGrade, let next = Self.toggledSplitAndGradeLayout(monitorLayout) else {
+            return false
+        }
+        setMonitorLayout(next)
+        return true
+    }
+
     /// Segmented monitor control. Entering 对照 turns off 看调色前 so the
     /// right pane stays this shared set. Does not edit exposure, white balance,
     /// the paired IDT, or the preview frame.
