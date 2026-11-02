@@ -929,6 +929,8 @@ struct SplitPreview: View {
 /// Missing fps/duration: Chinese fail, no fake range. Stills: no slider.
 struct PreviewScrubBar: View {
     @ObservedObject var session: SessionModel
+    @State private var jumpText = ""
+    @State private var jumpNote: String?
 
     var body: some View {
         if session.isExporting {
@@ -1000,6 +1002,32 @@ struct PreviewScrubBar: View {
                     .disabled(!session.canJumpPreviewToEnd)
                     .help("到最后一帧。End 是同一套。只改预览，不改这一套曝光和白平衡，也不参与写出。")
                 }
+                if session.previewClockText != nil {
+                    HStack(spacing: 8) {
+                        TextField("0:01.500", text: $jumpText)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.body.monospacedDigit())
+                            .frame(width: 148)
+                            .onSubmit(commitPreviewJump)
+                            .onChange(of: jumpText) { _, _ in
+                                jumpNote = nil
+                            }
+                            .disabled(!session.canJumpPreviewToClock)
+                        Button("跳到") {
+                            commitPreviewJump()
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canJumpPreviewToClock)
+                        if let jumpNote {
+                            Text(jumpNote)
+                                .font(.callout)
+                                .foregroundStyle(.orange)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 8)
+                    }
+                    .help("按这条帧率落到最近的一帧。可写 0:01.500、1:02:03.004、秒数 1.5、1.5秒，或第 12 帧。超出就停在开头或结尾。回车和「跳到」是同一套。读不到帧率就没有这一栏。只改预览，不改这一套曝光和白平衡，也不参与写出。不是时间码。")
+                }
                 Text(previewFrameReadout(last: last))
                     .font(.body.monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -1009,6 +1037,24 @@ struct PreviewScrubBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .onChange(of: session.selectedID) { _, _ in
+                jumpText = ""
+                jumpNote = nil
+            }
+        }
+    }
+
+    /// Empty and unrecognized stay on this frame. A real time moves the preview only.
+    private func commitPreviewJump() {
+        let text = jumpText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty {
+            jumpNote = "先写出时间，如 0:01.500 或第 12 帧"
+            return
+        }
+        if session.jumpPreview(toClock: text) {
+            jumpNote = nil
+        } else if session.canJumpPreviewToClock {
+            jumpNote = "认不出这个时间"
         }
     }
 

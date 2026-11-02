@@ -1,5 +1,6 @@
 """UI plan: single-window grade/delivery, no personal data, scopes stay advanced."""
 
+import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -551,6 +552,172 @@ def test_preview_second_step_uses_this_clip_rate_and_names_the_last_frame():
     assert "最后一帧" in plan
     assert "不是片源时长" in plan
     assert "滑条下面这一行" in plan
+    assert "不猜 24 或 30" in plan
+    assert "不改曝光和白平衡" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
+
+
+def _schoolbook_round(value: float) -> int:
+    """Same tie break as Swift `rounded()` for a finite value: half away from zero."""
+    if value >= 0:
+        return int(math.floor(value + 0.5))
+    return int(math.ceil(value - 0.5))
+
+
+def _preview_clock_text(frame_index: int, fps: float) -> str:
+    """Same digits as Clip.previewClock. Used to check a typed readout lands back."""
+    whole = _schoolbook_round((frame_index / fps) * 1000)
+    millis = whole % 1000
+    total = whole // 1000
+    secs = total % 60
+    minutes = (total // 60) % 60
+    hours = total // 3600
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}.{millis:03d}"
+    return f"{minutes}:{secs:02d}.{millis:03d}"
+
+
+def _preview_frame_index(text: str, fps: float | None, last_frame: int) -> int | None:
+    """Mirror of Clip.previewFrameIndex(forClock:fps:lastFrame:)."""
+    if last_frame < 0 or fps is None or not math.isfinite(fps) or fps <= 0:
+        return None
+    trimmed = text.strip().replace("：", ":")
+    if not trimmed:
+        return None
+    if "帧" in trimmed:
+        stripped = trimmed.replace("第", "").replace("帧", "").strip()
+        try:
+            display = int(stripped)
+        except ValueError:
+            return None
+        if display < 1:
+            return None
+        return min(display - 1, last_frame)
+    if trimmed.endswith("秒"):
+        trimmed = trimmed[:-1].strip()
+    seconds = _preview_clock_seconds(trimmed)
+    if seconds is None or not math.isfinite(seconds) or seconds < 0:
+        return None
+    raw = float(_schoolbook_round(seconds * fps))
+    if not math.isfinite(raw) or raw < 0:
+        return None
+    if raw > last_frame:
+        return last_frame
+    return int(raw)
+
+
+def _preview_clock_seconds(text: str) -> float | None:
+    parts = [part.strip() for part in text.split(":")]
+    # split drops nothing; an empty field stays so "1::2" is not one minute.
+    if not 1 <= len(parts) <= 3:
+        return None
+
+    def number(part: str) -> float | None:
+        if not part:
+            return None
+        try:
+            value = float(part)
+        except ValueError:
+            return None
+        if not math.isfinite(value) or value < 0:
+            return None
+        return value
+
+    def whole(value: float) -> bool:
+        return float(_schoolbook_round(value)) == value
+
+    if len(parts) == 1:
+        return number(parts[0])
+    if len(parts) == 2:
+        minutes = number(parts[0])
+        seconds = number(parts[1])
+        if minutes is None or seconds is None or not whole(minutes) or seconds >= 60:
+            return None
+        return minutes * 60 + seconds
+    hours = number(parts[0])
+    minutes = number(parts[1])
+    seconds = number(parts[2])
+    if (
+        hours is None
+        or minutes is None
+        or seconds is None
+        or not whole(hours)
+        or not whole(minutes)
+        or minutes >= 60
+        or seconds >= 60
+    ):
+        return None
+    hour = 60.0
+    return hours * hour * hour + minutes * hour + seconds
+
+
+def test_preview_jump_reads_a_clock_or_a_frame_and_leaves_the_grade():
+    """Typed time uses this clip's rate. It does not invent 24/30 or move the grade."""
+    assert _preview_frame_index("0:01.000", 25, 1000) == 25
+    assert _preview_frame_index("1.5", 25, 1000) == 38
+    assert _preview_frame_index("1.5秒", 25, 1000) == 38
+    assert _preview_frame_index("0：01.500", 25, 1000) == 38
+    assert _preview_frame_index("第 12 帧", 25, 1000) == 11
+    assert _preview_frame_index("12帧", 25, 1000) == 11
+    assert _preview_frame_index("第 1 帧", 25, 1000) == 0
+    assert _preview_frame_index("第 9 帧", 25, 3) == 3
+    assert _preview_frame_index("9:00", 25, 10) == 10
+    assert _preview_frame_index("1:02:03", 25, 100000) == (3600 + 120 + 3) * 25
+    assert _preview_frame_index("", 25, 1000) is None
+    assert _preview_frame_index("   ", 25, 1000) is None
+    assert _preview_frame_index("abc", 25, 1000) is None
+    assert _preview_frame_index("1:60", 25, 1000) is None
+    assert _preview_frame_index("1.5:00", 25, 1000) is None
+    assert _preview_frame_index("第 0 帧", 25, 1000) is None
+    assert _preview_frame_index("0:01.000", None, 1000) is None
+    assert _preview_frame_index("0:01.000", 25, -1) is None
+    for fps in (23.976, 24, 25, 29.97, 30, 59.94, 60):
+        last = int(fps * 90)
+        for frame in range(0, last + 1, 7):
+            typed = _preview_clock_text(frame, fps)
+            assert _preview_frame_index(typed, fps, last) == frame, (fps, frame, typed)
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func previewFrameIndex(forClock")[1].split("static func previewSecondFrameCount")[0]
+    assert "fps.isFinite, fps > 0" in fn
+    assert "return nil" in fn
+    assert "replacingOccurrences(of: \"：\"" in fn
+    assert "contains(\"帧\")" in fn
+    assert "hasSuffix(\"秒\")" in fn
+    assert "previewClockSeconds" in fn
+    assert "rounded()" in fn
+    assert "lastFrame" in fn
+    assert "hour * hour" in fn
+    assert "seconds < 60" in fn
+    for token in ("24", "30", "5600", "6504", "setExposureStops", "setWBParams"):
+        assert token not in fn, token
+    jump = clip.split("func jumpPreview(toClock")[1].split("var lockedClips")[0]
+    assert "canJumpPreviewToClock" in jump
+    assert "previewFrameIndex(forClock:" in jump
+    assert "stopPreviewPlayback()" in jump
+    assert "setPreviewFrame(index)" in jump
+    assert "setExposureStops" not in jump
+    assert "setWBParams" not in jump
+    assert "touchSharedGrade" not in jump
+    gate = clip.split("var canJumpPreviewToClock")[1].split("func jumpPreview(toClock")[0]
+    assert "canStepPreviewFrame" in gate
+    assert "previewPlaybackFPS" in gate
+    content = _read(CONTENT)
+    bar = content.split("struct PreviewScrubBar")[1].split("struct WriteProgressLine")[0]
+    assert 'Button("跳到")' in bar
+    assert 'TextField("0:01.500"' in bar
+    assert "previewClockText != nil" in bar
+    assert "commitPreviewJump" in bar
+    assert "jumpPreview(toClock: text)" in bar
+    assert "认不出这个时间" in bar
+    assert "先写出时间，如 0:01.500 或第 12 帧" in bar
+    assert "canJumpPreviewToClock" in bar
+    assert 'jumpText = ""' in bar
+    plan = _read(PLAN)
+    assert "跳到" in plan
+    assert "认不出这个时间" in plan
+    assert "第 12 帧" in plan
+    assert "不是时间码" in plan
     assert "不猜 24 或 30" in plan
     assert "不改曝光和白平衡" in plan
     for token in BANNED_CONTACT:

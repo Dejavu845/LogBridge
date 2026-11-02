@@ -203,6 +203,71 @@ struct Clip: Identifiable, Hashable {
         return String(format: "%d:%02d.%03d", minutes, secs, millis)
     }
 
+    /// Frame for a typed preview clock, a number of seconds, or 「第 N 帧」.
+    /// N is the 1-based readout. A clock lands on the nearest frame at this rate.
+    /// Past either end clamps. Nil when the text or the rate cannot be read.
+    /// Does not fill in a rate. Not camera timecode.
+    static func previewFrameIndex(forClock text: String, fps: Double?, lastFrame: Int) -> Int? {
+        guard lastFrame >= 0, let fps, fps.isFinite, fps > 0 else { return nil }
+        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        trimmed = trimmed.replacingOccurrences(of: "：", with: ":")
+        if trimmed.contains("帧") {
+            guard let display = previewDisplayFrame(trimmed) else { return nil }
+            return min(display - 1, lastFrame)
+        }
+        if trimmed.hasSuffix("秒") {
+            trimmed.removeLast()
+            trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let seconds = previewClockSeconds(trimmed), seconds.isFinite, seconds >= 0 else { return nil }
+        let raw = (seconds * fps).rounded()
+        guard raw.isFinite, raw >= 0 else { return nil }
+        if raw > Double(lastFrame) { return lastFrame }
+        return Int(raw)
+    }
+
+    /// 「第 12 帧」 and 「12帧」. 1-based, matching the readout. Nil if it is not a frame.
+    private static func previewDisplayFrame(_ text: String) -> Int? {
+        guard text.contains("帧") else { return nil }
+        let stripped = text
+            .replacingOccurrences(of: "第", with: "")
+            .replacingOccurrences(of: "帧", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let n = Int(stripped), n >= 1 else { return nil }
+        return n
+    }
+
+    /// `m:ss.mmm`, `h:mm:ss.mmm`, or a plain number of seconds. Nil when it is not a clock.
+    /// The right-hand fields stay under a minute. The leftmost field may run long.
+    private static func previewClockSeconds(_ text: String) -> Double? {
+        let parts = text.split(separator: ":", omittingEmptySubsequences: false).map {
+            String($0).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard (1...3).contains(parts.count) else { return nil }
+        func number(_ part: String) -> Double? {
+            guard !part.isEmpty, let value = Double(part), value.isFinite, value >= 0 else { return nil }
+            return value
+        }
+        func whole(_ value: Double) -> Bool {
+            value.rounded() == value
+        }
+        if parts.count == 1 {
+            return number(parts[0])
+        }
+        if parts.count == 2 {
+            guard let minutes = number(parts[0]), let seconds = number(parts[1]) else { return nil }
+            guard whole(minutes), seconds < 60 else { return nil }
+            return minutes * 60 + seconds
+        }
+        guard let hours = number(parts[0]), let minutes = number(parts[1]), let seconds = number(parts[2]) else {
+            return nil
+        }
+        guard whole(hours), whole(minutes), minutes < 60, seconds < 60 else { return nil }
+        let hour = 60.0
+        return hours * hour * hour + minutes * hour + seconds
+    }
+
     /// Frames in about one second at this clip's rate. Nearest whole frame.
     /// Nil when the rate is missing or rounds to nothing. Does not fill in a rate.
     static func previewSecondFrameCount(fps: Double?) -> Int? {
@@ -714,6 +779,29 @@ final class SessionModel: ObservableObject {
         }
         if preview.isWorking { return }
         setPreviewFrame(previewFrameIndex + 1, keepPlaying: true)
+    }
+
+    /// Typed clock, seconds, or 第 N 帧. Same rate as the readout. No invented rate.
+    var canJumpPreviewToClock: Bool {
+        guard canStepPreviewFrame else { return false }
+        guard let fps = previewPlaybackFPS, fps.isFinite, fps > 0 else { return false }
+        return true
+    }
+
+    /// Nearest frame at this clip's rate. Clamps to the scrub ends.
+    /// Stops playback. Does not change exposure, white balance, or the write.
+    @discardableResult
+    func jumpPreview(toClock text: String) -> Bool {
+        guard canJumpPreviewToClock, let last = previewScrubLastFrame else { return false }
+        guard let index = Clip.previewFrameIndex(forClock: text, fps: previewPlaybackFPS, lastFrame: last) else {
+            return false
+        }
+        if index == previewFrameIndex {
+            stopPreviewPlayback()
+            return true
+        }
+        setPreviewFrame(index)
+        return true
     }
 
     var lockedClips: [Clip] { clips.filter(\.hasLockedPair) }
