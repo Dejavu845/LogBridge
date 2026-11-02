@@ -65,4 +65,6 @@ def test_deliver_sheet_is_separate_from_preferences():
     assert bar.count("Button(") == 1
     assert "processLockedClips" in bar
     assert "showDeliverSheet" in bar
+    assert "attachedSheet" in bar
+    assert "下一步：在右侧检查器选成对 IDT" in bar
     assert "DeliverSheet" not in _read(SETTINGS)

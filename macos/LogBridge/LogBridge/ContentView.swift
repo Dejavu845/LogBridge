@@ -313,7 +313,7 @@ struct ProcessLockedBar: View {
                     .font(.title3.weight(.semibold))
                 Text(session.lockStatusText)
                     .font(.body.weight(.semibold))
-                if let reason = session.selectedClip?.processSkipReason {
+                if let reason = session.selectedClip?.processSkipReason, session.showsProcessLockedButton {
                     Text(reason)
                         .font(.callout)
                         .foregroundStyle(.orange)
@@ -340,6 +340,15 @@ struct ProcessLockedBar: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if !session.showsProcessLockedButton, !session.clips.isEmpty, !session.isWritingDeliverables {
+                Text("下一步：在右侧检查器选成对 IDT。选完才能写出。")
+                    .font(.body.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(session.selectedClip?.processSkipReason ?? "先选择 Log 与色域")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if session.showsBatchSummary {
                 Text(session.lastExportNote)
                     .font(.callout)
@@ -353,10 +362,29 @@ struct ProcessLockedBar: View {
         .onChange(of: session.deliverSheetConfirmed) { _, confirmed in
             guard confirmed else { return }
             session.deliverSheetConfirmed = false
+            openFolderPanelAfterSheet()
+        }
+    }
+
+    /// NSOpenPanel on top of a dismissing sheet often never appears.
+    /// Wait until the write sheet is gone, then use the existing folder panel.
+    private func openFolderPanelAfterSheet() {
+        let session = session
+        func kick(_ attempt: Int) {
             DispatchQueue.main.async {
+                let sheetStillUp = session.showDeliverSheet
+                    || session.showSettings
+                    || NSApp.windows.contains { $0.attachedSheet != nil }
+                if sheetStillUp, attempt < 40 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        kick(attempt + 1)
+                    }
+                    return
+                }
                 session.processLockedClips()
             }
         }
+        kick(0)
     }
 
     private var deliverableNote: String {
@@ -453,6 +481,22 @@ struct SplitPreview: View {
                 .background(.black.opacity(0.62))
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 .padding(32)
+                .allowsHitTesting(false)
+            } else if let clip = session.selectedClip, clip.isPending, !session.isExporting {
+                VStack(spacing: 4) {
+                    Text(clip.processSkipReason ?? "先选择 Log 与色域")
+                        .font(.title3.weight(.semibold))
+                    Text("在右侧检查器选成对 IDT。预览角标仍是仅预览。")
+                        .font(.callout)
+                }
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .allowsHitTesting(false)
             }
         }
