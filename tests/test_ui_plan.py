@@ -102,6 +102,30 @@ def test_monitor_can_enlarge_the_grade_preview():
     assert "shownLayout" in preview
 
 
+def test_short_window_keeps_inspector_and_grade_readout():
+    content = _read(CONTENT)
+    column = content.split("struct InspectorColumn")[1].split("struct ClipListArrowMonitor")[0]
+    assert "ScrollView" in column
+    assert "PairedIDTBar" in column
+    assert "InspectorView" in column
+    assert "跟这条选中" in column
+    header = content.split("struct MonitorHeader")[1].split("struct InspectorColumn")[0]
+    assert "gradeReadout" in header
+    assert "曝光关" in header
+    assert "白平衡关" in header
+    assert "仅预览" in header
+    preview = content.split("SplitPreview(session: session, layout: monitorLayout)")[1].split(
+        "ProcessLockedBar"
+    )[0]
+    assert "minHeight: 200" in preview
+    advanced = content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
+    assert "maxHeight: 220" in advanced
+    assert "ScrollView" in advanced
+    plan = _read(PLAN)
+    assert "整栏滚动" in plan
+    assert "一行读数" in plan
+
+
 def test_idt_lock_stays_on_the_clip_being_previewed():
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]

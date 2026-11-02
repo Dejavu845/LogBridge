@@ -21,9 +21,9 @@ struct ContentView: View {
                 ClipSidebarView(session: session)
                     .frame(minWidth: 240, idealWidth: 292, maxWidth: 380)
                 VStack(spacing: 0) {
-                    MonitorHeader(layout: $monitorLayout)
+                    MonitorHeader(session: session, layout: $monitorLayout)
                     SplitPreview(session: session, layout: monitorLayout)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(minHeight: 200, maxWidth: .infinity, maxHeight: .infinity)
                         .layoutPriority(1)
                     ProcessLockedBar(session: session)
                     AdvancedPanel(session: session, isExpanded: $settings.advancedPanelExpanded)
@@ -169,68 +169,116 @@ enum MonitorLayout: String, CaseIterable, Identifiable {
 }
 
 private struct MonitorHeader: View {
+    @ObservedObject var session: SessionModel
     @Binding var layout: MonitorLayout
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text("监视器")
-                .font(.headline)
-            Text(layout.caption)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            Picker("画面", selection: $layout) {
-                ForEach(MonitorLayout.allCases) { item in
-                    Text(item.label).tag(item)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text("监视器")
+                    .font(.headline)
+                Text(layout.caption)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Picker("画面", selection: $layout) {
+                    ForEach(MonitorLayout.allCases) { item in
+                        Text(item.label).tag(item)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .frame(width: 210)
+                .labelsHidden()
+                .help("分屏对照，或把预览放大来看调色。点灰卡时会显示预览。仅预览。")
+                Text("仅预览")
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.primary.opacity(0.08))
+                    .clipShape(Capsule())
             }
-            .pickerStyle(.segmented)
-            .frame(width: 210)
-            .labelsHidden()
-            .help("分屏对照，或把预览放大来看调色。点灰卡时会显示预览。仅预览。")
-            Text("仅预览")
-                .font(.caption.weight(.bold))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.primary.opacity(0.08))
-                .clipShape(Capsule())
+            if session.selectedClip != nil {
+                Text(gradeReadout)
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help("和右侧检查器是同一套。改曝光或白平衡，这一行和预览一起变。仅预览。")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.primary.opacity(0.03))
+    }
+
+    /// 监视器上的调色读数。数字来自当前检查器，不另存一套，也不参与写出。
+    private var gradeReadout: String {
+        let clipName = session.selectedClip?.filename ?? ""
+        let exposure: String
+        if session.graph.exposureEnabled {
+            exposure = String(format: "曝光 %+.2f 档", session.graph.exposureStops)
+        } else {
+            exposure = "曝光关"
+        }
+        let wb: String
+        if !session.graph.wbEnabled {
+            wb = "白平衡关"
+        } else if let cct = session.graph.wbCCT {
+            wb = "\(session.graph.wbSource.title) \(Int(cct)) K"
+        } else {
+            wb = session.graph.wbSource.title
+        }
+        let pending = session.selectedClip?.isPending == true ? "待选 · " : ""
+        return "\(clipName) · \(pending)\(exposure) · \(wb)"
     }
 }
 
-/// Inspector follows the selected clip. IDT, then exposure and white balance.
+/// 检查器跟当前选中。标题固定；成对 IDT、曝光、白平衡在下面整栏滚动。
+/// 窗口变矮时仍能滚到曝光和白平衡，不会被成对 IDT 顶出画面。
 private struct InspectorColumn: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("检查器")
                     .font(.title3.weight(.semibold))
                 if let clip = session.selectedClip {
                     Text(clip.filename)
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
-                    Text("成对 IDT 记在这条素材上。曝光和白平衡改完即在预览里生效；写出时已锁定素材共用当前这一套。")
+                        .truncationMode(.middle)
+                    Text(clip.hasLockedPair
+                         ? "跟这条选中。调色改完即在预览里生效。"
+                         : "跟这条选中。先选成对 IDT。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(2)
                 } else {
                     Text("先在左侧点一条素材。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             Divider()
-            PairedIDTBar(session: session)
-            Divider()
-            InspectorView(session: session)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    PairedIDTBar(session: session)
+                    Divider()
+                    InspectorView(session: session)
+                    Text("写出时已锁定素材共用当前这一套曝光和白平衡，每条仍用自己的成对 IDT。")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
+                }
+            }
         }
         .background(Color.primary.opacity(0.02))
     }
@@ -345,17 +393,18 @@ struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("写出")
                     .font(.title3.weight(.semibold))
                 Text(session.lockStatusText)
                     .font(.body.weight(.semibold))
+                    .lineLimit(1)
                 if let reason = session.selectedClip?.processSkipReason, session.showsProcessLockedButton {
                     Text(reason)
                         .font(.callout)
                         .foregroundStyle(.orange)
-                        .lineLimit(2)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 if session.showsProcessLockedButton {
@@ -371,29 +420,28 @@ struct ProcessLockedBar: View {
                     .help(UICopy.PROCESS_BUTTON_HELP_UI)
                 }
             }
-            Text(session.settings.exportFormat.labelZH)
-                .font(.callout)
-            Text(deliverableNote)
+            Text("\(session.settings.exportFormat.labelZH) · \(deliverableNote)")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
             if !session.showsProcessLockedButton, !session.clips.isEmpty, !session.isWritingDeliverables {
                 Text("下一步：在右侧检查器选成对 IDT。选完才能写出。")
                     .font(.body.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2)
                 Text(session.selectedClip?.processSkipReason ?? "先选择 Log 与色域")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
             }
             if session.showsBatchSummary {
                 Text(session.lastExportNote)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2)
             }
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.accentColor.opacity(session.showsProcessLockedButton ? 0.08 : 0.04))
         .onChange(of: session.deliverSheetConfirmed) { _, confirmed in
@@ -440,40 +488,44 @@ struct AdvancedPanel: View {
 
     var body: some View {
         DisclosureGroup("高级", isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("节点、写出格式、直方图。默认收起，不挡预览。")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Picker("写出格式", selection: Binding(
-                    get: { session.settings.exportFormat },
-                    set: { session.settings.exportFormat = $0 }
-                )) {
-                    ForEach(ExportFormat.allCases) { fmt in
-                        Text(fmt.labelZH).tag(fmt)
+            // 展开后在自己的高度里滚，监视器仍留一块预览。
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("节点、写出格式、直方图。默认收起，不挡预览。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Picker("写出格式", selection: Binding(
+                        get: { session.settings.exportFormat },
+                        set: { session.settings.exportFormat = $0 }
+                    )) {
+                        ForEach(ExportFormat.allCases) { fmt in
+                            Text(fmt.labelZH).tag(fmt)
+                        }
                     }
-                }
-                .pickerStyle(.radioGroup)
-                .help(session.settings.exportFormat.pickerHelpZH)
-                NodeStripView(session: session)
-                HStack {
-                    Button("导出 ACEScct / EXR") {
-                        session.exportResolve()
+                    .pickerStyle(.radioGroup)
+                    .help(session.settings.exportFormat.pickerHelpZH)
+                    NodeStripView(session: session)
+                    HStack {
+                        Button("导出 ACEScct / EXR") {
+                            session.exportResolve()
+                        }
+                        .controlSize(.regular)
+                        .disabled(!session.canProcess)
+                        .help(UICopy.ADVANCED_EXPORT_HELP)
+                        if let reason = session.processBlockedReason {
+                            Text(reason)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                        Spacer()
                     }
-                    .controlSize(.regular)
-                    .disabled(!session.canProcess)
-                    .help(UICopy.ADVANCED_EXPORT_HELP)
-                    if let reason = session.processBlockedReason {
-                        Text(reason)
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal, 10)
-                PreviewHistogramView(image: isExpanded ? session.preview.odtImage : nil)
                     .padding(.horizontal, 10)
-                    .padding(.bottom, 8)
+                    PreviewHistogramView(image: isExpanded ? session.preview.odtImage : nil)
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 8)
+                }
             }
+            .frame(maxHeight: 220)
         }
         .help(UICopy.ADVANCED_DISCLOSURE_HELP)
         .padding(.horizontal, 12)

@@ -95,28 +95,27 @@ struct InspectorView: View {
     @State private var wbOpen = true
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                DisclosureGroup(isExpanded: $exposureOpen) {
-                    ExposureInspector(session: session)
-                        .padding(.top, 6)
-                } label: {
-                    Text("曝光")
-                        .font(.headline)
-                }
-                DisclosureGroup(isExpanded: $wbOpen) {
-                    WBInspector(session: session)
-                        .padding(.top, 6)
-                } label: {
-                    Text("白平衡")
-                        .font(.headline)
-                }
+        // 外层检查器已整栏滚动，这里不再套一层，避免矮窗口里滚不动。
+        VStack(alignment: .leading, spacing: 12) {
+            DisclosureGroup(isExpanded: $exposureOpen) {
+                ExposureInspector(session: session)
+                    .padding(.top, 6)
+            } label: {
+                Text("曝光")
+                    .font(.headline)
             }
-            .disabled(session.isExporting)
-            .opacity(session.isExporting ? 0.45 : 1)
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            DisclosureGroup(isExpanded: $wbOpen) {
+                WBInspector(session: session)
+                    .padding(.top, 6)
+            } label: {
+                Text("白平衡")
+                    .font(.headline)
+            }
         }
+        .disabled(session.isExporting)
+        .opacity(session.isExporting ? 0.45 : 1)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.primary.opacity(0.02))
     }
 }
