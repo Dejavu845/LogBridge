@@ -1,4 +1,157 @@
 import SwiftUI
+import AppKit
+
+/// First-frame pictures for the bin and the inspector.
+/// Camera-log source only: not the grade, not a deliverable, not written to disk.
+/// Separate from the monitor cache, which keeps only the selected clip.
+/// Selection and scrub do not replace these. A removed row drops its picture.
+final class ClipPosterCache: ObservableObject {
+    /// Smaller than the monitor long edge. The list only needs a glance.
+    static let longEdge: CGFloat = 160
+    /// Visible rows stay. Scrolling back decodes that row again.
+    static let keptCount = 80
+
+    @Published private(set) var images: [UUID: CGImage] = [:]
+    @Published private(set) var failures: [UUID: String] = [:]
+
+    private let queue = DispatchQueue(label: "app.logbridge.posters", qos: .utility)
+    private var inflight: Set<UUID> = []
+    private var alive: Set<UUID> = []
+    private var order: [UUID] = []
+
+    /// First frame only. In memory. Does not grade and does not write a file.
+    func request(id: UUID, url: URL) {
+        if images[id] != nil || failures[id] != nil || inflight.contains(id) { return }
+        inflight.insert(id)
+        alive.insert(id)
+        queue.async { [weak self] in
+            let outcome = Self.decodeFirstFrame(url: url)
+            DispatchQueue.main.async {
+                self?.finish(id: id, outcome: outcome)
+            }
+        }
+    }
+
+    func drop(id: UUID) {
+        alive.remove(id)
+        inflight.remove(id)
+        if images[id] != nil {
+            var next = images
+            next[id] = nil
+            images = next
+        }
+        if failures[id] != nil {
+            var next = failures
+            next[id] = nil
+            failures = next
+        }
+        order.removeAll { $0 == id }
+    }
+
+    private func finish(id: UUID, outcome: Result<CGImage, String>) {
+        inflight.remove(id)
+        guard alive.contains(id) else { return }
+        switch outcome {
+        case .success(let image):
+            var next = images
+            next[id] = image
+            images = next
+            order.removeAll { $0 == id }
+            order.append(id)
+            evictIfNeeded()
+        case .failure(let note):
+            var next = failures
+            next[id] = note
+            failures = next
+        }
+    }
+
+    private func evictIfNeeded() {
+        guard order.count > Self.keptCount else { return }
+        var next = images
+        while order.count > Self.keptCount {
+            let old = order.removeFirst()
+            next[old] = nil
+        }
+        images = next
+    }
+
+    /// Same first-frame decode as the source pane. frameIndex stays 0, so a
+    /// missing frame rate is not invented and the picture does not follow the scrub.
+    private static func decodeFirstFrame(url: URL) -> Result<CGImage, String> {
+        do {
+            guard let image = try PreviewEngine.decodeDownscaled(
+                url: url,
+                maxLongEdge: longEdge,
+                frameIndex: 0
+            ) else {
+                return .failure("解不出预览帧")
+            }
+            return .success(image)
+        } catch {
+            return .failure(PreviewEngine.userFacingFailureNote(error))
+        }
+    }
+}
+
+/// Small source picture. The corner says 源 so it is not read as the grade.
+struct ClipSourcePoster: View {
+    @ObservedObject var session: SessionModel
+    @ObservedObject var posters: ClipPosterCache
+    let clip: Clip
+
+    static let help = "这一小图是源（相机 Log）第一帧。静帧就是这一张。不是调色预览，不含曝光和白平衡，不参与写出。"
+
+    var body: some View {
+        tile
+            .frame(width: 84, height: 48)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .help(posters.failures[clip.id] ?? Self.help)
+            .onAppear {
+                session.requestClipPoster(id: clip.id, url: clip.url)
+            }
+            .onChange(of: session.isWritingDeliverables) { _, writing in
+                if !writing {
+                    session.requestClipPoster(id: clip.id, url: clip.url)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var tile: some View {
+        if let image = posters.images[clip.id] {
+            ZStack(alignment: .bottomLeading) {
+                Image(nsImage: NSImage(
+                    cgImage: image,
+                    size: NSSize(width: CGFloat(image.width), height: CGFloat(image.height))
+                ))
+                .resizable()
+                .scaledToFill()
+                Text("源")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(.black.opacity(0.55))
+            }
+        } else if posters.failures[clip.id] != nil {
+            Text("没有画面")
+                .font(.caption2)
+                .foregroundStyle(.orange)
+                .multilineTextAlignment(.center)
+                .padding(4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.85))
+        } else {
+            Text("源")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.85))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.85))
+        }
+    }
+}
 
 /// Media list. Drop zone + rows. Badge is never a finished-picture claim.
 /// 待选 / 已锁定 stay glanceable. No lock button — the paired IDT picker locks.
@@ -78,6 +231,7 @@ struct ClipSidebarView: View {
                         }
                         ForEach(session.visibleClips) { clip in
                             ClipRow(
+                                session: session,
                                 clip: clip,
                                 selected: session.selectedID == clip.id,
                                 writing: session.writingClipID == clip.id,
@@ -163,6 +317,7 @@ private struct DropZone: View {
 }
 
 struct ClipRow: View {
+    @ObservedObject var session: SessionModel
     let clip: Clip
     var selected: Bool = false
     var writing: Bool = false
@@ -174,6 +329,7 @@ struct ClipRow: View {
                 .fill(clip.isPending ? Color.yellow.opacity(0.95) : Color.accentColor)
                 .frame(width: 4)
                 .padding(.vertical, 2)
+            ClipSourcePoster(session: session, posters: session.posters, clip: clip)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(clip.filename)

@@ -336,23 +336,28 @@ private struct InspectorColumn: View {
                 Text("检查器")
                     .font(.title3.weight(.semibold))
                 if let clip = session.selectedClip {
-                    Text(clip.filename)
-                        .font(.body.weight(.semibold))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if let fact = clip.mediaFactLine {
-                        Text(fact)
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .help("和左侧列表、监视器、写出说明是同一行。缺的不写，不猜帧率。不参与写出。")
+                    HStack(alignment: .top, spacing: 8) {
+                        ClipSourcePoster(session: session, posters: session.posters, clip: clip)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(clip.filename)
+                                .font(.body.weight(.semibold))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            if let fact = clip.mediaFactLine {
+                                Text(fact)
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .help("和左侧列表、监视器、写出说明是同一行。缺的不写，不猜帧率。不参与写出。")
+                            }
+                            Text(clip.hasLockedPair
+                                 ? "跟这条选中。曝光和白平衡是全片这一套，换一条也不改。"
+                                 : "跟这条选中。先选成对 IDT。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
                     }
-                    Text(clip.hasLockedPair
-                         ? "跟这条选中。曝光和白平衡是全片这一套，换一条也不改。"
-                         : "跟这条选中。先选成对 IDT。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
                 } else if session.clips.isEmpty {
                     Text("先拖入或点「添加…」。选中一条后，这里跟这条。")
                         .font(.callout)

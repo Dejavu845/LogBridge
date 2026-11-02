@@ -328,6 +328,8 @@ final class SessionModel: ObservableObject {
     private var previewScrubClipID: UUID?
 
     let preview = PreviewEngine()
+    /// Bin / inspector pictures. Not the monitor cache, and not the write.
+    let posters = ClipPosterCache()
     let settings = AppSettings.shared
     /// User edited exposure / WB, or a camera reading already filled the one shared set.
     /// Selection must not replace that set. Write uses the same set for every locked clip.
@@ -1647,6 +1649,13 @@ final class SessionModel: ObservableObject {
         return true
     }
 
+    /// First-frame picture for the list and the inspector.
+    /// Camera-log source, not the grade. Skipped while a proxy is being written.
+    func requestClipPoster(id: UUID, url: URL) {
+        guard !isWritingDeliverables else { return }
+        posters.request(id: id, url: url)
+    }
+
     /// Delete / Backspace: drop the selected clip from the SESSION only.
     /// Does not delete, trash, or move the source file. Does not delete an
     /// already-written `_proxy` folder — leave it on disk; just drop the row.
@@ -1668,6 +1677,7 @@ final class SessionModel: ObservableObject {
         stopPreviewPlayback()
         clips.remove(at: idx)
         preview.evict(clipID: id)
+        posters.drop(id: id)
         if clips.indices.contains(idx) {
             selectedID = clips[idx].id
             noteSelectionForSharedGrade(clips[idx])

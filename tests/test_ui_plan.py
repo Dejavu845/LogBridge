@@ -142,9 +142,8 @@ def test_short_window_keeps_inspector_and_grade_readout():
     assert "曝光关" in header
     assert "白平衡关" in header
     assert "仅预览" in header
-    preview = content.split("SplitPreview(session: session, layout: monitorLayout)")[1].split(
-        "ProcessLockedBar"
-    )[0]
+    preview = content.split("SplitPreview(")[1].split("ProcessLockedBar")[0]
+    assert "monitorLayout" in preview
     assert "minHeight: 200" in preview
     advanced = content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
     assert "maxHeight: 220" in advanced
@@ -297,9 +296,12 @@ def test_write_sheet_names_the_proxy_and_the_toolbar_says_the_next_step():
 def test_shared_grade_stays_when_selection_changes():
     """Browsing clips must not replace the one exposure / WB set write uses."""
     content = _read(CONTENT)
-    change = content.split(".onChange(of: session.selectedID)")[1].split(".background")[0]
-    assert "noteSelectionForSharedGrade" in change
-    assert "applyClipWBToGraph" not in change
+    # Monitor zoom resets on the first selectedID change. The shared grade
+    # stays on the later handler, which is what write uses.
+    handlers = content.split(".onChange(of: session.selectedID)")[1:]
+    grade = [part.split("refreshPreview()")[0] for part in handlers if "noteSelectionForSharedGrade" in part]
+    assert len(grade) == 1
+    assert "applyClipWBToGraph" not in grade[0]
     assert "这次预览" in content
     assert "setODT" in content.split("struct MonitorHeader")[1].split("struct InspectorColumn")[0]
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
@@ -715,5 +717,52 @@ def test_write_progress_names_the_clip_and_the_row_opens_the_proxy():
     assert "第 k / 共 m 帧" in plan
     assert "不猜 24 或 30" in plan
     assert "_Rec709_proxy.mov" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
+
+
+def test_clip_posters_are_source_first_frames_and_not_the_grade():
+    """The bin picture is the camera-log first frame. It does not follow the scrub or the write."""
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    cache = sidebar.split("final class ClipPosterCache")[1].split("struct ClipSourcePoster")[0]
+    assert "decodeDownscaled" in cache
+    assert "frameIndex: 0" in cache
+    assert "maxLongEdge: longEdge" in cache
+    assert "app.logbridge.posters" in cache
+    assert "gradeAP0" not in cache
+    assert "applyIDT" not in cache
+    assert "setIDT" not in cache
+    assert "setExposureStops" not in cache
+    assert "setWBParams" not in cache
+    assert "FileManager" not in cache
+    assert "write(to:" not in cache
+    for token in ("24", "30", "5600", "6504"):
+        assert token not in cache, token
+    poster = sidebar.split("struct ClipSourcePoster")[1].split("struct ClipSidebarView")[0]
+    assert 'Text("源")' in poster
+    assert 'Text("没有画面")' in poster
+    assert "requestClipPoster" in poster
+    assert "isWritingDeliverables" in poster
+    assert "不含曝光和白平衡，不参与写出" in poster
+    assert "第一帧" in poster
+    row = sidebar.split("struct ClipRow")[1]
+    assert "ClipSourcePoster(session: session, posters: session.posters, clip: clip)" in row
+    content = _read(CONTENT)
+    column = content.split("struct InspectorColumn")[1].split("struct ClipListArrowMonitor")[0]
+    assert "ClipSourcePoster(session: session, posters: session.posters, clip: clip)" in column
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    ask = clip.split("func requestClipPoster")[1].split("func removeSelectedClipFromSession")[0]
+    assert "isWritingDeliverables" in ask
+    assert "posters.request" in ask
+    assert "setIDT" not in ask
+    assert "5600" not in ask
+    assert "6504" not in ask
+    remove = clip.split("func removeSelectedClipFromSession")[1].split("static func isArrowConsumedByTextInput")[0]
+    assert "posters.drop(id: id)" in remove
+    plan = _read(PLAN)
+    assert "角上写「源」" in plan
+    assert "不跟着当前预览帧走" in plan
+    assert "没有画面" in plan
+    assert "不写入磁盘" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
