@@ -146,8 +146,28 @@ enum WorkspaceSheet: Equatable {
     case deliver
 }
 
+/// Sidebar list filter. Does not change the shared grade or which clip is previewed
+/// until the user moves the selection inside the filtered rows.
+enum ClipListFilter: String, CaseIterable, Identifiable {
+    case all
+    case pending
+    case locked
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all: return "全部"
+        case .pending: return "待选"
+        case .locked: return "已锁定"
+        }
+    }
+}
+
 final class SessionModel: ObservableObject {
     @Published var clips: [Clip] = []
+    /// 全部 / 待选 / 已锁定. The monitor keeps the current clip until selection moves.
+    @Published var clipListFilter: ClipListFilter = .all
     @Published var selectedID: UUID?
     @Published var selectedNode: NodeSlot = .idt
     @Published var graph = SerialGraph()
@@ -183,6 +203,9 @@ final class SessionModel: ObservableObject {
 
     let preview = PreviewEngine()
     let settings = AppSettings.shared
+    /// User edited exposure / WB, or a camera reading already filled the one shared set.
+    /// Selection must not replace that set. Write uses the same set for every locked clip.
+    private var sharedGradeTouched = false
     private let writeCancel = WriteCancelFlag()
     private var lastProgressUptime: TimeInterval = 0
 
@@ -192,6 +215,44 @@ final class SessionModel: ObservableObject {
 
     var selectedClip: Clip? {
         clips.first { $0.id == selectedID }
+    }
+
+    /// Monitor menu. Off has no picture transform; the menu stays on Rec.709
+    /// until the user picks HLG or PQ. Does not change the saved default.
+    var monitorPreviewODT: ODTMode {
+        switch graph.odt {
+        case .hlg: return .hlg
+        case .pq: return .pq
+        case .rec709, .off: return .rec709
+        }
+    }
+
+    /// Rows the sidebar is showing. Arrow keys move inside this list.
+    var visibleClips: [Clip] {
+        switch clipListFilter {
+        case .all:
+            return clips
+        case .pending:
+            return clips.filter { !$0.hasLockedPair }
+        case .locked:
+            return clips.filter(\.hasLockedPair)
+        }
+    }
+
+    /// Factory knobs: nothing to protect yet. The next selected clip may fill them
+    /// from its camera reading. After that, or after any edit, selection must not.
+    private var sharedGradeIsFactory: Bool {
+        !sharedGradeTouched
+            && graph.exposureEnabled
+            && graph.exposureStops == 0
+            && !graph.wbEnabled
+            && graph.wbCCT == nil
+            && graph.wbSource == .unknown
+            && abs(graph.wbTint) < 1e-9
+    }
+
+    private func touchSharedGrade() {
+        sharedGradeTouched = true
     }
 
     func refreshPreview() {
@@ -1005,12 +1066,12 @@ final class SessionModel: ObservableObject {
         guard let currentIdx = clips.firstIndex(where: { $0.id == lockedID }) else { return }
         if let next = clips.dropFirst(currentIdx + 1).first(where: { !$0.hasLockedPair }) {
             selectedID = next.id
-            applyClipWBToGraph(next)
+            noteSelectionForSharedGrade(next)
             return
         }
         if let wrap = clips.first(where: { $0.id != lockedID && !$0.hasLockedPair }) {
             selectedID = wrap.id
-            applyClipWBToGraph(wrap)
+            noteSelectionForSharedGrade(wrap)
         }
     }
 
@@ -1080,27 +1141,38 @@ final class SessionModel: ObservableObject {
               !showImporter,
               !showDeliverSheet
         else { return false }
-        if let shot = graph.asShotCCT {
+        if let shot = selectedClip?.asShotCCT {
+            let tint = selectedClip?.asShotTint ?? 0
             let atShot = graph.wbSource == .asShot
                 && graph.wbCCT == shot
-                && abs(graph.wbTint - graph.asShotTint) <= 1e-3
+                && abs(graph.wbTint - tint) <= 1e-3
             return !atShot
         }
         let cleared = graph.wbCCT == nil && graph.wbSource == .unknown && abs(graph.wbTint) <= 1e-3
         return !cleared
     }
 
+    /// Writes the selected clip's camera CCT and tint into the one shared set.
+    /// Missing camera reading clears the knobs. Does not guess a temperature.
+    /// Other clips keep this set until the user edits again.
     func restoreAsShotWB() {
         guard canRestoreAsShotWB else { return }
-        if let shot = graph.asShotCCT {
+        let shot = selectedClip?.asShotCCT
+        let shotTint = selectedClip?.asShotTint ?? 0
+        if let shot {
+            graph.asShotCCT = shot
+            graph.asShotTint = shotTint
             graph.wbCCT = shot
-            graph.wbTint = graph.asShotTint
+            graph.wbTint = shotTint
             graph.wbSource = .asShot
         } else {
+            graph.asShotCCT = nil
+            graph.asShotTint = 0
             graph.wbCCT = nil
             graph.wbTint = 0
             graph.wbSource = .unknown
         }
+        touchSharedGrade()
         persistGraphWBToSelectedClip()
         preview.invalidateWBODT()
         refreshPreview()
@@ -1115,17 +1187,19 @@ final class SessionModel: ObservableObject {
         guard !showSettings, !showImporter, !showDeliverSheet else { return false }
         guard !Self.isArrowConsumedByTextInput() else { return false }
         guard !clips.isEmpty, delta != 0 else { return false }
+        let rows = visibleClips
+        guard !rows.isEmpty else { return false }
         let step = delta > 0 ? 1 : -1
-        if let id = selectedID, let idx = clips.firstIndex(where: { $0.id == id }) {
+        if let id = selectedID, let idx = rows.firstIndex(where: { $0.id == id }) {
             let next = idx + step
-            guard clips.indices.contains(next) else { return false }
-            selectedID = clips[next].id
-            applyClipWBToGraph(clips[next])
+            guard rows.indices.contains(next) else { return false }
+            selectedID = rows[next].id
+            noteSelectionForSharedGrade(rows[next])
             return true
         }
-        let idx = step > 0 ? 0 : clips.count - 1
-        selectedID = clips[idx].id
-        applyClipWBToGraph(clips[idx])
+        let idx = step > 0 ? 0 : rows.count - 1
+        selectedID = rows[idx].id
+        noteSelectionForSharedGrade(rows[idx])
         return true
     }
 
@@ -1151,10 +1225,10 @@ final class SessionModel: ObservableObject {
         preview.evict(clipID: id)
         if clips.indices.contains(idx) {
             selectedID = clips[idx].id
-            applyClipWBToGraph(clips[idx])
+            noteSelectionForSharedGrade(clips[idx])
         } else if idx > 0, clips.indices.contains(idx - 1) {
             selectedID = clips[idx - 1].id
-            applyClipWBToGraph(clips[idx - 1])
+            noteSelectionForSharedGrade(clips[idx - 1])
         } else {
             selectedID = nil
         }
@@ -1186,18 +1260,21 @@ final class SessionModel: ObservableObject {
     }
 
     func setExposureEnabled(_ enabled: Bool) {
+        touchSharedGrade()
         graph.setEnabled(.exposure, enabled)
         preview.invalidateWBODT()
         refreshPreview()
     }
 
     func setExposureStops(_ stops: Double) {
+        touchSharedGrade()
         graph.exposureStops = stops
         preview.invalidateWBODT()
         refreshPreview()
     }
 
     func setWBEnabled(_ enabled: Bool) {
+        touchSharedGrade()
         graph.setEnabled(.wb, enabled)
         preview.invalidateWBODT()
         refreshPreview()
@@ -1214,6 +1291,7 @@ final class SessionModel: ObservableObject {
     }
 
     func setWBParams(cct: Double? = nil, tint: Double? = nil, method: String? = nil) {
+        touchSharedGrade()
         if let cct {
             graph.wbCCT = cct
             graph.wbSource = .user
@@ -1241,6 +1319,18 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// Keep one exposure and white-balance set for the whole bin.
+    /// A still-factory graph may take the selected clip's camera reading once.
+    /// Later selections do not replace the knobs or the CAT reference.
+    /// 回到机内 is what copies the current clip's camera reading into the set.
+    func noteSelectionForSharedGrade(_ clip: Clip) {
+        guard sharedGradeIsFactory else { return }
+        applyClipWBToGraph(clip)
+        if clip.asShotCCT != nil {
+            sharedGradeTouched = true
+        }
+    }
+
     func persistGraphWBToSelectedClip() {
         guard let id = selectedID, let idx = clips.firstIndex(where: { $0.id == id }) else { return }
         clips[idx].wbSource = graph.wbSource
@@ -1251,6 +1341,7 @@ final class SessionModel: ObservableObject {
     /// Grey-card pick: sample after IDT in ACES2065-1 (AP0) linear. Overrides metadata.
     func pickNeutral(linearRGB: SIMD3<Double>) {
         guard let est = WhiteBalanceNode.pickNeutral(linearRGB: linearRGB, rgbToXYZ: WhiteBalanceNode.ap0ToXYZ) else { return }
+        touchSharedGrade()
         graph.wbCCT = est.cct
         graph.wbTint = est.tint
         graph.wbSource = .grey
@@ -1276,6 +1367,7 @@ final class SessionModel: ObservableObject {
     /// Confirm estimate → absolute AP0 CAT. Grey-card wins. Empty stays empty.
     func confirmAutoWB() {
         guard graph.wbSource != .grey, let cct = graph.autoWBCCT else { return }
+        touchSharedGrade()
         graph.wbCCT = cct
         graph.wbTint = graph.autoWBTint
         graph.wbSource = .estimate
@@ -1397,10 +1489,10 @@ final class SessionModel: ObservableObject {
                 // All-locked keeps first / existing selection. Does not lock IDT.
                 if let pending = built.first(where: { !$0.hasLockedPair }) {
                     self.selectedID = pending.id
-                    self.applyClipWBToGraph(pending)
+                    self.noteSelectionForSharedGrade(pending)
                 } else if self.selectedID == nil, let first = built.first {
                     self.selectedID = first.id
-                    self.applyClipWBToGraph(first)
+                    self.noteSelectionForSharedGrade(first)
                 }
                 if !skipped.isEmpty {
                     self.lastImportNote = Self.importSkipSummary(skipped)

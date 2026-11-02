@@ -58,7 +58,7 @@ struct ContentView: View {
         }
         .onChange(of: session.selectedID) { _, _ in
             if let clip = session.selectedClip {
-                session.applyClipWBToGraph(clip)
+                session.noteSelectionForSharedGrade(clip)
             }
             session.refreshPreview()
         }
@@ -201,12 +201,26 @@ private struct MonitorHeader: View {
                     .clipShape(Capsule())
             }
             if session.selectedClip != nil {
-                Text(gradeReadout)
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help("和右侧检查器是同一套。改曝光或白平衡，这一行和预览一起变。仅预览。")
+                HStack(spacing: 8) {
+                    Picker("这次预览", selection: Binding(
+                        get: { session.monitorPreviewODT },
+                        set: { session.setODT($0) }
+                    )) {
+                        Text("Rec.709").tag(ODTMode.rec709)
+                        Text("HLG").tag(ODTMode.hlg)
+                        Text("PQ").tag(ODTMode.pq)
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    .disabled(session.isExporting)
+                    .help("只改这次监视器。默认预览在设置。角标仍是仅预览。不改写出。")
+                    Text(gradeReadout)
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help("和右侧检查器是同一套。换一条素材，这一行的曝光和白平衡不改。仅预览。")
+                }
             }
         }
         .padding(.horizontal, 12)
@@ -253,7 +267,7 @@ private struct InspectorColumn: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(clip.hasLockedPair
-                         ? "跟这条选中。调色改完即在预览里生效。"
+                         ? "跟这条选中。曝光和白平衡是全片这一套，换一条也不改。"
                          : "跟这条选中。先选成对 IDT。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -278,7 +292,7 @@ private struct InspectorColumn: View {
                     PairedIDTBar(session: session)
                     Divider()
                     InspectorView(session: session)
-                    Text("写出时已锁定素材共用当前这一套曝光和白平衡，每条仍用自己的成对 IDT。")
+                    Text("写出时已锁定素材共用当前这一套曝光和白平衡，每条仍用自己的成对 IDT。点另一条、方向键或再拖入，都不会改掉这一套。")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)

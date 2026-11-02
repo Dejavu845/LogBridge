@@ -45,7 +45,7 @@ struct SettingsView: View {
                     Text("默认 Rec.709（角标仅预览）。只作预览，未与 HDR 匹配。默认写出 ProRes；EXR 在高级选项。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("这是全局默认，当前预览会一起换。")
+                    Text("这是全局默认，当前预览会一起换。主窗口监视器上的「这次预览」只改当前这次，不改这里的默认，也不改写出。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } header: {

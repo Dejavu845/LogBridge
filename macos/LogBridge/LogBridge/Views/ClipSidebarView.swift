@@ -29,6 +29,20 @@ struct ClipSidebarView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
 
+            if !session.clips.isEmpty {
+                Picker("列表", selection: $session.clipListFilter) {
+                    ForEach(ClipListFilter.allCases) { item in
+                        Text(item.label).tag(item)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .controlSize(.small)
+                .labelsHidden()
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+                .help("全部 \(session.clips.count) 条，待选 \(session.pendingClipCount) 条，已锁定 \(session.lockedClipCount) 条。筛选只收列表，不改当前这一套调色。")
+            }
+
             if !session.lastImportNote.isEmpty {
                 Text(session.lastImportNote)
                     .font(.caption)
@@ -40,7 +54,25 @@ struct ClipSidebarView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 4) {
-                        ForEach(session.clips) { clip in
+                        if !session.clips.isEmpty && session.visibleClips.isEmpty {
+                            Text(session.clipListFilter == .pending
+                                 ? "没有待选。成对 IDT 都已选上。"
+                                 : "没有已锁定。先在检查器选成对 IDT。")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 8)
+                        } else if let clip = session.selectedClip,
+                                  !session.visibleClips.contains(where: { $0.id == clip.id }) {
+                            Text("当前这条不在这个筛选里。监视器不跟着筛选换。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 4)
+                                .padding(.bottom, 4)
+                        }
+                        ForEach(session.visibleClips) { clip in
                             ClipRow(
                                 clip: clip,
                                 selected: session.selectedID == clip.id,

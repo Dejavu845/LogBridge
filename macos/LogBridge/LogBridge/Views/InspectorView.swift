@@ -130,6 +130,12 @@ struct WBInspector: View {
                 set: { session.setWBEnabled($0) }
             ))
             .controlSize(.regular)
+            if let clip = session.selectedClip {
+                Text(cameraReadingLine(clip))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             // Three states only. Estimate chip lights AFTER confirm, never on propose.
             // 机内 / 估计确认才写 / 灰卡 — distinct tone + weight at a glance.
             HStack(spacing: 4) {
@@ -203,7 +209,7 @@ struct WBInspector: View {
                         .disabled(!session.canNudgeWB || (session.graph.wbCCT ?? 10000) >= 10000)
                 }
                 .controlSize(.regular)
-                .help("每次 100 K，或回到机内色温和绿品。没有机内读数就清空，不猜 5600。空值不能步进。菜单「调色」是同一套。仅预览。")
+                .help("每次 100 K。回到机内把当前这条的机内色温和绿品写入这一套。没有机内读数就清空，不猜 5600。换一条素材不会自己改掉这一套。空值不能步进。菜单「调色」是同一套。仅预览。")
                 HStack {
                     Text("绿品")
                         .font(.caption)
@@ -231,10 +237,19 @@ struct WBInspector: View {
                 .controlSize(.regular)
                 .frame(maxWidth: .infinity)
             }
-            Text("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。")
+            Text("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。这一套不跟素材换。")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
+    }
+
+    /// Camera reading for the selected clip. Not the shared knobs.
+    private func cameraReadingLine(_ clip: Clip) -> String {
+        if let cct = clip.asShotCCT {
+            let tint = String(format: "%+.1f", clip.asShotTint)
+            return "这条机内 \(Int(cct.rounded())) K · 绿品 \(tint)。换一条不会改这一套。回到机内才换成这条。"
+        }
+        return "这条读不到机内色温。换一条不会改这一套。回到机内会清空，不猜 5600。"
     }
 }
 

@@ -266,6 +266,36 @@ def test_write_sheet_names_the_proxy_and_the_toolbar_says_the_next_step():
     assert "先拖入或点添加" in plan
 
 
+def test_shared_grade_stays_when_selection_changes():
+    """Browsing clips must not replace the one exposure / WB set write uses."""
+    content = _read(CONTENT)
+    change = content.split(".onChange(of: session.selectedID)")[1].split(".background")[0]
+    assert "noteSelectionForSharedGrade" in change
+    assert "applyClipWBToGraph" not in change
+    assert "这次预览" in content
+    assert "setODT" in content.split("struct MonitorHeader")[1].split("struct InspectorColumn")[0]
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    note = clip.split("func noteSelectionForSharedGrade")[1].split("func persistGraphWBToSelectedClip")[0]
+    assert "sharedGradeIsFactory" in note
+    assert "applyClipWBToGraph" in note
+    adjacent = clip.split("func selectAdjacentClip")[1].split("func removeSelectedClipFromSession")[0]
+    assert "visibleClips" in adjacent
+    assert "noteSelectionForSharedGrade" in adjacent
+    assert "applyClipWBToGraph" not in adjacent
+    restore = clip.split("func restoreAsShotWB")[1].split("func selectAdjacentClip")[0]
+    assert "selectedClip?.asShotCCT" in restore
+    assert "touchSharedGrade" in restore
+    sidebar = _read(ROOT / "macos/LogBridge/LogBridge/Views/ClipSidebarView.swift")
+    assert "clipListFilter" in sidebar
+    assert "visibleClips" in sidebar
+    assert "待选" in sidebar
+    assert "已锁定" in sidebar
+    plan = _read(PLAN)
+    assert "这次预览" in plan
+    assert "不会改掉" in plan
+    assert "全部 / 待选 / 已锁定" in plan
+
+
 def test_idt_lock_stays_on_the_clip_being_previewed():
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]
