@@ -11,7 +11,6 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @StateObject private var session = SessionModel()
     @ObservedObject private var settings = AppSettings.shared
-    @State private var monitorLayout: MonitorLayout = .split
     @State private var monitorZoom: MonitorZoom = .fit
     @State private var monitorPan = MonitorPanBus()
 
@@ -23,7 +22,7 @@ struct ContentView: View {
                 ClipSidebarView(session: session)
                     .frame(minWidth: 240, idealWidth: 292, maxWidth: 380)
                 VStack(spacing: 0) {
-                    MonitorHeader(session: session, layout: $monitorLayout, zoom: $monitorZoom)
+                    MonitorHeader(session: session, layout: monitorLayoutBinding, zoom: $monitorZoom)
                         .onChange(of: monitorZoom) { _, _ in
                             monitorPan.reset()
                         }
@@ -32,7 +31,7 @@ struct ContentView: View {
                         }
                     SplitPreview(
                         session: session,
-                        layout: monitorLayout,
+                        layout: session.monitorLayout,
                         zoom: monitorZoom,
                         panBus: monitorPan
                     )
@@ -134,6 +133,14 @@ struct ContentView: View {
         .focusedSceneValue(\.logBridgeSession, SessionFocus(session: session))
     }
 
+    /// Picker writes the session layout. 对照 is refused until a pair is locked.
+    private var monitorLayoutBinding: Binding<MonitorLayout> {
+        Binding(
+            get: { session.monitorLayout },
+            set: { session.setMonitorLayout($0) }
+        )
+    }
+
     /// One sheet for global preferences or the write step. Not a save dialog.
     private var presentedSheet: Binding<Bool> {
         Binding(
@@ -194,6 +201,7 @@ private struct WorkspaceToolbar: View {
 /// How the monitor uses its space. Default stays the source | grade split.
 enum MonitorLayout: String, CaseIterable, Identifiable {
     case split
+    case compare
     case source
     case grade
 
@@ -202,6 +210,7 @@ enum MonitorLayout: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .split: return "分屏"
+        case .compare: return "对照"
         case .source: return "源"
         case .grade: return "预览"
         }
@@ -210,6 +219,7 @@ enum MonitorLayout: String, CaseIterable, Identifiable {
     var caption: String {
         switch self {
         case .split: return "左：源（相机 Log）  右：预览"
+        case .compare: return "左：调色前  右：这一套。不含曝光和白平衡的是左幅。仅预览。"
         case .source: return "源（相机 Log）"
         case .grade: return "预览放大。角标仍是仅预览。"
         }
@@ -239,9 +249,9 @@ private struct MonitorHeader: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 210)
+                .frame(width: 268)
                 .labelsHidden()
-                .help("分屏对照，或把预览放大来看调色。点灰卡时会显示预览。仅预览。")
+                .help("分屏是源和预览。对照是调色前和这一套，左右同时看，不改检查器，也不改写出。未锁定时不能切到对照。点灰卡时仍在预览上取样。仅预览。")
                 Button(session.previewShowsGradeBefore ? "回到调色" : "看调色前") {
                     session.togglePreviewGradeBefore()
                 }
@@ -344,6 +354,9 @@ private struct MonitorHeader: View {
         let line = "\(clipName) · \(pending)\(exposure) · \(wb)"
         if session.previewShowsGradeBefore {
             return "看调色前 · \(line)"
+        }
+        if session.monitorLayout == .compare {
+            return "对照 · \(line)"
         }
         return line
     }
@@ -853,6 +866,11 @@ struct SplitPreview: View {
                         sourcePane
                         previewPane
                     }
+                case .compare:
+                    HSplitView {
+                        compareBeforePane
+                        previewPane
+                    }
                 case .source:
                     sourcePane
                 case .grade:
@@ -905,6 +923,17 @@ struct SplitPreview: View {
         }
     }
 
+    /// Same IDT and this preview, without exposure or white balance. Not the camera log.
+    @ViewBuilder
+    private var compareBeforePane: some View {
+        gradedPane(
+            title: "调色前",
+            caption: "同一成对 IDT、同一次预览，不含曝光和白平衡。检查器数字和写出都不改。仅预览。",
+            image: session.preview.compareBeforeImage,
+            picking: false
+        )
+    }
+
     private var sourcePane: some View {
         SourcePreviewView(
             title: "源（相机 Log）",
@@ -931,30 +960,48 @@ struct SplitPreview: View {
 
     @ViewBuilder
     private var previewPane: some View {
+        gradedPane(
+            title: gradePaneTitle,
+            caption: gradePaneCaption,
+            image: session.preview.odtImage,
+            picking: session.pickingNeutral && !session.isExporting,
+            onLayerFail: {
+                session.failClosedHDRPreviewLayer()
+            }
+        )
+    }
+
+    /// Rec.709 or HDR host. Grey-card hits only the pane that asks for them.
+    @ViewBuilder
+    private func gradedPane(
+        title: String,
+        caption: String,
+        image: CGImage?,
+        picking: Bool,
+        onLayerFail: (() -> Void)? = nil
+    ) -> some View {
         if session.graph.odt.isHDR {
             HDRPreviewView(
-                title: gradePaneTitle,
-                caption: gradePaneCaption,
-                image: session.preview.odtImage,
+                title: title,
+                caption: caption,
+                image: image,
                 zoom: shownZoom,
                 panBus: panBus,
                 odt: session.graph.odt,
-                pickingNeutral: session.pickingNeutral && !session.isExporting,
+                pickingNeutral: picking,
                 onPick: { nx, ny in
                     session.handlePreviewPick(nx: nx, ny: ny)
                 },
-                onLayerFail: {
-                    session.failClosedHDRPreviewLayer()
-                }
+                onLayerFail: onLayerFail
             )
         } else {
             Rec709PreviewView(
-                title: gradePaneTitle,
-                caption: gradePaneCaption,
-                image: session.preview.odtImage,
+                title: title,
+                caption: caption,
+                image: image,
                 zoom: shownZoom,
                 panBus: panBus,
-                pickingNeutral: session.pickingNeutral && !session.isExporting,
+                pickingNeutral: picking,
                 onPick: { nx, ny in
                     session.handlePreviewPick(nx: nx, ny: ny)
                 }

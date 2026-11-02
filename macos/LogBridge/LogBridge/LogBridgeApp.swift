@@ -183,6 +183,11 @@ private struct LogBridgeCommands: Commands {
             }
             .keyboardShortcut("\\", modifiers: [.command, .option])
             .disabled(sessionFocus?.session?.canTogglePreviewGradeBefore != true)
+            Button(sessionFocus?.session?.monitorLayout == .compare ? "关掉对照" : "对照调色前后") {
+                sessionFocus?.session?.togglePreviewCompare()
+            }
+            .keyboardShortcut("/", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canTogglePreviewCompare != true)
             Divider()
             Button("撤销这一套") {
                 sessionFocus?.session?.undoSharedGrade()

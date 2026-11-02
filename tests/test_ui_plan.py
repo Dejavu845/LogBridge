@@ -1590,3 +1590,65 @@ def test_remove_from_list_leaves_the_file_and_the_shared_grade():
     assert "没有确认面板" in plan
     for token in BANNED_CONTACT:
         assert token not in plan
+
+
+def test_compare_layout_shows_grade_before_beside_the_shared_set():
+    """对照 is two preview panes. The left drops exposure and WB. Write keeps the set."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    before = clip.split("var graphForCompareBefore")[1].split("var canTogglePreviewGradeBefore")[0]
+    assert "monitorLayout == .compare" in before
+    assert "hasLockedPair" in before
+    assert "exposureEnabled = false" in before
+    assert "wbEnabled = false" in before
+    assert "5600" not in before
+    assert "6504" not in before
+    gate = clip.split("var canTogglePreviewCompare")[1].split("var graphForPreview")[0]
+    assert "isWritingDeliverables" in gate
+    assert "showSettings" in gate
+    assert "showImporter" in gate
+    assert "showDeliverSheet" in gate
+    assert "openingExportFolder" in gate
+    assert "pickingNeutral" in gate
+    assert "hasLockedPair" in gate
+    layout = clip.split("func setMonitorLayout")[1].split("func togglePreviewCompare")[0]
+    assert "canTogglePreviewCompare" in layout
+    assert "previewShowsGradeBefore = false" in layout
+    assert "compareBeforeImage = nil" in layout
+    assert "refreshPreview()" in layout
+    for token in ("setExposureStops", "setWBParams", "setIDT", "setPreviewFrame", "5600", "6504"):
+        assert token not in layout, token
+    toggle = clip.split("func togglePreviewCompare")[1].split("func resetPreviewScrub")[0]
+    assert "setMonitorLayout(.compare)" in toggle
+    assert "setMonitorLayout(back)" in toggle
+    refresh = clip.split("func refreshPreview()")[1].split("func refreshODTOnly()")[0]
+    assert "compareBefore: graphForCompareBefore" in refresh
+    assert "graphForPreview" in refresh
+    scrub = clip.split("func setPreviewFrame")[1].split("func setMonitorLayout")[0]
+    assert "compareBefore: graphForCompareBefore" in scrub
+    content = _read(CONTENT)
+    assert "case compare" in content
+    assert 'return "对照"' in content
+    assert "compareBeforePane" in content
+    assert "compareBeforeImage" in content
+    assert "调色前" in content
+    assert "不含曝光和白平衡" in content
+    header = content.split("struct MonitorHeader")[1].split("struct InspectorColumn")[0]
+    assert "对照 ·" in header
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    assert "对照调色前后" in menu
+    assert "关掉对照" in menu
+    assert "togglePreviewCompare" in menu
+    assert "canTogglePreviewCompare" in menu
+    assert 'keyboardShortcut("/"' in menu
+    engine = _read(ROOT / "macos/LogBridge/LogBridge/Preview/PreviewEngine.swift")
+    assert "compareBeforeImage" in engine
+    assert "gradedFromLinear" in engine
+    assert "func comparePicture" in engine
+    plan = _read(PLAN)
+    assert "对照" in plan
+    assert "左：调色前" in plan
+    assert "未锁定时不能切过去" in plan
+    assert "对照调色前后" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan

@@ -483,6 +483,10 @@ final class SessionModel: ObservableObject {
     /// Monitor compare. The picture drops exposure and white balance.
     /// Inspector numbers and the write keep the shared set.
     @Published var previewShowsGradeBefore = false
+    /// 分屏 / 对照 / 源 / 预览。对照左幅不含曝光和白平衡，右幅是这一套。
+    @Published var monitorLayout: MonitorLayout = .split
+    /// Layout to restore when 对照 is turned off from the menu.
+    private var monitorLayoutBeforeCompare: MonitorLayout = .split
     /// Last index (duration × metadata fps − 1). Nil: still, or no clip, or fail.
     @Published var previewScrubLastFrame: Int? = nil
     /// 「读不到帧率，未核对」 / 「读不到时长，未核对」. No slider. No 24/30 guess.
@@ -584,10 +588,24 @@ final class SessionModel: ObservableObject {
         sharedGradeTouched = true
     }
 
+    /// 对照左幅。同一成对 IDT、同一次预览，曝光和白平衡关掉。
+    /// Nil unless the monitor is on 对照 and this clip has a locked pair.
+    /// Does not replace `graph`, and does not guess a color temperature.
+    var graphForCompareBefore: SerialGraph? {
+        guard monitorLayout == .compare else { return nil }
+        guard selectedClip?.hasLockedPair == true else { return nil }
+        guard !previewShowsGradeBefore else { return nil }
+        var copy = graph
+        copy.exposureEnabled = false
+        copy.wbEnabled = false
+        return copy
+    }
+
     /// Turn the compare on only after a paired IDT is locked.
     /// Turn it off whenever a clip is selected. Sheets, write, and grey-card
-    /// sampling keep the current picture.
+    /// sampling keep the current picture. 对照 already shows that picture beside the grade.
     var canTogglePreviewGradeBefore: Bool {
+        guard monitorLayout != .compare else { return false }
         guard !isWritingDeliverables,
               !showSettings,
               !showImporter,
@@ -595,6 +613,20 @@ final class SessionModel: ObservableObject {
               !pickingNeutral
         else { return false }
         if previewShowsGradeBefore { return selectedClip != nil }
+        return selectedClip?.hasLockedPair == true
+    }
+
+    /// 对照 opens after a paired IDT is locked. Closing it does not need a lock.
+    /// Sheets, write, and grey-card sampling leave the layout alone.
+    var canTogglePreviewCompare: Bool {
+        guard !isWritingDeliverables,
+              !showSettings,
+              !showImporter,
+              !showDeliverSheet,
+              !openingExportFolder,
+              !pickingNeutral
+        else { return false }
+        if monitorLayout == .compare { return true }
         return selectedClip?.hasLockedPair == true
     }
 
@@ -624,12 +656,17 @@ final class SessionModel: ObservableObject {
             stopPreviewPlayback()
             resetPreviewScrub()
         }
-        preview.refresh(clip: selectedClip, graph: graphForPreview, frameIndex: previewFrameIndex)
+        preview.refresh(clip: selectedClip, graph: graphForPreview, frameIndex: previewFrameIndex, compareBefore: graphForCompareBefore)
     }
 
     /// ODT / scrub: do not invalidate graded linear (IDT+exposure+WB).
     func refreshODTOnly() {
-        preview.refreshODT(clip: selectedClip, graph: graphForPreview, frameIndex: previewFrameIndex)
+        preview.refreshODT(
+            clip: selectedClip,
+            graph: graphForPreview,
+            frameIndex: previewFrameIndex,
+            compareBefore: graphForCompareBefore
+        )
     }
 
     /// Slider: first…last from duration × metadata fps. No 24/30 guess.
@@ -642,7 +679,45 @@ final class SessionModel: ObservableObject {
         guard let last = previewScrubLastFrame else { return }
         let next = max(0, min(index, last))
         previewFrameIndex = next
-        preview.scrub(clip: selectedClip, graph: graphForPreview, frameIndex: next)
+        preview.scrub(
+            clip: selectedClip,
+            graph: graphForPreview,
+            frameIndex: next,
+            compareBefore: graphForCompareBefore
+        )
+    }
+
+    /// Segmented monitor control. Entering 对照 turns off 看调色前 so the
+    /// right pane stays this shared set. Does not edit exposure, white balance,
+    /// the paired IDT, or the preview frame.
+    func setMonitorLayout(_ layout: MonitorLayout) {
+        guard monitorLayout != layout else { return }
+        let touchesCompare = layout == .compare || monitorLayout == .compare
+        if touchesCompare, !canTogglePreviewCompare { return }
+        let wasCompare = monitorLayout == .compare
+        let wasGradeBefore = previewShowsGradeBefore
+        if layout == .compare, !wasCompare {
+            monitorLayoutBeforeCompare = monitorLayout
+            previewShowsGradeBefore = false
+        }
+        monitorLayout = layout
+        if wasCompare, layout != .compare {
+            preview.compareBeforeImage = nil
+        }
+        if layout == .compare || wasCompare || (wasGradeBefore && !previewShowsGradeBefore) {
+            refreshPreview()
+        }
+    }
+
+    /// Menu and ⌥⌘/. Off returns to the layout from before 对照.
+    func togglePreviewCompare() {
+        guard canTogglePreviewCompare else { return }
+        if monitorLayout == .compare {
+            let back = monitorLayoutBeforeCompare == .compare ? MonitorLayout.split : monitorLayoutBeforeCompare
+            setMonitorLayout(back)
+        } else {
+            setMonitorLayout(.compare)
+        }
     }
 
     /// Stills: no slider. Movies: duration × metadata fps. Missing → Chinese fail.

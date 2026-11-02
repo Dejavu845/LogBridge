@@ -31,6 +31,8 @@ final class PreviewEngine: ObservableObject {
 
     @Published var sourceImage: CGImage?
     @Published var odtImage: CGImage?
+    /// 对照的左幅：同一条、同一次预览，不含曝光和白平衡。不参与写出。
+    @Published var compareBeforeImage: CGImage?
     @Published var status: String = "没有素材"
     @Published var isWorking = false
 
@@ -143,13 +145,14 @@ final class PreviewEngine: ObservableObject {
         queue.async(execute: work)
     }
 
-    func refresh(clip: Clip?, graph: SerialGraph, frameIndex: Int = 0) {
+    func refresh(clip: Clip?, graph: SerialGraph, frameIndex: Int = 0, compareBefore: SerialGraph? = nil) {
         nextRequestedFrameIndex = frameIndex
         let gen = beginPreviewRequest(clipID: clip?.id)
         retainPreviewCaches(keeping: clip?.id)
         guard let clip else {
             sourceImage = nil
             odtImage = nil
+            compareBeforeImage = nil
             status = "没有素材"
             isWorking = false
             // In-flight first-frame may refill after this; drop again on the queue.
@@ -161,19 +164,27 @@ final class PreviewEngine: ObservableObject {
         isWorking = true
         status = "正在解码预览…"
         let graphCopy = graph
+        let beforeCopy = compareBefore
         enqueuePreview { [weak self] in
-            self?.build(clip: clip, graph: graphCopy, frameIndex: frameIndex, generation: gen)
+            self?.build(
+                clip: clip,
+                graph: graphCopy,
+                frameIndex: frameIndex,
+                generation: gen,
+                compareBefore: beforeCopy
+            )
         }
     }
 
     /// Scrub / ODT switch: reuse graded linear (IDT+exposure+WB). Only re-run ODT.
-    func refreshODT(clip: Clip?, graph: SerialGraph, frameIndex: Int = 0) {
+    func refreshODT(clip: Clip?, graph: SerialGraph, frameIndex: Int = 0, compareBefore: SerialGraph? = nil) {
         nextRequestedFrameIndex = frameIndex
         let gen = beginPreviewRequest(clipID: clip?.id)
         retainPreviewCaches(keeping: clip?.id)
         guard let clip else {
             sourceImage = nil
             odtImage = nil
+            compareBeforeImage = nil
             status = "没有素材"
             isWorking = false
             enqueuePreview { [weak self] in
@@ -182,9 +193,14 @@ final class PreviewEngine: ObservableObject {
             return
         }
         let graphCopy = graph
+        let beforeCopy = compareBefore
         enqueuePreview { [weak self] in
             self?.applyODTFromGradedOrRebuild(
-                clip: clip, graph: graphCopy, frameIndex: frameIndex, generation: gen
+                clip: clip,
+                graph: graphCopy,
+                frameIndex: frameIndex,
+                generation: gen,
+                compareBefore: beforeCopy
             )
         }
     }
@@ -195,7 +211,7 @@ final class PreviewEngine: ObservableObject {
     /// Cache miss (new clip, exposure/WB/IDT change, or no graded buffer):
     /// rebuild linear once, then ODT-only again.
     private func applyODTFromGradedOrRebuild(
-        clip: Clip, graph: SerialGraph, frameIndex: Int, generation: UInt64
+        clip: Clip, graph: SerialGraph, frameIndex: Int, generation: UInt64, compareBefore: SerialGraph? = nil
     ) {
         guard isCurrentPreview(generation: generation, clipID: clip.id) else { return }
         // Stale work may have refilled another clip after the main-thread retain.
@@ -203,10 +219,18 @@ final class PreviewEngine: ObservableObject {
         if let idt = clip.idt, !idt.isStub,
            let graded = gradedCacheHit(clipID: clip.id, idt: idt, graph: graph, frameIndex: frameIndex) {
             let (odtCG, note) = renderODTFromGraded(graded: graded, graph: graph, cacheHit: true)
-            publishODTOnly(generation: generation, clipID: clip.id, odt: odtCG, status: note)
-            return
+            switch comparePicture(clipID: clip.id, idt: idt, before: compareBefore, frameIndex: frameIndex) {
+            case .off:
+                publishODTOnly(generation: generation, clipID: clip.id, odt: odtCG, status: note, compareBefore: nil)
+                return
+            case .image(let beforeCG):
+                publishODTOnly(generation: generation, clipID: clip.id, odt: odtCG, status: note, compareBefore: beforeCG)
+                return
+            case .pendingLinear:
+                break
+            }
         }
-        build(clip: clip, graph: graph, frameIndex: frameIndex, generation: generation)
+        build(clip: clip, graph: graph, frameIndex: frameIndex, generation: generation, compareBefore: compareBefore)
     }
 
     private func gradedCacheHit(
@@ -257,10 +281,13 @@ final class PreviewEngine: ObservableObject {
     }
 
     /// Scrub / ODT hit: replace the 709 / HDR pane only. Source thumbnail stays.
-    private func publishODTOnly(generation: UInt64, clipID: UUID, odt: CGImage?, status: String) {
+    private func publishODTOnly(
+        generation: UInt64, clipID: UUID, odt: CGImage?, status: String, compareBefore: CGImage? = nil
+    ) {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCurrentPreview(generation: generation, clipID: clipID) else { return }
             self.odtImage = odt
+            self.compareBeforeImage = compareBefore
             self.status = Self.resolvedPreviewStatus(odt: odt, status: status)
             self.isWorking = false
         }
@@ -286,7 +313,9 @@ final class PreviewEngine: ObservableObject {
         return status
     }
 
-    private func build(clip: Clip, graph: SerialGraph, frameIndex: Int, generation: UInt64) {
+    private func build(
+        clip: Clip, graph: SerialGraph, frameIndex: Int, generation: UInt64, compareBefore: SerialGraph? = nil
+    ) {
         guard isCurrentPreview(generation: generation, clipID: clip.id) else { return }
         retainPreviewCaches(keeping: clip.id)
         let source: SourceFrame?
@@ -320,7 +349,21 @@ final class PreviewEngine: ObservableObject {
         let linear = cachedLinear(clipID: clip.id, idt: idt, source: source)
         let graded = cachedGraded(clipID: clip.id, idt: idt, linear: linear, graph: graph)
         let (odtCG, note) = renderODTFromGraded(graded: graded, graph: graph, cacheHit: false)
-        publish(generation: generation, clipID: clip.id, source: source.cgImage, odt: odtCG, status: note)
+        let beforeCG: CGImage?
+        switch comparePicture(clipID: clip.id, idt: idt, before: compareBefore, frameIndex: linear.frameIndex) {
+        case .off, .pendingLinear:
+            beforeCG = nil
+        case .image(let image):
+            beforeCG = image
+        }
+        publish(
+            generation: generation,
+            clipID: clip.id,
+            source: source.cgImage,
+            odt: odtCG,
+            status: note,
+            compareBefore: beforeCG
+        )
     }
 
     private static func gradeKey(idt: IDT, graph: SerialGraph) -> String {
@@ -336,6 +379,14 @@ final class PreviewEngine: ObservableObject {
            hit.frameIndex == linear.frameIndex {
             return hit
         }
+        let frame = gradedFromLinear(idt: idt, linear: linear, graph: graph)
+        gradedCache[clipID] = frame
+        return frame
+    }
+
+    /// Exposure and WB on a post-IDT buffer. Does not store, so 对照 can
+    /// grade the bypass graph without evicting the shared-set cache.
+    private func gradedFromLinear(idt: IDT, linear: LinearFrame, graph: SerialGraph) -> GradedFrame {
         var work = linear.rgb
         if graph.exposureEnabled {
             PreviewColor.applyExposure(rgb: &work, stops: graph.exposureStops)
@@ -359,15 +410,33 @@ final class PreviewEngine: ObservableObject {
                 )
             }
         }
-        let frame = GradedFrame(
-            key: key,
+        return GradedFrame(
+            key: Self.gradeKey(idt: idt, graph: graph),
             frameIndex: linear.frameIndex,
             width: linear.width,
             height: linear.height,
             rgb: work
         )
-        gradedCache[clipID] = frame
-        return frame
+    }
+
+    /// 对照左幅。Off leaves the pane empty. Pending linear falls through to a full build.
+    private enum ComparePicture {
+        case off
+        case pendingLinear
+        case image(CGImage?)
+    }
+
+    private func comparePicture(
+        clipID: UUID, idt: IDT, before: SerialGraph?, frameIndex: Int
+    ) -> ComparePicture {
+        guard let before else { return .off }
+        guard let linear = linearCache[clipID],
+              linear.idtID == idt.rawValue,
+              linear.frameIndex == frameIndex
+        else { return .pendingLinear }
+        let graded = gradedFromLinear(idt: idt, linear: linear, graph: before)
+        let (image, _) = renderODTFromGraded(graded: graded, graph: before, cacheHit: false)
+        return .image(image)
     }
 
     /// In-memory only. Do not write the preview cache to disk.
@@ -425,13 +494,14 @@ final class PreviewEngine: ObservableObject {
     /// Does not tear that frame's linear cache. Does not decode the whole clip.
     /// Cache miss: decode this requested frame only, then ODT.
     /// In-memory only. Do not write the preview cache to disk.
-    func scrub(clip: Clip?, graph: SerialGraph, frameIndex: Int) {
+    func scrub(clip: Clip?, graph: SerialGraph, frameIndex: Int, compareBefore: SerialGraph? = nil) {
         nextRequestedFrameIndex = frameIndex
         let gen = beginPreviewRequest(clipID: clip?.id)
         retainPreviewCaches(keeping: clip?.id)
         guard let clip else {
             sourceImage = nil
             odtImage = nil
+            compareBeforeImage = nil
             status = "没有素材"
             isWorking = false
             enqueuePreview { [weak self] in
@@ -444,12 +514,21 @@ final class PreviewEngine: ObservableObject {
         // picture jumped to whichever frame finished last.
         isWorking = true
         let graphCopy = graph
+        let beforeCopy = compareBefore
         enqueuePreview { [weak self] in
-            self?.applyScrub(clip: clip, graph: graphCopy, frameIndex: frameIndex, generation: gen)
+            self?.applyScrub(
+                clip: clip,
+                graph: graphCopy,
+                frameIndex: frameIndex,
+                generation: gen,
+                compareBefore: beforeCopy
+            )
         }
     }
 
-    private func applyScrub(clip: Clip, graph: SerialGraph, frameIndex: Int, generation: UInt64) {
+    private func applyScrub(
+        clip: Clip, graph: SerialGraph, frameIndex: Int, generation: UInt64, compareBefore: SerialGraph? = nil
+    ) {
         guard isCurrentPreview(generation: generation, clipID: clip.id) else {
             return
         }
@@ -462,17 +541,34 @@ final class PreviewEngine: ObservableObject {
             clipID: clip.id, idt: idt, graph: graph, frameIndex: frameIndex
            ) {
             let (odtCG, note) = renderODTFromGraded(graded: graded, graph: graph, cacheHit: true)
-            publish(generation: generation, clipID: clip.id, source: source.cgImage, odt: odtCG, status: note)
-            return
+            switch comparePicture(clipID: clip.id, idt: idt, before: compareBefore, frameIndex: frameIndex) {
+            case .off:
+                publish(
+                    generation: generation, clipID: clip.id, source: source.cgImage,
+                    odt: odtCG, status: note, compareBefore: nil
+                )
+                return
+            case .image(let beforeCG):
+                publish(
+                    generation: generation, clipID: clip.id, source: source.cgImage,
+                    odt: odtCG, status: note, compareBefore: beforeCG
+                )
+                return
+            case .pendingLinear:
+                break
+            }
         }
-        build(clip: clip, graph: graph, frameIndex: frameIndex, generation: generation)
+        build(clip: clip, graph: graph, frameIndex: frameIndex, generation: generation, compareBefore: compareBefore)
     }
 
-    private func publish(generation: UInt64, clipID: UUID, source: CGImage?, odt: CGImage?, status: String) {
+    private func publish(
+        generation: UInt64, clipID: UUID, source: CGImage?, odt: CGImage?, status: String, compareBefore: CGImage? = nil
+    ) {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCurrentPreview(generation: generation, clipID: clipID) else { return }
             self.sourceImage = source
             self.odtImage = odt
+            self.compareBeforeImage = compareBefore
             self.status = Self.resolvedPreviewStatus(odt: odt, status: status)
             self.isWorking = false
         }
