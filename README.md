@@ -45,8 +45,10 @@ Uncompressed half RGB. Large on disk (~6 bytes/pixel). Prefer ProRes unless you 
 2. Open `macos/LogBridge/LogBridge.xcodeproj`.
 3. Select the **LogBridge** scheme → Run (▶), or Product → Archive → Distribute App → **Copy App** for a local `.app`.
 4. Drop a folder of mixed Log clips (MOV/MP4 ProRes / H.264 / HEVC; TIFF/DPX/EXR stills).
-5. For each **待选** clip, pick a paired Log + gamut IDT.
-6. Click **处理已锁定片段**.
+5. For each **待选** clip, pick a paired Log + gamut IDT in the right inspector.
+6. Click **处理已锁定片段**, read the write sheet, then pick a folder.
+
+The window is one screen: media list, large preview (badge 仅预览), inspector for the selected clip. ⌘, is global preferences (they apply immediately). There is no editing timeline. Details and the Mac click-through are in `docs/ui-plan.md`.
 
 Trial copy is not notarized. Gatekeeper may require right-click → Open.
 

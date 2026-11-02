@@ -140,6 +140,10 @@ final class SessionModel: ObservableObject {
     @Published var lastImportNote: String = ""
     @Published var pickingNeutral: Bool = false
     @Published var showSettings = false
+    /// 写出说明。确认后才走 processLockedClips 的选文件夹。不是偏好设置。
+    @Published var showDeliverSheet = false
+    /// Deliver sheet sets this; ProcessLockedBar starts the existing folder panel.
+    @Published var deliverSheetConfirmed = false
     @Published var isWritingDeliverables = false
     /// Same busy flag. Preview progress + inspector / IDT lock read this.
     var isExporting: Bool { isWritingDeliverables }
@@ -571,7 +575,7 @@ final class SessionModel: ObservableObject {
     @discardableResult
     func cancelWritingFromEscape() -> Bool {
         guard isWritingDeliverables else { return false }
-        guard !showSettings, !showImporter else { return false }
+        guard !showSettings, !showImporter, !showDeliverSheet else { return false }
         cancelLockedDeliverables()
         return true
     }
@@ -970,7 +974,7 @@ final class SessionModel: ObservableObject {
     @discardableResult
     func selectAdjacentClip(_ delta: Int) -> Bool {
         guard !isWritingDeliverables else { return false }
-        guard !showSettings, !showImporter else { return false }
+        guard !showSettings, !showImporter, !showDeliverSheet else { return false }
         guard !Self.isArrowConsumedByTextInput() else { return false }
         guard !clips.isEmpty, delta != 0 else { return false }
         let step = delta > 0 ? 1 : -1
@@ -999,7 +1003,7 @@ final class SessionModel: ObservableObject {
     @discardableResult
     func removeSelectedClipFromSession() -> Bool {
         guard !isWritingDeliverables else { return false }
-        guard !showSettings, !showImporter else { return false }
+        guard !showSettings, !showImporter, !showDeliverSheet else { return false }
         guard !Self.isArrowConsumedByTextInput() else { return false }
         guard let id = selectedID, let idx = clips.firstIndex(where: { $0.id == id }) else {
             return false

@@ -1,34 +1,40 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// One primary path: list → preview + paired IDT → 处理已锁定片段.
-/// Preview dominates the window. Sidebar / inspector / chrome recede.
-/// Right inspector is Exposure + WB only. Paired IDT stays under preview
-/// (never inside 「高级」). Node strip / Resolve export sit behind 「高级」
-/// (hidden by default). UI copy uses "已实现（未验证）"
-/// — never "supported". Primary action is "处理已锁定片段" — 不是一步还原.
-/// Unlocked IDT is skipped, never guessed. Export default: ProRes 422 HQ; advanced: ACEScct / EXR package.
+/// Single window for local grading and delivery. Not an editor timeline.
+/// List | large preview | inspector that follows the selection.
+/// Global preferences stay on ⌘,. Per-clip IDT / exposure / WB live in the inspector.
+/// Write is its own sheet, then the existing folder panel. Not a save dialog.
+/// Default export: ProRes 422 HQ. Advanced: ACEScct / EXR, nodes, histogram.
+/// UI copy uses "已实现（未验证）". Primary action is "处理已锁定片段".
+/// Unlocked IDT is skipped, never guessed.
 struct ContentView: View {
     @StateObject private var session = SessionModel()
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
-        HSplitView {
-            ClipSidebarView(session: session)
-                .frame(minWidth: 196, idealWidth: 228, maxWidth: 280)
-            VStack(spacing: 0) {
-                SplitPreview(session: session)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .layoutPriority(1)
-                PairedIDTBar(session: session)
-                ProcessLockedBar(session: session)
-                AdvancedPanel(session: session, isExpanded: $settings.advancedPanelExpanded)
-                StatusBar(session: session)
+        VStack(spacing: 0) {
+            WorkspaceToolbar(session: session)
+            Divider()
+            HSplitView {
+                ClipSidebarView(session: session)
+                    .frame(minWidth: 240, idealWidth: 292, maxWidth: 380)
+                VStack(spacing: 0) {
+                    MonitorHeader()
+                    SplitPreview(session: session)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .layoutPriority(1)
+                    ProcessLockedBar(session: session)
+                    AdvancedPanel(session: session, isExpanded: $settings.advancedPanelExpanded)
+                    StatusBar(session: session)
+                }
+                .frame(minWidth: 560)
+                .layoutPriority(1)
+                InspectorColumn(session: session)
+                    .frame(minWidth: 280, idealWidth: 332, maxWidth: 420)
             }
-            .frame(minWidth: 520)
-            InspectorView(session: session)
-                .frame(minWidth: 196, idealWidth: 220, maxWidth: 260)
         }
+        .preferredColorScheme(settings.windowAppearance.colorScheme)
         .onDrop(of: [.fileURL], isTargeted: $session.dropTargeted) { providers in
             session.importProviders(providers)
             return true
@@ -40,8 +46,12 @@ struct ContentView: View {
         ) { result in
             session.handleImporter(result)
         }
-        .sheet(isPresented: $session.showSettings) {
-            SettingsView(settings: session.settings, session: session)
+        .sheet(isPresented: presentedSheet) {
+            if session.showDeliverSheet {
+                DeliverSheet(session: session)
+            } else {
+                SettingsView(settings: session.settings, session: session)
+            }
         }
         .onChange(of: session.selectedID) { _, _ in
             if let clip = session.selectedClip {
@@ -76,6 +86,115 @@ struct ContentView: View {
             session.removeSelectedClipFromSession()
         }
         .focusedSceneValue(\.logBridgeSession, SessionFocus(session: session))
+    }
+
+    /// One sheet for global preferences or the write step. Not a save dialog.
+    private var presentedSheet: Binding<Bool> {
+        Binding(
+            get: { session.showSettings || session.showDeliverSheet },
+            set: { presented in
+                if !presented {
+                    session.showSettings = false
+                    session.showDeliverSheet = false
+                }
+            }
+        )
+    }
+}
+
+/// Top bar: add, global settings, write. Not a multi-page shell.
+private struct WorkspaceToolbar: View {
+    @ObservedObject var session: SessionModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("LogBridge")
+                    .font(.headline)
+                Text("调色与交付")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Button("添加…") { session.showImporter = true }
+                .controlSize(.large)
+            Button("设置") {
+                session.showDeliverSheet = false
+                session.showSettings = true
+            }
+            .controlSize(.large)
+            .help("全局偏好。改完即生效。")
+            Button(session.isWritingDeliverables ? "取消" : "写出") {
+                if session.isWritingDeliverables {
+                    session.cancelLockedDeliverables()
+                } else {
+                    session.showSettings = false
+                    session.showDeliverSheet = true
+                }
+            }
+            .controlSize(.large)
+            .disabled(!session.isWritingDeliverables && !session.showsProcessLockedButton)
+            .help("先看写出说明，再选文件夹。整段代理，代理精度。")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
+    }
+}
+
+private struct MonitorHeader: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("监视器")
+                .font(.headline)
+            Text("左：源（相机 Log）  右：预览")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text("仅预览")
+                .font(.caption.weight(.bold))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.primary.opacity(0.08))
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.primary.opacity(0.03))
+    }
+}
+
+/// Inspector follows the selected clip. IDT, then exposure and white balance.
+private struct InspectorColumn: View {
+    @ObservedObject var session: SessionModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("检查器")
+                    .font(.title3.weight(.semibold))
+                if let clip = session.selectedClip {
+                    Text(clip.filename)
+                        .font(.body.weight(.semibold))
+                        .lineLimit(1)
+                    Text("成对 IDT 记在这条素材上。曝光和白平衡改完即在预览里生效；写出时已锁定素材共用当前这一套。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("先在左侧点一条素材。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Divider()
+            PairedIDTBar(session: session)
+            Divider()
+            InspectorView(session: session)
+        }
+        .background(Color.primary.opacity(0.02))
     }
 }
 
@@ -180,25 +299,25 @@ private struct ClipListArrowMonitor: NSViewRepresentable {
     }
 }
 
-/// Center column action. Shown only when locked-clip count > 0.
-/// Write progress lives on SplitPreview (WriteProgressLine), not here.
-/// Not a second process button — StatusBar has no process control.
-/// 不是一步还原. Hover/help is Chinese locked phrases.
-/// Default deliverable: ProRes 422 HQ (Rec.709 preview). EXR remains advanced.
+/// Write step under the monitor. One button: open the deliver sheet, or 取消.
+/// The sheet confirms, then this view calls processLockedClips (folder panel).
+/// 不是一步还原. Default deliverable: ProRes 422 HQ. EXR remains advanced.
 /// 整段代理，代理精度.
 struct ProcessLockedBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("写出")
+                    .font(.title3.weight(.semibold))
                 Text(session.lockStatusText)
-                    .font(.caption.weight(.semibold))
+                    .font(.body.weight(.semibold))
                 if let reason = session.selectedClip?.processSkipReason {
                     Text(reason)
-                        .font(.caption2)
+                        .font(.callout)
                         .foregroundStyle(.orange)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
                 Spacer(minLength: 8)
                 if session.showsProcessLockedButton {
@@ -206,40 +325,60 @@ struct ProcessLockedBar: View {
                         if session.isWritingDeliverables {
                             session.cancelLockedDeliverables()
                         } else {
-                            session.processLockedClips()
+                            session.showSettings = false
+                            session.showDeliverSheet = true
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .controlSize(.large)
                     .help(UICopy.PROCESS_BUTTON_HELP_UI)
                 }
             }
-            Text(UICopy.PROCESS_DELIVERABLE_NOTE_UI)
-                .font(.caption2)
+            Text(session.settings.exportFormat.labelZH)
+                .font(.callout)
+            Text(deliverableNote)
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if session.showsBatchSummary {
                 Text(session.lastExportNote)
-                    .font(.caption2)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(Color.primary.opacity(0.03))
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(session.showsProcessLockedButton ? 0.08 : 0.04))
+        .onChange(of: session.deliverSheetConfirmed) { _, confirmed in
+            guard confirmed else { return }
+            session.deliverSheetConfirmed = false
+            DispatchQueue.main.async {
+                session.processLockedClips()
+            }
+        }
+    }
+
+    private var deliverableNote: String {
+        if session.settings.exportFormat == .prores422HQ {
+            return UICopy.PROCESS_DELIVERABLE_NOTE_UI
+        }
+        return "高级格式走 ACES2065-1 EXR 序列。整段代理，代理精度。"
     }
 }
 
-/// Node strip + Resolve export only. Hidden by default.
-/// Paired IDT stays on the main path under the preview — never here.
+/// Node strip, format, Resolve export, and the on-demand histogram.
+/// Hidden by default. Paired IDT stays in the inspector — never here.
 struct AdvancedPanel: View {
     @ObservedObject var session: SessionModel
     @Binding var isExpanded: Bool
 
     var body: some View {
         DisclosureGroup("高级", isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("节点、写出格式、直方图。默认收起，不挡预览。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 Picker("写出格式", selection: Binding(
                     get: { session.settings.exportFormat },
                     set: { session.settings.exportFormat = $0 }
@@ -255,23 +394,25 @@ struct AdvancedPanel: View {
                     Button("导出 ACEScct / EXR") {
                         session.exportResolve()
                     }
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     .disabled(!session.canProcess)
                     .help(UICopy.ADVANCED_EXPORT_HELP)
                     if let reason = session.processBlockedReason {
                         Text(reason)
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.orange)
                     }
                     Spacer()
                 }
                 .padding(.horizontal, 10)
-                .padding(.bottom, 6)
+                PreviewHistogramView(image: isExpanded ? session.preview.odtImage : nil)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 8)
             }
         }
         .help(UICopy.ADVANCED_DISCLOSURE_HELP)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 2)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
         .background(Color.primary.opacity(0.02))
     }
 }
@@ -280,45 +421,77 @@ struct SplitPreview: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            HSplitView {
-                SourcePreviewView(
-                    title: "源（相机 Log）",
-                    caption: "未套 Rec.709。相机编码值。",
-                    image: session.preview.sourceImage
-                )
-                if session.graph.odt.isHDR {
-                    HDRPreviewView(
-                        title: session.odtPreviewTitle,
-                        caption: session.odtPreviewCaption,
-                        image: session.preview.odtImage,
-                        odt: session.graph.odt,
-                        pickingNeutral: session.pickingNeutral && !session.isExporting,
-                        onPick: { nx, ny in
-                            session.handlePreviewPick(nx: nx, ny: ny)
-                        },
-                        onLayerFail: {
-                            session.failClosedHDRPreviewLayer()
-                        }
-                    )
-                } else {
-                    Rec709PreviewView(
-                        title: session.odtPreviewTitle,
-                        caption: session.odtPreviewCaption,
-                        image: session.preview.odtImage,
-                        pickingNeutral: session.pickingNeutral && !session.isExporting,
-                        onPick: { nx, ny in
-                            session.handlePreviewPick(nx: nx, ny: ny)
-                        }
-                    )
+        ZStack {
+            VStack(spacing: 0) {
+                HSplitView {
+                    sourcePane
+                    previewPane
+                }
+                PreviewScrubBar(session: session)
+                if session.isExporting {
+                    WriteProgressLine(text: session.lastExportNote)
+                } else if let caption = session.selectedClip?.previewCaption {
+                    WriteProgressLine(text: caption)
                 }
             }
-            PreviewScrubBar(session: session)
-            if session.isExporting {
-                WriteProgressLine(text: session.lastExportNote)
-            } else if let caption = session.selectedClip?.previewCaption {
-                WriteProgressLine(text: caption)
+            if session.clips.isEmpty {
+                VStack(spacing: 10) {
+                    Text("把混源文件夹拖进来")
+                        .font(.title2.weight(.semibold))
+                    Text("或点「添加…」。每条再选成对 Log 与色域。")
+                        .font(.body)
+                        .multilineTextAlignment(.center)
+                    Text("已实现（未验证）")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.28))
+                        .clipShape(Capsule())
+                }
+                .foregroundStyle(.white)
+                .padding(28)
+                .background(.black.opacity(0.62))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .padding(32)
+                .allowsHitTesting(false)
             }
+        }
+    }
+
+    private var sourcePane: some View {
+        SourcePreviewView(
+            title: "源（相机 Log）",
+            caption: "未套 Rec.709。相机编码值。",
+            image: session.preview.sourceImage
+        )
+    }
+
+    @ViewBuilder
+    private var previewPane: some View {
+        if session.graph.odt.isHDR {
+            HDRPreviewView(
+                title: session.odtPreviewTitle,
+                caption: session.odtPreviewCaption,
+                image: session.preview.odtImage,
+                odt: session.graph.odt,
+                pickingNeutral: session.pickingNeutral && !session.isExporting,
+                onPick: { nx, ny in
+                    session.handlePreviewPick(nx: nx, ny: ny)
+                },
+                onLayerFail: {
+                    session.failClosedHDRPreviewLayer()
+                }
+            )
+        } else {
+            Rec709PreviewView(
+                title: session.odtPreviewTitle,
+                caption: session.odtPreviewCaption,
+                image: session.preview.odtImage,
+                pickingNeutral: session.pickingNeutral && !session.isExporting,
+                onPick: { nx, ny in
+                    session.handlePreviewPick(nx: nx, ny: ny)
+                }
+            )
         }
     }
 }
@@ -333,13 +506,16 @@ struct PreviewScrubBar: View {
             EmptyView()
         } else if let fail = session.previewScrubFail {
             Text(fail)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.orange)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
         } else if let last = session.previewScrubLastFrame {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Text("预览帧")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 Slider(
                     value: Binding(
                         get: { Double(session.previewFrameIndex) },
@@ -348,15 +524,15 @@ struct PreviewScrubBar: View {
                     in: 0...Double(last),
                     step: 1
                 )
-                .controlSize(.small)
+                .controlSize(.regular)
                 .help("仅预览")
                 Text("第 \(session.previewFrameIndex + 1) / \(last + 1) 帧")
-                    .font(.caption.monospacedDigit())
+                    .font(.body.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .frame(minWidth: 88, alignment: .trailing)
+                    .frame(minWidth: 120, alignment: .trailing)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
     }
 }
@@ -368,12 +544,12 @@ struct WriteProgressLine: View {
 
     var body: some View {
         Text(text)
-            .font(.caption.monospacedDigit())
+            .font(.callout.monospacedDigit())
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background(Color.accentColor.opacity(0.08))
             .help(UICopy.PROGRESS_STATUS_HELP)
     }
@@ -415,8 +591,8 @@ struct StatusBar: View {
             Spacer()
         }
         .font(.caption)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
         .background(.bar)
         .help(UICopy.PROGRESS_STATUS_HELP)
     }

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Combine
 
 /// User-facing settings. Chinese copy. No color-number changes.
@@ -16,6 +17,7 @@ final class AppSettings: ObservableObject {
         static let lastExportDirectory = "logbridge.lastExportDirectory"
         static let advancedPanelExpanded = "logbridge.advancedPanelExpanded"
         static let exportFormat = "logbridge.exportFormat"
+        static let windowAppearance = "logbridge.windowAppearance"
     }
 
     /// Settings default for the preview pane. Export stays ACEScct.
@@ -36,6 +38,11 @@ final class AppSettings: ObservableObject {
     /// Default ProRes 422 HQ. EXR is the advanced option.
     @Published var exportFormat: ExportFormat {
         didSet { UserDefaults.standard.set(exportFormat.rawValue, forKey: Key.exportFormat) }
+    }
+
+    /// Chrome only. Does not change color math, preview tags, or the write path.
+    @Published var windowAppearance: WindowAppearance {
+        didSet { UserDefaults.standard.set(windowAppearance.rawValue, forKey: Key.windowAppearance) }
     }
 
     /// Cannot be turned off. Pending IDT always blocks 处理已锁定片段.
@@ -75,6 +82,33 @@ final class AppSettings: ObservableObject {
         advancedPanelExpanded = UserDefaults.standard.bool(forKey: Key.advancedPanelExpanded)
         let fmtRaw = UserDefaults.standard.string(forKey: Key.exportFormat) ?? ExportFormat.default.rawValue
         exportFormat = ExportFormat(rawValue: fmtRaw) ?? .default
+        let appearanceRaw = UserDefaults.standard.string(forKey: Key.windowAppearance) ?? WindowAppearance.system.rawValue
+        windowAppearance = WindowAppearance(rawValue: appearanceRaw) ?? .system
         lastExportDirectoryPath = UserDefaults.standard.string(forKey: Key.lastExportDirectory)
+    }
+}
+
+/// Window chrome only. Preview panes stay on their own color tags.
+enum WindowAppearance: String, CaseIterable, Identifiable {
+    case system
+    case dark
+    case light
+
+    var id: String { rawValue }
+
+    var labelZH: String {
+        switch self {
+        case .system: return "跟随系统"
+        case .dark: return "深色"
+        case .light: return "浅色"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .dark: return .dark
+        case .light: return .light
+        }
     }
 }

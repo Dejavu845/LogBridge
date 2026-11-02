@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// LogBridge — serial node graph: IDT → WB → Off / Rec.709 preview / Rec.2100 HLG / PQ.
+/// LogBridge — local grade and delivery. Single window, not an editor.
+/// Serial graph: IDT → exposure → WB → Off / Rec.709 preview / Rec.2100 HLG / PQ.
 /// Not a general node editor. IDTs are implemented (unverified) until golden samples.
 
 /// The window's session, published for menu commands.
@@ -57,9 +58,18 @@ private struct LogBridgeCommands: Commands {
         }
         CommandGroup(replacing: .appSettings) {
             Button("设置…") {
+                sessionFocus?.session?.showDeliverSheet = false
                 sessionFocus?.session?.showSettings = true
             }
             .keyboardShortcut(",")
+        }
+        CommandGroup(after: .newItem) {
+            Button("写出…") {
+                guard let session = sessionFocus?.session, !session.isWritingDeliverables else { return }
+                session.showSettings = false
+                session.showDeliverSheet = true
+            }
+            .keyboardShortcut("e")
         }
     }
 }

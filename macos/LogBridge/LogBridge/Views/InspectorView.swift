@@ -1,30 +1,30 @@
 import SwiftUI
 
-/// Paired IDT picker pinned under the preview. Always visible.
+/// Paired IDT for the selected clip. Lives in the inspector column, always visible.
 /// Visible during write; picker is not swappable mid-write.
 /// Do not bury this in 「高级」. Unlocked IDT blocks / skips process.
 struct PairedIDTBar: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("成对 IDT")
-                    .font(.caption.weight(.semibold))
-                Text("先选 Log 与色域，才能处理")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .font(.headline)
                 Spacer(minLength: 8)
                 if let clip = session.selectedClip {
                     Text(clip.verificationBadge)
-                        .font(.caption2.weight(clip.isPending ? .regular : .semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
+                        .font(.caption.weight(clip.isPending ? .regular : .semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
                         .background(clip.isPending ? Color.yellow.opacity(0.28) : Color.orange.opacity(0.2))
                         .clipShape(Capsule())
                 }
             }
+            Text("本片色彩。先选 Log 与色域，才能处理。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if let clip = session.selectedClip {
                 // One locked pair per row. Never two independent curve/gamut dropdowns.
                 Picker("用户选择成对 IDT", selection: Binding(
@@ -41,59 +41,72 @@ struct PairedIDTBar: View {
                     }
                 }
                 .labelsHidden()
-                .controlSize(.small)
-                .frame(maxWidth: 420)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
                 .disabled(session.isExporting)
                 // S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。
                 .help("S-Log3 + S-Gamut3 或 S-Log3 + S-Gamut3.Cine。C-Log2 / C-Log3 + Cinema Gamut 或 BT.2020。Venice 对仅在检测到时出现。")
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Text("来源：\(clip.detectionSource.title)")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                     if clip.veniceDetected {
                         Text("检测到 Venice")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if let reason = clip.processSkipReason {
-                        Text(reason)
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
-                            .lineLimit(1)
-                    }
+                }
+                if let reason = clip.processSkipReason {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(clip.detectionNote)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                    .lineLimit(2)
             } else {
                 Text("先点一条素材。读不到元数据就在这里选成对 IDT，不猜。")
-                    .font(.caption2)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.primary.opacity(0.03))
     }
 }
 
-/// Right inspector: Exposure + WB three states only.
-/// IDT lives under the preview — not in 「高级」. Node strip / export only.
+/// Right inspector: Exposure + WB, folded sections, follow the selection.
+/// IDT stays above this view — not in 「高级」. Changes apply immediately.
 struct InspectorView: View {
     @ObservedObject var session: SessionModel
+    @State private var exposureOpen = true
+    @State private var wbOpen = true
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 7) {
-                ExposureInspector(session: session)
-                Divider()
-                WBInspector(session: session)
+            VStack(alignment: .leading, spacing: 12) {
+                DisclosureGroup(isExpanded: $exposureOpen) {
+                    ExposureInspector(session: session)
+                        .padding(.top, 6)
+                } label: {
+                    Text("曝光")
+                        .font(.headline)
+                }
+                DisclosureGroup(isExpanded: $wbOpen) {
+                    WBInspector(session: session)
+                        .padding(.top, 6)
+                } label: {
+                    Text("白平衡")
+                        .font(.headline)
+                }
             }
             .disabled(session.isExporting)
             .opacity(session.isExporting ? 0.45 : 1)
-            .padding(6)
+            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color.primary.opacity(0.02))
@@ -104,14 +117,12 @@ struct WBInspector: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("白平衡")
-                .font(.caption.weight(.semibold))
+        VStack(alignment: .leading, spacing: 8) {
             Toggle("启用白平衡（可旁路，不烘焙）", isOn: Binding(
                 get: { session.graph.wbEnabled },
                 set: { session.setWBEnabled($0) }
             ))
-            .controlSize(.small)
+            .controlSize(.regular)
             // Three states only. Estimate chip lights AFTER confirm, never on propose.
             // 机内 / 估计确认才写 / 灰卡 — distinct tone + weight at a glance.
             HStack(spacing: 4) {
@@ -138,12 +149,12 @@ struct WBInspector: View {
                 Button(session.pickingNeutral ? "在预览上点灰卡…" : "点灰卡") {
                     session.pickingNeutral.toggle()
                 }
-                .controlSize(.small)
+                .controlSize(.regular)
                 .help("点灰卡：在 IDT 之后的线性预览上取样，覆盖元数据并写入白平衡。不是校准。")
                 Button("估计白平衡") {
                     session.proposeAutoWB()
                 }
-                .controlSize(.small)
+                .controlSize(.regular)
                 .help("白平衡（估计）：给出估计色温，确认后才写入；把握不够就空着。不猜 5600。不是校准。")
             }
             if session.graph.autoWBCCT != nil {
@@ -155,7 +166,7 @@ struct WBInspector: View {
                     Button("确认估计") {
                         session.confirmAutoWB()
                     }
-                    .controlSize(.small)
+                    .controlSize(.regular)
                 }
             }
             if session.graph.wbEnabled {
@@ -171,7 +182,7 @@ struct WBInspector: View {
                         in: 2000...10000,
                         step: 10
                     )
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     Text(session.graph.wbCCT.map { "\(Int($0)) K" } ?? "机内未知")
                         .font(.caption.monospacedDigit())
                         .frame(width: 72, alignment: .trailing)
@@ -188,7 +199,7 @@ struct WBInspector: View {
                         in: -10...10,
                         step: 0.1
                     )
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     Text(String(format: "%.1f", session.graph.wbTint))
                         .font(.caption.monospacedDigit())
                         .frame(width: 52, alignment: .trailing)
@@ -200,8 +211,8 @@ struct WBInspector: View {
                     Text("Bradford").tag("bradford")
                     Text("CAT02").tag("cat02")
                 }
-                .controlSize(.small)
-                .frame(maxWidth: 200)
+                .controlSize(.regular)
+                .frame(maxWidth: .infinity)
             }
             Text("机内色温只填旋钮，默认是单位阵。只有你改色温才做相对校正（例如 3200→5600 变暖）。灰卡是绝对校正；读不到就保持单位阵，不猜 5600。")
                 .font(.caption2)
@@ -307,14 +318,12 @@ struct ExposureInspector: View {
     @ObservedObject var session: SessionModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("曝光")
-                .font(.caption.weight(.semibold))
+        VStack(alignment: .leading, spacing: 8) {
             Toggle("启用曝光（0 档 = 不动）", isOn: Binding(
                 get: { session.graph.exposureEnabled },
                 set: { session.setExposureEnabled($0) }
             ))
-            .controlSize(.small)
+            .controlSize(.regular)
             if session.graph.exposureEnabled {
                 HStack(spacing: 6) {
                     Text("档")
@@ -328,10 +337,10 @@ struct ExposureInspector: View {
                         in: -8...8,
                         step: 0.05
                     )
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     Text(String(format: "%+.2f 档", session.graph.exposureStops))
-                        .font(.caption.monospacedDigit())
-                        .frame(width: 56, alignment: .trailing)
+                        .font(.body.monospacedDigit())
+                        .frame(width: 78, alignment: .trailing)
                 }
                 Text(String(format: "线性增益 = %.4f", pow(2.0, session.graph.exposureStops)))
                     .font(.caption2.monospacedDigit())
