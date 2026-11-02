@@ -349,6 +349,16 @@ struct ExposureInspector: View {
                         .font(.body.monospacedDigit())
                         .frame(width: 78, alignment: .trailing)
                 }
+                HStack(spacing: 8) {
+                    Button("−0.10") { session.nudgeExposureStops(-0.10) }
+                        .disabled(session.graph.exposureStops <= -8)
+                    Button("归零") { session.resetExposureStops() }
+                        .disabled(abs(session.graph.exposureStops) < 0.001)
+                    Button("+0.10") { session.nudgeExposureStops(0.10) }
+                        .disabled(session.graph.exposureStops >= 8)
+                }
+                .controlSize(.regular)
+                .help("每次 0.10 档，或归零。预览和监视器读数一起变。菜单「调色」是同一套。仅预览。")
                 Text(String(format: "线性增益 = %.4f", pow(2.0, session.graph.exposureStops)))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)

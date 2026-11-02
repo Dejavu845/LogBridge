@@ -126,6 +126,51 @@ def test_short_window_keeps_inspector_and_grade_readout():
     assert "一行读数" in plan
 
 
+def test_exposure_steps_and_luma_waveform_stay_on_the_preview_path():
+    content = _read(CONTENT)
+    before = content.split("struct AdvancedPanel")[0]
+    assert "亮度波形" not in before
+    advanced = content.split("struct AdvancedPanel")[1].split("struct SplitPreview")[0]
+    assert "亮度波形" in advanced
+    assert "PreviewHistogramView" in advanced
+    histogram = _read(HISTOGRAM)
+    assert "亮度波形" in histogram
+    assert "LumaWaveformSampler" in histogram
+    assert "不参与写出" in histogram
+    assert "不是示波器读数" in histogram
+    assert "export" not in histogram.split("enum LumaWaveformSampler")[1].split("private struct LumaWaveformBars")[0]
+    inspector = _read(ROOT / "macos/LogBridge/LogBridge/Views/InspectorView.swift")
+    assert 'Button("归零")' in inspector
+    assert "nudgeExposureStops(-0.10)" in inspector
+    assert "nudgeExposureStops(0.10)" in inspector
+    assert "resetExposureStops()" in inspector
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("var canNudgeExposure")[1].split("func nudgeExposureStops")[0]
+    assert "exposureEnabled" in gate
+    assert "isWritingDeliverables" in gate
+    assert "showDeliverSheet" in gate
+    nudge = clip.split("func nudgeExposureStops")[1].split("func resetExposureStops")[0]
+    assert "canNudgeExposure" in nudge
+    assert "setExposureStops" in nudge
+    reset = clip.split("func resetExposureStops")[1].split("func ")[0]
+    assert "setExposureStops(0)" in reset
+    pending_gate = clip.split("var canSelectNextPending")[1].split("func selectNextPendingFromMenu")[0]
+    assert "hasLockedPair" in pending_gate
+    assert "isWritingDeliverables" in pending_gate
+    menu_fn = clip.split("func selectNextPendingFromMenu")[1].split("func ")[0]
+    assert "canSelectNextPending" in menu_fn
+    assert "selectNextPendingAfterLock" in menu_fn
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    assert 'CommandMenu("调色")' in app
+    assert "曝光归零" in app
+    assert "下一条待选" in app
+    assert "selectNextPendingFromMenu" in app
+    plan = _read(PLAN)
+    assert "亮度波形" in plan
+    assert "归零" in plan
+    assert "不是示波器读数" in plan
+
+
 def test_idt_lock_stays_on_the_clip_being_previewed():
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]

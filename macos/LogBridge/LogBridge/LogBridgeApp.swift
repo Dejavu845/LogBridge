@@ -69,5 +69,28 @@ private struct LogBridgeCommands: Commands {
             }
             .keyboardShortcut("e")
         }
+        CommandMenu("调色") {
+            Button("曝光 +0.10") {
+                sessionFocus?.session?.nudgeExposureStops(0.10)
+            }
+            .keyboardShortcut("=", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canNudgeExposure != true)
+            Button("曝光 −0.10") {
+                sessionFocus?.session?.nudgeExposureStops(-0.10)
+            }
+            .keyboardShortcut("-", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canNudgeExposure != true)
+            Button("曝光归零") {
+                sessionFocus?.session?.resetExposureStops()
+            }
+            .keyboardShortcut("0", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canNudgeExposure != true)
+            Divider()
+            Button("下一条待选") {
+                sessionFocus?.session?.selectNextPendingFromMenu()
+            }
+            .keyboardShortcut("]", modifiers: [.command])
+            .disabled(sessionFocus?.session?.canSelectNextPending != true)
+        }
     }
 }

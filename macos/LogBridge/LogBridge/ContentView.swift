@@ -480,7 +480,7 @@ struct ProcessLockedBar: View {
     }
 }
 
-/// Node strip, format, Resolve export, and the on-demand histogram.
+/// Node strip, format, Resolve export, histogram, and luma waveform.
 /// Hidden by default. Paired IDT stays in the inspector — never here.
 struct AdvancedPanel: View {
     @ObservedObject var session: SessionModel
@@ -491,7 +491,7 @@ struct AdvancedPanel: View {
             // 展开后在自己的高度里滚，监视器仍留一块预览。
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("节点、写出格式、直方图。默认收起，不挡预览。")
+                    Text("节点、写出格式、直方图、亮度波形。默认收起，不挡预览。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Picker("写出格式", selection: Binding(

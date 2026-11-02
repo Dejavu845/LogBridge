@@ -972,6 +972,44 @@ final class SessionModel: ObservableObject {
         }
     }
 
+    /// Menu 「下一条待选」. Same move as the inspector button.
+    /// Does not lock an IDT. Does not write. Stays put when nothing else is pending.
+    var canSelectNextPending: Bool {
+        !isWritingDeliverables
+            && !showSettings
+            && !showImporter
+            && !showDeliverSheet
+            && selectedClip?.hasLockedPair == true
+            && pendingClipCount > 0
+    }
+
+    func selectNextPendingFromMenu() {
+        guard canSelectNextPending, let clip = selectedClip else { return }
+        selectNextPendingAfterLock(lockedID: clip.id)
+    }
+
+    /// ±0.10 stop, or back to 0. Same graph as the inspector slider.
+    /// Preview and the monitor readout follow via setExposureStops.
+    /// Off while writing or while a sheet is up. Does not turn exposure on.
+    var canNudgeExposure: Bool {
+        graph.exposureEnabled
+            && !isWritingDeliverables
+            && !showSettings
+            && !showImporter
+            && !showDeliverSheet
+    }
+
+    func nudgeExposureStops(_ delta: Double) {
+        guard canNudgeExposure else { return }
+        let rounded = ((graph.exposureStops + delta) * 100).rounded() / 100
+        setExposureStops(min(8, max(-8, rounded)))
+    }
+
+    func resetExposureStops() {
+        guard canNudgeExposure else { return }
+        setExposureStops(0)
+    }
+
     /// Up/Down in the main window: move selected clip in the sidebar list.
     /// Mid-write (#32 / #37) does not change selection. Does not lock IDT. Does not write.
     /// Stops at the ends (no wrap). Inspector numeric / search / text fields keep their arrows.
