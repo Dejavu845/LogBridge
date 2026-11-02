@@ -1104,6 +1104,16 @@ final class SessionModel: ObservableObject {
         selectedIsPending ? inspectorPairedIDTAnchor : nil
     }
 
+    /// Pair name pinned under the inspector title. Only a locked pair.
+    /// Pending returns nil, so the header does not invent a pair.
+    /// Does not change the grade, the frame, or the write.
+    static func inspectorPinnedPairLine(hasLockedPair: Bool, pairLabel: String) -> String? {
+        guard hasLockedPair else { return nil }
+        let trimmed = pairLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
     /// 写出说明上的这一套。和检查器同一套曝光、白平衡，套到已锁定素材。
     /// 不另记数字，也不在色温空着时填 5600。
     var sharedGradeWriteLine: String {

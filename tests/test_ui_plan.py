@@ -1912,6 +1912,35 @@ def test_pending_selection_scrolls_the_inspector_back_to_the_paired_idt():
         assert token not in plan
 
 
+def test_inspector_header_pins_the_locked_pair_and_does_not_invent_one():
+    """The fixed title keeps a locked pair visible while the grade scrolls. Pending stays blank."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    fn = clip.split("static func inspectorPinnedPairLine")[1].split("写出说明上的这一套")[0]
+    assert "guard hasLockedPair else { return nil }" in fn
+    assert "trimmingCharacters" in fn
+    assert "guard !trimmed.isEmpty else { return nil }" in fn
+    assert "return trimmed" in fn
+    for token in ("setIDT", "setExposureStops", "setWBParams", "setPreviewFrame", "setODT", "5600", "6504", "24", "30"):
+        assert token not in fn, token
+    content = _read(CONTENT)
+    column = content.split("struct InspectorColumn")[1].split("struct ClipListArrowMonitor")[0]
+    header, scroll = column.split("ScrollViewReader", 1)
+    assert "inspectorPinnedPairLine" in header
+    assert "inspectorPinnedPairLine" not in scroll
+    assert "clip.hasLockedPair" in header
+    assert "clip.idt?.pairLabel" in header
+    assert "待选不在标题里写一对" in header
+    assert "不改这一套调色，不改预览帧，也不参与写出" in header
+    assert "PairedIDTBar" in scroll
+    plan = _read(PLAN)
+    assert "标题下固定写出这一对的名字" in plan
+    assert "待选不在标题里写一对" in plan
+    assert "不猜成对 IDT" in plan
+    assert "滚到曝光和白平衡时这一行还在" in plan
+    for token in BANNED_CONTACT:
+        assert token not in plan
+
+
 def test_write_sheet_names_the_last_export_folder_without_the_full_path():
     """The sheet, the bar, and the folder panel name the last folder, or say it is gone."""
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")

@@ -361,6 +361,7 @@ private struct MonitorHeader: View {
 
 /// 检查器跟当前选中。标题固定；成对 IDT、曝光、白平衡在下面整栏滚动。
 /// 窗口变矮时仍能滚到曝光和白平衡，不会被成对 IDT 顶出画面。
+/// 已锁定时，标题下固定这一对的名字，滚到曝光时还在。待选不在标题里写一对。
 /// 换到待选时回到成对 IDT。换到已锁定时不跟着滚。
 private struct InspectorColumn: View {
     @ObservedObject var session: SessionModel
@@ -391,7 +392,16 @@ private struct InspectorColumn: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
-                                .help("换到还没锁定的一条时，下面这一栏回到成对 IDT。换到已锁定时不跟着滚，曝光和白平衡留在刚才的位置。不改这一套调色，不改预览帧，也不参与写出。")
+                                .help("换到还没锁定的一条时，下面这一栏回到成对 IDT。换到已锁定时不跟着滚，曝光和白平衡留在刚才的位置。已锁定时，标题下这一行是这一对的名字，滚到曝光也还在。待选不在标题里写一对。不改这一套调色，不改预览帧，也不参与写出。")
+                            if let pair = SessionModel.inspectorPinnedPairLine(
+                                hasLockedPair: clip.hasLockedPair,
+                                pairLabel: clip.idt?.pairLabel ?? ""
+                            ) {
+                                Text(pair)
+                                    .font(.callout.weight(.semibold))
+                                    .lineLimit(2)
+                                    .help("这条已锁定的成对 IDT，和列表、写出说明是同一句。标题固定，滚到曝光和白平衡时这一行还在。待选不在标题里写一对。换一条跟着换。不改这一套调色，不改预览帧，也不参与写出。")
+                            }
                         }
                     }
                     HStack(spacing: 8) {
