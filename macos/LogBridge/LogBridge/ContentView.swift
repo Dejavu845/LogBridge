@@ -182,7 +182,9 @@ private struct MonitorHeader: View {
             HStack(spacing: 8) {
                 Text("监视器")
                     .font(.headline)
-                Text(layout.caption)
+                Text(session.previewShowsGradeBefore
+                     ? "预览不含曝光和白平衡。写出仍用检查器这一套。"
+                     : layout.caption)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -196,6 +198,20 @@ private struct MonitorHeader: View {
                 .frame(width: 210)
                 .labelsHidden()
                 .help("分屏对照，或把预览放大来看调色。点灰卡时会显示预览。仅预览。")
+                Button(session.previewShowsGradeBefore ? "回到调色" : "看调色前") {
+                    session.togglePreviewGradeBefore()
+                }
+                .controlSize(.regular)
+                .disabled(!session.canTogglePreviewGradeBefore)
+                .help("只改监视器画面：不含曝光和白平衡。检查器数字不动，写出也不改。再点一次回到调色。仅预览。")
+                if session.previewShowsGradeBefore {
+                    Text("调色前")
+                        .font(.caption.weight(.bold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.28))
+                        .clipShape(Capsule())
+                }
                 Text("仅预览")
                     .font(.caption.weight(.bold))
                     .padding(.horizontal, 8)
@@ -222,7 +238,9 @@ private struct MonitorHeader: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .help("和右侧检查器是同一套。换一条素材，这一行的曝光和白平衡不改。仅预览。")
+                        .help(session.previewShowsGradeBefore
+                              ? "画面不含曝光和白平衡。这一行仍是检查器里会写出的那一套。仅预览。"
+                              : "和右侧检查器是同一套。换一条素材，这一行的曝光和白平衡不改。仅预览。")
                 }
             }
         }
@@ -251,7 +269,11 @@ private struct MonitorHeader: View {
             wb = session.graph.wbSource.title
         }
         let pending = session.selectedClip?.isPending == true ? "待选 · " : ""
-        return "\(clipName) · \(pending)\(exposure) · \(wb)"
+        let line = "\(clipName) · \(pending)\(exposure) · \(wb)"
+        if session.previewShowsGradeBefore {
+            return "看调色前 · \(line)"
+        }
+        return line
     }
 }
 
@@ -653,12 +675,26 @@ struct SplitPreview: View {
         )
     }
 
+    private var gradePaneTitle: String {
+        if session.previewShowsGradeBefore {
+            return "调色前 · \(session.odtPreviewTitle)"
+        }
+        return session.odtPreviewTitle
+    }
+
+    private var gradePaneCaption: String {
+        if session.previewShowsGradeBefore {
+            return "不含曝光和白平衡。检查器里的数字和写出都不改。仅预览。"
+        }
+        return session.odtPreviewCaption
+    }
+
     @ViewBuilder
     private var previewPane: some View {
         if session.graph.odt.isHDR {
             HDRPreviewView(
-                title: session.odtPreviewTitle,
-                caption: session.odtPreviewCaption,
+                title: gradePaneTitle,
+                caption: gradePaneCaption,
                 image: session.preview.odtImage,
                 odt: session.graph.odt,
                 pickingNeutral: session.pickingNeutral && !session.isExporting,
@@ -671,8 +707,8 @@ struct SplitPreview: View {
             )
         } else {
             Rec709PreviewView(
-                title: session.odtPreviewTitle,
-                caption: session.odtPreviewCaption,
+                title: gradePaneTitle,
+                caption: gradePaneCaption,
                 image: session.preview.odtImage,
                 pickingNeutral: session.pickingNeutral && !session.isExporting,
                 onPick: { nx, ny in

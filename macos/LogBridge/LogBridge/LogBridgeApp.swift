@@ -136,6 +136,12 @@ private struct LogBridgeCommands: Commands {
                 sessionFocus?.session?.stepPreviewFrame(1)
             }
             .disabled(sessionFocus?.session?.canStepPreviewForward != true)
+            Divider()
+            Button(sessionFocus?.session?.previewShowsGradeBefore == true ? "回到调色" : "看调色前") {
+                sessionFocus?.session?.togglePreviewGradeBefore()
+            }
+            .keyboardShortcut("\\", modifiers: [.command, .option])
+            .disabled(sessionFocus?.session?.canTogglePreviewGradeBefore != true)
         }
     }
 }

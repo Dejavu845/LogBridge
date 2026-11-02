@@ -195,6 +195,9 @@ final class SessionModel: ObservableObject {
     var destFreeBytesOverride: Int64? = nil
     /// Movie slider index. Stills stay 0. Missing fps/duration does not invent a range.
     @Published var previewFrameIndex: Int = 0
+    /// Monitor compare. The picture drops exposure and white balance.
+    /// Inspector numbers and the write keep the shared set.
+    @Published var previewShowsGradeBefore = false
     /// Last index (duration × metadata fps − 1). Nil: still, or no clip, or fail.
     @Published var previewScrubLastFrame: Int? = nil
     /// 「读不到帧率，未核对」 / 「读不到时长，未核对」. No slider. No 24/30 guess.
@@ -255,6 +258,38 @@ final class SessionModel: ObservableObject {
         sharedGradeTouched = true
     }
 
+    /// Turn the compare on only after a paired IDT is locked.
+    /// Turn it off whenever a clip is selected. Sheets, write, and grey-card
+    /// sampling keep the current picture.
+    var canTogglePreviewGradeBefore: Bool {
+        guard !isWritingDeliverables,
+              !showSettings,
+              !showImporter,
+              !showDeliverSheet,
+              !pickingNeutral
+        else { return false }
+        if previewShowsGradeBefore { return selectedClip != nil }
+        return selectedClip?.hasLockedPair == true
+    }
+
+    /// Picture for the monitor. Compare copies the shared set with exposure
+    /// and white balance off. Does not replace `graph`.
+    var graphForPreview: SerialGraph {
+        guard previewShowsGradeBefore else { return graph }
+        var copy = graph
+        copy.exposureEnabled = false
+        copy.wbEnabled = false
+        return copy
+    }
+
+    /// 看调色前 / 回到调色. Same frame. Does not edit the shared set.
+    func togglePreviewGradeBefore() {
+        guard canTogglePreviewGradeBefore else { return }
+        previewShowsGradeBefore.toggle()
+        preview.invalidateWBODT()
+        refreshPreview()
+    }
+
     func refreshPreview() {
         // Selected clip (or grade) changed. PreviewEngine keeps only this
         // clip's preview source/linear/graded and drops a stale first-frame
@@ -262,12 +297,12 @@ final class SessionModel: ObservableObject {
         if selectedID != previewScrubClipID {
             resetPreviewScrub()
         }
-        preview.refresh(clip: selectedClip, graph: graph, frameIndex: previewFrameIndex)
+        preview.refresh(clip: selectedClip, graph: graphForPreview, frameIndex: previewFrameIndex)
     }
 
     /// ODT / scrub: do not invalidate graded linear (IDT+exposure+WB).
     func refreshODTOnly() {
-        preview.refreshODT(clip: selectedClip, graph: graph, frameIndex: previewFrameIndex)
+        preview.refreshODT(clip: selectedClip, graph: graphForPreview, frameIndex: previewFrameIndex)
     }
 
     /// Slider: first…last from duration × metadata fps. No 24/30 guess.
@@ -276,7 +311,7 @@ final class SessionModel: ObservableObject {
         guard let last = previewScrubLastFrame else { return }
         let next = max(0, min(index, last))
         previewFrameIndex = next
-        preview.scrub(clip: selectedClip, graph: graph, frameIndex: next)
+        preview.scrub(clip: selectedClip, graph: graphForPreview, frameIndex: next)
     }
 
     /// Stills: no slider. Movies: duration × metadata fps. Missing → Chinese fail.

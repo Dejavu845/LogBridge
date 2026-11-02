@@ -393,6 +393,63 @@ def test_preview_frame_steps_without_inventing_a_range_or_moving_the_grade():
     assert "不猜帧率" in plan
 
 
+def test_grade_before_is_preview_only_and_leaves_the_shared_set():
+    """Compare drops exposure and WB in the picture. Write keeps the shared set."""
+    clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
+    gate = clip.split("var canTogglePreviewGradeBefore")[1].split("var graphForPreview")[0]
+    assert "hasLockedPair" in gate
+    assert "previewShowsGradeBefore" in gate
+    assert "isWritingDeliverables" in gate
+    assert "showSettings" in gate
+    assert "showImporter" in gate
+    assert "showDeliverSheet" in gate
+    assert "pickingNeutral" in gate
+    picture = clip.split("var graphForPreview")[1].split("func togglePreviewGradeBefore")[0]
+    assert "previewShowsGradeBefore" in picture
+    assert "exposureEnabled = false" in picture
+    assert "wbEnabled = false" in picture
+    assert "5600" not in picture
+    assert "6504" not in picture
+    toggle = clip.split("func togglePreviewGradeBefore")[1].split("func refreshPreview")[0]
+    assert "canTogglePreviewGradeBefore" in toggle
+    assert "invalidateWBODT" in toggle
+    assert "refreshPreview()" in toggle
+    assert "touchSharedGrade" not in toggle
+    assert "setExposureStops" not in toggle
+    assert "setWBParams" not in toggle
+    assert "previewFrameIndex" not in toggle
+    refresh = clip.split("func refreshPreview()")[1].split("func refreshODTOnly()")[0]
+    assert "graphForPreview" in refresh
+    only = clip.split("func refreshODTOnly()")[1].split("func setPreviewFrame")[0]
+    assert "graphForPreview" in only
+    scrub = clip.split("func setPreviewFrame")[1].split("func resetPreviewScrub")[0]
+    assert "graphForPreview" in scrub
+    write_line = clip.split("var sharedGradeWriteLine")[1].split("var loopStepHint")[0]
+    assert "previewShowsGradeBefore" not in write_line
+    assert "这一套会套到已锁定素材" in write_line
+    content = _read(CONTENT)
+    header = content.split("struct MonitorHeader")[1].split("struct InspectorColumn")[0]
+    assert 'Button(session.previewShowsGradeBefore ? "回到调色" : "看调色前")' in header
+    assert "togglePreviewGradeBefore" in header
+    assert "canTogglePreviewGradeBefore" in header
+    assert "看调色前 ·" in header
+    preview = content.split("struct SplitPreview")[1]
+    assert "调色前 ·" in preview
+    assert "不含曝光和白平衡" in preview
+    app = _read(ROOT / "macos/LogBridge/LogBridge/LogBridgeApp.swift")
+    menu = app.split('CommandMenu("调色")')[1]
+    assert "看调色前" in menu
+    assert "回到调色" in menu
+    assert "togglePreviewGradeBefore" in menu
+    assert "canTogglePreviewGradeBefore" in menu
+    assert 'keyboardShortcut("\\\\"' in menu
+    plan = _read(PLAN)
+    assert "看调色前" in plan
+    assert "回到调色" in plan
+    assert "不含曝光和白平衡" in plan
+    assert "检查器数字不动" in plan
+
+
 def test_idt_lock_stays_on_the_clip_being_previewed():
     clip = _read(ROOT / "macos/LogBridge/LogBridge/Models/Clip.swift")
     body = clip.split("func setIDT(")[1].split("func selectNextPendingAfterLock")[0]
